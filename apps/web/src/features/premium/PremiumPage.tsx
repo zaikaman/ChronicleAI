@@ -4,7 +4,12 @@ import { PaymentChallengePanel } from "./PaymentChallengePanel.tsx";
 import { PremiumContentView } from "./PremiumContentView.tsx";
 import { PremiumTeaserCard } from "./PremiumTeaserCard.tsx";
 import { SponsoredWatchList } from "./SponsoredWatchList.tsx";
-import { usePremiumItemAccess, usePremiumTeasers, useSponsoredWatches } from "./use-premium.ts";
+import {
+  storePremiumAccessReceipt,
+  usePremiumItemAccess,
+  usePremiumTeasers,
+  useSponsoredWatches,
+} from "./use-premium.ts";
 
 export function PremiumPage(): ReactElement {
   const { items, isLoading, error, refetch } = usePremiumTeasers();
@@ -52,13 +57,18 @@ export function PremiumPage(): ReactElement {
   }, [paymentChallenge]);
 
   const handleSettled = useCallback(
-    (paymentRecordId: string) => {
+    (paymentRecordId: string, accessReceipt?: string) => {
       setSettledPaymentId(paymentRecordId);
       setShowPaymentPanel(false);
 
+      if (selectedItemId && accessReceipt) {
+        storePremiumAccessReceipt(selectedItemId, accessReceipt);
+      }
+
       if (selectedItemId) {
         setTimeout(() => {
-          accessItem(selectedItemId);
+          // Re-fetch with the signed receipt (not bare payer identity)
+          accessItem(selectedItemId, accessReceipt);
         }, 500);
       }
     },

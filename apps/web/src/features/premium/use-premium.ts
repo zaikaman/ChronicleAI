@@ -5,6 +5,32 @@ import { useCallback, useEffect, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
 
+const RECEIPT_STORAGE_PREFIX = "chronicle_premium_receipt:";
+
+export function storePremiumAccessReceipt(itemId: string, receipt: string): void {
+  try {
+    sessionStorage.setItem(`${RECEIPT_STORAGE_PREFIX}${itemId}`, receipt);
+  } catch {
+    // sessionStorage may be unavailable (private mode / SSR) — ignore
+  }
+}
+
+export function loadPremiumAccessReceipt(itemId: string): string | null {
+  try {
+    return sessionStorage.getItem(`${RECEIPT_STORAGE_PREFIX}${itemId}`);
+  } catch {
+    return null;
+  }
+}
+
+export function clearPremiumAccessReceipt(itemId: string): void {
+  try {
+    sessionStorage.removeItem(`${RECEIPT_STORAGE_PREFIX}${itemId}`);
+  } catch {
+    // ignore
+  }
+}
+
 export interface PremiumTeasersState {
   items: PremiumItemTeaserResponse[];
   isLoading: boolean;
@@ -16,7 +42,11 @@ export interface PremiumItemAccessResult {
   isLoading: boolean;
   error: string | null;
   data: Record<string, unknown> | null;
-  accessItem: (itemId: string, payerReference?: string) => Promise<void>;
+  /**
+   * Access premium content. Uses a stored HMAC access receipt when available
+   * (from a prior settlement). Bare payer references are not used for unlock.
+   */
+  accessItem: (itemId: string, accessReceipt?: string) => Promise<void>;
   isPaymentRequired: boolean;
   paymentChallenge: {
     premiumItemId: string;
@@ -63,7 +93,7 @@ export function usePremiumTeasers(): PremiumTeasersState {
 
 /**
  * Hook to access a premium item with payment gating.
- * Handles the 402 -> challenge -> settle flow.
+ * Handles the 402 -> challenge -> settle -> receipt flow.
  */
 export function usePremiumItemAccess(): PremiumItemAccessResult {
   const [isLoading, setIsLoading] = useState(false);
@@ -77,7 +107,7 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
     currency: string;
   } | null>(null);
 
-  const accessItem = useCallback(async (itemId: string, payerReference?: string) => {
+  const accessItem = useCallback(async (itemId: string, accessReceipt?: string) => {
     setIsLoading(true);
     setError(null);
     setData(null);
@@ -85,19 +115,30 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
     setPaymentChallenge(null);
 
     try {
-      // Step 1: Try to access the item
-      const params = payerReference ? `?payer=${encodeURIComponent(payerReference)}` : "";
-      const response = await fetch(`${API_BASE}/premium/items/${itemId}${params}`);
+      const receipt = accessReceipt?.trim() || loadPremiumAccessReceipt(itemId) || undefined;
+
+      const headers: Record<string, string> = {};
+      if (receipt) {
+        headers.Authorization = `Bearer ${receipt}`;
+        headers["X-Premium-Access-Receipt"] = receipt;
+      }
+
+      const response = await fetch(`${API_BASE}/premium/items/${itemId}`, {
+        headers,
+        credentials: "include",
+      });
 
       if (response.status === 200) {
-        // Access granted
         const itemData = (await response.json()) as Record<string, unknown>;
         setData(itemData);
         return;
       }
 
       if (response.status === 402) {
-        // Payment required
+        // Stale/invalid receipt should not stick around
+        if (receipt) {
+          clearPremiumAccessReceipt(itemId);
+        }
         const body = await response.json();
         setIsPaymentRequired(true);
         setPaymentChallenge({
@@ -159,7 +200,7 @@ export async function createPaymentChallenge(params: {
 }
 
 /**
- * Settle a payment challenge.
+ * Settle a payment challenge. On success, returns accessReceipt for content unlock.
  */
 export async function settlePayment(params: {
   challengeReference: string;
@@ -170,6 +211,7 @@ export async function settlePayment(params: {
     const response = await fetch(`${API_BASE}/payments/settlements`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(params),
     });
 

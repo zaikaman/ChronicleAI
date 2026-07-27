@@ -75,6 +75,7 @@ describe("RevenueRoutingService", () => {
 
     const mockPaymentRepo: PaymentRecordRepository = {
       createChallenge: vi.fn(),
+      findById: vi.fn(),
       findByChallengeReference: vi.fn(),
       markSettled: vi.fn(),
       markUnderpaid: vi.fn(),

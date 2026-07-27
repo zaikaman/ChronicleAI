@@ -9,12 +9,14 @@ import type { PaymentRecordInsert, PaymentRecordRow, PaymentRecordUpdate } from 
 
 export interface PaymentRecordRepository {
   createChallenge(record: PaymentRecordInsert): Promise<Result<PaymentRecordRow>>;
+  findById(id: string): Promise<Result<PaymentRecordRow | null>>;
   findByChallengeReference(challengeReference: string): Promise<Result<PaymentRecordRow | null>>;
   markSettled(
     id: string,
     settlementReference: string,
     amountSettled: number,
     currency: string,
+    payerReference?: string | null,
   ): Promise<Result<PaymentRecordRow>>;
   markUnderpaid(id: string): Promise<Result<PaymentRecordRow>>;
   markExpired(id: string): Promise<Result<PaymentRecordRow>>;
@@ -48,6 +50,17 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       return success(data as unknown as PaymentRecordRow);
     },
 
+    async findById(id) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        return success(null);
+      }
+      const { data, error } = await table().select("*").eq("id", id).limit(1);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(maybeRow(data ?? []));
+    },
+
     async findByChallengeReference(challengeReference) {
       const { data, error } = await table()
         .select("*")
@@ -58,15 +71,20 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       return success(maybeRow(data ?? []));
     },
 
-    async markSettled(id, settlementReference, amountSettled, currency) {
+    async markSettled(id, settlementReference, amountSettled, currency, payerReference?) {
       const now = new Date().toISOString();
-      return update(id, {
+      const updates: PaymentRecordUpdate = {
         status: "settled" as PaymentStatus,
         settlement_reference: settlementReference,
         amount_settled: amountSettled,
         currency,
         settled_at: now,
-      });
+      };
+      // Persist verified payer so access checks can scope entitlement to this payer only.
+      if (payerReference != null && payerReference !== "") {
+        updates.payer_reference = payerReference;
+      }
+      return update(id, updates);
     },
 
     async markUnderpaid(id) {

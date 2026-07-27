@@ -10,8 +10,13 @@ import type {
 } from "@chronicleai/db";
 import type { ExecutionLogInsert } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
-import { Router, type Router as RouterType } from "express";
+import { Router, type Router as RouterType, type Response } from "express";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
+import {
+  buildPremiumAccessReceiptCookie,
+  DEFAULT_PREMIUM_ACCESS_RECEIPT_TTL_SECONDS,
+  type PremiumAccessReceiptService,
+} from "../services/premium-access-receipt-service.ts";
 import { PaymentChallengeService } from "../services/payment-challenge-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
 import { createSponsoredWatchService } from "../services/sponsored-watch-service.ts";
@@ -23,7 +28,10 @@ export function createPaymentRoutes(params: {
   execLogRepo: ExecutionLogRepository;
   watchRepo: SponsoredWatchRepository;
   adapters: Map<PaymentRoute, PaymentAdapter>;
+  receiptService: PremiumAccessReceiptService;
   web3Client?: Web3Client | null;
+  /** When true, Set-Cookie includes Secure (production / HTTPS). */
+  secureCookies?: boolean;
 }): RouterType {
   const router: RouterType = Router();
 
@@ -43,6 +51,44 @@ export function createPaymentRoutes(params: {
     execLogRepo: params.execLogRepo,
     web3Client: params.web3Client ?? null,
   });
+
+  function issueAccessReceipt(args: {
+    paymentRecordId: string;
+    premiumItemId: string;
+    payerReference?: string | null;
+  }): { accessReceipt: string; accessReceiptExpiresAt: string } {
+    const issued = params.receiptService.issue({
+      paymentRecordId: args.paymentRecordId,
+      premiumItemId: args.premiumItemId,
+      payerReference: args.payerReference ?? null,
+    });
+    return {
+      accessReceipt: issued.token,
+      accessReceiptExpiresAt: issued.expiresAt,
+    };
+  }
+
+  function attachReceiptCookie(
+    res: Response,
+    premiumItemId: string,
+    accessReceipt: string,
+    expiresAt: string,
+  ): void {
+    const maxAgeSeconds = Math.max(
+      0,
+      Math.floor((Date.parse(expiresAt) - Date.now()) / 1000) ||
+        DEFAULT_PREMIUM_ACCESS_RECEIPT_TTL_SECONDS,
+    );
+    res.append(
+      "Set-Cookie",
+      buildPremiumAccessReceiptCookie({
+        token: accessReceipt,
+        premiumItemId,
+        maxAgeSeconds,
+        secure: params.secureCookies === true,
+      }),
+    );
+  }
 
   /**
    * POST /payments/challenges
@@ -138,7 +184,7 @@ export function createPaymentRoutes(params: {
   /**
    * POST /payments/settlements
    *
-   * Settle a payment challenge.
+   * Settle a payment challenge and issue an access receipt on success.
    */
   router.post("/payments/settlements", async (req, res, next) => {
     try {
@@ -187,69 +233,89 @@ export function createPaymentRoutes(params: {
         return;
       }
 
-      // Check if the premium item is a sponsored_monitor to create a watch
       const recordResult =
         await params.paymentRecordRepo.findByChallengeReference(challengeReference);
 
-      if (recordResult.ok && recordResult.value) {
-        const premiumItemResult = await params.premiumRepo.findById(
-          recordResult.value.premium_item_id,
-        );
+      if (!recordResult.ok || !recordResult.value) {
+        res.status(400).json({
+          settled: false,
+          error: "Settlement succeeded but payment record could not be loaded for access receipt",
+          paymentRecordId: result.paymentRecordId,
+        });
+        return;
+      }
 
-        if (
-          premiumItemResult.ok &&
-          premiumItemResult.value &&
-          premiumItemResult.value.content_type === "sponsored_monitor"
-        ) {
-          try {
-            const now = new Date();
-            const endsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const paymentRecord = recordResult.value;
+      const receipt = issueAccessReceipt({
+        paymentRecordId: result.paymentRecordId,
+        premiumItemId: paymentRecord.premium_item_id,
+        payerReference:
+          result.verification.payerReference ?? paymentRecord.payer_reference ?? null,
+      });
 
-            // Extract target contract from premium item's content_private
-            const contentPrivate = premiumItemResult.value.content_private as
-              | { targetContract?: string; watchSpecHash?: string }
-              | undefined;
-            const targetContract = contentPrivate?.targetContract;
-            const watchSpecHash =
-              contentPrivate?.watchSpecHash ??
-              `0x${"c".repeat(64)}`;
+      attachReceiptCookie(
+        res,
+        paymentRecord.premium_item_id,
+        receipt.accessReceipt,
+        receipt.accessReceiptExpiresAt,
+      );
 
-            if (!targetContract) {
-              res.status(400).json({
-                settled: false,
-                error:
-                  "Sponsored monitor premium item is missing targetContract in content_private",
-              });
-              return;
-            }
+      // Check if the premium item is a sponsored_monitor to create a watch
+      const premiumItemResult = await params.premiumRepo.findById(paymentRecord.premium_item_id);
 
-            const watch = await watchService.createSponsoredWatch({
-              targetContract,
-              watchSpecHash,
-              startsAt: now.toISOString(),
-              endsAt,
-            });
+      if (
+        premiumItemResult.ok &&
+        premiumItemResult.value &&
+        premiumItemResult.value.content_type === "sponsored_monitor"
+      ) {
+        try {
+          const now = new Date();
+          const endsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-            res.json({
-              settled: true,
-              paymentRecordId: result.paymentRecordId,
-              verification: {
-                amountSettled: result.verification.amountSettled,
-                currency: result.verification.currency,
-                settlementReference: result.verification.settlementReference,
-                payerReference: result.verification.payerReference,
-              },
-              sponsoredWatch: {
-                id: watch.id,
-                targetContract: watch.target_contract,
-                status: watch.status,
-                createTxHash: watch.create_tx_hash,
-              },
+          // Extract target contract from premium item's content_private
+          const contentPrivate = premiumItemResult.value.content_private as
+            | { targetContract?: string; watchSpecHash?: string }
+            | undefined;
+          const targetContract = contentPrivate?.targetContract;
+          const watchSpecHash = contentPrivate?.watchSpecHash ?? `0x${"c".repeat(64)}`;
+
+          if (!targetContract) {
+            res.status(400).json({
+              settled: false,
+              error:
+                "Sponsored monitor premium item is missing targetContract in content_private",
             });
             return;
-          } catch (watchError) {
-            console.error("Failed to create sponsored watch:", watchError);
           }
+
+          const watch = await watchService.createSponsoredWatch({
+            targetContract,
+            watchSpecHash,
+            startsAt: now.toISOString(),
+            endsAt,
+          });
+
+          res.json({
+            settled: true,
+            paymentRecordId: result.paymentRecordId,
+            verification: {
+              amountSettled: result.verification.amountSettled,
+              currency: result.verification.currency,
+              settlementReference: result.verification.settlementReference,
+              payerReference: result.verification.payerReference,
+            },
+            accessReceipt: receipt.accessReceipt,
+            accessReceiptExpiresAt: receipt.accessReceiptExpiresAt,
+            sponsoredWatch: {
+              id: watch.id,
+              targetContract: watch.target_contract,
+              status: watch.status,
+              createTxHash: watch.create_tx_hash,
+            },
+          });
+          return;
+        } catch (watchError) {
+          console.error("Failed to create sponsored watch:", watchError);
         }
       }
 
@@ -262,8 +328,10 @@ export function createPaymentRoutes(params: {
           settlementReference: result.verification.settlementReference,
           payerReference: result.verification.payerReference,
         },
+        accessReceipt: receipt.accessReceipt,
+        accessReceiptExpiresAt: receipt.accessReceiptExpiresAt,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       res.status(400).json({
         settled: false,
         error: error instanceof Error ? error.message : "Settlement failed",

@@ -21,7 +21,7 @@ export function corsMiddleware(allowedOrigin: string) {
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature",
+      "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature, X-Premium-Access-Receipt",
     );
     res.setHeader("Access-Control-Max-Age", "86400");
 

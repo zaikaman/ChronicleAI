@@ -16,6 +16,11 @@ export interface ServerEnv {
   groqBaseUrl: string | undefined;
   x402FacilitatorUrl: string | undefined;
   mppSecret: string | undefined;
+  /**
+   * HMAC secret for premium access receipts (min 16 chars).
+   * Falls back to keeperhubWebhookSecret when unset.
+   */
+  premiumAccessSecret: string | undefined;
   treasuryWalletAddress: string | undefined;
   /** Creator recovery payout recipient (required for revenue routing). */
   creatorRecoveryWallet: string | undefined;
@@ -67,6 +72,7 @@ export function loadServerEnv(): ServerEnv {
     groqBaseUrl: optionalEnv("GROQ_BASE_URL"),
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),
     mppSecret: optionalEnv("MPP_SECRET") ?? optionalEnv("MPP_SECRET_KEY"),
+    premiumAccessSecret: optionalEnv("PREMIUM_ACCESS_SECRET"),
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),
     creatorRecoveryWallet: optionalEnv("CREATOR_RECOVERY_WALLET"),
     revenueEthPerCurrencyUnit: Number(

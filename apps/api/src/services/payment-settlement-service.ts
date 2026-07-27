@@ -146,12 +146,13 @@ export class PaymentSettlementService {
       };
     }
 
-    // Record successful settlement
+    // Record successful settlement, including verified payer for access gating
     await this.paymentRecordRepo.markSettled(
       record.id,
       verification.settlementReference,
       verification.amountSettled,
       verification.currency,
+      verification.payerReference ?? record.payer_reference ?? null,
     );
 
     // Log the successful settlement

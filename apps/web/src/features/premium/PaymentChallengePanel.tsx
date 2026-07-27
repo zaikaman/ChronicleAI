@@ -9,7 +9,7 @@ interface PaymentChallengePanelProps {
   premiumItemId: string;
   priceAmount: number;
   priceCurrency: string;
-  onSettled: (paymentRecordId: string) => void;
+  onSettled: (paymentRecordId: string, accessReceipt?: string) => void;
   onClose: () => void;
   "data-testid"?: string;
 }
@@ -206,7 +206,9 @@ export function PaymentChallengePanel({
 
       if (result && result.settled) {
         setStep("settled");
-        onSettled(result.paymentRecordId as string);
+        const accessReceipt =
+          typeof result.accessReceipt === "string" ? result.accessReceipt : undefined;
+        onSettled(result.paymentRecordId as string, accessReceipt);
 
         setTimeout(() => {
           onClose();

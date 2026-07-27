@@ -156,6 +156,10 @@ import type { PaymentRoute } from "@chronicleai/schemas";
 import { MppPaymentAdapter } from "../payments/mpp-payment-adapter.ts";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
 import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
+import {
+  PremiumAccessReceiptService,
+  resolvePremiumAccessSecret,
+} from "../services/premium-access-receipt-service.ts";
 import { createPaymentRoutes } from "./payment-routes.ts";
 import { createPremiumRoutes } from "./premium-routes.ts";
 
@@ -179,6 +183,13 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
   );
   adapters.set("mpp", new MppPaymentAdapter({ mppSecret: env.mppSecret ?? undefined }));
 
+  const receiptService = new PremiumAccessReceiptService({
+    secret: resolvePremiumAccessSecret({
+      premiumAccessSecret: env.premiumAccessSecret,
+      keeperhubWebhookSecret: env.keeperhubWebhookSecret,
+    }),
+  });
+
   // Premium routes
   apiRouter.use(
     createPremiumRoutes({
@@ -186,6 +197,7 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
       paymentRecordRepo: deps.paymentRecordRepo,
       execLogRepo: deps.execLogRepo,
       watchRepo: deps.watchRepo,
+      receiptService,
     }),
   );
 
@@ -197,7 +209,9 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
       execLogRepo: deps.execLogRepo,
       watchRepo: deps.watchRepo,
       adapters,
+      receiptService,
       web3Client,
+      secureCookies: env.nodeEnv === "production",
     }),
   );
 }

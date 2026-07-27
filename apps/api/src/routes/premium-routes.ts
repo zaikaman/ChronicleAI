@@ -9,6 +9,10 @@ import type {
   SponsoredWatchRepository,
 } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
+import {
+  extractAccessReceiptFromRequest,
+  type PremiumAccessReceiptService,
+} from "../services/premium-access-receipt-service.ts";
 import { PaymentRequiredError, PremiumAccessService } from "../services/premium-access-service.ts";
 import { PremiumContentVisibilityService } from "../services/premium-content-visibility-service.ts";
 
@@ -17,6 +21,7 @@ export function createPremiumRoutes(params: {
   paymentRecordRepo: PaymentRecordRepository;
   execLogRepo: ExecutionLogRepository;
   watchRepo: SponsoredWatchRepository;
+  receiptService: PremiumAccessReceiptService;
 }): RouterType {
   const router: RouterType = Router();
   const visibilityService = new PremiumContentVisibilityService();
@@ -24,6 +29,7 @@ export function createPremiumRoutes(params: {
     premiumRepo: params.premiumRepo,
     paymentRecordRepo: params.paymentRecordRepo,
     execLogRepo: params.execLogRepo,
+    receiptService: params.receiptService,
   });
 
   /**
@@ -74,11 +80,14 @@ export function createPremiumRoutes(params: {
    *
    * Access a premium intelligence item.
    *
-   * If the user has a settled payment, returns the full content.
-   * Otherwise, returns 402 Payment Required with challenge details.
+   * Full private content is returned only when a valid HMAC-signed access
+   * receipt is presented (issued at settlement). Bare ?payer= is not accepted.
    *
-   * Query parameters:
-   *   payer - Optional payer/wallet reference for access check
+   * Auth (any one of):
+   *   Authorization: Bearer <accessReceipt>
+   *   X-Premium-Access-Receipt: <accessReceipt>
+   *   ?receipt=<accessReceipt>
+   *   HttpOnly cookie chronicle_premium_receipt_<itemId>
    *
    * Responses:
    *   200 - Full premium item content
@@ -88,7 +97,6 @@ export function createPremiumRoutes(params: {
   router.get("/premium/items/:id", async (req, res, next) => {
     try {
       const { id } = req.params;
-      const payerReference = req.query.payer as string | undefined;
 
       // Check if item exists
       const itemResult = await params.premiumRepo.findById(id);
@@ -109,11 +117,20 @@ export function createPremiumRoutes(params: {
         return;
       }
 
+      const accessReceipt = extractAccessReceiptFromRequest({
+        authorizationHeader:
+          typeof req.headers.authorization === "string" ? req.headers.authorization : undefined,
+        receiptHeader: req.headers["x-premium-access-receipt"],
+        receiptQuery: req.query.receipt as string | string[] | undefined,
+        cookieHeader: typeof req.headers.cookie === "string" ? req.headers.cookie : undefined,
+        premiumItemId: id,
+      });
+
       // Try to access the item (may throw PaymentRequiredError)
       try {
         const accessResult = await accessService.accessPremiumItem({
           itemId: id,
-          payerReference: payerReference ?? undefined,
+          accessReceipt,
         });
 
         if (accessResult.allowed) {

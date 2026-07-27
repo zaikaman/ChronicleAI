@@ -28,7 +28,7 @@ describe("GET /premium/items/:id", () => {
     expect(body).toHaveProperty("error");
   });
 
-  it("should return 402 Payment Required without payer reference", async () => {
+  it("should return 402 Payment Required without access receipt", async () => {
     const response = await fetch(`${API_BASE}/premium/items/${KNOWN_PREMIUM_ITEM_ID}`);
     if (response.status === 404) {
       expect(response.status).toBe(404);
@@ -43,7 +43,7 @@ describe("GET /premium/items/:id", () => {
     expect(body).toHaveProperty("premiumItemId");
   });
 
-  it("should return 402 Payment Required for unknown payer", async () => {
+  it("should return 402 Payment Required for bare payer query (not a receipt)", async () => {
     const response = await fetch(
       `${API_BASE}/premium/items/${KNOWN_PREMIUM_ITEM_ID}?payer=unknown-wallet`,
     );
@@ -56,6 +56,23 @@ describe("GET /premium/items/:id", () => {
     const body = await response.json();
     expect(body).toHaveProperty("error");
     expect(body.error).toContain("Payment");
+  });
+
+  it("should return 402 Payment Required for forged receipt", async () => {
+    const response = await fetch(`${API_BASE}/premium/items/${KNOWN_PREMIUM_ITEM_ID}`, {
+      headers: {
+        Authorization: "Bearer forged.payload",
+        "X-Premium-Access-Receipt": "forged.payload",
+      },
+    });
+    if (response.status === 404) {
+      expect(response.status).toBe(404);
+      return;
+    }
+    expect(response.status).toBe(402);
+
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
   });
 
   it("should return teaser data in 402 response (not full content)", async () => {

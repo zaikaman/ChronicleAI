@@ -152,6 +152,7 @@ describe("Agent Activity Integration", () => {
 
     const paymentRepo: PaymentRecordRepository = {
       createChallenge: vi.fn(),
+      findById: vi.fn(),
       findByChallengeReference: vi.fn(),
       markSettled: vi.fn(),
       markUnderpaid: vi.fn(),

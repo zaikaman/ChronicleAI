@@ -1,6 +1,6 @@
 // Premium Access Service
-// Gates premium content behind settled payment records.
-// Returns 402 Payment Required when no valid payment exists.
+// Gates premium content behind HMAC-signed access receipts issued at settlement.
+// Client-supplied ?payer= alone never unlocks private content.
 
 import type {
   ExecutionLogRepository,
@@ -9,6 +9,7 @@ import type {
 } from "@chronicleai/db";
 import type { PremiumIntelligenceItemRow } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
+import type { PremiumAccessReceiptService } from "./premium-access-receipt-service.ts";
 import {
   PremiumContentVisibilityService,
   type PremiumItemFull,
@@ -37,30 +38,34 @@ export class PremiumAccessService {
   private readonly premiumRepo: PremiumIntelligenceRepository;
   private readonly paymentRecordRepo: PaymentRecordRepository;
   private readonly execLogRepo: ExecutionLogRepository;
+  private readonly receiptService: PremiumAccessReceiptService;
   private readonly visibilityService: PremiumContentVisibilityService;
 
   constructor(params: {
     premiumRepo: PremiumIntelligenceRepository;
     paymentRecordRepo: PaymentRecordRepository;
     execLogRepo: ExecutionLogRepository;
+    receiptService: PremiumAccessReceiptService;
   }) {
     this.premiumRepo = params.premiumRepo;
     this.paymentRecordRepo = params.paymentRecordRepo;
     this.execLogRepo = params.execLogRepo;
+    this.receiptService = params.receiptService;
     this.visibilityService = new PremiumContentVisibilityService();
   }
 
   /**
    * Attempt to access premium content.
    *
-   * If the user has a valid settled payment record for this item,
-   * returns the full content with private data.
+   * Access is granted only when a valid HMAC-signed access receipt is presented
+   * and the referenced payment record is still settled for this item.
+   * Bare payer references are not accepted as proof of entitlement.
    *
-   * Otherwise, returns a 402 challenge result.
+   * Otherwise throws PaymentRequiredError (402).
    */
   async accessPremiumItem(params: {
     itemId: string;
-    payerReference?: string | undefined;
+    accessReceipt?: string | undefined;
     paymentRoute?: PaymentRoute | undefined;
   }): Promise<PremiumAccessResult> {
     const itemResult = await this.premiumRepo.findById(params.itemId);
@@ -70,42 +75,49 @@ export class PremiumAccessService {
     }
 
     const item = itemResult.value;
+    const paymentRoute =
+      params.paymentRoute ?? (item.payment_routes[0] as PaymentRoute) ?? "x402";
 
-    // Check if there's a settled payment for this item
-    if (params.payerReference) {
-      const settledResult = await this.paymentRecordRepo.findSettledByPayer(
-        params.itemId,
-        params.payerReference,
-      );
-
-      if (settledResult.ok && settledResult.value) {
-        // User has access - return full content
-        return {
-          allowed: true,
-          content: this.visibilityService.toFullWithPrivateContent(item),
-        };
-      }
+    const receiptToken = params.accessReceipt?.trim();
+    if (!receiptToken) {
+      throw new PaymentRequiredError(item, paymentRoute);
     }
 
-    // No valid payment found - check all payment records for this item
-    // to see if there's any settled record
-    const allPayments = await this.paymentRecordRepo.listByPremiumItem(params.itemId);
-
-    if (allPayments.ok) {
-      const settledPayment = allPayments.value.find((p) => p.status === "settled");
-      if (settledPayment) {
-        return {
-          allowed: true,
-          content: this.visibilityService.toFullWithPrivateContent(item),
-        };
-      }
+    const verified = this.receiptService.verify(receiptToken);
+    if (!verified.ok) {
+      throw new PaymentRequiredError(item, paymentRoute);
     }
 
-    // No access - return 402
-    throw new PaymentRequiredError(
-      item,
-      params.paymentRoute ?? (item.payment_routes[0] as PaymentRoute) ?? "x402",
-    );
+    const { claims } = verified;
+
+    // Receipt must be bound to the requested item
+    if (claims.pi !== params.itemId) {
+      throw new PaymentRequiredError(item, paymentRoute);
+    }
+
+    // Defense in depth: re-check settlement status in the database
+    const paymentResult = await this.paymentRecordRepo.findById(claims.pr);
+    if (!paymentResult.ok || !paymentResult.value) {
+      throw new PaymentRequiredError(item, paymentRoute);
+    }
+
+    const payment = paymentResult.value;
+    if (
+      payment.status !== "settled" ||
+      payment.premium_item_id !== params.itemId
+    ) {
+      throw new PaymentRequiredError(item, paymentRoute);
+    }
+
+    // If the receipt carries a payer claim, it must match the settled record
+    if (claims.pay && payment.payer_reference && claims.pay !== payment.payer_reference) {
+      throw new PaymentRequiredError(item, paymentRoute);
+    }
+
+    return {
+      allowed: true,
+      content: this.visibilityService.toFullWithPrivateContent(item),
+    };
   }
 
   /**

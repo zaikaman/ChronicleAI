@@ -134,6 +134,32 @@ export interface PaymentSettlementRequest {
   currency?: string;
 }
 
+// ── Payment Settlement Response ─────────────────────────
+export interface PaymentSettlementResponse {
+  settled: boolean;
+  paymentRecordId: string;
+  verification: {
+    amountSettled: number;
+    currency: string;
+    settlementReference?: string;
+    payerReference?: string;
+  };
+  /**
+   * HMAC-signed access receipt. Present this as
+   * `Authorization: Bearer <token>` (or X-Premium-Access-Receipt)
+   * when calling GET /premium/items/:id.
+   */
+  accessReceipt?: string;
+  accessReceiptExpiresAt?: string;
+  error?: string;
+  sponsoredWatch?: {
+    id: string;
+    targetContract: string;
+    status: string;
+    createTxHash?: string | null;
+  };
+}
+
 // ── Public Agent Activity ───────────────────────────────
 export interface AgentActivityResponse {
   alerts: PublicAlertResponse[];
