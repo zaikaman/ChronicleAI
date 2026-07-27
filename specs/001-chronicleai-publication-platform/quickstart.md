@@ -17,6 +17,9 @@ Backend environment must include:
 - Supabase URL and service credentials required by the API
 - Operator auth configuration
 - KeeperHub webhook signature secret
+- Gemini API key and model for primary alert generation
+- OpenAI API key and model for secondary alert generation
+- Groq API key and model for tertiary alert generation
 - x402 facilitator or settlement configuration
 - MPP challenge and settlement configuration
 - Treasury wallet or balance source configuration
@@ -63,10 +66,30 @@ pnpm --filter @chronicleai/web dev
 1. Send a valid KeeperHub event fixture to `POST /keeperhub/events`.
 2. Confirm the API returns `202`.
 3. Confirm a monitored event record is stored.
-4. Confirm a public alert is generated for a qualifying event.
-5. Open the frontend alerts view and verify the alert shows title, summary, event type, source reference, confidence, and published time.
+4. Confirm a public alert is generated for a qualifying event using Gemini when available.
+5. Confirm the alert stores LLM provider metadata and generation attempt history.
+6. Open the frontend alerts view and verify the alert shows title, summary, event type, source reference, confidence, provider indicator, and published time.
 
-**Expected outcome**: A qualifying event creates exactly one public alert within the target alert window, and duplicate fixture replay does not publish a second alert.
+**Expected outcome**: A qualifying event creates exactly one public alert within the target alert window, records the successful LLM provider, and duplicate fixture replay does not publish a second alert.
+
+### Scenario 1A: Public alert LLM fallback
+
+1. Configure the Gemini test adapter to fail.
+2. Send a valid qualifying KeeperHub event fixture to `POST /keeperhub/events`.
+3. Confirm ChronicleAI attempts Gemini first, then OpenAI.
+4. Configure both Gemini and OpenAI test adapters to fail.
+5. Send another valid qualifying KeeperHub event fixture.
+6. Confirm ChronicleAI attempts Gemini, OpenAI, and Groq in order.
+
+**Expected outcome**: ChronicleAI uses the first successful provider in the configured fallback order and records each failed and successful provider attempt.
+
+### Scenario 1B: All LLM providers fail
+
+1. Configure Gemini, OpenAI, and Groq test adapters to fail.
+2. Send a valid qualifying KeeperHub event fixture to `POST /keeperhub/events`.
+3. Review the stored monitored event and execution logs.
+
+**Expected outcome**: ChronicleAI records a retryable generation failure with provider attempt details and does not publish fabricated alert content.
 
 ### Scenario 2: Daily digest generation
 

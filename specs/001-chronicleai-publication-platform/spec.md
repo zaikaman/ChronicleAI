@@ -16,12 +16,13 @@ Public readers and community members receive concise, trustworthy alerts when si
 
 **Why this priority**: Real-time public alerts establish ChronicleAI's core value, demonstrate autonomous monitoring, and provide a visible baseline experience even before paid intelligence is used.
 
-**Independent Test**: Can be tested by introducing or replaying a qualifying on-chain event and verifying that a public alert is created with event context, a plain-language summary, and a timestamped audit trail.
+**Independent Test**: Can be tested by introducing or replaying a qualifying on-chain event and verifying that a public alert is created with event context, an LLM-generated plain-language summary, source references, provider fallback audit details, and a timestamped audit trail.
 
 **Acceptance Scenarios**:
 
-1. **Given** ChronicleAI is monitoring supported on-chain activity, **When** a transaction or event crosses a configured significance threshold, **Then** ChronicleAI publishes a public alert with the event type, affected protocol or asset, transaction reference, summary, and publication time.
+1. **Given** ChronicleAI is monitoring supported on-chain activity, **When** a transaction or event crosses a configured significance threshold, **Then** ChronicleAI publishes a public alert with the event type, affected protocol or asset, transaction reference, LLM-generated summary, provider used for generation, and publication time.
 2. **Given** multiple qualifying events occur close together, **When** alerts are generated, **Then** ChronicleAI avoids duplicate bulletins for the same underlying event and preserves a clear order of publication.
+3. **Given** the primary LLM provider is unavailable, **When** alert generation runs, **Then** ChronicleAI automatically attempts the configured secondary provider and then the configured tertiary provider before marking generation as failed.
 
 ---
 
@@ -77,6 +78,8 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - Publication or notification destinations are unavailable when content is ready.
 - Operating funds are below the safety buffer while new monitored events continue to arrive.
 - Generated analysis contains unsupported claims, low confidence conclusions, or insufficient source references.
+- The primary or secondary LLM provider times out, returns an invalid response, exhausts quota, or is unavailable.
+- All configured LLM providers fail during alert generation.
 
 ## Requirements *(mandatory)*
 
@@ -84,7 +87,7 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 
 - **FR-001**: ChronicleAI MUST monitor supported on-chain signals, including block-level gas or volume anomalies, large trades, liquidations, and new smart contract deployments.
 - **FR-002**: ChronicleAI MUST allow significance thresholds to be configured for monitored event types so operators can control alert sensitivity.
-- **FR-003**: ChronicleAI MUST transform qualifying monitored events into public alert summaries that include source references, affected assets or protocols when known, event magnitude, and publication time.
+- **FR-003**: ChronicleAI MUST transform qualifying monitored events into LLM-generated public alert summaries that include source references, affected assets or protocols when known, event magnitude, provider metadata, and publication time.
 - **FR-004**: ChronicleAI MUST prevent duplicate public alerts for the same underlying event within a reasonable deduplication window.
 - **FR-005**: ChronicleAI MUST maintain an auditable record of monitored events, generated content, publication attempts, and delivery outcomes.
 - **FR-006**: ChronicleAI MUST produce a daily intelligence digest that summarizes the prior reporting period and clearly distinguishes observed facts from analytical interpretation.
@@ -100,11 +103,15 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - **FR-016**: ChronicleAI MUST mark generated analysis with sufficient source references or confidence indicators so readers can distinguish verified event data from synthesized commentary.
 - **FR-017**: ChronicleAI MUST avoid publishing premium-only deep analysis in public alerts or public digests unless that content has been intentionally designated as public.
 - **FR-018**: ChronicleAI MUST maintain a premium visual experience for public and operator-facing views consistent with the ChronicleAI product identity.
+- **FR-019**: ChronicleAI MUST attempt public alert LLM generation using Gemini first, OpenAI second, and Groq third, stopping at the first valid provider response.
+- **FR-020**: ChronicleAI MUST record each LLM provider attempt, including provider name, outcome, latency, failure reason when applicable, and final provider selected.
+- **FR-021**: ChronicleAI MUST fail alert generation visibly and retryably when all configured LLM providers fail, without publishing unsupported or fabricated alert content.
 
 ### Key Entities
 
 - **Monitored Event**: A captured on-chain signal such as a large trade, liquidation, gas spike, volume anomaly, or contract deployment; includes event type, source reference, observed values, related assets or protocols, capture time, and significance score.
-- **Public Alert**: A short public bulletin generated from a monitored event; includes title, summary, source references, target destinations, publication status, and delivery history.
+- **Public Alert**: A short public bulletin generated from a monitored event; includes title, summary, source references, LLM provider metadata, target destinations, publication status, and delivery history.
+- **LLM Generation Attempt**: A recorded attempt to generate alert or report content through a configured provider; includes provider name, attempt order, input reference, status, latency, failure reason, and response metadata when available.
 - **Daily Digest**: A scheduled market intelligence report covering a defined reporting period; includes highlights, trend commentary, referenced events, publication status, and audience classification.
 - **Premium Intelligence Item**: Paid content or structured feed data that may include deeper analysis, historical context, or machine-readable event intelligence; includes price, access terms, source references, and purchase status.
 - **Payment Record**: Evidence of a premium access payment attempt or settlement; includes payment route, amount, status, requested content, payer reference where available, and settlement time.
@@ -123,6 +130,8 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - **SC-006**: Operators can determine the agent's current sustainability status, recent revenue, estimated costs, and treasury safety-buffer state in under 1 minute.
 - **SC-007**: Duplicate public alerts for the same underlying event remain below 2% of total alert volume in representative testing.
 - **SC-008**: At least 80% of test readers rate the public alert and daily digest summaries as clear, credible, and useful for understanding relevant on-chain activity.
+- **SC-009**: 100% of public alert generation attempts record provider attempt history, including fallback from Gemini to OpenAI and from OpenAI to Groq when earlier providers fail.
+- **SC-010**: When Gemini fails in representative testing, at least 95% of otherwise valid alert-generation requests complete through OpenAI or Groq within the 2-minute alert publication target.
 
 ## Assumptions
 
@@ -133,3 +142,5 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - Payment access is scoped to pay-per-request and recurring subscription demonstrations; complex invoicing, refunds, and dispute handling are outside the first release.
 - The operator audit view is intended for transparency and demonstration, not full financial accounting.
 - Publication destinations and notification channels may vary by deployment, but the experience must demonstrate both public content publishing and real-time community notification.
+- Public alert generation uses the provider fallback order Gemini, then OpenAI, then Groq. Provider API keys are backend-only secrets and are never exposed to the frontend.
+- If all LLM providers fail, ChronicleAI records a failed generation state and retryable execution log rather than publishing a fabricated summary.

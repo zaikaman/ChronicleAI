@@ -6,13 +6,13 @@
 
 ## Summary
 
-ChronicleAI will be built as a TypeScript monorepo with a Vite React frontend deployed to Vercel, a Node.js Express API deployed to Heroku, Supabase as the managed data/auth/storage platform, and KeeperHub workflows as the on-chain monitoring and automation layer. The implementation centers on four user-visible loops: public on-chain alerts, daily intelligence digests, paid premium intelligence access through x402 and MPP, and operator sustainability reporting.
+ChronicleAI will be built as a TypeScript monorepo with a Vite React frontend deployed to Vercel, a Node.js Express API deployed to Heroku, Supabase as the managed data/auth/storage platform, and KeeperHub workflows as the on-chain monitoring and automation layer. The implementation centers on four user-visible loops: public on-chain alerts generated through a Gemini -> OpenAI -> Groq LLM fallback chain, daily intelligence digests, paid premium intelligence access through x402 and MPP, and operator sustainability reporting.
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5.x across frontend, backend, shared packages, and tests; Node.js current LTS for local development, Heroku runtime, and CI
 
-**Primary Dependencies**: React, Vite, Node.js, Express, Supabase client libraries for application data/auth/storage, shadcn/ui and Radix UI for frontend components, Sonner for toasts, KeeperHub workflows and webhook/API integrations, x402 and MPP payment verification adapters, native `fetch` for external HTTP integrations
+**Primary Dependencies**: React, Vite, Node.js, Express, Supabase client libraries for application data/auth/storage, shadcn/ui and Radix UI for frontend components, Sonner for toasts, KeeperHub workflows and webhook/API integrations, x402 and MPP payment verification adapters, Gemini API, OpenAI API, Groq API, and native `fetch` for external HTTP integrations
 
 **Storage**: Supabase Postgres for operational records; Supabase Auth for operator and subscriber identity where required; Supabase Storage only for generated report assets or media if needed; file-based SQL migrations committed in the repo
 
@@ -22,9 +22,9 @@ ChronicleAI will be built as a TypeScript monorepo with a Vite React frontend de
 
 **Project Type**: Monorepo web application with separate frontend app, backend API service, shared TypeScript packages, database migrations, and feature documentation
 
-**Performance Goals**: 95% of qualifying events produce public alerts within 2 minutes of detection; paid premium content unlock completes within 30 seconds during normal operation; operators can assess sustainability status in under 1 minute; critical backend request handlers target sub-200ms p95 excluding third-party settlement or LLM latency
+**Performance Goals**: 95% of qualifying events produce public alerts within 2 minutes of detection, including LLM fallback attempts when required; paid premium content unlock completes within 30 seconds during normal operation; operators can assess sustainability status in under 1 minute; critical backend request handlers target sub-200ms p95 excluding third-party settlement or LLM latency
 
-**Constraints**: Strict typing with no `any`; no unnecessary SDK dependencies for external integrations where native `fetch` is practical; shadcn/ui and Radix UI for reusable frontend primitives; no native browser dialogs; file-based database migrations with monotonic journal timestamps; payment-gated premium content must never leak through public endpoints or unauthenticated cache paths
+**Constraints**: Strict typing with no `any`; no unnecessary SDK dependencies for external integrations where native `fetch` is practical; shadcn/ui and Radix UI for reusable frontend primitives; no native browser dialogs; file-based database migrations with monotonic journal timestamps; payment-gated premium content must never leak through public endpoints or unauthenticated cache paths; LLM provider API keys remain backend-only secrets; alert generation must record provider attempts and must not publish fabricated content if all providers fail
 
 **Scale/Scope**: Hackathon-ready first release with configurable thresholds, four monitored event categories, public alert publishing, daily digest generation, paid premium feed access, and operator audit dashboard; designed for hundreds of demo users and automated clients with clear extension points for production scale
 
@@ -35,7 +35,7 @@ ChronicleAI will be built as a TypeScript monorepo with a Vite React frontend de
 - **Code Quality & Technical Standards**: PASS. Plan uses TypeScript across the monorepo, requires strict typing, and limits external integration SDKs in favor of native `fetch` where practical.
 - **Testing Standards & Verification Discipline**: PASS. Plan requires Vitest, contract tests, `pnpm type-check`, and `pnpm check`/`pnpm fix`.
 - **User Experience & Theme Consistency**: PASS. Frontend plan uses shadcn/ui, Radix UI, Sonner, and a premium glassmorphic product identity without native dialogs.
-- **Performance & On-Chain Reliability**: PASS. Plan carries forward the sub-200ms critical-path target, 2-minute alert outcome, payment unlock timing, retries, audit logs, and KeeperHub workflow execution boundaries.
+- **Performance & On-Chain Reliability**: PASS. Plan carries forward the sub-200ms critical-path target, 2-minute alert outcome with LLM fallback, payment unlock timing, retries, audit logs, and KeeperHub workflow execution boundaries.
 - **Database Schema & Migration Integrity**: PASS. Plan requires file-based Supabase/Postgres migrations tracked in the repo and avoids ad hoc schema pushes for shared environments.
 - **Development and Branching Strategy**: PASS. Work remains on `master` as required by the constitution.
 

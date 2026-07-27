@@ -45,3 +45,4 @@ npm-debug.log*
 
 # KeeperHub (read-only reference)
 keeperhub
+.agents

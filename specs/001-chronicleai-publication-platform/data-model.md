@@ -46,15 +46,46 @@ Represents a public bulletin generated from a qualifying monitored event.
 - `publishedAt`: Public publication time
 - `dedupeKey`: Event-derived duplicate prevention key
 - `confidence`: `high`, `medium`, or `low`
+- `generationProvider`: Provider that produced the final alert content, such as `gemini`, `openai`, or `groq`
+- `generationAttemptIds`: References to provider attempts made while generating the alert
 
 **Relationships**:
 - Belongs to one `MonitoredEvent`
 - Has many `ExecutionLog` entries
+- Has many `LLMGenerationAttempt` entries
 
 **Validation rules**:
 - Published alerts require title, summary, source references, and at least one destination result
 - `dedupeKey` must be unique within the deduplication window
 - Public alerts must not contain premium-only analysis
+- Published alerts require a successful `generationProvider`
+
+## LLMGenerationAttempt
+
+Represents one provider attempt during alert or report generation.
+
+**Fields**:
+- `id`: Stable internal identifier
+- `entityType`: Related generated entity type, initially `public_alert`
+- `entityId`: Related entity identifier when available
+- `monitoredEventId`: Source monitored event for alert generation
+- `provider`: `gemini`, `openai`, or `groq`
+- `attemptOrder`: Numeric order in the fallback chain
+- `status`: `succeeded`, `failed`, or `invalid_response`
+- `latencyMs`: Provider request duration
+- `failureReason`: Safe failure category or message when the attempt fails
+- `responseMetadata`: Provider response metadata that is safe to store
+- `createdAt`: Attempt time
+
+**Relationships**:
+- Belongs to one `MonitoredEvent`
+- Can attach to one `PublicAlert` after successful generation
+- Has many `ExecutionLog` entries through the related generated entity
+
+**Validation rules**:
+- Provider attempts must follow the configured fallback order: Gemini first, OpenAI second, Groq third
+- A successful public alert may have only one successful provider attempt
+- Failure reasons must not store API keys, prompts containing secrets, or sensitive provider credentials
 
 ## DailyDigest
 
@@ -195,6 +226,14 @@ Represents an auditable action or failure across monitoring, generation, publica
 `queued` -> `partial_failure` -> `published`
 
 `queued` -> `failed`
+
+### LLMGenerationAttempt
+
+`failed`
+
+`invalid_response`
+
+`succeeded`
 
 ### DailyDigest
 
