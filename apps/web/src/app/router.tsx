@@ -30,7 +30,7 @@ export const routeDefinitions: RouteDefinition[] = [
   { id: "alerts", path: "/alerts", label: "Alerts" },
   { id: "digests", path: "/digests/latest", label: "Digest" },
   { id: "premium", path: "/premium", label: "Premium" },
-  { id: "operator", path: "/operator", label: "Operator", requiresAuth: true },
+  { id: "operator", path: "/operator", label: "Operator" },
 ];
 
 const routes: RouteObject[] = [

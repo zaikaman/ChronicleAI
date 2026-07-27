@@ -1,21 +1,16 @@
 // Contract tests: GET /operator/audit
-// Tests authenticated, unauthenticated, and response-shape cases
+// Tests response-shape cases (public endpoint, no auth required)
 
 import { describe, expect, it } from "vitest";
 import { assertOperatorAuditShape } from "./schema-assertions.ts";
 
 const API_URL = process.env["TEST_API_URL"] ?? "http://localhost:4000";
-const OPERATOR_TOKEN =
-  process.env["TEST_OPERATOR_TOKEN"] ??
-  process.env["OPERATOR_AUTH_SECRET"] ??
-  "test-operator-secret-token-for-testing";
 
 describe("Contract: GET /operator/audit", () => {
-  it("should return 200 with audit data shape when authenticated", async () => {
+  it("should return 200 with audit data shape", async () => {
     const response = await fetch(`${API_URL}/operator/audit`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${OPERATOR_TOKEN}`,
         "Content-Type": "application/json",
       },
     });
@@ -40,7 +35,6 @@ describe("Contract: GET /operator/audit", () => {
     const response = await fetch(`${API_URL}/operator/audit`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${OPERATOR_TOKEN}`,
         "Content-Type": "application/json",
       },
     });
@@ -57,55 +51,10 @@ describe("Contract: GET /operator/audit", () => {
     expect(body.treasury).toBeDefined();
   });
 
-  it("should return 401 without authorization header", async () => {
-    const response = await fetch(`${API_URL}/operator/audit`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    expect(response.status).toBe(401);
-
-    const body = (await response.json()) as Record<string, unknown>;
-    expect(body).toHaveProperty("error");
-  });
-
-  it("should return 401 with invalid token", async () => {
-    const response = await fetch(`${API_URL}/operator/audit`, {
-      method: "GET",
-      headers: {
-        Authorization: "Bearer invalid-token-that-should-be-rejected",
-        "Content-Type": "application/json",
-      },
-    });
-
-    expect(response.status).toBe(401);
-
-    const body = (await response.json()) as Record<string, unknown>;
-    expect(body).toHaveProperty("error");
-  });
-
-  it("should return 401 with malformed authorization header", async () => {
-    const response = await fetch(`${API_URL}/operator/audit`, {
-      method: "GET",
-      headers: {
-        Authorization: "NotBearer token",
-        "Content-Type": "application/json",
-      },
-    });
-
-    expect(response.status).toBe(401);
-
-    const body = (await response.json()) as Record<string, unknown>;
-    expect(body).toHaveProperty("error");
-  });
-
   it("should return 200 with alerts containing required fields", async () => {
     const response = await fetch(`${API_URL}/operator/audit`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${OPERATOR_TOKEN}`,
         "Content-Type": "application/json",
       },
     });
@@ -126,7 +75,6 @@ describe("Contract: GET /operator/audit", () => {
     const response = await fetch(`${API_URL}/operator/audit`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${OPERATOR_TOKEN}`,
         "Content-Type": "application/json",
       },
     });
@@ -147,7 +95,6 @@ describe("Contract: GET /operator/audit", () => {
     const response = await fetch(`${API_URL}/operator/audit`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${OPERATOR_TOKEN}`,
         "Content-Type": "application/json",
       },
     });

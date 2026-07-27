@@ -242,6 +242,6 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
   keeperhubRouter.use(createKeeperhubRevenueRoutes(revenueHandler));
   apiRouter.use(keeperhubRouter);
 
-  // Operator audit route (with bearer auth)
-  apiRouter.use(createOperatorRoutes(auditService, env));
+  // Operator audit route (public)
+  apiRouter.use(createOperatorRoutes(auditService));
 }

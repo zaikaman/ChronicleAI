@@ -1,5 +1,4 @@
 import { type ReactElement, useMemo } from "react";
-import { Lock } from "lucide-react";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { ExecutionLogTable } from "./ExecutionLogTable.tsx";
 import { OperatorMetricGrid } from "./OperatorMetricGrid.tsx";
@@ -9,7 +8,7 @@ import { TreasuryStatusPanel } from "./TreasuryStatusPanel.tsx";
 import { useOperatorAudit } from "./use-operator-audit.ts";
 
 export function OperatorDashboardPage(): ReactElement {
-  const { data, isLoading, error, isUnauthenticated, refetch } = useOperatorAudit();
+  const { data, isLoading, error, refetch } = useOperatorAudit();
 
   const metrics = useMemo(() => {
     if (!data) return null;
@@ -55,26 +54,6 @@ export function OperatorDashboardPage(): ReactElement {
       createdAt: p.createdAt,
     }));
   }, [data]);
-
-  if (isUnauthenticated) {
-    return (
-      <div data-testid="operator-dashboard-page">
-        <div className="max-w-md mx-auto my-16 text-center bg-frame border border-border p-8 rounded-2xl shadow-sm flex flex-col items-center">
-          <Lock className="w-12 h-12 text-accent mb-6" />
-          <h2 className="text-2xl font-bold text-foreground mb-2" style={{ fontFamily: "var(--font-space-grotesk)" }}>
-            Authentication Required
-          </h2>
-          <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-            The operator dashboard requires a valid authentication token. Please set the
-            VITE_OPERATOR_TOKEN environment variable with your operator bearer token.
-          </p>
-          <p className="text-xs font-mono p-4 bg-muted border border-border rounded-xl text-foreground break-all select-all">
-            VITE_OPERATOR_TOKEN=your_token_here
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div data-testid="operator-dashboard-page" className="max-w-5xl mx-auto">

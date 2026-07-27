@@ -16,7 +16,7 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { id: "alerts", path: "/alerts", label: "Alerts" },
   { id: "digests", path: "/digests/latest", label: "Latest Digest" },
   { id: "premium", path: "/premium", label: "Premium" },
-  { id: "operator", path: "/operator", label: "Operator", requiresAuth: true },
+  { id: "operator", path: "/operator", label: "Operator" },
 ];
 
 // ── Loading / Error / Empty State Models ────────────────
