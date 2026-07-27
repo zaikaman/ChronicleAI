@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "build": "tsc && esbuild src/server.ts --bundle --platform=node --target=node22 --outfile=dist/server.js --format=esm --packages=external",
     "start": "node dist/server.js",
     "type-check": "tsc --noEmit",
     "test": "vitest run"
@@ -21,6 +21,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/node": "^22.14.1",
+    "esbuild": "^0.28.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"

@@ -1,13 +1,13 @@
 // Frontend app router with route definitions
 
-import { createBrowserRouter, type RouteObject } from "react-router-dom";
 import type { RouteDefinition } from "@chronicleai/schemas";
+import { type RouteObject, createBrowserRouter } from "react-router-dom";
 import { App } from "./App.tsx";
 
 // ── Page components ─────────────────────────────────────
 import type React from "react";
-import { HomePage } from "../features/home/HomePage.tsx";
 import { AlertsPage } from "../features/alerts/AlertsPage.tsx";
+import { HomePage } from "../features/home/HomePage.tsx";
 
 function DigestPage(): React.ReactElement {
   return (

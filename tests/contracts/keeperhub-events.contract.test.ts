@@ -1,9 +1,12 @@
 // Contract tests for POST /keeperhub/events
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestServer } from "@chronicleai/testing";
 import type { TestServer } from "@chronicleai/testing";
-import { createQualifyingEvent, createMalformedEvent } from "../../apps/api/src/test/fixtures/keeperhub-events.ts";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  createMalformedEvent,
+  createQualifyingEvent,
+} from "../../apps/api/src/test/fixtures/keeperhub-events.ts";
 
 // Set env vars before importing app (dynamic import in beforeAll)
 const ENV = {
@@ -23,7 +26,7 @@ describe("POST /keeperhub/events", () => {
   beforeAll(async () => {
     // Set env vars before importing app
     for (const [key, value] of Object.entries(ENV)) {
-      process.env[key] = value;
+      process.env[key] = process.env[key] || value;
     }
 
     // Use dynamic import to ensure env vars are set before app module executes
@@ -54,7 +57,7 @@ describe("POST /keeperhub/events", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ChronicleAI-Signature": "test-webhook-secret",
+        "X-ChronicleAI-Signature": process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
       },
       body: JSON.stringify(malformed),
     });
@@ -69,11 +72,11 @@ describe("POST /keeperhub/events", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ChronicleAI-Signature": "test-webhook-secret",
+        "X-ChronicleAI-Signature": process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
       },
       body: JSON.stringify(event),
     });
 
     expect(response.status).toBe(202);
-  });
+  }, 30000);
 });

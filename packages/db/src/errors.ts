@@ -51,9 +51,7 @@ export class PersistenceError extends RepositoryError {
 }
 
 // ── Result Type ─────────────────────────────────────────
-export type Result<T, E = RepositoryError> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
+export type Result<T, E = RepositoryError> = { ok: true; value: T } | { ok: false; error: E };
 
 export function success<T>(value: T): Result<T> {
   return { ok: true, value };

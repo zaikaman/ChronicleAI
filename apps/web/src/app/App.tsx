@@ -1,7 +1,7 @@
+import type React from "react";
 // Application shell with navigation, layout, and toast provider
 import { NavLink, Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
-import type React from "react";
 
 const NAV_ITEMS = [
   { to: "/", label: "Home" },

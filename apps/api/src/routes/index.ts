@@ -18,15 +18,15 @@ export { apiRouter };
 // Lazy setup function to avoid circular dependencies
 import type { ServerEnv } from "@chronicleai/config";
 import type {
-  MonitoredEventRepository,
-  PublicAlertRepository,
   ExecutionLogRepository,
   LLMGenerationAttemptRepository,
+  MonitoredEventRepository,
+  PublicAlertRepository,
 } from "@chronicleai/db";
-import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
 import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
-import { createKeeperhubEventRoutes } from "./keeperhub-event-routes.ts";
+import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
 import { createAlertRoutes } from "./alert-routes.ts";
+import { createKeeperhubEventRoutes } from "./keeperhub-event-routes.ts";
 
 export interface US1Dependencies {
   eventRepo: MonitoredEventRepository;
@@ -35,11 +35,7 @@ export interface US1Dependencies {
   llmAttemptRepo: LLMGenerationAttemptRepository;
 }
 
-export function setupUS1Routes(
-  app: Express,
-  env: ServerEnv,
-  deps: US1Dependencies,
-): void {
+export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependencies): void {
   // Event ingestion handler
   const handler = new EventIngestionHandler({
     eventRepo: deps.eventRepo,
@@ -47,15 +43,15 @@ export function setupUS1Routes(
     execLogRepo: deps.execLogRepo,
     llmAttemptRepo: deps.llmAttemptRepo,
     providerConfigs: {
-      gemini: { apiKey: env.geminiApiKey, model: env.geminiModel },
-      openai: { apiKey: env.openaiApiKey, model: env.openaiModel },
-      groq: { apiKey: env.groqApiKey, model: env.groqModel },
+      gemini: { apiKey: env.geminiApiKey, model: env.geminiModel, baseUrl: env.geminiBaseUrl },
+      openai: { apiKey: env.openaiApiKey, model: env.openaiModel, baseUrl: env.openaiBaseUrl },
+      groq: { apiKey: env.groqApiKey, model: env.groqModel, baseUrl: env.groqBaseUrl },
     },
   });
 
   // KeeperHub events (with signature middleware)
   const keeperhubRouter = Router();
-  keeperhubRouter.use(keeperhubSignatureMiddleware(env.keeperhubWebhookSecret));
+  keeperhubRouter.use("/keeperhub", keeperhubSignatureMiddleware(env.keeperhubWebhookSecret));
   keeperhubRouter.use(createKeeperhubEventRoutes(handler));
   apiRouter.use(keeperhubRouter);
 

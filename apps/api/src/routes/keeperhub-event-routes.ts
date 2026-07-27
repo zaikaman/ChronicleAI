@@ -1,10 +1,10 @@
 // KeeperHub event ingestion route: POST /keeperhub/events
 // Accepts signed event payloads from KeeperHub workflows
 
-import { Router, type Router as RouterType } from "express";
 import type { EventIngestionPayload } from "@chronicleai/schemas";
-import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
+import { Router, type Router as RouterType } from "express";
 import { badRequest, conflict } from "../errors.ts";
+import type { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
 
 const SUPPORTED_EVENT_TYPES = [
   "large_swap",
@@ -14,9 +14,7 @@ const SUPPORTED_EVENT_TYPES = [
   "contract_deployment",
 ] as const;
 
-export function createKeeperhubEventRoutes(
-  handler: EventIngestionHandler,
-): RouterType {
+export function createKeeperhubEventRoutes(handler: EventIngestionHandler): RouterType {
   const router: RouterType = Router();
 
   /**
@@ -58,7 +56,9 @@ export function createKeeperhubEventRoutes(
         ...(payload.protocol ? { protocol: String(payload.protocol) } : {}),
         ...(payload.transactionHash ? { transactionHash: String(payload.transactionHash) } : {}),
         ...(payload.assetSymbols ? { assetSymbols: payload.assetSymbols as string[] } : {}),
-        ...(payload.magnitude ? { magnitude: payload.magnitude as { value: number; unit: string } } : {}),
+        ...(payload.magnitude
+          ? { magnitude: payload.magnitude as { value: number; unit: string } }
+          : {}),
       };
 
       const result = await handler.ingest(typedPayload);
@@ -88,11 +88,19 @@ function validateEventPayload(payload: Record<string, unknown>): string[] {
     errors.push("sourceEventId is required and must be a string");
   }
 
-  if (!payload.eventType || !SUPPORTED_EVENT_TYPES.includes(payload.eventType as typeof SUPPORTED_EVENT_TYPES[number])) {
+  if (
+    !payload.eventType ||
+    !SUPPORTED_EVENT_TYPES.includes(payload.eventType as (typeof SUPPORTED_EVENT_TYPES)[number])
+  ) {
     errors.push(`eventType must be one of: ${SUPPORTED_EVENT_TYPES.join(", ")}`);
   }
 
-  if (payload.chainId === undefined || payload.chainId === null || typeof Number(payload.chainId) !== "number" || Number.isNaN(Number(payload.chainId))) {
+  if (
+    payload.chainId === undefined ||
+    payload.chainId === null ||
+    typeof Number(payload.chainId) !== "number" ||
+    Number.isNaN(Number(payload.chainId))
+  ) {
     errors.push("chainId is required and must be a number");
   }
 

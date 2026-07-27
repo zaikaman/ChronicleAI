@@ -1,6 +1,6 @@
 // Integration tests for KeeperHub event ingestion flow
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, expect, it } from "vitest";
 
 describe("KeeperHub Event Ingestion - Integration", () => {
   // These tests verify the orchestration flow without needing a real database
@@ -10,7 +10,13 @@ describe("KeeperHub Event Ingestion - Integration", () => {
 
     const mockSupabase = {
       from: () => ({
-        insert: () => ({ data: [{ id: "test-id-1" }], error: null, select: () => ({ single: () => Promise.resolve({ data: { id: "test-id-1" }, error: null }) }) }),
+        insert: () => ({
+          data: [{ id: "test-id-1" }],
+          error: null,
+          select: () => ({
+            single: () => Promise.resolve({ data: { id: "test-id-1" }, error: null }),
+          }),
+        }),
         select: () => ({
           eq: () => Promise.resolve({ data: [], error: null }),
           order: () => Promise.resolve({ data: [], error: null }),
@@ -77,7 +83,9 @@ describe("KeeperHub Event Ingestion - Integration", () => {
   });
 
   it("qualifying event qualification returns correct result", async () => {
-    const { createEventQualificationService } = await import("../services/event-qualification-service.ts");
+    const { createEventQualificationService } = await import(
+      "../services/event-qualification-service.ts"
+    );
 
     const service = createEventQualificationService();
 
@@ -92,7 +100,9 @@ describe("KeeperHub Event Ingestion - Integration", () => {
   });
 
   it("ignored event qualification returns ignored correctly", async () => {
-    const { createEventQualificationService } = await import("../services/event-qualification-service.ts");
+    const { createEventQualificationService } = await import(
+      "../services/event-qualification-service.ts"
+    );
 
     const service = createEventQualificationService();
 
@@ -126,7 +136,9 @@ describe("KeeperHub Event Ingestion - Integration", () => {
   });
 
   it("all providers fail does not produce alert content", async () => {
-    const { createPublicAlertContentService } = await import("../services/public-alert-content-service.ts");
+    const { createPublicAlertContentService } = await import(
+      "../services/public-alert-content-service.ts"
+    );
     const { createLLMGenerationAttemptRepository } = await import("@chronicleai/db");
 
     function mockInsert() {

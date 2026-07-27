@@ -1,7 +1,7 @@
 // Alert data fetching hook
 
-import { useState, useEffect, useCallback } from "react";
 import type { PublicAlertResponse } from "@chronicleai/schemas";
+import { useCallback, useEffect, useState } from "react";
 
 export interface AlertsState {
   alerts: PublicAlertResponse[];

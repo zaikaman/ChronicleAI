@@ -1,7 +1,7 @@
 // Test server bootstrap helpers for API integration tests
 // Boots HTTP server in tests without listening on a fixed port
 
-import { createServer, type Server } from "node:http";
+import { type Server, createServer } from "node:http";
 import type { Express } from "express";
 
 export interface TestServer {

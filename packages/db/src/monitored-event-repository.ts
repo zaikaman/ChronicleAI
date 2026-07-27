@@ -1,16 +1,7 @@
 // Monitored event repository: create, find by source/sourceEventId, update status/significance, list
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  type MonitoredEventInsert,
-  type MonitoredEventRow,
-  type MonitoredEventUpdate,
-} from "./types.ts";
-import {
-  type Result,
-  success,
-  failure,
-} from "./errors.ts";
+import { type Result, failure, success } from "./errors.ts";
 import {
   type PaginationParams,
   buildInsertPayload,
@@ -19,19 +10,13 @@ import {
   mapPostgrestError,
   normalizePagination,
 } from "./repository-utils.ts";
+import type { MonitoredEventInsert, MonitoredEventRow, MonitoredEventUpdate } from "./types.ts";
 
 export interface MonitoredEventRepository {
   create(data: MonitoredEventInsert): Promise<Result<MonitoredEventRow>>;
   findById(id: string): Promise<Result<MonitoredEventRow>>;
-  findBySourceAndEventId(
-    source: string,
-    sourceEventId: string,
-  ): Promise<MonitoredEventRow | null>;
-  updateStatus(
-    id: string,
-    status: string,
-    score?: number,
-  ): Promise<Result<MonitoredEventRow>>;
+  findBySourceAndEventId(source: string, sourceEventId: string): Promise<MonitoredEventRow | null>;
+  updateStatus(id: string, status: string, score?: number): Promise<Result<MonitoredEventRow>>;
   list(
     params?: PaginationParams & {
       status?: string;
@@ -40,18 +25,13 @@ export interface MonitoredEventRepository {
   ): Promise<Result<MonitoredEventRow[]>>;
 }
 
-export function createMonitoredEventRepository(
-  supabase: SupabaseClient,
-): MonitoredEventRepository {
+export function createMonitoredEventRepository(supabase: SupabaseClient): MonitoredEventRepository {
   const table = () => supabase.from("monitored_events");
 
   return {
     async create(data) {
       const payload = buildInsertPayload(data as unknown as Record<string, unknown>);
-      const { data: rows, error } = await table()
-        .insert(payload)
-        .select()
-        .single();
+      const { data: rows, error } = await table().insert(payload).select().single();
 
       if (error) {
         return failure(mapPostgrestError(error));
@@ -61,9 +41,7 @@ export function createMonitoredEventRepository(
     },
 
     async findById(id) {
-      const { data: rows, error } = await table()
-        .select("*")
-        .eq("id", id);
+      const { data: rows, error } = await table().select("*").eq("id", id);
 
       if (error) {
         return failure(mapPostgrestError(error));
@@ -94,11 +72,7 @@ export function createMonitoredEventRepository(
       }
 
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
-      const { data: rows, error } = await table()
-        .update(payload)
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: rows, error } = await table().update(payload).eq("id", id).select().single();
 
       if (error) {
         return failure(mapPostgrestError(error));

@@ -1,10 +1,10 @@
 // Home page with latest alerts preview
 
-import { Link } from "react-router-dom";
-import { useAlerts } from "../alerts/use-alerts.ts";
-import { AlertCard } from "../alerts/AlertCard.tsx";
-import { LoadingState, EmptyState, RetryState } from "../../components/state-views.tsx";
 import type { ReactElement } from "react";
+import { Link } from "react-router-dom";
+import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { AlertCard } from "../alerts/AlertCard.tsx";
+import { useAlerts } from "../alerts/use-alerts.ts";
 
 export function HomePage(): ReactElement {
   const { alerts, isLoading, error, refetch } = useAlerts(3);
@@ -41,8 +41,8 @@ export function HomePage(): ReactElement {
             lineHeight: 1.6,
           }}
         >
-          Autonomous on-chain intelligence monitoring and alert publication.
-          Real-time alerts for significant blockchain events.
+          Autonomous on-chain intelligence monitoring and alert publication. Real-time alerts for
+          significant blockchain events.
         </p>
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
           <Link
@@ -103,9 +103,7 @@ export function HomePage(): ReactElement {
             marginBottom: "1.5rem",
           }}
         >
-          <h2 style={{ fontSize: "var(--font-size-xl)", fontWeight: 600 }}>
-            Latest Alerts
-          </h2>
+          <h2 style={{ fontSize: "var(--font-size-xl)", fontWeight: 600 }}>Latest Alerts</h2>
           <Link
             to="/alerts"
             style={{
@@ -121,11 +119,7 @@ export function HomePage(): ReactElement {
         {isLoading ? (
           <LoadingState message="Loading latest alerts..." />
         ) : error ? (
-          <RetryState
-            title="Failed to load alerts"
-            message={error}
-            onRetry={refetch}
-          />
+          <RetryState title="Failed to load alerts" message={error} onRetry={refetch} />
         ) : alerts.length === 0 ? (
           <EmptyState
             title="No alerts yet"

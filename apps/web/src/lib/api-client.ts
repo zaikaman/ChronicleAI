@@ -67,7 +67,9 @@ export class ApiClient {
       : controller.signal;
 
     try {
-      const requestBody: string | null | undefined = options?.body ? JSON.stringify(options.body) : null;
+      const requestBody: string | null | undefined = options?.body
+        ? JSON.stringify(options.body)
+        : null;
 
       const response = await fetch(this.buildUrl(path, options?.params), {
         method,
@@ -121,19 +123,11 @@ export class ApiClient {
     return this.request<T>("GET", path, options);
   }
 
-  async post<T>(
-    path: string,
-    body?: unknown,
-    options?: { signal?: AbortSignal },
-  ): Promise<T> {
+  async post<T>(path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
     return this.request<T>("POST", path, { body, ...options });
   }
 
-  async put<T>(
-    path: string,
-    body?: unknown,
-    options?: { signal?: AbortSignal },
-  ): Promise<T> {
+  async put<T>(path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
     return this.request<T>("PUT", path, { body, ...options });
   }
 

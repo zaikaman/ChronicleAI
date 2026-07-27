@@ -6,7 +6,6 @@ import type {
   EventType,
   PaymentRoute,
   PaymentStatus,
-  PremiumItemStatus,
   TreasuryStatus,
 } from "./domain.ts";
 

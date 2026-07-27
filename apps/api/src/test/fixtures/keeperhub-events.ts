@@ -2,7 +2,9 @@
 
 import type { EventIngestionPayload } from "@chronicleai/schemas";
 
-export function createQualifyingEvent(overrides?: Partial<EventIngestionPayload>): EventIngestionPayload {
+export function createQualifyingEvent(
+  overrides?: Partial<EventIngestionPayload>,
+): EventIngestionPayload {
   return {
     sourceEventId: `test-qualifying-${Date.now()}`,
     eventType: "large_swap",
@@ -17,7 +19,9 @@ export function createQualifyingEvent(overrides?: Partial<EventIngestionPayload>
   };
 }
 
-export function createIgnoredEvent(overrides?: Partial<EventIngestionPayload>): EventIngestionPayload {
+export function createIgnoredEvent(
+  overrides?: Partial<EventIngestionPayload>,
+): EventIngestionPayload {
   return {
     sourceEventId: `test-ignored-${Date.now()}`,
     eventType: "large_swap",
@@ -52,7 +56,9 @@ export function createDuplicateEvent(baseEvent: EventIngestionPayload): EventIng
   };
 }
 
-export function createGeminiFailureEvent(overrides?: Partial<EventIngestionPayload>): EventIngestionPayload {
+export function createGeminiFailureEvent(
+  overrides?: Partial<EventIngestionPayload>,
+): EventIngestionPayload {
   return createQualifyingEvent({
     sourceEventId: `test-gemini-fail-${Date.now()}`,
     eventType: "liquidation",
@@ -61,7 +67,9 @@ export function createGeminiFailureEvent(overrides?: Partial<EventIngestionPaylo
   });
 }
 
-export function createOpenAIFailureEvent(overrides?: Partial<EventIngestionPayload>): EventIngestionPayload {
+export function createOpenAIFailureEvent(
+  overrides?: Partial<EventIngestionPayload>,
+): EventIngestionPayload {
   return createQualifyingEvent({
     sourceEventId: `test-openai-fail-${Date.now()}`,
     eventType: "gas_spike",
@@ -70,7 +78,9 @@ export function createOpenAIFailureEvent(overrides?: Partial<EventIngestionPaylo
   });
 }
 
-export function createGroqFailureEvent(overrides?: Partial<EventIngestionPayload>): EventIngestionPayload {
+export function createGroqFailureEvent(
+  overrides?: Partial<EventIngestionPayload>,
+): EventIngestionPayload {
   return createQualifyingEvent({
     sourceEventId: `test-groq-fail-${Date.now()}`,
     eventType: "contract_deployment",
@@ -78,7 +88,9 @@ export function createGroqFailureEvent(overrides?: Partial<EventIngestionPayload
   });
 }
 
-export function createAllProvidersFailedEvent(overrides?: Partial<EventIngestionPayload>): EventIngestionPayload {
+export function createAllProvidersFailedEvent(
+  overrides?: Partial<EventIngestionPayload>,
+): EventIngestionPayload {
   return createQualifyingEvent({
     sourceEventId: `test-all-fail-${Date.now()}`,
     eventType: "volume_anomaly",

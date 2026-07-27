@@ -1,7 +1,7 @@
 // Express middleware: JSON parsing, request IDs, CORS, timing headers, and error handling
 
-import type { Request, Response, NextFunction } from "express";
 import { randomUUID } from "node:crypto";
+import type { NextFunction, Request, Response } from "express";
 import { ApiError } from "../errors.ts";
 
 // ── Request ID ──────────────────────────────────────────
@@ -19,7 +19,10 @@ export function corsMiddleware(allowedOrigin: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature",
+    );
     res.setHeader("Access-Control-Max-Age", "86400");
 
     if (req.method === "OPTIONS") {

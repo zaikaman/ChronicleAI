@@ -1,6 +1,6 @@
 // Unit tests for public alert content safety
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
 function mockInsert() {
   return {
@@ -31,7 +31,9 @@ function createMockSupabase() {
 
 describe("PublicAlertContentService - Safety", () => {
   it("validates response with all required fields", async () => {
-    const { createPublicAlertContentService } = await import("../services/public-alert-content-service.ts");
+    const { createPublicAlertContentService } = await import(
+      "../services/public-alert-content-service.ts"
+    );
     const { createLLMGenerationAttemptRepository } = await import("@chronicleai/db");
 
     const llmAttemptRepo = createLLMGenerationAttemptRepository(createMockSupabase() as never);
@@ -50,7 +52,9 @@ describe("PublicAlertContentService - Safety", () => {
   });
 
   it("generates safe source references without premium-only content", async () => {
-    const { createPublicAlertContentService } = await import("../services/public-alert-content-service.ts");
+    const { createPublicAlertContentService } = await import(
+      "../services/public-alert-content-service.ts"
+    );
     const { createLLMGenerationAttemptRepository } = await import("@chronicleai/db");
 
     const llmAttemptRepo = createLLMGenerationAttemptRepository(createMockSupabase() as never);

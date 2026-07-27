@@ -1,9 +1,9 @@
 // Express middleware: KeeperHub webhook signature verification
 
-import type { Request, Response, NextFunction } from "express";
 import { timingSafeEqual } from "node:crypto";
-import { unauthorized } from "../errors.ts";
 import type { WebhookAuthMetadata } from "@chronicleai/schemas";
+import type { NextFunction, Request, Response } from "express";
+import { unauthorized } from "../errors.ts";
 
 // Augment Express Request to include verified webhook metadata
 declare module "express" {
@@ -18,7 +18,9 @@ declare module "express" {
  */
 export function keeperhubSignatureMiddleware(secret: string) {
   if (!secret || secret.length < 16) {
-    console.warn("KeeperHub signature secret is too short or missing - signature validation will fail");
+    console.warn(
+      "KeeperHub signature secret is too short or missing - signature validation will fail",
+    );
   }
 
   return (req: Request, res: Response, next: NextFunction): void => {

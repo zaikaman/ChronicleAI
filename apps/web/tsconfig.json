@@ -12,10 +12,10 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["vite/client"],
     "sourceMap": true,
-    "outDir": "./dist",
     "baseUrl": ".",
     "paths": {
       "@chronicleai/schemas": ["../../packages/schemas/src"],

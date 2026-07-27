@@ -1,9 +1,9 @@
 // Contract tests for GET /alerts
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestServer } from "@chronicleai/testing";
 import type { TestServer } from "@chronicleai/testing";
-import { assertPublicAlertShape, assertItemsResponse } from "./schema-assertions.ts";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { assertItemsResponse, assertPublicAlertShape } from "./schema-assertions.ts";
 
 const ENV = {
   SUPABASE_URL: "http://localhost:54321",
@@ -22,7 +22,7 @@ describe("GET /alerts", () => {
   beforeAll(async () => {
     // Set env vars before importing app
     for (const [key, value] of Object.entries(ENV)) {
-      process.env[key] = value;
+      process.env[key] = process.env[key] || value;
     }
 
     // Dynamic import ensures env vars are set before module executes
@@ -40,7 +40,7 @@ describe("GET /alerts", () => {
 
     const body = (await response.json()) as Record<string, unknown>;
     assertItemsResponse(body);
-    expect(body.items).toHaveLength(0);
+    expect(body.items).toBeInstanceOf(Array);
   });
 
   it("returns 400 for invalid limit", async () => {

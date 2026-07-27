@@ -1,6 +1,6 @@
 // Contract test utilities for validating API response shape against shared schemas
 
-import { describe, it, expect } from "vitest";
+import { describe, expect } from "vitest";
 
 // ── Required Field Check ───────────────────────────────
 export function assertHasRequiredFields(
@@ -9,10 +9,7 @@ export function assertHasRequiredFields(
   path = "response",
 ): void {
   for (const field of requiredFields) {
-    expect(
-      obj,
-      `${path} should have required field: ${field}`,
-    ).toHaveProperty(field);
+    expect(obj, `${path} should have required field: ${field}`).toHaveProperty(field);
   }
 }
 
@@ -22,10 +19,9 @@ export function assertValidEnumValue<T extends string>(
   allowedValues: readonly T[],
   fieldName: string,
 ): asserts value is T {
-  expect(
-    allowedValues,
-    `${fieldName} should be one of: ${allowedValues.join(", ")}`,
-  ).toContain(value);
+  expect(allowedValues, `${fieldName} should be one of: ${allowedValues.join(", ")}`).toContain(
+    value,
+  );
 }
 
 // ── Response Shape Assertions ──────────────────────────
@@ -81,22 +77,11 @@ export function assertPaymentChallengeShape(challenge: Record<string, unknown>):
 }
 
 export function assertPaymentRecordShape(record: Record<string, unknown>): void {
-  assertHasRequiredFields(record, [
-    "id",
-    "premiumItemId",
-    "paymentRoute",
-    "status",
-  ]);
+  assertHasRequiredFields(record, ["id", "premiumItemId", "paymentRoute", "status"]);
 }
 
 export function assertOperatorAuditShape(audit: Record<string, unknown>): void {
-  assertHasRequiredFields(audit, [
-    "alerts",
-    "digests",
-    "payments",
-    "treasury",
-    "executionLogs",
-  ]);
+  assertHasRequiredFields(audit, ["alerts", "digests", "payments", "treasury", "executionLogs"]);
 }
 
 // ── HTTP Status Assertions ─────────────────────────────

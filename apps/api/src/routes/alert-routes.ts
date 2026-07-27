@@ -1,12 +1,10 @@
 // Public alerts route: GET /alerts
 // Returns newest-first public alerts with limit validation
 
-import { Router, type Router as RouterType } from "express";
 import type { PublicAlertRepository, PublicAlertRow } from "@chronicleai/db";
+import { Router, type Router as RouterType } from "express";
 
-export function createAlertRoutes(
-  alertRepo: PublicAlertRepository,
-): RouterType {
+export function createAlertRoutes(alertRepo: PublicAlertRepository): RouterType {
   const router: RouterType = Router();
 
   /**

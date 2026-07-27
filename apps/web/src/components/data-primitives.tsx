@@ -26,20 +26,27 @@ export function MetricCard({
         : "var(--fg-tertiary)";
 
   return (
-    <div
-      className="card"
-      data-testid={dataTestId}
-      style={{ minWidth: "160px" }}
-    >
-      <div className="text-tertiary" style={{ fontSize: "var(--font-size-xs)", marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+    <div className="card" data-testid={dataTestId} style={{ minWidth: "160px" }}>
+      <div
+        className="text-tertiary"
+        style={{
+          fontSize: "var(--font-size-xs)",
+          marginBottom: "0.25rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+        }}
+      >
         {label}
       </div>
-      <div style={{ fontSize: "var(--font-size-2xl)", fontWeight: 700, color: "var(--fg-primary)" }}>
+      <div
+        style={{ fontSize: "var(--font-size-2xl)", fontWeight: 700, color: "var(--fg-primary)" }}
+      >
         {value}
       </div>
       {change ? (
         <div style={{ fontSize: "var(--font-size-xs)", color: changeColor, marginTop: "0.25rem" }}>
-          {change.direction === "up" ? "\u2191" : change.direction === "down" ? "\u2193" : "\u2192"} {change.value}
+          {change.direction === "up" ? "\u2191" : change.direction === "down" ? "\u2193" : "\u2192"}{" "}
+          {change.value}
         </div>
       ) : null}
     </div>
@@ -124,7 +131,9 @@ export function SourceReference({
           {reference}
         </a>
       ) : (
-        <code style={{ color: "var(--fg-secondary)", fontFamily: "var(--font-mono)" }}>{reference}</code>
+        <code style={{ color: "var(--fg-secondary)", fontFamily: "var(--font-mono)" }}>
+          {reference}
+        </code>
       )}
     </span>
   );
@@ -168,7 +177,11 @@ export function TimestampDisplay({
       display = date.toLocaleString();
       break;
     case "date":
-      display = date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      display = date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
       break;
     case "time":
       display = date.toLocaleTimeString();

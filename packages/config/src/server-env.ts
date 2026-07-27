@@ -8,10 +8,13 @@ export interface ServerEnv {
   operatorAuthSecret: string;
   geminiApiKey: string;
   geminiModel: string;
+  geminiBaseUrl: string | undefined;
   openaiApiKey: string;
   openaiModel: string;
+  openaiBaseUrl: string | undefined;
   groqApiKey: string;
   groqModel: string;
+  groqBaseUrl: string | undefined;
   x402FacilitatorUrl: string | undefined;
   mppSecret: string | undefined;
   treasuryWalletAddress: string | undefined;
@@ -42,10 +45,13 @@ export function loadServerEnv(): ServerEnv {
     operatorAuthSecret: requireEnv("OPERATOR_AUTH_SECRET"),
     geminiApiKey: optionalEnv("GEMINI_API_KEY", "") as string,
     geminiModel: optionalEnv("GEMINI_MODEL", "gemini-2.0-flash") as string,
+    geminiBaseUrl: optionalEnv("GEMINI_BASE_URL"),
     openaiApiKey: optionalEnv("OPENAI_API_KEY", "") as string,
     openaiModel: optionalEnv("OPENAI_MODEL", "gpt-4o-mini") as string,
+    openaiBaseUrl: optionalEnv("OPENAI_BASE_URL"),
     groqApiKey: optionalEnv("GROQ_API_KEY", "") as string,
     groqModel: optionalEnv("GROQ_MODEL", "llama-3.3-70b-versatile") as string,
+    groqBaseUrl: optionalEnv("GROQ_BASE_URL"),
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),
     mppSecret: optionalEnv("MPP_SECRET"),
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),

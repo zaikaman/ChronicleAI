@@ -1,7 +1,6 @@
 // Express middleware: Operator bearer authentication
 
-import type { Request, Response, NextFunction } from "express";
-import { unauthorized } from "../errors.ts";
+import type { NextFunction, Request, Response } from "express";
 
 /**
  * Creates middleware that validates bearer auth for operator routes.

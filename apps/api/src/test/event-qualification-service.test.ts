@@ -1,6 +1,6 @@
 // Unit tests for event qualification service
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createEventQualificationService } from "../services/event-qualification-service.ts";
 
 describe("EventQualificationService", () => {

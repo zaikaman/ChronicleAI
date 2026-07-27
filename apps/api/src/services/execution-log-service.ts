@@ -1,9 +1,6 @@
 // Structured execution logger service that writes to execution_logs
 
-import type {
-  ExecutionLogActionType,
-  ExecutionLogStatus,
-} from "@chronicleai/schemas";
+import type { ExecutionLogActionType, ExecutionLogStatus } from "@chronicleai/schemas";
 
 // ── ExecutionLogInsert inline type ─────────────────────
 interface ExecutionLogInsert {
@@ -45,7 +42,8 @@ export function createExecutionLogService(supabase: {
         message: params?.message ?? null,
         details: params?.details ?? {},
         started_at: new Date().toISOString(),
-        completed_at: status === "succeeded" || status === "failed" ? new Date().toISOString() : null,
+        completed_at:
+          status === "succeeded" || status === "failed" ? new Date().toISOString() : null,
       };
 
       const { error } = await supabase.from("execution_logs").insert(insert);

@@ -1,19 +1,9 @@
 // LLM generation attempt repository: create and list by entity
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  type LLMGenerationAttemptInsert,
-  type LLMGenerationAttemptRow,
-} from "./types.ts";
-import {
-  type Result,
-  success,
-  failure,
-} from "./errors.ts";
-import {
-  buildInsertPayload,
-  mapPostgrestError,
-} from "./repository-utils.ts";
+import { type Result, failure, success } from "./errors.ts";
+import { buildInsertPayload, mapPostgrestError } from "./repository-utils.ts";
+import type { LLMGenerationAttemptInsert, LLMGenerationAttemptRow } from "./types.ts";
 
 export interface LLMGenerationAttemptRepository {
   create(data: LLMGenerationAttemptInsert): Promise<Result<LLMGenerationAttemptRow>>;
@@ -29,10 +19,7 @@ export function createLLMGenerationAttemptRepository(
   return {
     async create(data) {
       const payload = buildInsertPayload(data as unknown as Record<string, unknown>);
-      const { data: rows, error } = await table()
-        .insert(payload)
-        .select()
-        .single();
+      const { data: rows, error } = await table().insert(payload).select().single();
 
       if (error) {
         return failure(mapPostgrestError(error));

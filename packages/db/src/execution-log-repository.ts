@@ -1,19 +1,9 @@
 // Execution log repository: append logs and list by entity
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  type ExecutionLogInsert,
-  type ExecutionLogRow,
-} from "./types.ts";
-import {
-  type Result,
-  success,
-  failure,
-} from "./errors.ts";
-import {
-  buildInsertPayload,
-  mapPostgrestError,
-} from "./repository-utils.ts";
+import { type Result, failure, success } from "./errors.ts";
+import { buildInsertPayload, mapPostgrestError } from "./repository-utils.ts";
+import type { ExecutionLogInsert, ExecutionLogRow } from "./types.ts";
 
 export interface ExecutionLogRepository {
   append(data: ExecutionLogInsert): Promise<Result<ExecutionLogRow>>;
@@ -22,23 +12,16 @@ export interface ExecutionLogRepository {
     entityId: string,
     limitParam?: number,
   ): Promise<Result<ExecutionLogRow[]>>;
-  listRecent(
-    limitParam?: number,
-  ): Promise<Result<ExecutionLogRow[]>>;
+  listRecent(limitParam?: number): Promise<Result<ExecutionLogRow[]>>;
 }
 
-export function createExecutionLogRepository(
-  supabase: SupabaseClient,
-): ExecutionLogRepository {
+export function createExecutionLogRepository(supabase: SupabaseClient): ExecutionLogRepository {
   const table = () => supabase.from("execution_logs");
 
   return {
     async append(data) {
       const payload = buildInsertPayload(data as unknown as Record<string, unknown>);
-      const { data: rows, error } = await table()
-        .insert(payload)
-        .select()
-        .single();
+      const { data: rows, error } = await table().insert(payload).select().single();
 
       if (error) {
         return failure(mapPostgrestError(error));

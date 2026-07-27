@@ -1,14 +1,15 @@
 // LLM-backed public alert content generator with Gemini -> OpenAI -> Groq fallback
 
-import { LLM_FALLBACK_ORDER, ALERT_GENERATION_TIMEOUT_MS } from "@chronicleai/config";
-import type { EventType, LLMProvider, Confidence } from "@chronicleai/schemas";
+import { ALERT_GENERATION_TIMEOUT_MS, LLM_FALLBACK_ORDER } from "@chronicleai/config";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
+import type { Confidence, EventType, LLMProvider } from "@chronicleai/schemas";
 
 // ── Types ───────────────────────────────────────────────
 
 export interface LLMProviderConfig {
   apiKey: string;
   model: string;
+  baseUrl?: string | undefined;
 }
 
 export interface LLMProviderMap {
@@ -73,7 +74,8 @@ function buildPrompt(input: AlertGenerationInput): string {
   if (input.assetSymbols?.length) parts.push(`Assets: ${input.assetSymbols.join(", ")}`);
   if (input.magnitude) parts.push(`Magnitude: ${input.magnitude.value} ${input.magnitude.unit}`);
   if (input.transactionHash) parts.push(`Transaction: ${input.transactionHash}`);
-  if (input.significanceScore) parts.push(`Significance Score: ${input.significanceScore.toFixed(2)}`);
+  if (input.significanceScore)
+    parts.push(`Significance Score: ${input.significanceScore.toFixed(2)}`);
 
   parts.push(
     "",
@@ -132,8 +134,15 @@ async function callGemini(
   prompt: string,
   signal: AbortSignal,
 ): Promise<string> {
+  let host = config.baseUrl || "https://generativelanguage.googleapis.com";
+  if (host.endsWith("/")) host = host.slice(0, -1);
+  const path = host.includes("/v1")
+    ? `/models/${config.model}:generateContent?key=${config.apiKey}`
+    : `/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+  const url = `${host}${path}`;
+
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`,
+    url,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -165,7 +174,11 @@ async function callOpenAI(
   prompt: string,
   signal: AbortSignal,
 ): Promise<string> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  let host = config.baseUrl || "https://api.openai.com/v1";
+  if (host.endsWith("/")) host = host.slice(0, -1);
+  const url = `${host}/chat/completions`;
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -174,7 +187,11 @@ async function callOpenAI(
     body: JSON.stringify({
       model: config.model,
       messages: [
-        { role: "system", content: "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events." },
+        {
+          role: "system",
+          content:
+            "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
+        },
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
@@ -200,7 +217,11 @@ async function callGroq(
   prompt: string,
   signal: AbortSignal,
 ): Promise<string> {
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  let host = config.baseUrl || "https://api.groq.com/openai/v1";
+  if (host.endsWith("/")) host = host.slice(0, -1);
+  const url = `${host}/chat/completions`;
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -209,7 +230,11 @@ async function callGroq(
     body: JSON.stringify({
       model: config.model,
       messages: [
-        { role: "system", content: "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events." },
+        {
+          role: "system",
+          content:
+            "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
+        },
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
@@ -236,7 +261,10 @@ export function createPublicAlertContentService(
   providerConfigs: LLMProviderMap,
   llmAttemptRepo: LLMGenerationAttemptRepository,
 ): PublicAlertContentService {
-  const providerCallers: Record<LLMProvider, (config: LLMProviderConfig, prompt: string, signal: AbortSignal) => Promise<string>> = {
+  const providerCallers: Record<
+    LLMProvider,
+    (config: LLMProviderConfig, prompt: string, signal: AbortSignal) => Promise<string>
+  > = {
     gemini: callGemini,
     openai: callOpenAI,
     groq: callGroq,
@@ -300,7 +328,8 @@ export function createPublicAlertContentService(
             attempt_order: LLM_FALLBACK_ORDER.indexOf(provider) + 1,
             status: "invalid_response",
             latency_ms: latencyMs,
-            failure_reason: "Response did not contain valid JSON with title, summary, and confidence",
+            failure_reason:
+              "Response did not contain valid JSON with title, summary, and confidence",
           });
         } catch (error) {
           clearTimeout(timeoutId);

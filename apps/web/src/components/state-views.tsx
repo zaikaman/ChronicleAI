@@ -72,7 +72,10 @@ export function EmptyState({
     >
       <h3 style={{ fontSize: "var(--font-size-lg)", color: "var(--fg-primary)" }}>{title}</h3>
       {description ? (
-        <p className="text-secondary" style={{ fontSize: "var(--font-size-sm)", maxWidth: "400px" }}>
+        <p
+          className="text-secondary"
+          style={{ fontSize: "var(--font-size-sm)", maxWidth: "400px" }}
+        >
           {description}
         </p>
       ) : null}
@@ -109,7 +112,9 @@ export function ErrorState({
       }}
     >
       <h3 style={{ fontSize: "var(--font-size-lg)", color: "var(--accent-error)" }}>{title}</h3>
-      <p className="text-secondary" style={{ fontSize: "var(--font-size-sm)" }}>{message}</p>
+      <p className="text-secondary" style={{ fontSize: "var(--font-size-sm)" }}>
+        {message}
+      </p>
     </div>
   );
 }
@@ -145,7 +150,9 @@ export function RetryState({
       }}
     >
       <h3 style={{ fontSize: "var(--font-size-lg)", color: "var(--accent-error)" }}>{title}</h3>
-      <p className="text-secondary" style={{ fontSize: "var(--font-size-sm)" }}>{message}</p>
+      <p className="text-secondary" style={{ fontSize: "var(--font-size-sm)" }}>
+        {message}
+      </p>
       <button
         type="button"
         onClick={onRetry}

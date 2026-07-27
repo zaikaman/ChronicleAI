@@ -1,31 +1,20 @@
 // Public alert repository: create, find by dedupe key, list newest-first, update delivery status
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  type PublicAlertInsert,
-  type PublicAlertRow,
-  type PublicAlertUpdate,
-} from "./types.ts";
-import {
-  type Result,
-  success,
-  failure,
-} from "./errors.ts";
+import { type Result, failure, success } from "./errors.ts";
 import {
   buildInsertPayload,
   buildUpdatePayload,
   expectRow,
   mapPostgrestError,
-  normalizePagination,
 } from "./repository-utils.ts";
+import type { PublicAlertInsert, PublicAlertRow, PublicAlertUpdate } from "./types.ts";
 
 export interface PublicAlertRepository {
   create(data: PublicAlertInsert): Promise<Result<PublicAlertRow>>;
   findById(id: string): Promise<Result<PublicAlertRow>>;
   findByDedupeKey(dedupeKey: string): Promise<PublicAlertRow | null>;
-  list(
-    limitParam?: number,
-  ): Promise<Result<PublicAlertRow[]>>;
+  list(limitParam?: number): Promise<Result<PublicAlertRow[]>>;
   updateDeliveryStatus(
     id: string,
     status: string,
@@ -40,18 +29,13 @@ export interface PublicAlertRepository {
   ): Promise<Result<PublicAlertRow>>;
 }
 
-export function createPublicAlertRepository(
-  supabase: SupabaseClient,
-): PublicAlertRepository {
+export function createPublicAlertRepository(supabase: SupabaseClient): PublicAlertRepository {
   const table = () => supabase.from("public_alerts");
 
   return {
     async create(data) {
       const payload = buildInsertPayload(data as unknown as Record<string, unknown>);
-      const { data: rows, error } = await table()
-        .insert(payload)
-        .select()
-        .single();
+      const { data: rows, error } = await table().insert(payload).select().single();
 
       if (error) {
         return failure(mapPostgrestError(error));
@@ -61,9 +45,7 @@ export function createPublicAlertRepository(
     },
 
     async findById(id) {
-      const { data: rows, error } = await table()
-        .select("*")
-        .eq("id", id);
+      const { data: rows, error } = await table().select("*").eq("id", id);
 
       if (error) {
         return failure(mapPostgrestError(error));
@@ -73,9 +55,7 @@ export function createPublicAlertRepository(
     },
 
     async findByDedupeKey(dedupeKey) {
-      const { data: rows, error } = await table()
-        .select("*")
-        .eq("dedupe_key", dedupeKey);
+      const { data: rows, error } = await table().select("*").eq("dedupe_key", dedupeKey);
 
       if (error) {
         return null;
@@ -111,11 +91,7 @@ export function createPublicAlertRepository(
       }
 
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
-      const { data: rows, error } = await table()
-        .update(payload)
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: rows, error } = await table().update(payload).eq("id", id).select().single();
 
       if (error) {
         return failure(mapPostgrestError(error));
@@ -134,11 +110,7 @@ export function createPublicAlertRepository(
       }
 
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
-      const { data: rows, error } = await table()
-        .update(payload)
-        .eq("id", id)
-        .select()
-        .single();
+      const { data: rows, error } = await table().update(payload).eq("id", id).select().single();
 
       if (error) {
         return failure(mapPostgrestError(error));

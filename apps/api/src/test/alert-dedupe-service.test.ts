@@ -1,6 +1,6 @@
 // Unit tests for alert deduplication service
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createAlertDedupeService } from "../services/alert-dedupe-service.ts";
 
 describe("AlertDedupeService", () => {

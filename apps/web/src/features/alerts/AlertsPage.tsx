@@ -1,10 +1,10 @@
 // Alerts page with filtering and state management
 
-import { useState, useMemo, type ReactElement } from "react";
-import { useAlerts } from "./use-alerts.ts";
+import { type ReactElement, useMemo, useState } from "react";
+import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { AlertCard } from "./AlertCard.tsx";
 import { AlertFilters, type AlertFiltersState } from "./AlertFilters.tsx";
-import { LoadingState, EmptyState, ErrorState, RetryState } from "../../components/state-views.tsx";
+import { useAlerts } from "./use-alerts.ts";
 
 export function AlertsPage(): ReactElement {
   const { alerts, isLoading, error, refetch } = useAlerts(100);
@@ -21,7 +21,9 @@ export function AlertsPage(): ReactElement {
     return alerts.filter((a) => {
       const titleLower = a.title.toLowerCase();
       const typeLabel = filters.eventType.replace(/_/g, " ");
-      return titleLower.includes(typeLabel) || titleLower.includes(filters.eventType.replace(/_/g, " "));
+      return (
+        titleLower.includes(typeLabel) || titleLower.includes(filters.eventType.replace(/_/g, " "))
+      );
     });
   }, [alerts, filters.eventType]);
 
@@ -80,9 +82,7 @@ export function AlertsPage(): ReactElement {
           marginBottom: "1rem",
         }}
       >
-        <h1 style={{ fontSize: "var(--font-size-2xl)", fontWeight: 700 }}>
-          Public Alerts
-        </h1>
+        <h1 style={{ fontSize: "var(--font-size-2xl)", fontWeight: 700 }}>Public Alerts</h1>
         <span className="text-tertiary" style={{ fontSize: "var(--font-size-sm)" }}>
           {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? "s" : ""}
         </span>

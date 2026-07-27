@@ -1,14 +1,19 @@
-import express, { type Express } from "express";
-import { corsMiddleware, errorHandler, requestIdMiddleware, timingMiddleware } from "./middleware/core.ts";
-import { registerRoutes, setupUS1Routes } from "./routes/index.ts";
 import { loadServerEnv } from "@chronicleai/config";
 import {
-  createServerSupabaseClient,
-  createMonitoredEventRepository,
-  createPublicAlertRepository,
   createExecutionLogRepository,
   createLLMGenerationAttemptRepository,
+  createMonitoredEventRepository,
+  createPublicAlertRepository,
+  createServerSupabaseClient,
 } from "@chronicleai/db";
+import express, { type Express } from "express";
+import {
+  corsMiddleware,
+  errorHandler,
+  requestIdMiddleware,
+  timingMiddleware,
+} from "./middleware/core.ts";
+import { registerRoutes, setupUS1Routes } from "./routes/index.ts";
 
 const app: Express = express();
 

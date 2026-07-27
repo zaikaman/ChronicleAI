@@ -5,10 +5,10 @@ import {
   ConflictError,
   NotFoundError,
   PersistenceError,
-  ValidationError,
   type Result,
-  success,
+  ValidationError,
   failure,
+  success,
 } from "./errors.ts";
 
 // ── Pagination ──────────────────────────────────────────

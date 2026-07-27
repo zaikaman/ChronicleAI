@@ -17,12 +17,7 @@ export const EVENT_TYPES: readonly EventType[] = [
 ] as const;
 
 // ── Alert Delivery States ───────────────────────────────
-export type AlertDeliveryStatus =
-  | "draft"
-  | "queued"
-  | "published"
-  | "partial_failure"
-  | "failed";
+export type AlertDeliveryStatus = "draft" | "queued" | "published" | "partial_failure" | "failed";
 
 export const ALERT_DELIVERY_STATUSES: readonly AlertDeliveryStatus[] = [
   "draft",
@@ -145,20 +140,12 @@ export const MONITORED_EVENT_STATUSES: readonly MonitoredEventStatus[] = [
 // ── Confidence Levels ───────────────────────────────────
 export type Confidence = "high" | "medium" | "low";
 
-export const CONFIDENCE_LEVELS: readonly Confidence[] = [
-  "high",
-  "medium",
-  "low",
-] as const;
+export const CONFIDENCE_LEVELS: readonly Confidence[] = ["high", "medium", "low"] as const;
 
 // ── Audience ────────────────────────────────────────────
 export type Audience = "public" | "premium" | "operator";
 
-export const AUDIENCES: readonly Audience[] = [
-  "public",
-  "premium",
-  "operator",
-] as const;
+export const AUDIENCES: readonly Audience[] = ["public", "premium", "operator"] as const;
 
 // ── LLM Providers ───────────────────────────────────────
 export type LLMProvider = "gemini" | "openai" | "groq";

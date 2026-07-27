@@ -1,10 +1,10 @@
 // Unit tests for LLM alert generation fallback
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
+import { createLLMGenerationAttemptRepository } from "@chronicleai/db";
 // Increase timeout for all-providers-failed test which makes actual fetch calls
 import { createPublicAlertContentService } from "../services/public-alert-content-service.ts";
-import { createLLMGenerationAttemptRepository } from "@chronicleai/db";
 
 describe("LLMAlertGenerationService - Fallback", () => {
   // Create a mock supabase client for the LLM attempt repo

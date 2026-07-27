@@ -28,7 +28,10 @@ export async function cleanupTable(
   tableName: string,
   idColumn = "id",
 ): Promise<void> {
-  const { error } = await supabase.from(tableName).delete().neq(idColumn, "00000000-0000-0000-0000-000000000000");
+  const { error } = await supabase
+    .from(tableName)
+    .delete()
+    .neq(idColumn, "00000000-0000-0000-0000-000000000000");
 
   if (error) {
     console.warn(`Cleanup warning for ${tableName}: ${error.message}`);
