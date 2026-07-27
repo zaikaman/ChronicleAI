@@ -45,4 +45,4 @@ This constitution serves as the source of truth for engineering practices in Chr
 3. Propagation of changes to all dependent specification, plan, and task templates.
 All code reviews and automated workflows must enforce compliance with these principles.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-27 | **Last Amended**: 2026-07-27
+**Version**: 1.1.0 | **Ratified**: 2026-07-06 | **Last Amended**: 2026-07-06
