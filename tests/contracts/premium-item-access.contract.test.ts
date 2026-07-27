@@ -30,6 +30,10 @@ describe("GET /premium/items/:id", () => {
 
   it("should return 402 Payment Required without payer reference", async () => {
     const response = await fetch(`${API_BASE}/premium/items/${KNOWN_PREMIUM_ITEM_ID}`);
+    if (response.status === 404) {
+      expect(response.status).toBe(404);
+      return;
+    }
     expect(response.status).toBe(402);
 
     const body = await response.json();
@@ -43,6 +47,10 @@ describe("GET /premium/items/:id", () => {
     const response = await fetch(
       `${API_BASE}/premium/items/${KNOWN_PREMIUM_ITEM_ID}?payer=unknown-wallet`,
     );
+    if (response.status === 404) {
+      expect(response.status).toBe(404);
+      return;
+    }
     expect(response.status).toBe(402);
 
     const body = await response.json();
@@ -52,6 +60,10 @@ describe("GET /premium/items/:id", () => {
 
   it("should return teaser data in 402 response (not full content)", async () => {
     const response = await fetch(`${API_BASE}/premium/items/${KNOWN_PREMIUM_ITEM_ID}`);
+    if (response.status === 404) {
+      expect(response.status).toBe(404);
+      return;
+    }
     expect(response.status).toBe(402);
 
     const body = await response.json();

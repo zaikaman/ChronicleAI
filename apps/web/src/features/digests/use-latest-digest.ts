@@ -33,7 +33,7 @@ export function useLatestDigest(): UseLatestDigestReturn {
     setState({ status: "loading" });
 
     try {
-      const origin = (import.meta as unknown as Record<string, Record<string, string>>).env?.VITE_API_ORIGIN || "";
+      const origin = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
       const response = await fetch(`${origin}/digests/latest`);
 
       if (response.status === 404) {
