@@ -6,6 +6,12 @@ export interface ServerEnv {
   supabaseServiceRoleKey: string;
   keeperhubWebhookSecret: string;
   operatorAuthSecret: string;
+  geminiApiKey: string;
+  geminiModel: string;
+  openaiApiKey: string;
+  openaiModel: string;
+  groqApiKey: string;
+  groqModel: string;
   x402FacilitatorUrl: string | undefined;
   mppSecret: string | undefined;
   treasuryWalletAddress: string | undefined;
@@ -34,6 +40,12 @@ export function loadServerEnv(): ServerEnv {
     supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
     keeperhubWebhookSecret: requireEnv("KEEPERHUB_WEBHOOK_SECRET"),
     operatorAuthSecret: requireEnv("OPERATOR_AUTH_SECRET"),
+    geminiApiKey: optionalEnv("GEMINI_API_KEY", "") as string,
+    geminiModel: optionalEnv("GEMINI_MODEL", "gemini-2.0-flash") as string,
+    openaiApiKey: optionalEnv("OPENAI_API_KEY", "") as string,
+    openaiModel: optionalEnv("OPENAI_MODEL", "gpt-4o-mini") as string,
+    groqApiKey: optionalEnv("GROQ_API_KEY", "") as string,
+    groqModel: optionalEnv("GROQ_MODEL", "llama-3.3-70b-versatile") as string,
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),
     mppSecret: optionalEnv("MPP_SECRET"),
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),

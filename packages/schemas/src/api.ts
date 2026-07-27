@@ -19,6 +19,16 @@ export interface PublicAlertResponse {
   deliveryStatus: AlertDeliveryStatus;
   publishedAt: string;
   confidence?: Confidence;
+  generationProvider?: string;
+}
+
+// ── LLM Generation Attempt (response) ───────────────────
+export interface LLMGenerationAttemptResponse {
+  provider: string;
+  attemptOrder: number;
+  status: string;
+  latencyMs: number;
+  failureReason?: string;
 }
 
 // ── Daily Digest ────────────────────────────────────────

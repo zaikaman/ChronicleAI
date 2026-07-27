@@ -93,38 +93,38 @@
 
 ### Tests for User Story 1
 
-- [ ] T056 [P] [US1] Write contract tests for `POST /keeperhub/events` success, invalid payload, invalid signature, and duplicate replay in `tests/contracts/keeperhub-events.contract.test.ts`
-- [ ] T057 [P] [US1] Write contract tests for `GET /alerts` pagination and public alert response shape in `tests/contracts/alerts.contract.test.ts`
-- [ ] T058 [P] [US1] Write unit tests for event qualification thresholds and ignored-event behavior in `apps/api/src/test/event-qualification-service.test.ts`
-- [ ] T059 [P] [US1] Write unit tests for alert dedupe key generation and duplicate-window matching in `apps/api/src/test/alert-dedupe-service.test.ts`
-- [ ] T060 [P] [US1] Write unit tests for LLM-generated public alert content safety to prevent premium-only analysis leakage in `apps/api/src/test/public-alert-content-service.test.ts`
-- [ ] T061 [P] [US1] Write integration tests for event ingestion, event persistence, alert generation, execution logs, and duplicate replay in `apps/api/src/test/keeperhub-events.integration.test.ts`
-- [ ] T062 [P] [US1] Write unit tests for Gemini -> OpenAI -> Groq alert-generation fallback, provider attempt logging, and all-providers-failed behavior in `apps/api/src/test/llm-alert-generation-service.test.ts`
+- [X] T056 [P] [US1] Write contract tests for `POST /keeperhub/events` success, invalid payload, invalid signature, and duplicate replay in `tests/contracts/keeperhub-events.contract.test.ts`
+- [X] T057 [P] [US1] Write contract tests for `GET /alerts` pagination and public alert response shape in `tests/contracts/alerts.contract.test.ts`
+- [X] T058 [P] [US1] Write unit tests for event qualification thresholds and ignored-event behavior in `apps/api/src/test/event-qualification-service.test.ts`
+- [X] T059 [P] [US1] Write unit tests for alert dedupe key generation and duplicate-window matching in `apps/api/src/test/alert-dedupe-service.test.ts`
+- [X] T060 [P] [US1] Write unit tests for LLM-generated public alert content safety to prevent premium-only analysis leakage in `apps/api/src/test/public-alert-content-service.test.ts`
+- [X] T061 [P] [US1] Write integration tests for event ingestion, event persistence, alert generation, execution logs, and duplicate replay in `apps/api/src/test/keeperhub-events.integration.test.ts`
+- [X] T062 [P] [US1] Write unit tests for Gemini -> OpenAI -> Groq alert-generation fallback, provider attempt logging, and all-providers-failed behavior in `apps/api/src/test/llm-alert-generation-service.test.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T063 [P] [US1] Implement monitored event repository create, find-by-source, qualify update, and list methods in `packages/db/src/monitored-event-repository.ts`
-- [ ] T064 [P] [US1] Implement public alert repository create, find-by-dedupe-key, list, and delivery status methods in `packages/db/src/public-alert-repository.ts`
-- [ ] T065 [P] [US1] Implement execution log repository append and list-by-entity methods in `packages/db/src/execution-log-repository.ts`
-- [ ] T066 [P] [US1] Add Gemini, OpenAI, and Groq server environment variables, fallback order defaults, `llm_generation_attempts` migration, and related database types in `packages/config/src/server-env.ts`, `packages/config/src/defaults.ts`, `supabase/migrations/202607270003_add_llm_generation_attempts.sql`, and `packages/db/src/types.ts`
-- [ ] T067 [US1] Implement event qualification service for supported event types and configurable thresholds in `apps/api/src/services/event-qualification-service.ts`
-- [ ] T068 [US1] Implement alert deduplication service using source event identifiers and dedupe keys in `apps/api/src/services/alert-dedupe-service.ts`
-- [ ] T069 [US1] Implement LLM-backed public alert content generator with Gemini -> OpenAI -> Groq fallback, source references, event magnitude, confidence, provider metadata, and no premium-only content in `apps/api/src/services/public-alert-content-service.ts`
-- [ ] T070 [US1] Implement alert publication service with destination result tracking and partial failure states in `apps/api/src/services/alert-publication-service.ts`
-- [ ] T071 [US1] Implement KeeperHub event ingestion orchestrator that records raw payloads before generation in `apps/api/src/keeperhub/event-ingestion-handler.ts`
-- [ ] T072 [US1] Implement `POST /keeperhub/events` route with signature middleware and idempotent responses in `apps/api/src/routes/keeperhub-event-routes.ts`
-- [ ] T073 [US1] Implement `GET /alerts` route with limit validation and newest-first ordering in `apps/api/src/routes/alert-routes.ts`
-- [ ] T074 [US1] Register KeeperHub event and alert routes in `apps/api/src/routes/index.ts`
-- [ ] T075 [P] [US1] Create qualifying, ignored, malformed, unsigned, duplicate, Gemini-failure, OpenAI-failure, Groq-failure, and all-providers-failed KeeperHub event fixtures in `apps/api/src/test/fixtures/keeperhub-events.ts`
-- [ ] T076 [P] [US1] Create frontend alert query hook with loading, retry, and schema validation in `apps/web/src/features/alerts/use-alerts.ts`
-- [ ] T077 [P] [US1] Create public alert card component with event type, magnitude, confidence, generation provider, source references, and timestamp in `apps/web/src/features/alerts/AlertCard.tsx`
-- [ ] T078 [P] [US1] Create alert filter controls for event type and chain with stable test IDs in `apps/web/src/features/alerts/AlertFilters.tsx`
-- [ ] T079 [US1] Create `/alerts` page with empty, error, loading, filtered, and populated states in `apps/web/src/features/alerts/AlertsPage.tsx`
-- [ ] T080 [US1] Add latest alerts preview to the home page in `apps/web/src/features/home/HomePage.tsx`
-- [ ] T081 [US1] Add public alert route wiring to the app router in `apps/web/src/app/router.tsx`
-- [ ] T082 [US1] Add execution logs for event received, event ignored, Gemini attempt failed, OpenAI attempt failed, Groq attempt failed, alert generated, alert generation failed, alert published, duplicate skipped, and publication failed in `apps/api/src/keeperhub/event-ingestion-handler.ts`
-- [ ] T083 [US1] Add API documentation comments for `POST /keeperhub/events` and `GET /alerts` in `apps/api/src/routes/keeperhub-event-routes.ts` and `apps/api/src/routes/alert-routes.ts`
-- [ ] T084 [US1] Run US1 contract, integration, and unit tests and fix failures in `tests/contracts/keeperhub-events.contract.test.ts`, `tests/contracts/alerts.contract.test.ts`, `apps/api/src/test/keeperhub-events.integration.test.ts`, and `apps/api/src/test/llm-alert-generation-service.test.ts`
+- [X] T063 [P] [US1] Implement monitored event repository create, find-by-source, qualify update, and list methods in `packages/db/src/monitored-event-repository.ts`
+- [X] T064 [P] [US1] Implement public alert repository create, find-by-dedupe-key, list, and delivery status methods in `packages/db/src/public-alert-repository.ts`
+- [X] T065 [P] [US1] Implement execution log repository append and list-by-entity methods in `packages/db/src/execution-log-repository.ts`
+- [X] T066 [P] [US1] Add Gemini, OpenAI, and Groq server environment variables, fallback order defaults, `llm_generation_attempts` migration, and related database types in `packages/config/src/server-env.ts`, `packages/config/src/defaults.ts`, `supabase/migrations/202607270003_add_llm_generation_attempts.sql`, and `packages/db/src/types.ts`
+- [X] T067 [US1] Implement event qualification service for supported event types and configurable thresholds in `apps/api/src/services/event-qualification-service.ts`
+- [X] T068 [US1] Implement alert deduplication service using source event identifiers and dedupe keys in `apps/api/src/services/alert-dedupe-service.ts`
+- [X] T069 [US1] Implement LLM-backed public alert content generator with Gemini -> OpenAI -> Groq fallback, source references, event magnitude, confidence, provider metadata, and no premium-only content in `apps/api/src/services/public-alert-content-service.ts`
+- [X] T070 [US1] Implement alert publication service with destination result tracking and partial failure states in `apps/api/src/services/alert-publication-service.ts`
+- [X] T071 [US1] Implement KeeperHub event ingestion orchestrator that records raw payloads before generation in `apps/api/src/keeperhub/event-ingestion-handler.ts`
+- [X] T072 [US1] Implement `POST /keeperhub/events` route with signature middleware and idempotent responses in `apps/api/src/routes/keeperhub-event-routes.ts`
+- [X] T073 [US1] Implement `GET /alerts` route with limit validation and newest-first ordering in `apps/api/src/routes/alert-routes.ts`
+- [X] T074 [US1] Register KeeperHub event and alert routes in `apps/api/src/routes/index.ts`
+- [X] T075 [P] [US1] Create qualifying, ignored, malformed, unsigned, duplicate, Gemini-failure, OpenAI-failure, Groq-failure, and all-providers-failed KeeperHub event fixtures in `apps/api/src/test/fixtures/keeperhub-events.ts`
+- [X] T076 [P] [US1] Create frontend alert query hook with loading, retry, and schema validation in `apps/web/src/features/alerts/use-alerts.ts`
+- [X] T077 [P] [US1] Create public alert card component with event type, magnitude, confidence, generation provider, source references, and timestamp in `apps/web/src/features/alerts/AlertCard.tsx`
+- [X] T078 [P] [US1] Create alert filter controls for event type and chain with stable test IDs in `apps/web/src/features/alerts/AlertFilters.tsx`
+- [X] T079 [US1] Create `/alerts` page with empty, error, loading, filtered, and populated states in `apps/web/src/features/alerts/AlertsPage.tsx`
+- [X] T080 [US1] Add latest alerts preview to the home page in `apps/web/src/features/home/HomePage.tsx`
+- [X] T081 [US1] Add public alert route wiring to the app router in `apps/web/src/app/router.tsx`
+- [X] T082 [US1] Add execution logs for event received, event ignored, Gemini attempt failed, OpenAI attempt failed, Groq attempt failed, alert generated, alert generation failed, alert published, duplicate skipped, and publication failed in `apps/api/src/keeperhub/event-ingestion-handler.ts`
+- [X] T083 [US1] Add API documentation comments for `POST /keeperhub/events` and `GET /alerts` in `apps/api/src/routes/keeperhub-event-routes.ts` and `apps/api/src/routes/alert-routes.ts`
+- [X] T084 [US1] Run US1 contract, integration, and unit tests and fix failures in `tests/contracts/keeperhub-events.contract.test.ts`, `tests/contracts/alerts.contract.test.ts`, `apps/api/src/test/keeperhub-events.integration.test.ts`, and `apps/api/src/test/llm-alert-generation-service.test.ts`
 
 **Checkpoint**: User Story 1 is a complete MVP and can be demonstrated independently.
 

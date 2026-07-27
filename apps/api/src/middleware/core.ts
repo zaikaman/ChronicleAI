@@ -35,10 +35,14 @@ export function corsMiddleware(allowedOrigin: string) {
 export function timingMiddleware(req: Request, res: Response, next: NextFunction): void {
   const start = Date.now();
 
-  res.on("finish", () => {
+  // Set header early so it's captured before response is sent
+  const originalEnd = res.end.bind(res);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  res.end = function end(...args: any[]) {
     const duration = Date.now() - start;
     res.setHeader("X-Response-Time", `${duration}ms`);
-  });
+    return originalEnd(...args);
+  };
 
   next();
 }

@@ -66,6 +66,8 @@ export interface PublicAlertRow {
   published_at: string | null;
   dedupe_key: string | null;
   confidence: Confidence | null;
+  generation_provider: string | null;
+  generation_attempt_ids: string[];
   created_at: string;
   updated_at: string;
 }
@@ -81,6 +83,8 @@ export interface PublicAlertInsert {
   published_at?: string | null;
   dedupe_key?: string | null;
   confidence?: Confidence | null;
+  generation_provider?: string | null;
+  generation_attempt_ids?: string[];
 }
 
 export type PublicAlertUpdate = Partial<PublicAlertInsert>;
@@ -213,6 +217,35 @@ export interface TreasurySnapshotInsert {
 }
 
 export type TreasurySnapshotUpdate = Partial<TreasurySnapshotInsert>;
+
+// ── LLM Generation Attempts ────────────────────────────
+export interface LLMGenerationAttemptRow {
+  id: string;
+  entity_type: string;
+  entity_id: string | null;
+  monitored_event_id: string;
+  provider: string;
+  attempt_order: number;
+  status: string;
+  latency_ms: number;
+  failure_reason: string | null;
+  response_metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface LLMGenerationAttemptInsert {
+  entity_type?: string;
+  entity_id?: string | null;
+  monitored_event_id: string;
+  provider: string;
+  attempt_order: number;
+  status: string;
+  latency_ms?: number;
+  failure_reason?: string | null;
+  response_metadata?: Record<string, unknown> | null;
+}
+
+export type LLMGenerationAttemptUpdate = Partial<LLMGenerationAttemptInsert>;
 
 // ── Execution Logs ──────────────────────────────────────
 export interface ExecutionLogRow {

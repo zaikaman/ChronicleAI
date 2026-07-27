@@ -7,8 +7,8 @@ import {
   PersistenceError,
   ValidationError,
   type Result,
-  failure,
   success,
+  failure,
 } from "./errors.ts";
 
 // ── Pagination ──────────────────────────────────────────

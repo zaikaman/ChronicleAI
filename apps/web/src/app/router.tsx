@@ -4,36 +4,36 @@ import { createBrowserRouter, type RouteObject } from "react-router-dom";
 import type { RouteDefinition } from "@chronicleai/schemas";
 import { App } from "./App.tsx";
 
-// ── Placeholder page components ─────────────────────────
+// ── Page components ─────────────────────────────────────
 import type React from "react";
+import { HomePage } from "../features/home/HomePage.tsx";
+import { AlertsPage } from "../features/alerts/AlertsPage.tsx";
 
-function PlaceholderPage({ title }: { title: string }): React.ReactElement {
+function DigestPage(): React.ReactElement {
   return (
     <div style={{ padding: "2rem", textAlign: "center" }}>
-      <h2>{title}</h2>
+      <h2>Latest Digest</h2>
       <p style={{ color: "#a1a1aa" }}>Coming soon in a future phase.</p>
     </div>
   );
 }
 
-function HomePage(): React.ReactElement {
-  return <PlaceholderPage title="ChronicleAI" />;
-}
-
-function AlertsPage(): React.ReactElement {
-  return <PlaceholderPage title="Public Alerts" />;
-}
-
-function DigestPage(): React.ReactElement {
-  return <PlaceholderPage title="Latest Digest" />;
-}
-
 function PremiumPage(): React.ReactElement {
-  return <PlaceholderPage title="Premium Intelligence" />;
+  return (
+    <div style={{ padding: "2rem", textAlign: "center" }}>
+      <h2>Premium Intelligence</h2>
+      <p style={{ color: "#a1a1aa" }}>Coming soon in a future phase.</p>
+    </div>
+  );
 }
 
 function OperatorPage(): React.ReactElement {
-  return <PlaceholderPage title="Operator Dashboard" />;
+  return (
+    <div style={{ padding: "2rem", textAlign: "center" }}>
+      <h2>Operator Dashboard</h2>
+      <p style={{ color: "#a1a1aa" }}>Coming soon in a future phase.</p>
+    </div>
+  );
 }
 
 // ── Route definitions ───────────────────────────────────

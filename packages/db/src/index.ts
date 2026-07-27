@@ -3,3 +3,7 @@ export * from "./errors.ts";
 export * from "./repository-utils.ts";
 export * from "./supabase-server.ts";
 export * from "./supabase-browser.ts";
+export * from "./monitored-event-repository.ts";
+export * from "./public-alert-repository.ts";
+export * from "./execution-log-repository.ts";
+export * from "./llm-generation-attempt-repository.ts";

@@ -23,5 +23,11 @@ export const DASHBOARD_ROW_LIMITS = {
   executionLogs: 100,
 } as const;
 
+// ── LLM Provider Fallback Order ─────────────────────────
+export const LLM_FALLBACK_ORDER = ["gemini", "openai", "groq"] as const;
+
+// ── Alert Generation Defaults ───────────────────────────
+export const ALERT_GENERATION_TIMEOUT_MS = 30_000; // 30 seconds per provider
+
 // ── Digest Reporting Window Defaults ────────────────────
 export const DIGEST_REPORTING_WINDOW_HOURS = 24;

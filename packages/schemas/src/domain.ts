@@ -160,6 +160,24 @@ export const AUDIENCES: readonly Audience[] = [
   "operator",
 ] as const;
 
+// ── LLM Providers ───────────────────────────────────────
+export type LLMProvider = "gemini" | "openai" | "groq";
+
+export const LLM_PROVIDERS: readonly LLMProvider[] = ["gemini", "openai", "groq"] as const;
+
+export type LLMGenerationAttemptStatus = "succeeded" | "failed" | "invalid_response";
+
+export const LLM_GENERATION_ATTEMPT_STATUSES: readonly LLMGenerationAttemptStatus[] = [
+  "succeeded",
+  "failed",
+  "invalid_response",
+] as const;
+
+// ── Entity Types for LLM Generation ────────────────────
+export type LLMEntityType = "public_alert" | "daily_digest";
+
+export const LLM_ENTITY_TYPES: readonly LLMEntityType[] = ["public_alert", "daily_digest"] as const;
+
 // ── Branded ID Types ────────────────────────────────────
 declare const brand: unique symbol;
 
