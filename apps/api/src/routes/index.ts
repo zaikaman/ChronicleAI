@@ -187,6 +187,9 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
       facilitatorUrl: env.x402FacilitatorUrl ?? undefined,
       // Prefer address derived from TREASURY_WALLET_PRIVATE_KEY so receive === spend key
       treasuryWalletAddress: treasury.address,
+      // Real settlement rail: facilitator (preferred) or direct EIP-3009 submission
+      rpcUrl: env.rpcUrl ?? undefined,
+      settlementPrivateKey: treasury.privateKey ?? undefined,
     }),
   );
   adapters.set("mpp", new MppPaymentAdapter({ mppSecret: env.mppSecret ?? undefined }));

@@ -1,10 +1,77 @@
 // Unit tests for x402 payment adapter
 
 import { ethers } from "ethers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 
 const TREASURY = "0x1234567890123456789012345678901234567890";
+
+async function signAuthorization(
+  adapter: X402PaymentAdapter,
+  wallet: ethers.HDNodeWallet | ethers.Wallet,
+  amount: number,
+) {
+  const challenge = await adapter.createChallenge({
+    premiumItemId: "premium-001",
+    amount,
+    currency: "USDC",
+    payerReference: wallet.address,
+  });
+
+  interface EIP712Domain {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: string;
+  }
+  interface TransferWithAuthorizationType {
+    name: string;
+    type: string;
+  }
+  interface TransferWithAuthorizationMessage {
+    from: string;
+    to: string;
+    value: number;
+    validAfter: number;
+    validBefore: number;
+    nonce: string;
+  }
+
+  const challengeData = challenge.challengeData as {
+    domain: EIP712Domain;
+    types: {
+      TransferWithAuthorization: TransferWithAuthorizationType[];
+    };
+    message: TransferWithAuthorizationMessage;
+  };
+  const { domain, types, message } = challengeData;
+
+  const messageToSign = {
+    ...message,
+    from: wallet.address,
+    to: TREASURY,
+  };
+
+  const signature = await wallet.signTypedData(
+    domain,
+    {
+      TransferWithAuthorization: types.TransferWithAuthorization,
+    },
+    messageToSign,
+  );
+
+  const settlementPayload = {
+    signature,
+    from: wallet.address,
+    to: TREASURY,
+    value: messageToSign.value,
+    validAfter: messageToSign.validAfter,
+    validBefore: messageToSign.validBefore,
+    nonce: messageToSign.nonce,
+  };
+
+  return { challenge, settlementPayload, wallet };
+}
 
 describe("X402PaymentAdapter", () => {
   // Test adapter with allowTestMode enabled so plain-string settlement references work
@@ -12,7 +79,7 @@ describe("X402PaymentAdapter", () => {
     allowTestMode: true,
     treasuryWalletAddress: TREASURY,
   });
-  // Production adapter (no test mode) - rejects non-EIP-712 settlements
+  // Production adapter (no test mode) - rejects non-EIP-712 settlements and requires a real rail
   const prodAdapter = new X402PaymentAdapter({
     treasuryWalletAddress: TREASURY,
   });
@@ -37,6 +104,8 @@ describe("X402PaymentAdapter", () => {
         "0x1111111111111111111111111111111111111111",
       );
       expect((result.challengeData.message as { to: string }).to).toBe(TREASURY);
+      expect(result.challengeData.network).toBe("eip155:84532");
+      expect(result.challengeData.asset).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
     });
 
     it("should create a challenge with default expiry within 10 minutes", async () => {
@@ -147,84 +216,277 @@ describe("X402PaymentAdapter", () => {
         });
 
         expect(result.verified).toBe(false);
-        expect(result.errorMessage).toContain("JSON serialized EIP-712 authorization payload");
+        expect(result.errorMessage).toMatch(
+          /JSON serialized EIP-712|transaction hash|settlement rail|RPC_URL/i,
+        );
       });
 
-      it("should accept a valid EIP-712 signature settlement payload", async () => {
+      it("should reject a valid EIP-712 signature when no settlement rail is configured", async () => {
         const wallet = ethers.Wallet.createRandom();
         const amount = 5;
-        const currency = "USDC";
-
-        const challenge = await prodAdapter.createChallenge({
-          premiumItemId: "premium-001",
+        const { challenge, settlementPayload } = await signAuthorization(
+          prodAdapter,
+          wallet,
           amount,
-          currency,
-          payerReference: wallet.address,
-        });
-
-        interface EIP712Domain {
-          name: string;
-          version: string;
-          chainId: number;
-          verifyingContract: string;
-        }
-        interface TransferWithAuthorizationType {
-          name: string;
-          type: string;
-        }
-        interface TransferWithAuthorizationMessage {
-          from: string;
-          to: string;
-          value: number;
-          validAfter: number;
-          validBefore: number;
-          nonce: string;
-        }
-
-        const challengeData = challenge.challengeData as {
-          domain: EIP712Domain;
-          types: {
-            TransferWithAuthorization: TransferWithAuthorizationType[];
-          };
-          message: TransferWithAuthorizationMessage;
-        };
-        const { domain, types, message } = challengeData;
-
-        const messageToSign = {
-          ...message,
-          from: wallet.address,
-          to: TREASURY,
-        };
-
-        const signature = await wallet.signTypedData(
-          domain,
-          {
-            TransferWithAuthorization: types.TransferWithAuthorization,
-          },
-          messageToSign,
         );
-
-        const settlementPayload = {
-          signature,
-          from: wallet.address,
-          to: TREASURY,
-          value: messageToSign.value,
-          validAfter: messageToSign.validAfter,
-          validBefore: messageToSign.validBefore,
-          nonce: messageToSign.nonce,
-        };
 
         const result = await prodAdapter.verifySettlement({
           challengeReference: challenge.challengeReference,
           settlementReference: JSON.stringify(settlementPayload),
           amountRequested: amount,
-          currency,
+          currency: "USDC",
+          paymentRoute: "x402",
+        });
+
+        expect(result.verified).toBe(false);
+        expect(result.errorMessage).toMatch(/settlement rail|facilitator|RPC_URL/i);
+      });
+
+      it("should reject authorization when to is not the treasury", async () => {
+        const wallet = ethers.Wallet.createRandom();
+        const amount = 5;
+        const wrongTo = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        const challenge = await prodAdapter.createChallenge({
+          premiumItemId: "premium-001",
+          amount,
+          currency: "USDC",
+          payerReference: wallet.address,
+        });
+
+        const challengeData = challenge.challengeData as {
+          domain: ethers.TypedDataDomain;
+          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
+          message: {
+            from: string;
+            to: string;
+            value: number;
+            validAfter: number;
+            validBefore: number;
+            nonce: string;
+          };
+        };
+
+        const messageToSign = {
+          ...challengeData.message,
+          from: wallet.address,
+          to: wrongTo,
+        };
+
+        const signature = await wallet.signTypedData(
+          challengeData.domain,
+          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          messageToSign,
+        );
+
+        const result = await prodAdapter.verifySettlement({
+          challengeReference: challenge.challengeReference,
+          settlementReference: JSON.stringify({
+            signature,
+            from: wallet.address,
+            to: wrongTo,
+            value: messageToSign.value,
+            validAfter: messageToSign.validAfter,
+            validBefore: messageToSign.validBefore,
+            nonce: messageToSign.nonce,
+          }),
+          amountRequested: amount,
+          currency: "USDC",
+          paymentRoute: "x402",
+        });
+
+        expect(result.verified).toBe(false);
+        expect(result.errorMessage).toContain("does not match treasury");
+      });
+
+      it("should settle only after successful transfer rail + receipt matching treasury", async () => {
+        const wallet = ethers.Wallet.createRandom();
+        const amount = 5;
+        const txHash =
+          "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
+        const settleAuthorization = vi.fn().mockResolvedValue({
+          success: true,
+          transactionHash: txHash,
+        });
+        const verifyTransactionReceipt = vi.fn().mockResolvedValue({
+          confirmed: true,
+          from: wallet.address,
+          to: TREASURY,
+          value: BigInt(Math.round(amount * 1_000_000)),
+        });
+
+        const railAdapter = new X402PaymentAdapter({
+          treasuryWalletAddress: TREASURY,
+          settleAuthorization,
+          verifyTransactionReceipt,
+        });
+
+        const { challenge, settlementPayload } = await signAuthorization(
+          railAdapter,
+          wallet,
+          amount,
+        );
+
+        const result = await railAdapter.verifySettlement({
+          challengeReference: challenge.challengeReference,
+          settlementReference: JSON.stringify(settlementPayload),
+          amountRequested: amount,
+          currency: "USDC",
           paymentRoute: "x402",
         });
 
         expect(result.verified).toBe(true);
         expect(result.amountSettled).toBe(amount);
         expect(result.payerReference?.toLowerCase()).toBe(wallet.address.toLowerCase());
+        // Settlement reference becomes the on-chain tx hash, not the raw signature JSON
+        expect(result.settlementReference).toBe(txHash);
+        expect(settleAuthorization).toHaveBeenCalledOnce();
+        expect(verifyTransactionReceipt).toHaveBeenCalledWith(
+          txHash,
+          expect.objectContaining({
+            to: TREASURY,
+            minValue: BigInt(Math.round(amount * 1_000_000)),
+            from: wallet.address,
+          }),
+        );
+      });
+
+      it("should reject when transfer rail succeeds but receipt does not match treasury/amount", async () => {
+        const wallet = ethers.Wallet.createRandom();
+        const amount = 5;
+        const txHash =
+          "0x1111111111111111111111111111111111111111111111111111111111111111";
+
+        const railAdapter = new X402PaymentAdapter({
+          treasuryWalletAddress: TREASURY,
+          settleAuthorization: async () => ({
+            success: true,
+            transactionHash: txHash,
+          }),
+          verifyTransactionReceipt: async () => ({
+            confirmed: false,
+            errorMessage: "No matching USDC Transfer event to treasury found in transaction receipt",
+          }),
+        });
+
+        const { challenge, settlementPayload } = await signAuthorization(
+          railAdapter,
+          wallet,
+          amount,
+        );
+
+        const result = await railAdapter.verifySettlement({
+          challengeReference: challenge.challengeReference,
+          settlementReference: JSON.stringify(settlementPayload),
+          amountRequested: amount,
+          currency: "USDC",
+          paymentRoute: "x402",
+        });
+
+        expect(result.verified).toBe(false);
+        expect(result.errorMessage).toMatch(/receipt|treasury/i);
+        expect(result.settlementReference).toBe(txHash);
+      });
+
+      it("should verify an existing on-chain transaction hash via receipt check", async () => {
+        const payer = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        const txHash =
+          "0x2222222222222222222222222222222222222222222222222222222222222222";
+        const amount = 3;
+
+        const railAdapter = new X402PaymentAdapter({
+          treasuryWalletAddress: TREASURY,
+          verifyTransactionReceipt: async (hash, expected) => {
+            expect(hash).toBe(txHash);
+            expect(expected.to).toBe(TREASURY);
+            expect(expected.minValue).toBe(BigInt(Math.round(amount * 1_000_000)));
+            return {
+              confirmed: true,
+              from: payer,
+              to: TREASURY,
+              value: expected.minValue,
+            };
+          },
+        });
+
+        const result = await railAdapter.verifySettlement({
+          challengeReference: "x402_unused_for_tx_path",
+          settlementReference: txHash,
+          amountRequested: amount,
+          currency: "USDC",
+          paymentRoute: "x402",
+        });
+
+        expect(result.verified).toBe(true);
+        expect(result.settlementReference).toBe(txHash);
+        expect(result.payerReference?.toLowerCase()).toBe(payer.toLowerCase());
+      });
+
+      it("should reject underpaid authorization before settlement rail", async () => {
+        const wallet = ethers.Wallet.createRandom();
+        const amount = 5;
+
+        const railAdapter = new X402PaymentAdapter({
+          treasuryWalletAddress: TREASURY,
+          settleAuthorization: vi.fn(),
+          verifyTransactionReceipt: vi.fn(),
+        });
+
+        const challenge = await railAdapter.createChallenge({
+          premiumItemId: "premium-001",
+          amount,
+          currency: "USDC",
+          payerReference: wallet.address,
+        });
+
+        const challengeData = challenge.challengeData as {
+          domain: ethers.TypedDataDomain;
+          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
+          message: {
+            from: string;
+            to: string;
+            value: number;
+            validAfter: number;
+            validBefore: number;
+            nonce: string;
+          };
+        };
+
+        // Sign for less than requested
+        const underpaidValue = Math.round(1 * 1_000_000);
+        const messageToSign = {
+          ...challengeData.message,
+          from: wallet.address,
+          to: TREASURY,
+          value: underpaidValue,
+        };
+
+        const signature = await wallet.signTypedData(
+          challengeData.domain,
+          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          messageToSign,
+        );
+
+        const result = await railAdapter.verifySettlement({
+          challengeReference: challenge.challengeReference,
+          settlementReference: JSON.stringify({
+            signature,
+            from: wallet.address,
+            to: TREASURY,
+            value: underpaidValue,
+            validAfter: messageToSign.validAfter,
+            validBefore: messageToSign.validBefore,
+            nonce: messageToSign.nonce,
+          }),
+          amountRequested: amount,
+          currency: "USDC",
+          paymentRoute: "x402",
+        });
+
+        expect(result.verified).toBe(false);
+        expect(result.errorMessage).toContain("Insufficient payment value");
+        expect(railAdapter).toBeTruthy();
       });
     });
   });
