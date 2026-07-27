@@ -12,6 +12,8 @@
     "apps/**/src/**/*.ts",
     "apps/**/src/**/*.tsx",
     "packages/**/src/**/*.ts",
+    "packages/contracts/scripts/**/*.ts",
+    "packages/contracts/hardhat.config.ts",
     "tests/**/*.ts",
     "vitest.config.ts"
   ],

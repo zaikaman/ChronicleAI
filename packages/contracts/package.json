@@ -1,0 +1,19 @@
+{
+  "name": "@chronicleai/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ethers": "^6.17.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node": "^22.14.1",
+    "hardhat": "^2.22.18",
+    "typescript": "^5.8.3"
+  }
+}

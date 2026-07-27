@@ -6,7 +6,11 @@ import { ethers } from "hardhat";
 async function main(): Promise<void> {
   console.log("Deploying ChronicleRegistry...");
 
-  const [deployer] = await ethers.getSigners();
+  const signers = await ethers.getSigners();
+  const deployer = signers[0];
+  if (!deployer) {
+    throw new Error("No deployer signer found");
+  }
   console.log("Deployer address:", deployer.address);
 
   const ChronicleRegistry = await ethers.getContractFactory("ChronicleRegistry");
@@ -18,7 +22,7 @@ async function main(): Promise<void> {
   console.log("ChronicleRegistry deployed to:", address);
 
   // Verify on Etherscan/BaseScan
-  console.log(`\nVerification command:`);
+  console.log("\nVerification command:");
   console.log(`npx hardhat verify --network sepolia ${address}`);
 }
 
