@@ -91,37 +91,52 @@ pnpm --filter @chronicleai/web dev
 
 **Expected outcome**: ChronicleAI records a retryable generation failure with provider attempt details and does not publish fabricated alert content.
 
-### Scenario 2: Daily digest generation
+### Scenario 2: Daily digest generation and publication
 
 1. Seed monitored events for a 24-hour reporting period.
 2. Trigger `POST /keeperhub/digests/run` with the reporting window.
-3. Open the latest digest route.
+3. Verify that KeeperHub executes the `publishDigest` registry transaction.
+4. Confirm the digest updates the public Webflow site.
+5. Confirm premium subscribers receive the daily newsletter via SMTP.
+6. Open the latest digest on the frontend `/digests/latest` and verify that the registry transaction hash is displayed.
 
-**Expected outcome**: The digest includes a report date, ranked highlights, source references, and clear separation between observed facts and analysis.
+**Expected outcome**: The digest includes a report date, highlights, references, a clickable registry transaction hash linking to the explorer, and is distributed to Webflow and SMTP email recipients.
 
 ### Scenario 3: No-major-events digest
 
 1. Trigger digest generation for an empty reporting period.
 2. Open the latest digest route.
 
-**Expected outcome**: ChronicleAI publishes a concise no-major-events digest instead of failing silently.
+**Expected outcome**: ChronicleAI publishes a concise no-major-events digest on-chain, updates Webflow/SMTP email delivery, and displays the registry transaction hash.
 
-### Scenario 4: Premium payment gate
+### Scenario 4: Premium payment gate (x402 & MPP)
 
 1. Request `GET /premium/items/{id}` without settlement evidence.
 2. Confirm the response is `402` with payment challenge details.
-3. Complete or simulate a valid x402 or MPP settlement.
+3. Settle a subscription challenge via x402 on Base or a machine-billing challenge via MPP on Tempo.
 4. Retry the premium item request.
 
-**Expected outcome**: Premium content is withheld before settlement and returned only after a settled payment record exists.
+**Expected outcome**: Premium content remains locked until settlement and is returned in under 30 seconds once a settled payment record exists.
 
-### Scenario 5: Operator sustainability view
+### Scenario 4A: Sponsored contract monitoring campaign
 
-1. Create sample alerts, digests, payment records, and a treasury snapshot.
-2. Sign in as an operator.
-3. Open `/operator`.
+1. A protocol pays for a sponsored monitoring campaign through the payment endpoints.
+2. Verify that KeeperHub executes the `createSponsoredWatch` transaction on the Chronicle Registry.
+3. Replay event logs within the campaign window to trigger monitoring.
+4. Trigger the campaign completion workflow and verify that the final report is published on-chain via `publishSponsoredReport`.
+5. Verify the dashboard lists the sponsored campaign, showing both registry transaction hashes.
 
-**Expected outcome**: The dashboard shows recent publications, payment activity, treasury status, estimated costs, execution logs, and warning state when the balance is below the safety buffer.
+**Expected outcome**: The sponsored campaign is successfully initialized, tracked, published on-chain, and audited on the UI dashboard.
+
+### Scenario 5: Operator sustainability & autonomous payouts
+
+1. Trigger the weekly revenue routing webhook `POST /keeperhub/revenue/route`.
+2. Confirm that when Para wallet funds exceed the safety buffer, KeeperHub executes token payout transfers to allowlisted creator recovery wallets and referral partners.
+3. Confirm that KeeperHub executes `recordPayout` on the Chronicle Registry contract.
+4. Trigger a treasury check when available balance is below the safety buffer and verify the Refunding Loop issues warnings.
+5. Sign in as an operator and open `/operator`.
+
+**Expected outcome**: The dashboard shows total revenue, cost estimates, Para wallet balance, low-balance warnings, payout receipts with calculation basis and on-chain tx hashes, and execution logs.
 
 ## Required Checks
 

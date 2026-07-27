@@ -217,6 +217,34 @@ paths:
           description: Snapshot invalid
         "401":
           description: Invalid webhook authentication
+  /keeperhub/revenue/route:
+    post:
+      summary: Trigger weekly autonomous revenue routing from KeeperHub scheduled workflow
+      security:
+        - KeeperHubWebhook: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [periodStart, periodEnd]
+              properties:
+                periodStart:
+                  type: string
+                  format: date-time
+                periodEnd:
+                  type: string
+                  format: date-time
+      responses:
+        "202":
+          description: Revenue routing accepted
+        "400":
+          description: Invalid payload or period
+        "401":
+          description: Invalid webhook authentication
+        "409":
+          description: Payouts for this period have already been routed
   /operator/audit:
     get:
       summary: Get operator audit dashboard data
@@ -271,6 +299,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LLMGenerationAttempt"
+        registryTxHash:
+          type: string
+        sourceEventHash:
+          type: string
+        contentUri:
+          type: string
     DailyDigest:
       type: object
       required: [id, reportDate, title, summary, highlights, publicationStatus]
@@ -291,6 +325,12 @@ components:
         publicationStatus:
           type: string
           enum: [draft, queued, published, partial_failure, failed]
+        registryTxHash:
+          type: string
+        sourceEventRoot:
+          type: string
+        contentUri:
+          type: string
     PremiumItemTeaser:
       type: object
       required: [id, title, summaryPublic, priceAmount, priceCurrency, paymentRoutes]
@@ -404,7 +444,7 @@ components:
           type: string
     OperatorAudit:
       type: object
-      required: [alerts, digests, payments, treasury, executionLogs]
+      required: [alerts, digests, payments, treasury, executionLogs, sponsoredWatches, payouts]
       properties:
         alerts:
           type: array
@@ -433,3 +473,59 @@ components:
           type: array
           items:
             type: object
+        sponsoredWatches:
+          type: array
+          items:
+            $ref: "#/components/schemas/SponsoredWatch"
+        payouts:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevenuePayout"
+    SponsoredWatch:
+      type: object
+      required: [id, targetContract, watchSpecHash, startsAt, endsAt, createTxHash, status]
+      properties:
+        id:
+          type: string
+        targetContract:
+          type: string
+        watchSpecHash:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        createTxHash:
+          type: string
+        reportTxHash:
+          type: string
+        reportContentHash:
+          type: string
+        contentUri:
+          type: string
+        status:
+          type: string
+          enum: [accepted, monitoring, completed, failed]
+    RevenuePayout:
+      type: object
+      required: [id, payoutPeriodHash, recipient, amount, reasonHash, payoutTxHash, registryTxHash, status]
+      properties:
+        id:
+          type: string
+        payoutPeriodHash:
+          type: string
+        recipient:
+          type: string
+        amount:
+          type: number
+        reasonHash:
+          type: string
+        payoutTxHash:
+          type: string
+        registryTxHash:
+          type: string
+        status:
+          type: string
+          enum: [pending, transferred, failed]

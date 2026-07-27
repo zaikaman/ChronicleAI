@@ -37,17 +37,19 @@ Shows the latest public daily digest.
 - Highlights
 - Observed facts separated from analysis
 - Source event references
+- Clickable registry transaction hash (`publishDigest`) linking to block explorer
 
 ### `/premium`
 
-Shows premium intelligence teasers and payment entry points.
+Shows premium intelligence teasers, payment entry points, and active sponsored monitoring contract dashboards.
 
 **Must include**:
 - Item title
 - Public teaser
 - Price
-- Supported payment routes
+- Supported payment routes (x402 on Base, MPP on Tempo)
 - Payment-required state before premium content unlock
+- List of active sponsored monitoring contracts with their campaign windows and on-chain setup (`createSponsoredWatch`) and completion (`publishSponsoredReport`) transaction links
 
 ## Operator Routes
 
@@ -56,10 +58,11 @@ Shows premium intelligence teasers and payment entry points.
 Shows the operator audit dashboard.
 
 **Must include**:
-- Recent alerts
-- Recent digests
-- Payment activity
-- Treasury status
+- Recent alerts with registry transaction hashes
+- Recent digests with registry transaction hashes
+- Payment activity (settlements and challenges)
+- Treasury status (Para MPC wallet balance, safety buffer status, and low-balance warnings)
+- Autonomous Revenue Routing payout logs (payout periods, recipient addresses, basis calculations, transfer transaction hashes, and registry `recordPayout` transaction hashes)
 - Execution logs
 - Warning state when treasury falls below safety buffer
 

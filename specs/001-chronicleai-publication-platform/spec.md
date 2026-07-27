@@ -2,7 +2,7 @@
 
 **Feature Branch**: `master`
 
-**Created**: 2026-07-27
+**Created**: 2026-07-06
 
 **Status**: Draft
 
@@ -28,46 +28,50 @@ Public readers and community members receive concise, trustworthy alerts when si
 
 ### User Story 2 - Read Daily Intelligence Digest (Priority: P2)
 
-Subscribers and operators can review a daily market intelligence digest that synthesizes the prior 24 hours of monitored activity into a structured report with key events, patterns, and notable risks.
+Subscribers and operators can review a daily market intelligence digest that synthesizes the prior 24 hours of monitored activity into a structured report with key events, patterns, and notable risks, anchored on-chain with a verifiable proof-of-publication.
 
-**Why this priority**: The daily digest turns raw monitoring into a repeatable publication product and demonstrates the value of autonomous analysis beyond individual alerts.
+**Why this priority**: The daily digest turns raw monitoring into a repeatable publication product, demonstrates autonomous analysis, and guarantees publication authenticity via on-chain state hashes.
 
-**Independent Test**: Can be tested by providing a 24-hour set of captured events and verifying that ChronicleAI produces a complete digest containing summaries, ranked highlights, supporting references, and a publication record.
+**Independent Test**: Can be tested by providing a 24-hour set of captured events, triggering digest generation, and verifying that ChronicleAI produces a complete digest, executes a `publishDigest` transaction on the Chronicle Registry contract, updates Webflow, sends email bulletins via SMTP (e.g., using Gmail credentials), and displays the registry transaction hash on the report.
 
 **Acceptance Scenarios**:
 
-1. **Given** ChronicleAI has captured monitored events during a reporting period, **When** the daily digest schedule is reached, **Then** ChronicleAI creates a report that includes top events, trend commentary, links or references to source events, and a clear report date.
-2. **Given** no significant events were captured during a reporting period, **When** the daily digest schedule is reached, **Then** ChronicleAI publishes a concise no-major-events report instead of failing silently.
+1. **Given** ChronicleAI has captured monitored events during a reporting period, **When** the daily digest schedule is reached, **Then** ChronicleAI creates a report including top events, trend commentary, links to source events, and a clear date, calls `publishDigest` on the Chronicle Registry via KeeperHub, publishes the content to Webflow, and emails the digest to premium subscribers via SMTP.
+2. **Given** no significant events were captured during a reporting period, **When** the daily digest schedule is reached, **Then** ChronicleAI publishes a concise no-major-events report on-chain, updates Webflow/SMTP email delivery, and displays the registry transaction hash.
+3. **Given** the Daily Digest is published, **When** a user views the digest on the frontend, **Then** the UI displays the transaction hash of the on-chain publication receipt as a clickable link to the block explorer.
+
 
 ---
 
-### User Story 3 - Purchase Premium Intelligence Access (Priority: P3)
+### User Story 3 - Purchase Premium Intelligence Access & Sponsor Contracts (Priority: P3)
 
-Human readers and automated clients can pay a small fee to access deeper market intelligence, including full analytical reports, historical feed entries, and structured data suitable for downstream decision-making.
+Human readers and automated clients can pay a small fee to access deeper market intelligence (including full reports, historical feeds, and structured data) using x402 (Base) or MPP (Tempo) micro-payments. Additionally, protocols can pay to sponsor contract monitoring campaigns.
 
-**Why this priority**: Paid access proves the self-sustaining business model and enables ChronicleAI to fund ongoing monitoring, reporting, and operational costs.
+**Why this priority**: Paid access and sponsored monitoring tasks prove the self-sustaining business model and enable ChronicleAI to fund its own operational gas and API costs autonomously.
 
-**Independent Test**: Can be tested by requesting premium content without payment, completing a valid micro-payment challenge, and verifying that the premium response is unlocked only after payment settlement.
+**Independent Test**: Can be tested by requesting premium content without payment to receive a 402 challenge, settling via x402 or MPP to unlock it, and initiating a sponsored watch campaign by paying for it on-chain, verifying that KeeperHub executes the corresponding registry actions (`createSponsoredWatch` and `publishSponsoredReport`) and shows them on the dashboard.
 
 **Acceptance Scenarios**:
 
-1. **Given** a user requests premium intelligence without payment, **When** the request is evaluated, **Then** ChronicleAI presents the required payment terms and withholds premium content.
-2. **Given** a user or automated client completes a valid x402 or MPP payment for premium access, **When** the request is retried or continued, **Then** ChronicleAI returns the purchased intelligence and records the revenue event.
+1. **Given** a user requests premium content without payment, **When** evaluated, **Then** ChronicleAI returns a `402 Payment Required` challenge.
+2. **Given** a user settles a valid x402 (Base EVM subscription) or MPP (Tempo machine micro-payment), **When** they retry the request, **Then** ChronicleAI returns the private intelligence and logs the revenue.
+3. **Given** a protocol pays for a sponsored monitoring task, **When** submitted, **Then** KeeperHub executes a `createSponsoredWatch` transaction on-chain, monitors the target contract, compiles a final report at the end of the campaign, and executes `publishSponsoredReport` on the Chronicle Registry.
 
 ---
 
-### User Story 4 - Monitor Agent Sustainability (Priority: P4)
+### User Story 4 - Monitor Agent Sustainability & Treasury Payouts (Priority: P4)
 
-Operators can inspect ChronicleAI's operating health, including generated revenue, estimated costs, wallet balance status, alert volume, paid access volume, and recent execution outcomes.
+Operators can inspect ChronicleAI's operating health, including generated revenue, estimated costs, wallet balance status, execution outcomes, and the details of autonomous revenue routing and refund checks.
 
-**Why this priority**: The agent must demonstrate that it can sustain itself financially and expose enough evidence for hackathon judges and operators to trust the autonomous loop.
+**Why this priority**: The agent must operate transparently as a circular economy, exposing safety guardrails, refund alerts, and revenue payout receipts.
 
-**Independent Test**: Can be tested by reviewing the operator dashboard after sample alerts, digests, payments, and balance checks have occurred and verifying that the dashboard reflects those activities accurately.
+**Independent Test**: Can be tested by reviewing the operator dashboard after simulated x402/MPP revenues and gas expenditures, checking that the Refunding Loop (Loop 3) warns when below the buffer, and that the Revenue Routing Loop (Loop 5) triggers batched payouts, on-chain transfers, and `recordPayout` registry events.
 
 **Acceptance Scenarios**:
 
-1. **Given** ChronicleAI has generated publications, collected payments, and incurred operational costs, **When** an operator opens the audit dashboard, **Then** they can see recent outputs, payment totals, estimated expenses, wallet status, and execution logs.
-2. **Given** ChronicleAI's available operating funds fall below the configured safety buffer, **When** the maintenance check runs, **Then** ChronicleAI creates an operator-facing warning and includes supporting utility metrics.
+1. **Given** ChronicleAI has collected subscription/sponsorship revenue, **When** the operator opens the dashboard, **Then** they can see recent publications, total revenue, estimated costs, Para MPC wallet balance, and execution logs.
+2. **Given** the Para wallet balance drops below the safety buffer, **When** the maintenance check runs, **Then** ChronicleAI logs a failed execution warning and flags the warning on the operator dashboard.
+3. **Given** the weekly revenue routing loop triggers and net revenue exceeds the safety buffer, **When** executed, **Then** KeeperHub batches token transfers to the allowlisted creator recovery wallet and approved referral partners (attributing capped affiliate rewards), and executes a `recordPayout` transaction on the Chronicle Registry contract.
 
 ### Edge Cases
 
@@ -94,29 +98,36 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - **FR-007**: ChronicleAI MUST publish public summaries through at least one public content destination and at least one public notification destination.
 - **FR-008**: ChronicleAI MUST support premium intelligence requests from both human readers and automated clients.
 - **FR-009**: ChronicleAI MUST require successful payment before returning premium intelligence content or structured premium feed data.
-- **FR-010**: ChronicleAI MUST support both x402 and MPP payment flows for premium access where those payment rails are available.
+- **FR-010**: ChronicleAI MUST support both x402 (Base network EVM subscriptions) and MPP (Tempo machine-to-machine micro-billing) payment flows for premium access.
 - **FR-011**: ChronicleAI MUST record payment attempts, successful settlements, purchased content identifiers, and revenue totals for sustainability reporting.
 - **FR-012**: ChronicleAI MUST track operational sustainability indicators, including available treasury balance, estimated content generation costs, estimated transaction costs, paid request volume, and revenue.
 - **FR-013**: ChronicleAI MUST notify operators when available operating funds fall below the configured safety buffer.
-- **FR-014**: ChronicleAI MUST expose an operator audit view showing recent alerts, daily reports, premium access activity, treasury status, and execution history.
-- **FR-015**: ChronicleAI MUST include clear failure states and retry visibility for publication, notification, payment, and monitoring failures.
+- **FR-014**: ChronicleAI MUST expose an operator audit view showing recent alerts, daily reports, premium access activity, treasury status, executed payouts, active sponsored watches, and execution history.
+- **FR-015**: ChronicleAI MUST include clear failure states and retry visibility for publication, notification, payment, registry execution, and monitoring failures.
 - **FR-016**: ChronicleAI MUST mark generated analysis with sufficient source references or confidence indicators so readers can distinguish verified event data from synthesized commentary.
 - **FR-017**: ChronicleAI MUST avoid publishing premium-only deep analysis in public alerts or public digests unless that content has been intentionally designated as public.
 - **FR-018**: ChronicleAI MUST maintain a premium visual experience for public and operator-facing views consistent with the ChronicleAI product identity.
 - **FR-019**: ChronicleAI MUST attempt public alert LLM generation using Gemini first, OpenAI second, and Groq third, stopping at the first valid provider response.
 - **FR-020**: ChronicleAI MUST record each LLM provider attempt, including provider name, outcome, latency, failure reason when applicable, and final provider selected.
 - **FR-021**: ChronicleAI MUST fail alert generation visibly and retryably when all configured LLM providers fail, without publishing unsupported or fabricated alert content.
+- **FR-022**: ChronicleAI MUST write proof-of-publication hashes for public alerts (`publishAlert`) and digests (`publishDigest`) on-chain via the Chronicle Registry smart contract.
+- **FR-023**: ChronicleAI MUST record and display on-chain proof-of-publication transaction hashes for each public alert and digest.
+- **FR-024**: ChronicleAI MUST support sponsored watch campaigns, executing `createSponsoredWatch` on-chain upon purchase, tracking the target contract/event, and executing `publishSponsoredReport` with the final report hash.
+- **FR-025**: ChronicleAI MUST execute autonomous revenue payouts from its Para wallet when funds exceed the safety reserve, distributing configurable recovery shares to the creator/deployer and capping rewards for referrals, followed by recording the payout on-chain (`recordPayout`).
+- **FR-026**: ChronicleAI MUST enforce treasury-gated execution where registry writes are suspended if Available Balance is below the safety buffer, logging skipped distributions or alerts.
 
 ### Key Entities
 
 - **Monitored Event**: A captured on-chain signal such as a large trade, liquidation, gas spike, volume anomaly, or contract deployment; includes event type, source reference, observed values, related assets or protocols, capture time, and significance score.
-- **Public Alert**: A short public bulletin generated from a monitored event; includes title, summary, source references, LLM provider metadata, target destinations, publication status, and delivery history.
+- **Public Alert**: A short public bulletin generated from a monitored event; includes title, summary, source references, LLM provider metadata, target destinations, publication status, registry transaction hash, and delivery history.
 - **LLM Generation Attempt**: A recorded attempt to generate alert or report content through a configured provider; includes provider name, attempt order, input reference, status, latency, failure reason, and response metadata when available.
-- **Daily Digest**: A scheduled market intelligence report covering a defined reporting period; includes highlights, trend commentary, referenced events, publication status, and audience classification.
+- **Daily Digest**: A scheduled market intelligence report covering a defined reporting period; includes highlights, trend commentary, referenced events, publication status, registry transaction hash, source event Merkle root, and audience classification.
 - **Premium Intelligence Item**: Paid content or structured feed data that may include deeper analysis, historical context, or machine-readable event intelligence; includes price, access terms, source references, and purchase status.
-- **Payment Record**: Evidence of a premium access payment attempt or settlement; includes payment route, amount, status, requested content, payer reference where available, and settlement time.
+- **Payment Record**: Evidence of a premium access payment attempt or settlement; includes payment route, amount, status, requested content, payer reference, referral identifier, and settlement time.
+- **Sponsored Watch Campaign**: A paid monitoring campaign for a specific contract or event signature; includes target contract, campaign window, registry transaction hashes (creation and publication), and report hashes.
+- **Revenue Payout**: A ledger receipt documenting autonomous revenue distributions; includes payout period hash, recipient wallet address, token amount, reason hash, transfer transaction hash, and registry write transaction hash.
 - **Treasury Status**: The operating funds state for the autonomous agent; includes available balance, safety buffer, estimated costs, revenue totals, and latest maintenance outcome.
-- **Execution Log**: An audit entry for monitoring, generation, publication, notification, payment, or maintenance activity; includes action type, result, timestamp, and relevant references.
+- **Execution Log**: An audit entry for monitoring, generation, publication, notification, payment, registry writes, payouts, or maintenance activity; includes action type, result, timestamp, and relevant references.
 
 ## Success Criteria *(mandatory)*
 
@@ -127,11 +138,13 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - **SC-003**: At least 90% of generated public alerts include a source reference, event magnitude, and plain-language explanation understandable without reading raw transaction data.
 - **SC-004**: 100% of premium intelligence responses require a successful payment record before paid content is returned.
 - **SC-005**: Paid access users can complete a premium content purchase and receive the requested content in under 30 seconds during normal operation.
-- **SC-006**: Operators can determine the agent's current sustainability status, recent revenue, estimated costs, and treasury safety-buffer state in under 1 minute.
+- **SC-006**: Operators can determine the agent's current sustainability status, recent revenue, estimated costs, active sponsored campaigns, payout distributions, and treasury safety-buffer state in under 1 minute.
 - **SC-007**: Duplicate public alerts for the same underlying event remain below 2% of total alert volume in representative testing.
 - **SC-008**: At least 80% of test readers rate the public alert and daily digest summaries as clear, credible, and useful for understanding relevant on-chain activity.
 - **SC-009**: 100% of public alert generation attempts record provider attempt history, including fallback from Gemini to OpenAI and from OpenAI to Groq when earlier providers fail.
 - **SC-010**: When Gemini fails in representative testing, at least 95% of otherwise valid alert-generation requests complete through OpenAI or Groq within the 2-minute alert publication target.
+- **SC-011**: 100% of generated alerts and daily digests successfully call their respective Chronicle Registry methods (`publishAlert`, `publishDigest`) and register the transaction hash on-chain when the Para wallet is funded above the safety buffer.
+- **SC-012**: Payouts to allowlisted creators and referrers are successfully routed, executed on-chain, and recorded via `recordPayout` within the designated weekly execution cycle.
 
 ## Assumptions
 
@@ -141,6 +154,7 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - Public summaries may describe key findings, but detailed analysis, historical feed access, and structured premium data remain gated by payment.
 - Payment access is scoped to pay-per-request and recurring subscription demonstrations; complex invoicing, refunds, and dispute handling are outside the first release.
 - The operator audit view is intended for transparency and demonstration, not full financial accounting.
-- Publication destinations and notification channels may vary by deployment, but the experience must demonstrate both public content publishing and real-time community notification.
+- Publication destinations and notification channels may vary by deployment, but the experience must demonstrate both public content publishing (Webflow) and real-time community notification (Discord/Telegram).
 - Public alert generation uses the provider fallback order Gemini, then OpenAI, then Groq. Provider API keys are backend-only secrets and are never exposed to the frontend.
 - If all LLM providers fail, ChronicleAI records a failed generation state and retryable execution log rather than publishing a fabricated summary.
+- The Chronicle Registry contract is deployed to a supported testnet (such as Base Sepolia) and the agent uses a secure Para MPC wallet for gas funding and token payouts.

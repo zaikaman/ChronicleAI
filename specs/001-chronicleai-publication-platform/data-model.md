@@ -48,6 +48,9 @@ Represents a public bulletin generated from a qualifying monitored event.
 - `confidence`: `high`, `medium`, or `low`
 - `generationProvider`: Provider that produced the final alert content, such as `gemini`, `openai`, or `groq`
 - `generationAttemptIds`: References to provider attempts made while generating the alert
+- `registryTxHash`: Transaction hash of the `publishAlert` registry contract execution
+- `sourceEventHash`: Hash of the raw event details written on-chain
+- `contentUri`: URI or URL of the public article/alert on Webflow/IPFS
 
 **Relationships**:
 - Belongs to one `MonitoredEvent`
@@ -59,6 +62,7 @@ Represents a public bulletin generated from a qualifying monitored event.
 - `dedupeKey` must be unique within the deduplication window
 - Public alerts must not contain premium-only analysis
 - Published alerts require a successful `generationProvider`
+- Registry-written alerts require `registryTxHash` when Para wallet funding allows
 
 ## LLMGenerationAttempt
 
@@ -104,6 +108,9 @@ Represents a scheduled report covering a reporting period.
 - `audience`: `public`, `premium`, or `operator`
 - `publicationStatus`: `draft`, `queued`, `published`, `partial_failure`, `failed`
 - `publishedAt`: Publication time
+- `registryTxHash`: Transaction hash of the `publishDigest` registry contract execution
+- `sourceEventRoot`: Merkle root of all event hashes included in this digest
+- `contentUri`: URI or URL of the digest on Webflow/email template/IPFS
 
 **Relationships**:
 - References many `MonitoredEvent` records
@@ -114,6 +121,7 @@ Represents a scheduled report covering a reporting period.
 - Every scheduled reporting period must produce one digest
 - Reports must include either highlights or a no-major-events statement
 - Analytical claims require source references or confidence labels
+- Registry-written digests require `registryTxHash` when Para wallet funding allows
 
 ## PremiumIntelligenceItem
 
@@ -196,11 +204,11 @@ Represents ChronicleAI's operational funding state at a point in time.
 
 ## ExecutionLog
 
-Represents an auditable action or failure across monitoring, generation, publication, payment, or maintenance.
+Represents an auditable action or failure across monitoring, generation, publication, payment, registry writes, payouts, or maintenance.
 
 **Fields**:
 - `id`: Stable internal identifier
-- `actionType`: `monitor`, `generate_alert`, `publish_alert`, `generate_digest`, `publish_digest`, `payment`, `treasury_check`, `operator_notification`
+- `actionType`: `monitor`, `generate_alert`, `publish_alert`, `generate_digest`, `publish_digest`, `payment`, `treasury_check`, `operator_notification`, `registry_write`, `payout`
 - `entityType`: Related domain entity type
 - `entityId`: Related domain entity identifier
 - `status`: `started`, `succeeded`, `retrying`, `failed`
@@ -216,6 +224,54 @@ Represents an auditable action or failure across monitoring, generation, publica
 - Failed logs require a diagnostic message
 - Retrying logs require enough detail for operators to understand the next attempt
 - Logs must preserve chronological ordering for dashboard audit views
+
+## SponsoredWatch
+
+Represents a paid monitoring campaign for a contract or event signature.
+
+**Fields**:
+- `id`: Stable internal identifier
+- `targetContract`: Target Ethereum address monitored
+- `watchSpecHash`: Hash of the monitoring specification (filters, event signature)
+- `startsAt`: Timestamp when campaign starts
+- `endsAt`: Timestamp when campaign ends
+- `createTxHash`: Transaction hash of the `createSponsoredWatch` call
+- `reportTxHash`: Transaction hash of the `publishSponsoredReport` call
+- `reportContentHash`: Hash of the final generated campaign report
+- `contentUri`: Storage URI for the final monitoring report
+- `status`: `accepted`, `monitoring`, `completed`, `failed`
+- `createdAt`: Creation timestamp
+
+**Relationships**:
+- Links to one `PremiumIntelligenceItem` (the purchase trigger)
+- Has many `ExecutionLog` entries
+
+**Validation rules**:
+- Accepted campaigns require target contract, watch spec hash, startsAt, endsAt, and a valid `createTxHash`
+- Completed campaigns require a final `reportContentHash` and `reportTxHash`
+
+## RevenuePayout
+
+Represents an autonomous token distribution from the agent's Para wallet.
+
+**Fields**:
+- `id`: Stable internal identifier
+- `payoutPeriodHash`: Unique hash of the payout period
+- `recipient`: Address of allowlisted creator recovery wallet or referral wallet
+- `amount`: Amount in USDC or base tokens distributed
+- `reasonHash`: Hash of the payout calculation details (creator recovery share or referral rewards)
+- `payoutTxHash`: Transaction hash of the token transfer
+- `registryTxHash`: Transaction hash of the `recordPayout` registry call
+- `status`: `pending`, `transferred`, `failed`
+- `createdAt`: Payout timestamp
+
+**Relationships**:
+- Contributes to `TreasurySnapshot` history
+- Has many `ExecutionLog` entries
+
+**Validation rules**:
+- Transferred payouts require `payoutTxHash` and `registryTxHash`
+- Payout amount must not exceed the maximum allowed share or cause balance to drop below the safety buffer
 
 ## State Transitions
 
@@ -258,3 +314,15 @@ Represents an auditable action or failure across monitoring, generation, publica
 `healthy` -> `warning` -> `critical`
 
 `critical` -> `warning` -> `healthy`
+
+### SponsoredWatch
+
+`accepted` -> `monitoring` -> `completed`
+
+`monitoring` -> `failed`
+
+### RevenuePayout
+
+`pending` -> `transferred`
+
+`pending` -> `failed`

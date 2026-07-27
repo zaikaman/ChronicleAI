@@ -1,2 +1,3 @@
 - For docs related to keeperhub, just look at the keeperhub folder, but it's read-only, don't edit anything in it.
 - All code written must be real and production ready, no mock, fake or hardcode.
+- Whenever you're done, make sure to use powershell to play a sound to signal completion.

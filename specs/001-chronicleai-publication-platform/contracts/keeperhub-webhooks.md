@@ -65,9 +65,27 @@
 - `400`: Snapshot invalid
 - `401`: Signature invalid
 
+## Revenue Routing Webhook
+
+**Endpoint**: `POST /keeperhub/revenue/route`
+
+**Purpose**: Trigger the weekly autonomous revenue routing payout calculations, batch token transfers, and registry payout logging.
+
+**Authentication**: Requests must include a shared webhook signature in `X-ChronicleAI-Signature`.
+
+**Required payload fields**:
+- `periodStart`: Start timestamp of the payout period
+- `periodEnd`: End timestamp of the payout period
+
+**Expected responses**:
+- `202`: Revenue routing calculation initiated
+- `400`: Invalid payout period
+- `401`: Signature invalid
+- `409`: Revenue routing for this period has already been processed
+
 ## Delivery Guarantees
 
-- KeeperHub webhook calls must be idempotent using the source event or reporting-window identifier.
-- The API must record the raw accepted payload before content generation begins.
+- KeeperHub webhook calls must be idempotent using the source event, reporting-window, or payout-period identifier.
+- The API must record the raw accepted payload before content generation or transaction processing begins.
 - Failures must create execution logs visible in the operator audit view.
-- Retries must not publish duplicate public alerts or duplicate daily digests.
+- Retries must not publish duplicate public alerts, duplicate daily digests, or execute duplicate payout transfers.
