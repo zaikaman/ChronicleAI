@@ -50,20 +50,19 @@ export function OperatorDashboardPage(): ReactElement {
   }, [data]);
 
   const payoutEntries = useMemo(() => {
-    // Payouts are not directly in the audit API response currently
-    // We'll derive them when the backend supports it
-    return [] as Array<{
-      id: string;
-      payoutPeriodHash: string;
-      recipient: string;
-      amount: number;
-      reasonHash: string;
-      payoutTxHash?: string;
-      registryTxHash?: string;
-      status: string;
-      createdAt: string;
-    }>;
-  }, []);
+    if (!data || !data.payouts) return [];
+    return data.payouts.map((p: any) => ({
+      id: p.id,
+      payoutPeriodHash: p.payoutPeriodHash,
+      recipient: p.recipient,
+      amount: p.amount,
+      reasonHash: p.reasonHash,
+      payoutTxHash: p.payoutTxHash,
+      registryTxHash: p.registryTxHash,
+      status: p.status,
+      createdAt: p.createdAt,
+    }));
+  }, [data]);
 
   if (isUnauthenticated) {
     return (

@@ -29,6 +29,9 @@ function createMockWeb3Client(
     async recordPayout() {
       return "0xpayout-tx-hash";
     },
+    async sendTransfer() {
+      return "0xtransfer-tx-hash";
+    },
     ...overrides,
   };
 }

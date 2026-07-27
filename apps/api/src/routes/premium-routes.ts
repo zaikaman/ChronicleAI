@@ -2,7 +2,7 @@
 // GET /premium/items - List available premium item teasers
 // GET /premium/items/:id - Access a premium item (returns 402 if not paid)
 
-import type { ExecutionLogRepository, PremiumIntelligenceRepository, PaymentRecordRepository } from "@chronicleai/db";
+import type { ExecutionLogRepository, PremiumIntelligenceRepository, PaymentRecordRepository, SponsoredWatchRepository } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import {
   PremiumAccessService,
@@ -14,6 +14,7 @@ export function createPremiumRoutes(params: {
   premiumRepo: PremiumIntelligenceRepository;
   paymentRecordRepo: PaymentRecordRepository;
   execLogRepo: ExecutionLogRepository;
+  watchRepo: SponsoredWatchRepository;
 }): RouterType {
   const router: RouterType = Router();
   const visibilityService = new PremiumContentVisibilityService();
@@ -21,6 +22,24 @@ export function createPremiumRoutes(params: {
     premiumRepo: params.premiumRepo,
     paymentRecordRepo: params.paymentRecordRepo,
     execLogRepo: params.execLogRepo,
+  });
+
+  /**
+   * GET /premium/watches
+   *
+   * List active sponsored watch campaigns.
+   */
+  router.get("/premium/watches", async (_req, res, next) => {
+    try {
+      const result = await params.watchRepo.listActive();
+      if (!result.ok) {
+        res.status(500).json({ error: result.error.message });
+        return;
+      }
+      res.json({ watches: result.value });
+    } catch (error) {
+      next(error);
+    }
   });
 
   /**

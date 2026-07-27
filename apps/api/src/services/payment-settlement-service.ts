@@ -6,6 +6,7 @@ import type { ExecutionLogRepository, PaymentRecordRepository } from "@chronicle
 import type { PaymentRoute } from "@chronicleai/schemas";
 import type { PaymentAdapter, SettlementVerificationResult } from "../payments/payment-adapter.ts";
 import type { ExecutionLogService } from "./execution-log-service.ts";
+import { badRequest } from "../errors.ts";
 
 export interface SettlementResult {
   settled: boolean;
@@ -54,12 +55,12 @@ export class PaymentSettlementService {
     );
 
     if (!recordResult.ok) {
-      throw new Error(`Failed to find payment record: ${recordResult.error.message}`);
+      throw badRequest(`Failed to find payment record: ${recordResult.error.message}`);
     }
 
     const record = recordResult.value;
     if (!record) {
-      throw new Error(`Payment record not found for challenge: ${params.challengeReference}`);
+      throw badRequest(`Payment record not found for challenge: ${params.challengeReference}`);
     }
 
     // Check if already settled

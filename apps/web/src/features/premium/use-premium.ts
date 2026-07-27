@@ -183,3 +183,38 @@ export async function settlePayment(params: {
     throw err;
   }
 }
+
+/**
+ * Hook to fetch active sponsored watches.
+ */
+export function useSponsoredWatches() {
+  const [watches, setWatches] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchWatches = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/premium/watches`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch sponsored watches: ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as { watches: any[] };
+      setWatches(data.watches ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load sponsored watches");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWatches();
+  }, [fetchWatches]);
+
+  return { watches, isLoading, error, refetch: fetchWatches };
+}

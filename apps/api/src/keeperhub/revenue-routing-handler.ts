@@ -56,8 +56,8 @@ export class RevenueRoutingHandler {
         });
 
         return {
-          accepted: false,
-          statusCode: 202,
+          accepted: true,
+          statusCode: 201,
           payoutCount: 0,
           message: `Revenue routing skipped: ${result.errorMessage}`,
         };

@@ -15,6 +15,7 @@ import type { PaymentAdapter } from "../payments/payment-adapter.ts";
 import { PaymentChallengeService } from "../services/payment-challenge-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
 import { createSponsoredWatchService } from "../services/sponsored-watch-service.ts";
+import type { Web3Client } from "../services/web3-client-service.ts";
 
 export function createPaymentRoutes(params: {
   premiumRepo: PremiumIntelligenceRepository;
@@ -22,6 +23,7 @@ export function createPaymentRoutes(params: {
   execLogRepo: ExecutionLogRepository;
   watchRepo: SponsoredWatchRepository;
   adapters: Map<PaymentRoute, PaymentAdapter>;
+  web3Client?: Web3Client | null;
 }): RouterType {
   const router: RouterType = Router();
 
@@ -39,6 +41,7 @@ export function createPaymentRoutes(params: {
   const watchService = createSponsoredWatchService({
     watchRepo: params.watchRepo,
     execLogRepo: params.execLogRepo,
+    web3Client: params.web3Client ?? null,
   });
 
   /**
@@ -248,8 +251,11 @@ export function createPaymentRoutes(params: {
           payerReference: result.verification.payerReference,
         },
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      res.status(400).json({
+        settled: false,
+        error: error instanceof Error ? error.message : "Settlement failed",
+      });
     }
   });
 

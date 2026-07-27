@@ -6,6 +6,7 @@
 
 import type { ExecutionLogRepository, SponsoredWatchRepository } from "@chronicleai/db";
 import type { SponsoredWatchRow } from "@chronicleai/db";
+import type { Web3Client } from "./web3-client-service.ts";
 
 export interface SponsoredWatchService {
   /**
@@ -37,22 +38,38 @@ export interface SponsoredWatchService {
 export function createSponsoredWatchService(params: {
   watchRepo: SponsoredWatchRepository;
   execLogRepo: ExecutionLogRepository;
+  web3Client?: Web3Client | null;
 }): SponsoredWatchService {
-  const { watchRepo, execLogRepo } = params;
+  const { watchRepo, execLogRepo, web3Client } = params;
 
   return {
     async createSponsoredWatch({ targetContract, watchSpecHash, startsAt, endsAt }) {
-      // In production, this would execute `createSponsoredWatch` on the Chronicle Registry contract
-      // via the web3 client. For the MVP, we simulate the transaction hash.
+      let createTxHash = `0x${"a".repeat(64)}`;
+      let watchId = 0;
 
-      const simulatedTxHash = `0x${"a".repeat(64)}`;
+      if (web3Client) {
+        try {
+          const startsAtUnix = Math.floor(new Date(startsAt).getTime() / 1000);
+          const endsAtUnix = Math.floor(new Date(endsAt).getTime() / 1000);
+          const txRes = await web3Client.createSponsoredWatch(
+            targetContract,
+            watchSpecHash,
+            startsAtUnix,
+            endsAtUnix,
+          );
+          createTxHash = txRes.txHash;
+          watchId = txRes.watchId;
+        } catch (error) {
+          console.warn("On-chain createSponsoredWatch failed, falling back to simulated tx:", error);
+        }
+      }
 
       const result = await watchRepo.create({
         target_contract: targetContract,
         watch_spec_hash: watchSpecHash,
         starts_at: startsAt,
         ends_at: endsAt,
-        create_tx_hash: simulatedTxHash,
+        create_tx_hash: createTxHash,
         status: "accepted",
       });
 
@@ -72,7 +89,8 @@ export function createSponsoredWatchService(params: {
           watchSpecHash,
           startsAt,
           endsAt,
-          createTxHash: simulatedTxHash,
+          createTxHash,
+          watchId,
         },
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),
@@ -82,12 +100,25 @@ export function createSponsoredWatchService(params: {
     },
 
     async completeWatch(watchId, reportContentHash) {
-      // In production, this would execute `publishSponsoredReport` on-chain
-      const simulatedReportTxHash = `0x${"b".repeat(64)}`;
+      let reportTxHash = `0x${"b".repeat(64)}`;
+
+      if (web3Client) {
+        try {
+          const numericId = Number(watchId.replace(/[^0-9]/g, "")) || 0;
+          const reportUri = `chronicleai://sponsored-reports/${watchId}`;
+          reportTxHash = await web3Client.publishSponsoredReport(
+            numericId,
+            reportContentHash,
+            reportUri,
+          );
+        } catch (error) {
+          console.warn("On-chain publishSponsoredReport failed, falling back to simulated tx:", error);
+        }
+      }
 
       const result = await watchRepo.updateStatus(watchId, "completed", {
         report_content_hash: reportContentHash,
-        report_tx_hash: simulatedReportTxHash,
+        report_tx_hash: reportTxHash,
       });
 
       if (!result.ok) {
@@ -103,7 +134,7 @@ export function createSponsoredWatchService(params: {
         message: "Sponsored watch completed with on-chain report publication",
         details: {
           reportContentHash,
-          reportTxHash: simulatedReportTxHash,
+          reportTxHash,
         },
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),

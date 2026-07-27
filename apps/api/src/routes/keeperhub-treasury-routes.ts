@@ -63,8 +63,8 @@ export function createKeeperhubTreasuryRoutes(handler: TreasuryCheckHandler): Ro
         message: result.message,
         ...(result.snapshotId ? { snapshotId: result.snapshotId } : {}),
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message, stack: error.stack });
     }
   });
 

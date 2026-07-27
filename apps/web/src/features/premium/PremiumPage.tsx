@@ -6,7 +6,7 @@ import { PremiumTeaserCard } from "./PremiumTeaserCard.tsx";
 import { PaymentChallengePanel } from "./PaymentChallengePanel.tsx";
 import { PremiumContentView } from "./PremiumContentView.tsx";
 import { SponsoredWatchList, type SponsoredWatchModel } from "./SponsoredWatchList.tsx";
-import { usePremiumTeasers, usePremiumItemAccess } from "./use-premium.ts";
+import { usePremiumTeasers, usePremiumItemAccess, useSponsoredWatches } from "./use-premium.ts";
 
 export function PremiumPage(): ReactElement {
   const { items, isLoading, error, refetch } = usePremiumTeasers();
@@ -18,6 +18,7 @@ export function PremiumPage(): ReactElement {
     isPaymentRequired,
     paymentChallenge,
   } = usePremiumItemAccess();
+  const { watches: sponsoredWatches } = useSponsoredWatches();
 
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -26,27 +27,6 @@ export function PremiumPage(): ReactElement {
   const [currentItemCurrency, setCurrentItemCurrency] = useState("USDC");
   const [showContent, setShowContent] = useState(false);
   const [settledPaymentId, setSettledPaymentId] = useState<string | null>(null);
-
-  // Mock sponsored watches for display
-  const [sponsoredWatches] = useState<SponsoredWatchModel[]>([
-    {
-      id: "watch-demo-001",
-      targetContract: "0x1234567890abcdef1234567890abcdef12345678",
-      status: "monitoring",
-      createTxHash: "0x" + "a".repeat(64),
-      startsAt: new Date(Date.now() - 86400000).toISOString(),
-      endsAt: new Date(Date.now() + 6 * 86400000).toISOString(),
-    },
-    {
-      id: "watch-demo-002",
-      targetContract: "0xabcdef1234567890abcdef1234567890abcdef12",
-      status: "completed",
-      createTxHash: "0x" + "b".repeat(64),
-      reportTxHash: "0x" + "c".repeat(64),
-      startsAt: new Date(Date.now() - 7 * 86400000).toISOString(),
-      endsAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-  ]);
 
   const handleAccessItem = useCallback(
     async (itemId: string) => {

@@ -45,6 +45,17 @@ export interface OperatorAuditData {
     message: string | null;
     createdAt: string;
   }>;
+  payouts?: Array<{
+    id: string;
+    payoutPeriodHash: string;
+    recipient: string;
+    amount: number;
+    reasonHash: string;
+    payoutTxHash?: string;
+    registryTxHash?: string;
+    status: string;
+    createdAt: string;
+  }>;
 }
 
 export interface OperatorAuditState {
@@ -56,7 +67,7 @@ export interface OperatorAuditState {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
-const OPERATOR_TOKEN = import.meta.env.VITE_OPERATOR_TOKEN ?? "";
+const OPERATOR_TOKEN = (import.meta.env as any).VITE_OPERATOR_TOKEN ?? "";
 
 export function useOperatorAudit(): OperatorAuditState {
   const [data, setData] = useState<OperatorAuditData | null>(null);

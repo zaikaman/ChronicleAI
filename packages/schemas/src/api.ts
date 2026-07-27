@@ -144,6 +144,8 @@ export interface OperatorAuditResponse {
     status: TreasuryStatus;
   };
   executionLogs: Array<Record<string, unknown>>;
+  payouts?: Array<Record<string, unknown>>;
+  activeSponsoredWatches?: Array<Record<string, unknown>>;
 }
 
 // ── Response Wrappers ───────────────────────────────────

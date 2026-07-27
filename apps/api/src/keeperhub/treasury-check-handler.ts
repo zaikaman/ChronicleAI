@@ -46,7 +46,7 @@ export class TreasuryCheckHandler {
       const evaluation = this.treasuryService.evaluate({
         availableBalance: payload.availableBalance,
         safetyBuffer: payload.safetyBuffer,
-        previousStatus: previousStatus as "healthy" | "warning" | "critical" | undefined,
+        ...(previousStatus ? { previousStatus: previousStatus as "healthy" | "warning" | "critical" } : {}),
       });
 
       const deficitPct = evaluation.deficitPercentage ?? 0;

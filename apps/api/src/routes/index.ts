@@ -151,6 +151,8 @@ export interface US3Dependencies {
   watchRepo: SponsoredWatchRepository;
 }
 export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependencies): void {
+  const web3Client = createWeb3Client(env);
+
   // Initialize payment adapters
   const adapters = new Map<PaymentRoute, PaymentAdapter>();
   adapters.set("x402", new X402PaymentAdapter({ facilitatorUrl: env.x402FacilitatorUrl ?? undefined }));
@@ -161,6 +163,7 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
     premiumRepo: deps.premiumRepo,
     paymentRecordRepo: deps.paymentRecordRepo,
     execLogRepo: deps.execLogRepo,
+    watchRepo: deps.watchRepo,
   }));
 
   // Payment routes
@@ -170,6 +173,7 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
     execLogRepo: deps.execLogRepo,
     watchRepo: deps.watchRepo,
     adapters,
+    web3Client,
   }));
 }
 
@@ -215,6 +219,7 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
     execLogRepo: deps.execLogRepo,
     treasuryService,
     registryService,
+    web3Client,
   });
 
   const treasuryHandler = new TreasuryCheckHandler({

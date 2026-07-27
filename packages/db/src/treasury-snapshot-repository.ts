@@ -35,6 +35,7 @@ export function createTreasurySnapshotRepository(
   return {
     async create(snapshot) {
       const payload = buildInsertPayload(snapshot as unknown as Record<string, unknown>);
+      delete payload.updated_at;
       const { data, error } = await table().insert(payload).select().single();
 
       if (error) return failure(mapPostgrestError(error));
@@ -82,11 +83,12 @@ export function createTreasurySnapshotRepository(
         .limit(limit);
 
       if (error) return failure(mapPostgrestError(error));
-      return success(data ?? []);
+      return success(data as unknown as TreasurySnapshotRow[]);
     },
 
     async update(id, update) {
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
+      delete (payload as any).updated_at;
       const { data, error } = await table()
         .update(payload)
         .eq("id", id)

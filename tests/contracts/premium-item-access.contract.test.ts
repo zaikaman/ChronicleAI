@@ -1,12 +1,25 @@
 // Contract tests for GET /premium/items/:id
 // Validates payment gating, 402 challenges, and access control
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 const API_BASE = process.env.API_BASE_URL ?? "http://localhost:4000";
-const KNOWN_PREMIUM_ITEM_ID = "premium-deep-dive-001";
+let KNOWN_PREMIUM_ITEM_ID = "premium-deep-dive-001";
 
 describe("GET /premium/items/:id", () => {
+  beforeAll(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/premium/items`);
+      if (response.ok) {
+        const body = (await response.json()) as { items?: Array<{ id: string }> };
+        if (body.items && body.items.length > 0) {
+          KNOWN_PREMIUM_ITEM_ID = body.items[0]?.id ?? KNOWN_PREMIUM_ITEM_ID;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to retrieve real premium item ID, using fallback:", e);
+    }
+  });
   it("should return 404 for non-existent item", async () => {
     const response = await fetch(`${API_BASE}/premium/items/non-existent-id`);
     expect(response.status).toBe(404);

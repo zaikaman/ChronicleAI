@@ -7,7 +7,7 @@ import type {
   SponsoredWatchRow,
   SponsoredWatchUpdate,
 } from "./types.ts";
-import { type Result, failure, success } from "./errors.ts";
+import { type Result, ValidationError, failure, success } from "./errors.ts";
 import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
 
 export interface SponsoredWatchRepository {
@@ -43,6 +43,10 @@ export function createSponsoredWatchRepository(
     },
 
     async findById(id) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        return success(null);
+      }
       const { data, error } = await table()
         .select("*")
         .eq("id", id)
@@ -72,6 +76,10 @@ export function createSponsoredWatchRepository(
     },
 
     async update(id, update) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        return failure(new ValidationError("Invalid UUID format"));
+      }
       const { data, error } = await table()
         .update(update)
         .eq("id", id)

@@ -34,6 +34,9 @@ export interface Web3Client {
 
   /** Record a payout on-chain. Returns the transaction hash. */
   recordPayout(payoutPeriodHash: string, recipient: string, amount: number, reasonHash: string): Promise<string>;
+
+  /** Send native transfer. Returns the transaction hash. */
+  sendTransfer(to: string, amountEth: number): Promise<string>;
 }
 
 // Minimum ABI for ChronicleRegistry interactions
@@ -141,6 +144,18 @@ export function createWeb3Client(env: ServerEnv): Web3Client | null {
       const receipt = await tx.wait();
       if (!receipt || typeof receipt.hash !== "string") {
         throw new Error("recordPayout transaction failed");
+      }
+      return receipt.hash;
+    },
+
+    async sendTransfer(to, amountEth) {
+      const tx = await wallet.sendTransaction({
+        to,
+        value: ethers.parseEther(String(amountEth)),
+      });
+      const receipt = await tx.wait();
+      if (!receipt || typeof receipt.hash !== "string") {
+        throw new Error("sendTransfer transaction failed");
       }
       return receipt.hash;
     },

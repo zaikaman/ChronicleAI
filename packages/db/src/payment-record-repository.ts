@@ -91,6 +91,10 @@ export function createPaymentRecordRepository(
     },
 
     async listByPremiumItem(premiumItemId) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(premiumItemId)) {
+        return success([]);
+      }
       const { data, error } = await table()
         .select("*")
         .eq("premium_item_id", premiumItemId)
@@ -111,6 +115,10 @@ export function createPaymentRecordRepository(
     },
 
     async findSettledByPayer(premiumItemId, payerReference) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(premiumItemId)) {
+        return success(null);
+      }
       const { data, error } = await table()
         .select("*")
         .eq("premium_item_id", premiumItemId)

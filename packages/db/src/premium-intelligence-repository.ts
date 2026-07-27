@@ -50,6 +50,10 @@ export function createPremiumIntelligenceRepository(
     },
 
     async findById(id) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        return success(null);
+      }
       const { data, error } = await table()
         .select("*")
         .eq("id", id)
@@ -60,6 +64,10 @@ export function createPremiumIntelligenceRepository(
     },
 
     async findPrivateContent(id) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        return success(null);
+      }
       const { data, error } = await table()
         .select("content_private")
         .eq("id", id)
