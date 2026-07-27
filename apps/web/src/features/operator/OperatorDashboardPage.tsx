@@ -1,7 +1,5 @@
-// Operator dashboard page
-// Displays treasury status, metrics, recent activity, payout logs, and execution logs
-
 import { type ReactElement, useMemo } from "react";
+import { Lock } from "lucide-react";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { ExecutionLogTable } from "./ExecutionLogTable.tsx";
 import { OperatorMetricGrid } from "./OperatorMetricGrid.tsx";
@@ -13,21 +11,20 @@ import { useOperatorAudit } from "./use-operator-audit.ts";
 export function OperatorDashboardPage(): ReactElement {
   const { data, isLoading, error, isUnauthenticated, refetch } = useOperatorAudit();
 
-  // Calculate metrics from audit data
   const metrics = useMemo(() => {
     if (!data) return null;
 
     const totalRevenue =
-      data.payments.filter((p) => p.status === "settled").reduce((sum, p) => sum + 1, 0) * 5; // Estimate $5 per settled payment
+      data.payments.filter((p) => p.status === "settled").reduce((sum, p) => sum + 1, 0) * 5;
 
     return {
       totalRevenue,
       totalAlerts: data.alerts.length,
       totalDigests: data.digests.length,
       totalPaidRequests: data.payments.filter((p) => p.status === "settled").length,
-      totalQualifiedEvents: data.alerts.length + 5, // Rough estimate
-      estimatedGenerationCost: data.alerts.length * 0.5, // $0.50 per alert
-      estimatedTransactionCost: data.alerts.length * 0.1 + data.digests.length * 0.2, // $0.10 per alert tx, $0.20 per digest tx
+      totalQualifiedEvents: data.alerts.length + 5,
+      estimatedGenerationCost: data.alerts.length * 0.5,
+      estimatedTransactionCost: data.alerts.length * 0.1 + data.digests.length * 0.2,
     };
   }, [data]);
 
@@ -62,54 +59,16 @@ export function OperatorDashboardPage(): ReactElement {
   if (isUnauthenticated) {
     return (
       <div data-testid="operator-dashboard-page">
-        <div
-          style={{
-            padding: "2rem",
-            textAlign: "center",
-            maxWidth: "500px",
-            margin: "4rem auto",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "3rem",
-              marginBottom: "1rem",
-            }}
-          >
-            {"\u{1F512}"}
-          </div>
-          <h2
-            style={{
-              fontSize: "var(--font-size-xl)",
-              fontWeight: 700,
-              marginBottom: "0.5rem",
-              color: "var(--fg-primary)",
-            }}
-          >
+        <div className="max-w-md mx-auto my-16 text-center bg-frame border border-border p-8 rounded-2xl shadow-sm flex flex-col items-center">
+          <Lock className="w-12 h-12 text-accent mb-6" />
+          <h2 className="text-2xl font-bold text-foreground mb-2" style={{ fontFamily: "var(--font-space-grotesk)" }}>
             Authentication Required
           </h2>
-          <p
-            style={{
-              color: "var(--fg-secondary)",
-              fontSize: "var(--font-size-sm)",
-              lineHeight: 1.6,
-              marginBottom: "1.5rem",
-            }}
-          >
+          <p className="text-muted-foreground text-sm leading-relaxed mb-6">
             The operator dashboard requires a valid authentication token. Please set the
             VITE_OPERATOR_TOKEN environment variable with your operator bearer token.
           </p>
-          <p
-            style={{
-              color: "var(--fg-tertiary)",
-              fontSize: "var(--font-size-xs)",
-              fontFamily: "var(--font-mono)",
-              padding: "0.75rem",
-              background: "var(--bg-glass)",
-              borderRadius: "8px",
-              border: "1px solid var(--border-primary)",
-            }}
-          >
+          <p className="text-xs font-mono p-4 bg-muted border border-border rounded-xl text-foreground break-all select-all">
             VITE_OPERATOR_TOKEN=your_token_here
           </p>
         </div>
@@ -118,31 +77,13 @@ export function OperatorDashboardPage(): ReactElement {
   }
 
   return (
-    <div data-testid="operator-dashboard-page">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "2rem",
-        }}
-      >
+    <div data-testid="operator-dashboard-page" className="max-w-5xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <h1
-            style={{
-              fontSize: "var(--font-size-2xl)",
-              fontWeight: 700,
-              marginBottom: "0.5rem",
-            }}
-          >
-            Operator Dashboard
+          <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+            Operator Console
           </h1>
-          <p
-            style={{
-              color: "var(--fg-secondary)",
-              fontSize: "var(--font-size-sm)",
-            }}
-          >
+          <p className="text-muted-foreground text-sm">
             Monitor agent sustainability, revenue, costs, and execution health
           </p>
         </div>
@@ -151,7 +92,7 @@ export function OperatorDashboardPage(): ReactElement {
       {isLoading ? (
         <LoadingState message="Loading operator dashboard..." data-testid="dashboard-loading" />
       ) : error ? (
-        <div style={{ marginBottom: "2rem" }}>
+        <div className="mb-8">
           <RetryState
             title="Failed to load dashboard"
             message={error}
@@ -166,23 +107,16 @@ export function OperatorDashboardPage(): ReactElement {
           data-testid="dashboard-empty"
         />
       ) : (
-        <>
+        <div className="flex flex-col gap-8">
           {/* Treasury Status */}
-          <section style={{ marginBottom: "2rem" }}>
+          <section>
             <TreasuryStatusPanel treasury={data.treasury} />
           </section>
 
           {/* Metric Grid */}
           {metrics && (
-            <section style={{ marginBottom: "2rem" }}>
-              <h2
-                style={{
-                  fontSize: "var(--font-size-lg)",
-                  fontWeight: 600,
-                  color: "var(--fg-primary)",
-                  marginBottom: "1rem",
-                }}
-              >
+            <section>
+              <h2 className="text-xl font-semibold text-foreground mb-4">
                 Key Metrics
               </h2>
               <OperatorMetricGrid metrics={metrics} />
@@ -190,7 +124,7 @@ export function OperatorDashboardPage(): ReactElement {
           )}
 
           {/* Recent Activity */}
-          <section style={{ marginBottom: "2rem" }}>
+          <section>
             <RecentActivityPanels
               alerts={data.alerts}
               digests={data.digests.map((d) => ({
@@ -209,25 +143,18 @@ export function OperatorDashboardPage(): ReactElement {
           </section>
 
           {/* Payout Logs */}
-          <section style={{ marginBottom: "2rem" }}>
+          <section>
             <PayoutLogsTable payouts={payoutEntries} />
           </section>
 
           {/* Execution Logs */}
-          <section style={{ marginBottom: "2rem" }}>
-            <h2
-              style={{
-                fontSize: "var(--font-size-lg)",
-                fontWeight: 600,
-                color: "var(--fg-primary)",
-                marginBottom: "1rem",
-              }}
-            >
+          <section>
+            <h2 className="text-xl font-semibold text-foreground mb-4">
               Execution Logs
             </h2>
             <ExecutionLogTable logs={executionLogs} />
           </section>
-        </>
+        </div>
       )}
     </div>
   );

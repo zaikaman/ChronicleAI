@@ -1,5 +1,3 @@
-// Alerts page with filtering and state management
-
 import { type ReactElement, useMemo, useState } from "react";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { AlertCard } from "./AlertCard.tsx";
@@ -14,10 +12,7 @@ export function AlertsPage(): ReactElement {
   });
 
   const filteredAlerts = useMemo(() => {
-    // Note: chainId is not in the PublicAlertResponse, so this is a client-side filter
-    // In a production app, these would be server-side filters
     if (!filters.eventType) return alerts;
-    // Filter by event type embedded in alert title for now
     return alerts.filter((a) => {
       const titleLower = a.title.toLowerCase();
       const typeLabel = filters.eventType.replace(/_/g, " ");
@@ -44,8 +39,8 @@ export function AlertsPage(): ReactElement {
 
   if (alerts.length === 0) {
     return (
-      <>
-        <h1 style={{ fontSize: "var(--font-size-2xl)", fontWeight: 700, marginBottom: "1rem" }}>
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-6" style={{ fontFamily: "var(--font-space-grotesk)" }}>
           Public Alerts
         </h1>
         <EmptyState
@@ -53,14 +48,14 @@ export function AlertsPage(): ReactElement {
           description="Public alerts will appear here when significant on-chain events are detected."
           data-testid="alerts-empty"
         />
-      </>
+      </div>
     );
   }
 
   if (filters.eventType && filteredAlerts.length === 0) {
     return (
-      <div data-testid="alerts-filtered-empty">
-        <h1 style={{ fontSize: "var(--font-size-2xl)", fontWeight: 700, marginBottom: "1rem" }}>
+      <div data-testid="alerts-filtered-empty" className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-6" style={{ fontFamily: "var(--font-space-grotesk)" }}>
           Public Alerts
         </h1>
         <AlertFilters filters={filters} onChange={setFilters} />
@@ -73,24 +68,19 @@ export function AlertsPage(): ReactElement {
   }
 
   return (
-    <div data-testid="alerts-list">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "1rem",
-        }}
-      >
-        <h1 style={{ fontSize: "var(--font-size-2xl)", fontWeight: 700 }}>Public Alerts</h1>
-        <span className="text-tertiary" style={{ fontSize: "var(--font-size-sm)" }}>
+    <div data-testid="alerts-list" className="max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+          Public Alerts
+        </h1>
+        <span className="text-muted-foreground text-sm font-medium">
           {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? "s" : ""}
         </span>
       </div>
 
       <AlertFilters filters={filters} onChange={setFilters} />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <div className="flex flex-col gap-4 mt-6">
         {filteredAlerts.map((alert) => (
           <AlertCard key={alert.id} alert={alert} data-testid={`alert-${alert.id}`} />
         ))}

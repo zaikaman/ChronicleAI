@@ -18,6 +18,7 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
+      "@/*": ["src/*"],
       "@chronicleai/schemas": ["../../packages/schemas/src"],
       "@chronicleai/schemas/*": ["../../packages/schemas/src/*"],
       "@chronicleai/config": ["../../packages/config/src"],

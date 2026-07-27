@@ -43,7 +43,9 @@ npm-debug.log*
 # Temp files
 *.tmp
 
-.agents
-
 # KeeperHub (read-only reference)
 # keeperhub
+
+example
+
+.agents

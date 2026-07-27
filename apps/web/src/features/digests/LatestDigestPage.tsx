@@ -1,5 +1,3 @@
-// Latest Digest page: displays the most recent published daily digest
-
 import type { ReactElement } from "react";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { DigestAnalysisSections } from "./DigestAnalysisSections.tsx";
@@ -15,58 +13,40 @@ export function LatestDigestPage(): ReactElement {
 
   if (state.status === "not-found") {
     return (
-      <EmptyState
-        title="No digest available"
-        description="No daily digest has been published yet. Digests appear after the first scheduled generation run."
-        data-testid="digest-not-found"
-      />
+      <div className="max-w-4xl mx-auto">
+        <EmptyState
+          title="No digest available"
+          description="No daily digest has been published yet. Digests appear after the first scheduled generation run."
+          data-testid="digest-not-found"
+        />
+      </div>
     );
   }
 
   if (state.status === "error") {
     return (
-      <RetryState
-        title="Failed to load digest"
-        message={state.error}
-        onRetry={refetch}
-        data-testid="digest-error"
-      />
+      <div className="max-w-4xl mx-auto">
+        <RetryState
+          title="Failed to load digest"
+          message={state.error}
+          onRetry={refetch}
+          data-testid="digest-error"
+        />
+      </div>
     );
   }
 
   const { data: digest } = state;
 
   return (
-    <div data-testid="digest-latest">
+    <div data-testid="digest-latest" className="max-w-4xl mx-auto">
       {/* Header */}
-      <div
-        style={{
-          marginBottom: "2rem",
-        }}
-      >
-        <h1
-          style={{
-            fontSize: "var(--font-size-2xl)",
-            fontWeight: 700,
-            marginBottom: "0.5rem",
-          }}
-        >
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-3" style={{ fontFamily: "var(--font-space-grotesk)" }}>
           {digest.title}
         </h1>
-        <div
-          style={{
-            display: "flex",
-            gap: "1rem",
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "var(--font-size-sm)",
-              color: "var(--fg-secondary)",
-            }}
-          >
+        <div className="flex gap-4 items-center flex-wrap">
+          <span className="text-muted-foreground text-sm font-medium">
             {digest.publishedAt
               ? new Date(digest.publishedAt).toLocaleDateString("en-US", {
                   weekday: "long",
@@ -79,24 +59,13 @@ export function LatestDigestPage(): ReactElement {
               : digest.reportDate}
           </span>
           <span
-            style={{
-              padding: "0.125rem 0.5rem",
-              borderRadius: "999px",
-              fontSize: "var(--font-size-xs)",
-              fontWeight: 600,
-              background:
-                digest.publicationStatus === "published"
-                  ? "rgba(34, 197, 94, 0.1)"
-                  : digest.publicationStatus === "partial_failure"
-                    ? "rgba(234, 179, 8, 0.1)"
-                    : "rgba(239, 68, 68, 0.1)",
-              color:
-                digest.publicationStatus === "published"
-                  ? "rgb(34, 197, 94)"
-                  : digest.publicationStatus === "partial_failure"
-                    ? "rgb(234, 179, 8)"
-                    : "rgb(239, 68, 68)",
-            }}
+            className={`px-3 py-1 rounded-full text-xs font-semibold ${
+              digest.publicationStatus === "published"
+                ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                : digest.publicationStatus === "partial_failure"
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                  : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+            }`}
           >
             {digest.publicationStatus.replace(/_/g, " ")}
           </span>
@@ -115,25 +84,8 @@ export function LatestDigestPage(): ReactElement {
 
       {/* Self-hosted content permalink */}
       {digest.contentUri && (
-        <div
-          style={{
-            marginTop: "1.5rem",
-            textAlign: "center",
-          }}
-        >
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              padding: "0.75rem 1.5rem",
-              background: "var(--bg-glass)",
-              color: "var(--fg-secondary)",
-              borderRadius: "8px",
-              fontSize: "var(--font-size-sm)",
-              fontFamily: "monospace",
-            }}
-          >
+        <div className="mt-8 text-center">
+          <span className="inline-flex items-center gap-2 px-4 py-2.5 bg-muted/30 border border-border text-muted-foreground rounded-xl text-sm font-mono">
             {digest.contentUri}
           </span>
         </div>

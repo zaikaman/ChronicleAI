@@ -1,5 +1,3 @@
-// Digest highlights component with registry transaction links
-
 import type { ReactElement } from "react";
 
 export interface DigestHighlightsProps {
@@ -12,48 +10,22 @@ export function DigestHighlights({
   registryTxHash,
 }: DigestHighlightsProps): ReactElement {
   return (
-    <div className="digest-highlights" data-testid="digest-highlights">
-      <h3
-        style={{
-          fontSize: "var(--font-size-lg)",
-          fontWeight: 600,
-          marginBottom: "1rem",
-          color: "var(--fg-primary)",
-        }}
-      >
+    <div className="mb-8 font-sans" data-testid="digest-highlights">
+      <h3 className="text-xl font-semibold text-foreground mb-4">
         Key Highlights
       </h3>
 
       {highlights.length === 0 ? (
-        <p
-          style={{ color: "var(--fg-tertiary)", fontStyle: "italic" }}
-          data-testid="highlights-empty"
-        >
+        <p className="text-muted-foreground italic text-sm" data-testid="highlights-empty">
           No highlights available for this period.
         </p>
       ) : (
-        <ul
-          style={{
-            listStyle: "none",
-            padding: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.75rem",
-          }}
-        >
+        <ul className="list-none p-0 m-0 flex flex-col gap-3">
           {highlights.map((highlight, index) => (
             <li
               // biome-ignore lint/suspicious/noArrayIndexKey: stable ordered list
               key={index}
-              style={{
-                padding: "0.75rem 1rem",
-                background: "var(--bg-glass)",
-                borderRadius: "8px",
-                border: "1px solid var(--border-primary)",
-                fontSize: "var(--font-size-sm)",
-                color: "var(--fg-primary)",
-                lineHeight: 1.5,
-              }}
+              className="p-4 bg-frame border border-border rounded-2xl text-sm text-foreground leading-relaxed hover:border-accent/40 transition-colors shadow-xs"
             >
               {highlight}
             </li>
@@ -63,31 +35,18 @@ export function DigestHighlights({
 
       {registryTxHash && (
         <div
-          style={{
-            marginTop: "1rem",
-            padding: "0.75rem",
-            background: "var(--bg-glass)",
-            borderRadius: "8px",
-            border: "1px solid var(--accent-primary)",
-            fontSize: "var(--font-size-xs)",
-          }}
+          className="mt-4 p-4 bg-muted/20 border border-accent/20 rounded-2xl text-xs flex items-center flex-wrap gap-2"
           data-testid="registry-tx-link"
         >
-          <span style={{ color: "var(--fg-tertiary)" }}>On-chain proof: </span>
+          <span className="text-muted-foreground">On-chain proof: </span>
           <a
-            href={`https://sepolia.basescan.org/tx/${registryTxHash}`}
+            href={`https://sepolia.etherscan.io/tx/${registryTxHash}`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{
-              color: "var(--accent-primary)",
-              textDecoration: "none",
-              fontWeight: 600,
-              fontFamily: "monospace",
-            }}
-            title={`View transaction ${registryTxHash} on BaseScan`}
+            className="text-accent font-semibold font-mono hover:underline break-all"
+            title={`View transaction ${registryTxHash} on Etherscan`}
           >
-            {registryTxHash.slice(0, 10)}...
-            {registryTxHash.slice(-6)}
+            {registryTxHash}
           </a>
         </div>
       )}

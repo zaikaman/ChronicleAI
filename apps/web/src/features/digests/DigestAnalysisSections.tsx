@@ -1,5 +1,3 @@
-// Digest analysis sections: separates observed facts from analytical interpretation
-
 import type { ReactElement } from "react";
 
 export interface DigestAnalysisSectionsProps {
@@ -14,121 +12,49 @@ export function DigestAnalysisSections({
   reportDate,
 }: DigestAnalysisSectionsProps): ReactElement {
   return (
-    <div className="digest-analysis-sections" data-testid="digest-analysis-sections">
+    <div className="flex flex-col gap-6" data-testid="digest-analysis-sections">
       {/* Observed Facts Section */}
-      <section
-        style={{
-          marginBottom: "1.5rem",
-          padding: "1rem",
-          background: "var(--bg-glass)",
-          borderRadius: "8px",
-          border: "1px solid var(--border-primary)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            marginBottom: "0.75rem",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "var(--font-size-xs)",
-              fontWeight: 600,
-              color: "var(--accent-primary)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
+      <section className="p-6 bg-frame border border-border rounded-2xl shadow-xs">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xs font-semibold text-accent uppercase tracking-wider">
             Observed Facts
           </span>
-          <span
-            style={{
-              fontSize: "var(--font-size-xs)",
-              color: "var(--fg-tertiary)",
-            }}
-          >
+          <span className="text-xs text-muted-foreground">
             &middot; Verified On-Chain Data
           </span>
         </div>
-        <p
-          style={{
-            fontSize: "var(--font-size-sm)",
-            color: "var(--fg-primary)",
-            lineHeight: 1.6,
-            margin: 0,
-          }}
-        >
+        <p className="text-sm text-foreground leading-relaxed">
           {summary}
         </p>
       </section>
 
       {/* Analysis Section */}
       {analysis && (
-        <section
-          style={{
-            marginBottom: "1.5rem",
-            padding: "1rem",
-            background: "var(--bg-glass)",
-            borderRadius: "8px",
-            border: "1px solid var(--border-secondary)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginBottom: "0.75rem",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "var(--font-size-xs)",
-                fontWeight: 600,
-                color: "var(--fg-secondary)",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
+        <section className="p-6 bg-frame border border-border rounded-2xl shadow-xs">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Analysis
             </span>
-            <span
-              style={{
-                fontSize: "var(--font-size-xs)",
-                color: "var(--fg-tertiary)",
-              }}
-            >
+            <span className="text-xs text-muted-foreground">
               &middot; ChronicleAI Interpretation
             </span>
           </div>
-          {analysis.split("\n\n").map((paragraph, index) => (
-            <p
-              // biome-ignore lint/suspicious/noArrayIndexKey: stable text split
-              key={index}
-              style={{
-                fontSize: "var(--font-size-sm)",
-                color: "var(--fg-secondary)",
-                lineHeight: 1.6,
-                margin: "0 0 0.5rem 0",
-              }}
-            >
-              {paragraph}
-            </p>
-          ))}
+          <div className="flex flex-col gap-3">
+            {analysis.split("\n\n").map((paragraph, index) => (
+              <p
+                // biome-ignore lint/suspicious/noArrayIndexKey: stable text split
+                key={index}
+                className="text-sm text-muted-foreground leading-relaxed"
+              >
+                {paragraph}
+              </p>
+            ))}
+          </div>
         </section>
       )}
 
       {/* Report Date Footer */}
-      <p
-        style={{
-          fontSize: "var(--font-size-xs)",
-          color: "var(--fg-tertiary)",
-          textAlign: "right",
-        }}
-      >
+      <p className="text-xs text-muted-foreground text-right mt-2">
         Report Date: {reportDate}
       </p>
     </div>

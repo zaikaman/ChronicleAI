@@ -1,5 +1,3 @@
-// Alert filter controls for event type and chain
-
 import type React from "react";
 
 export interface AlertFiltersState {
@@ -38,18 +36,12 @@ export function AlertFilters({
   return (
     <div
       data-testid={dataTestId}
-      style={{
-        display: "flex",
-        gap: "1rem",
-        marginBottom: "1.5rem",
-        flexWrap: "wrap",
-        alignItems: "center",
-      }}
+      className="flex gap-6 mb-6 flex-wrap items-center bg-muted/20 border border-border p-4 rounded-2xl"
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+      <div className="flex flex-col gap-1.5">
         <label
           htmlFor="event-type-filter"
-          style={{ fontSize: "var(--font-size-xs)", color: "var(--fg-tertiary)" }}
+          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
         >
           Event Type
         </label>
@@ -58,29 +50,20 @@ export function AlertFilters({
           data-testid="event-type-filter"
           value={filters.eventType}
           onChange={(e) => onChange({ ...filters, eventType: e.target.value })}
-          style={{
-            padding: "0.5rem 0.75rem",
-            background: "var(--bg-glass)",
-            border: "1px solid var(--border-primary)",
-            borderRadius: "8px",
-            color: "var(--fg-primary)",
-            fontSize: "var(--font-size-sm)",
-            cursor: "pointer",
-            minWidth: "160px",
-          }}
+          className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-accent"
         >
           {EVENT_TYPES.map((type) => (
-            <option key={type.value} value={type.value}>
+            <option key={type.value} value={type.value} className="bg-frame text-foreground">
               {type.label}
             </option>
           ))}
         </select>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+      <div className="flex flex-col gap-1.5">
         <label
           htmlFor="chain-filter"
-          style={{ fontSize: "var(--font-size-xs)", color: "var(--fg-tertiary)" }}
+          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
         >
           Chain
         </label>
@@ -89,19 +72,10 @@ export function AlertFilters({
           data-testid="chain-filter"
           value={filters.chainId}
           onChange={(e) => onChange({ ...filters, chainId: e.target.value })}
-          style={{
-            padding: "0.5rem 0.75rem",
-            background: "var(--bg-glass)",
-            border: "1px solid var(--border-primary)",
-            borderRadius: "8px",
-            color: "var(--fg-primary)",
-            fontSize: "var(--font-size-sm)",
-            cursor: "pointer",
-            minWidth: "160px",
-          }}
+          className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-accent"
         >
           {CHAINS.map((chain) => (
-            <option key={chain.value} value={chain.value}>
+            <option key={chain.value} value={chain.value} className="bg-frame text-foreground">
               {chain.label}
             </option>
           ))}

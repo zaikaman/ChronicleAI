@@ -14,8 +14,13 @@
     "@chronicleai/config": "workspace:*",
     "@chronicleai/schemas": "workspace:*",
     "@chronicleai/ui": "workspace:*",
+    "@tailwindcss/vite": "^4.3.2",
+    "lenis": "^1.3.25",
+    "lucide-react": "^1.23.0",
+    "motion": "^12.42.2",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.3.2"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",

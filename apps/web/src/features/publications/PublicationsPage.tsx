@@ -1,5 +1,3 @@
-// Publications page — the ChronicleAI newspaper hub showing all published content
-
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
@@ -24,7 +22,6 @@ export function PublicationsPage(): ReactElement {
   const { state: digestState } = useLatestDigest();
   const { items: premiumItems, isLoading: premiumLoading } = usePremiumTeasers();
 
-  // Build a unified publication feed
   const publications: PublicationItem[] = [];
 
   if (digestState.status === "success") {
@@ -73,7 +70,6 @@ export function PublicationsPage(): ReactElement {
     });
   }
 
-  // Sort by date descending (most recent first)
   publications.sort((a, b) => {
     if (!a.date && !b.date) return 0;
     if (!a.date) return 1;
@@ -85,31 +81,28 @@ export function PublicationsPage(): ReactElement {
   const hasError = alertsError || digestState.status === "error";
 
   return (
-    <div className="newspaper-layout">
-      {/* ── Publications Masthead ──────────────────────── */}
-
-      <header className="newspaper-masthead">
-        <div className="masthead-accent-line" />
-        <h1 className="masthead-title" style={{ fontSize: "var(--font-size-3xl)" }}>
-          Publications
+    <div className="max-w-4xl mx-auto">
+      {/* Header */}
+      <header className="text-center py-12 mb-8 border-b border-border/20">
+        <h1 className="text-4xl font-bold tracking-tight text-foreground mb-3" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+          Publications Archive
         </h1>
-        <p className="masthead-subtitle">
-          The complete archive of ChronicleAI intelligence &mdash; alerts, reports, and premium analysis
+        <p className="text-muted-foreground text-base max-w-2xl mx-auto">
+          The complete archive of ChronicleAI intelligence bulletins — public alerts, digests, and premium analysis.
         </p>
-        <div className="masthead-accent-line" />
       </header>
 
-      {/* ── Section Navigation ──────────────────────── */}
-      <nav className="publications-filter-nav">
-        <span className="publications-filter-label">Sections:</span>
-        <span className="publications-filter-label-current">All Publications</span>
-        <Link to="/digests/latest" className="publications-filter-btn">Digest</Link>
-        <Link to="/alerts" className="publications-filter-btn">Alerts</Link>
-        <Link to="/premium" className="publications-filter-btn">Premium</Link>
+      {/* Navigation Filter Bar */}
+      <nav className="flex items-center gap-2 mb-8 p-3 bg-muted/20 border border-border rounded-2xl flex-wrap">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">Sections:</span>
+        <span className="px-3.5 py-1.5 bg-accent/20 text-accent font-semibold text-sm rounded-xl">All Publications</span>
+        <Link to="/digests/latest" className="px-3.5 py-1.5 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors rounded-xl hover:bg-muted/30">Digest</Link>
+        <Link to="/alerts" className="px-3.5 py-1.5 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors rounded-xl hover:bg-muted/30">Alerts</Link>
+        <Link to="/premium" className="px-3.5 py-1.5 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors rounded-xl hover:bg-muted/30">Premium</Link>
       </nav>
 
-      {/* ── Publication Feed ──────────────────────────── */}
-      <section className="publications-feed">
+      {/* Publications Timeline */}
+      <section className="mb-12">
         {isLoading ? (
           <LoadingState message="Loading publications..." />
         ) : hasError ? (
@@ -120,41 +113,51 @@ export function PublicationsPage(): ReactElement {
             description="ChronicleAI content will appear here once alerts, digests, and premium items are published."
           />
         ) : (
-          <div className="publications-timeline">
-            {/* Date group headers */}
+          <div className="flex flex-col gap-0">
             {publications.map((pub) => {
-              const typeColor = pub.type === "digest" ? "var(--accent-primary)" : pub.type === "alert" ? "var(--accent-warning)" : "var(--accent-success)";
+              const typeColor = pub.type === "digest" ? "var(--accent)" : pub.type === "alert" ? "#f59e0b" : "#22c55e";
+              const typeBorderColor = pub.type === "digest" ? "rgba(168,217,70,0.3)" : pub.type === "alert" ? "rgba(245,158,11,0.3)" : "rgba(34,197,94,0.3)";
+              const typeBgColor = pub.type === "digest" ? "rgba(168,217,70,0.08)" : pub.type === "alert" ? "rgba(245,158,11,0.08)" : "rgba(34,197,94,0.08)";
 
               return (
-                <article key={`${pub.type}-${pub.id}`} className="publication-item">
-                  <div className="publication-item-timeline">
-                    <div className="publication-timeline-dot" style={{ background: typeColor }} />
-                    <div className="publication-timeline-line" />
+                <article key={`${pub.type}-${pub.id}`} className="flex gap-6">
+                  <div className="flex flex-col items-center w-5 flex-shrink-0 pt-6">
+                    <div 
+                      className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" 
+                      style={{ background: typeColor }} 
+                    />
+                    <div className="w-[1px] flex-1 bg-border/40 mt-2" />
                   </div>
-                  <div className="publication-item-card">
-                    <div className="publication-item-header">
-                      <span className="publication-item-type" style={{ color: typeColor }}>
-                        <span className="publication-type-indicator" style={{ background: typeColor }} />
+                  
+                  <div className="flex-1 bg-frame border border-border rounded-2xl p-5 mb-5 hover:border-accent/40 transition-all duration-300 shadow-xs hover:shadow-md">
+                    <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+                      <span 
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+                        style={{ color: typeColor, borderColor: typeBorderColor, background: typeBgColor }}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: typeColor }} />
                         {pub.type.charAt(0).toUpperCase() + pub.type.slice(1)}
                       </span>
-                      <div className="publication-item-meta-top">
+                      <div className="flex items-center gap-3">
                         {pub.date && <TimestampDisplay timestamp={pub.date} />}
                         {pub.status !== "available" && (
                           <StatusBadge label={pub.status} variant={pub.status === "published" ? "success" : pub.status === "partial_failure" ? "warning" : "default"} />
                         )}
                       </div>
                     </div>
-                    <h3 className="publication-item-title">{pub.title}</h3>
-                    <p className="publication-item-summary">{pub.summary}</p>
-                    <div className="publication-item-footer">
-                      <div className="publication-item-meta">
+                    
+                    <h3 className="text-lg font-semibold text-foreground mb-2 leading-snug">{pub.title}</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed mb-4">{pub.summary}</p>
+                    
+                    <div className="flex justify-between items-center flex-wrap gap-3 pt-4 border-t border-border/10">
+                      <div className="flex flex-wrap gap-2">
                         {Object.entries(pub.meta).map(([key, value]) => (
-                          <span key={key} className="publication-meta-tag">
+                          <span key={key} className="text-[11px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded-lg border border-border/40">
                             {key}: {value.length > 30 ? `${value.slice(0, 16)}...` : value}
                           </span>
                         ))}
                       </div>
-                      <Link to={pub.href} className="publication-item-link">
+                      <Link to={pub.href} className="text-accent text-xs font-semibold hover:underline">
                         Read More &rarr;
                       </Link>
                     </div>
@@ -165,18 +168,6 @@ export function PublicationsPage(): ReactElement {
           </div>
         )}
       </section>
-
-      {/* ── Footer ──────────────────────────────────────── */}
-      <footer className="newspaper-footer">
-        <div className="newspaper-footer-accent" />
-        <div className="newspaper-footer-content">
-          <span className="newspaper-footer-brand">ChronicleAI</span>
-          <span>Autonomous On-Chain Intelligence</span>
-          <span className="masthead-dot">&bull;</span>
-          <span>All content anchored on-chain via Chronicle Registry</span>
-        </div>
-        <div className="newspaper-footer-accent" />
-      </footer>
     </div>
   );
 }
