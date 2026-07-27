@@ -4,11 +4,14 @@ import {
   createExecutionLogRepository,
   createLLMGenerationAttemptRepository,
   createMonitoredEventRepository,
+  createOperatorAuditRepository,
   createPaymentRecordRepository,
+  createPayoutRecordRepository,
   createPremiumIntelligenceRepository,
   createPublicAlertRepository,
   createServerSupabaseClient,
   createSponsoredWatchRepository,
+  createTreasurySnapshotRepository,
 } from "@chronicleai/db";
 import express, { type Express } from "express";
 import {
@@ -17,7 +20,7 @@ import {
   requestIdMiddleware,
   timingMiddleware,
 } from "./middleware/core.ts";
-import { registerRoutes, setupUS1Routes, setupUS2Routes, setupUS3Routes } from "./routes/index.ts";
+import { registerRoutes, setupUS1Routes, setupUS2Routes, setupUS3Routes, setupUS4Routes } from "./routes/index.ts";
 
 const app: Express = express();
 
@@ -33,7 +36,7 @@ app.use(corsMiddleware(frontendOrigin));
 // Register API routes
 registerRoutes(app);
 
-// Setup US1 through US3 routes when env is available
+// Setup US1 through US4 routes when env is available
 try {
   const env = loadServerEnv();
   const supabase = createServerSupabaseClient({
@@ -49,6 +52,11 @@ try {
   const premiumRepo = createPremiumIntelligenceRepository(supabase);
   const paymentRecordRepo = createPaymentRecordRepository(supabase);
   const watchRepo = createSponsoredWatchRepository(supabase);
+
+  // US4 repositories
+  const treasuryRepo = createTreasurySnapshotRepository(supabase);
+  const payoutRepo = createPayoutRecordRepository(supabase);
+  const auditRepo = createOperatorAuditRepository(supabase);
 
   // US1: Public Alerts
   setupUS1Routes(app, env, {
@@ -71,6 +79,15 @@ try {
     paymentRecordRepo,
     execLogRepo,
     watchRepo,
+  });
+
+  // US4: Operator Sustainability & Revenue Payouts
+  setupUS4Routes(app, env, {
+    treasuryRepo,
+    payoutRepo,
+    paymentRecordRepo,
+    execLogRepo,
+    auditRepo,
   });
 } catch (error) {
   // Log but don't crash - env vars may not be available in all contexts

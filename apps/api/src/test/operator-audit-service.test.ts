@@ -1,0 +1,237 @@
+// Unit tests: Operator Audit Service
+// Tests aggregation across alerts, digests, payments, treasury, payout records, and logs
+
+import { describe, expect, it, vi } from "vitest";
+import { createOperatorAuditService } from "../services/operator-audit-service.ts";
+import type { OperatorAuditRepository, OperatorAuditData } from "@chronicleai/db";
+
+describe("OperatorAuditService", () => {
+  function createMockAuditData(overrides?: Partial<OperatorAuditData>): OperatorAuditData {
+    return {
+      recentAlerts: [
+        {
+          id: "alert-001",
+          monitored_event_id: "event-001",
+          title: "Test Alert",
+          summary: "Test summary",
+          source_references: ["event-001"],
+          audience: "public",
+          destinations: null,
+          delivery_status: "published",
+          published_at: new Date().toISOString(),
+          dedupe_key: "dedupe-001",
+          confidence: "high",
+          generation_provider: "gemini",
+          generation_attempt_ids: [],
+          registry_tx_hash: null,
+          source_event_hash: null,
+          content_uri: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      recentDigests: [
+        {
+          id: "digest-001",
+          report_date: new Date().toISOString().split("T")[0] ?? "2026-07-27",
+          period_start: new Date(Date.now() - 86400000).toISOString(),
+          period_end: new Date().toISOString(),
+          title: "Test Digest",
+          summary: "Test digest summary",
+          highlights: ["Event 1", "Event 2"],
+          analysis: "Test analysis",
+          source_event_ids: ["event-001"],
+          audience: "public",
+          publication_status: "published",
+          published_at: new Date().toISOString(),
+          registry_tx_hash: "0xabc123",
+          source_event_root: "0xroot",
+          content_uri: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      recentPayments: [
+        {
+          id: "payment-001",
+          premium_item_id: "item-001",
+          payment_route: "x402",
+          payer_reference: "0xpayer",
+          amount_requested: 5,
+          amount_settled: 5,
+          currency: "USDC",
+          status: "settled",
+          challenge_reference: "challenge-001",
+          settlement_reference: "settlement-001",
+          requested_at: new Date().toISOString(),
+          settled_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      treasurySnapshots: [
+        {
+          id: "treasury-001",
+          available_balance: 50000,
+          currency: "USDC",
+          safety_buffer: 10000,
+          revenue_total: 25000,
+          estimated_generation_cost: 5000,
+          estimated_transaction_cost: 1000,
+          paid_request_count: 150,
+          status: "healthy",
+          captured_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        },
+      ],
+      activeSponsoredWatches: [],
+      recentPayouts: [
+        {
+          id: "payout-001",
+          payout_period_hash: "period-001",
+          recipient: "0xrecovery",
+          amount: 5000,
+          reason_hash: "reason-001",
+          payout_tx_hash: "0xtxhash",
+          registry_tx_hash: "0xregistry",
+          status: "transferred",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      recentLogs: [
+        {
+          id: "log-001",
+          action_type: "treasury_check",
+          entity_type: "treasury_snapshot",
+          entity_id: "treasury-001",
+          status: "succeeded",
+          message: "Treasury check completed",
+          details: {},
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        },
+      ],
+      totalMonitoredEvents: 100,
+      totalQualifiedEvents: 75,
+      ...overrides,
+    };
+  }
+
+  it("should return aggregated audit data", async () => {
+    const mockAuditData = createMockAuditData();
+
+    const mockRepo: OperatorAuditRepository = {
+      getAuditData: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: mockAuditData,
+      }),
+    };
+
+    const service = createOperatorAuditService(mockRepo);
+    const result = await service.getAudit();
+
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+
+    if (result.data) {
+      expect(result.data.alerts).toHaveLength(1);
+      expect(result.data.alerts[0]?.title).toBe("Test Alert");
+
+      expect(result.data.digests).toHaveLength(1);
+      expect(result.data.digests[0]?.title).toBe("Test Digest");
+
+      expect(result.data.payments).toHaveLength(1);
+      expect(result.data.payments[0]?.paymentRoute).toBe("x402");
+
+      expect(result.data.treasury.availableBalance).toBe(50000);
+      expect(result.data.treasury.status).toBe("healthy");
+
+      expect(result.data.executionLogs).toHaveLength(1);
+      expect(result.data.executionLogs[0]?.actionType).toBe("treasury_check");
+    }
+  });
+
+  it("should handle empty data gracefully", async () => {
+    const mockEmptyData = createMockAuditData({
+      recentAlerts: [],
+      recentDigests: [],
+      recentPayments: [],
+      treasurySnapshots: [],
+      activeSponsoredWatches: [],
+      recentPayouts: [],
+      recentLogs: [],
+    });
+
+    const mockRepo: OperatorAuditRepository = {
+      getAuditData: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: mockEmptyData,
+      }),
+    };
+
+    const service = createOperatorAuditService(mockRepo);
+    const result = await service.getAudit();
+
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+
+    if (result.data) {
+      expect(result.data.alerts).toHaveLength(0);
+      expect(result.data.digests).toHaveLength(0);
+      expect(result.data.payments).toHaveLength(0);
+      expect(result.data.executionLogs).toHaveLength(0);
+    }
+  });
+
+  it("should return error when repository fails", async () => {
+    const mockRepo: OperatorAuditRepository = {
+      getAuditData: vi.fn().mockResolvedValue({
+        ok: false as const,
+        error: new (await import("@chronicleai/db")).PersistenceError("Database error"),
+      }),
+    };
+
+    const service = createOperatorAuditService(mockRepo);
+    const result = await service.getAudit();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain("Failed to fetch audit data");
+  });
+
+  it("should include treasury status from latest snapshot", async () => {
+    const mockAuditData = createMockAuditData({
+      treasurySnapshots: [
+        {
+          id: "treasury-002",
+          available_balance: 8000,
+          currency: "USDC",
+          safety_buffer: 10000,
+          revenue_total: 12000,
+          estimated_generation_cost: 6000,
+          estimated_transaction_cost: 2000,
+          paid_request_count: 80,
+          status: "warning",
+          captured_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const mockRepo: OperatorAuditRepository = {
+      getAuditData: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: mockAuditData,
+      }),
+    };
+
+    const service = createOperatorAuditService(mockRepo);
+    const result = await service.getAudit();
+
+    expect(result.success).toBe(true);
+    expect(result.data?.treasury.status).toBe("warning");
+    expect(result.data?.treasury.safetyBuffer).toBe(10000);
+  });
+});

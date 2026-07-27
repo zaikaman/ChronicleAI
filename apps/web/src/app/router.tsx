@@ -15,13 +15,10 @@ function DigestPage(): React.ReactElement {
   return <LatestDigestPage />;
 }
 
+import { OperatorDashboardPage } from "../features/operator/OperatorDashboardPage.tsx";
+
 function OperatorPage(): React.ReactElement {
-  return (
-    <div style={{ padding: "2rem", textAlign: "center" }}>
-      <h2>Operator Dashboard</h2>
-      <p style={{ color: "#a1a1aa" }}>Coming soon in a future phase.</p>
-    </div>
-  );
+  return <OperatorDashboardPage />;
 }
 
 // ── Route definitions ───────────────────────────────────

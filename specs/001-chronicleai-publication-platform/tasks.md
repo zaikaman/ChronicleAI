@@ -239,41 +239,41 @@
 
 ### Tests for User Story 4
 
-- [ ] T140 [P] [US4] Write contract tests for `POST /keeperhub/treasury/check` valid, invalid, and unsigned requests in `tests/contracts/treasury-check.contract.test.ts`
-- [ ] T140a [P] [US4] Write contract tests for `POST /keeperhub/revenue/route` valid, invalid, and unsigned requests in `tests/contracts/revenue-route.contract.test.ts`
-- [ ] T141 [P] [US4] Write contract tests for `GET /operator/audit` authenticated, unauthenticated, and response-shape cases in `tests/contracts/operator-audit.contract.test.ts`
-- [ ] T142 [P] [US4] Write unit tests for treasury status calculation, safety-buffer warning transitions, and Para wallet balance checking (Loop 3) in `apps/api/src/test/treasury-status-service.test.ts`
-- [ ] T142a [P] [US4] Write unit tests for autonomous revenue routing, creator recovery calculations, referral reward capping, batched transfers, and registry payout logging (Loop 5) in `apps/api/src/test/revenue-routing-service.test.ts`
-- [ ] T143 [P] [US4] Write unit tests for operator audit aggregation across alerts, digests, payments, treasury snapshots, active sponsored campaigns, payout records, and logs in `apps/api/src/test/operator-audit-service.test.ts`
-- [ ] T144 [P] [US4] Write integration tests for treasury check webhook, warning log creation, operator audit data, and revenue routing in `apps/api/src/test/operator-audit.integration.test.ts`
+- [X] T140 [P] [US4] Write contract tests for `POST /keeperhub/treasury/check` valid, invalid, and unsigned requests in `tests/contracts/treasury-check.contract.test.ts`
+- [X] T140a [P] [US4] Write contract tests for `POST /keeperhub/revenue/route` valid, invalid, and unsigned requests in `tests/contracts/revenue-route.contract.test.ts`
+- [X] T141 [P] [US4] Write contract tests for `GET /operator/audit` authenticated, unauthenticated, and response-shape cases in `tests/contracts/operator-audit.contract.test.ts`
+- [X] T142 [P] [US4] Write unit tests for treasury status calculation, safety-buffer warning transitions, and Para wallet balance checking (Loop 3) in `apps/api/src/test/treasury-status-service.test.ts`
+- [X] T142a [P] [US4] Write unit tests for autonomous revenue routing, creator recovery calculations, referral reward capping, batched transfers, and registry payout logging (Loop 5) in `apps/api/src/test/revenue-routing-service.test.ts`
+- [X] T143 [P] [US4] Write unit tests for operator audit aggregation across alerts, digests, payments, treasury snapshots, active sponsored campaigns, payout records, and logs in `apps/api/src/test/operator-audit-service.test.ts`
+- [X] T144 [P] [US4] Write integration tests for treasury check webhook, warning log creation, operator audit data, and revenue routing in `apps/api/src/test/operator-audit.integration.test.ts`
 
 ### Implementation for User Story 4
 
-- [ ] T145a [US4] Create Supabase migration for the `payout_records` table (tracking payout period, recipient address, amount, reason hash, transfer tx hash, registry tx hash, status) in `supabase/migrations/202607270003_create_payout_records.sql`
-- [ ] T146 [P] [US4] Implement treasury snapshot repository create, latest, status history, and aggregate methods in `packages/db/src/treasury-snapshot-repository.ts`
-- [ ] T146a [P] [US4] Implement payout record repository create, find-by-period, and list methods in `packages/db/src/payout-record-repository.ts`
-- [ ] T147 [P] [US4] Implement operator audit repository queries for recent alerts, digests, payments, treasury snapshots, active sponsored campaigns, payout records, and logs in `packages/db/src/operator-audit-repository.ts`
-- [ ] T148 [US4] Implement treasury status service for healthy, warning, and critical transitions based on Para wallet balance in `apps/api/src/services/treasury-status-service.ts`
-- [ ] T148a [US4] Implement revenue routing service performing revenue aggregation, subtracting reserve buffers, triggering batched payout transfers via Para MPC wallet, and calling `recordPayout` on the registry in `apps/api/src/services/revenue-routing-service.ts`
-- [ ] T149 [US4] Implement operator notification service for low-balance warnings using configurable notification destinations in `apps/api/src/services/operator-notification-service.ts`
-- [ ] T150 [US4] Implement KeeperHub treasury check handler that records snapshots and creates warning logs in `apps/api/src/keeperhub/treasury-check-handler.ts`
-- [ ] T150a [US4] Implement KeeperHub revenue routing handler with signed request validation, idempotency checks, and execution logging in `apps/api/src/keeperhub/revenue-routing-handler.ts`
-- [ ] T151 [US4] Implement operator audit service that aggregates dashboard data under one typed response in `apps/api/src/services/operator-audit-service.ts`
-- [ ] T152 [US4] Implement `POST /keeperhub/treasury/check` route in `apps/api/src/routes/keeperhub-treasury-routes.ts`
-- [ ] T152a [US4] Implement `POST /keeperhub/revenue/route` route in `apps/api/src/routes/keeperhub-revenue-routes.ts`
-- [ ] T153 [US4] Implement `GET /operator/audit` route with bearer auth in `apps/api/src/routes/operator-routes.ts`
-- [ ] T154 [US4] Register treasury, revenue routing, and operator routes in `apps/api/src/routes/index.ts`
-- [ ] T155 [P] [US4] Create treasury, audit, payout, sponsored watch, and operator auth fixtures in `apps/api/src/test/fixtures/operator-audit.ts`
-- [ ] T156 [P] [US4] Create frontend operator audit query hook with authenticated error handling in `apps/web/src/features/operator/use-operator-audit.ts`
-- [ ] T157 [P] [US4] Create treasury status panel with healthy, warning, and critical visual states in `apps/web/src/features/operator/TreasuryStatusPanel.tsx`
-- [ ] T158 [P] [US4] Create operator metric grid for revenue, costs, paid requests, alert count, and digest count in `apps/web/src/features/operator/OperatorMetricGrid.tsx`
-- [ ] T159 [P] [US4] Create execution log table with action type, status, entity reference, timestamp, and retry visibility in `apps/web/src/features/operator/ExecutionLogTable.tsx`
-- [ ] T160 [P] [US4] Create recent publications and payment activity panels in `apps/web/src/features/operator/RecentActivityPanels.tsx`
-- [ ] T160a [P] [US4] Create frontend payout logs table showing payout period, recipient, amount, reason, and transaction hashes in `apps/web/src/features/operator/PayoutLogsTable.tsx`
-- [ ] T161 [US4] Create `/operator` page with route guard, loading, error, populated, warning, sponsored watches list, and payout history tables in `apps/web/src/features/operator/OperatorDashboardPage.tsx`
-- [ ] T162 [US4] Add operator route wiring and authenticated guard behavior to the app router in `apps/web/src/app/router.tsx`
-- [ ] T163 [US4] Add execution logs for treasury check received, snapshot recorded, routing triggered, payout transferred, payout recorded on-chain, and warning emitted in `apps/api/src/keeperhub/treasury-check-handler.ts`
-- [ ] T164 [US4] Run US4 contract, integration, and unit tests and fix failures in `tests/contracts/treasury-check.contract.test.ts`, `tests/contracts/operator-audit.contract.test.ts`, and `apps/api/src/test/operator-audit.integration.test.ts`
+- [X] T145a [US4] Create Supabase migration for the `payout_records` table (tracking payout period, recipient address, amount, reason hash, transfer tx hash, registry tx hash, status) in `supabase/migrations/202607270003_create_payout_records.sql`
+- [X] T146 [P] [US4] Implement treasury snapshot repository create, latest, status history, and aggregate methods in `packages/db/src/treasury-snapshot-repository.ts`
+- [X] T146a [P] [US4] Implement payout record repository create, find-by-period, and list methods in `packages/db/src/payout-record-repository.ts`
+- [X] T147 [P] [US4] Implement operator audit repository queries for recent alerts, digests, payments, treasury snapshots, active sponsored campaigns, payout records, and logs in `packages/db/src/operator-audit-repository.ts`
+- [X] T148 [US4] Implement treasury status service for healthy, warning, and critical transitions based on Para wallet balance in `apps/api/src/services/treasury-status-service.ts`
+- [X] T148a [US4] Implement revenue routing service performing revenue aggregation, subtracting reserve buffers, triggering batched payout transfers via Para MPC wallet, and calling `recordPayout` on the registry in `apps/api/src/services/revenue-routing-service.ts`
+- [X] T149 [US4] Implement operator notification service for low-balance warnings using configurable notification destinations in `apps/api/src/services/operator-notification-service.ts`
+- [X] T150 [US4] Implement KeeperHub treasury check handler that records snapshots and creates warning logs in `apps/api/src/keeperhub/treasury-check-handler.ts`
+- [X] T150a [US4] Implement KeeperHub revenue routing handler with signed request validation, idempotency checks, and execution logging in `apps/api/src/keeperhub/revenue-routing-handler.ts`
+- [X] T151 [US4] Implement operator audit service that aggregates dashboard data under one typed response in `apps/api/src/services/operator-audit-service.ts`
+- [X] T152 [US4] Implement `POST /keeperhub/treasury/check` route in `apps/api/src/routes/keeperhub-treasury-routes.ts`
+- [X] T152a [US4] Implement `POST /keeperhub/revenue/route` route in `apps/api/src/routes/keeperhub-revenue-routes.ts`
+- [X] T153 [US4] Implement `GET /operator/audit` route with bearer auth in `apps/api/src/routes/operator-routes.ts`
+- [X] T154 [US4] Register treasury, revenue routing, and operator routes in `apps/api/src/routes/index.ts`
+- [X] T155 [P] [US4] Create treasury, audit, payout, sponsored watch, and operator auth fixtures in `apps/api/src/test/fixtures/operator-audit.ts`
+- [X] T156 [P] [US4] Create frontend operator audit query hook with authenticated error handling in `apps/web/src/features/operator/use-operator-audit.ts`
+- [X] T157 [P] [US4] Create treasury status panel with healthy, warning, and critical visual states in `apps/web/src/features/operator/TreasuryStatusPanel.tsx`
+- [X] T158 [P] [US4] Create operator metric grid for revenue, costs, paid requests, alert count, and digest count in `apps/web/src/features/operator/OperatorMetricGrid.tsx`
+- [X] T159 [P] [US4] Create execution log table with action type, status, entity reference, timestamp, and retry visibility in `apps/web/src/features/operator/ExecutionLogTable.tsx`
+- [X] T160 [P] [US4] Create recent publications and payment activity panels in `apps/web/src/features/operator/RecentActivityPanels.tsx`
+- [X] T160a [P] [US4] Create frontend payout logs table showing payout period, recipient, amount, reason, and transaction hashes in `apps/web/src/features/operator/PayoutLogsTable.tsx`
+- [X] T161 [US4] Create `/operator` page with route guard, loading, error, populated, warning, sponsored watches list, and payout history tables in `apps/web/src/features/operator/OperatorDashboardPage.tsx`
+- [X] T162 [US4] Add operator route wiring and authenticated guard behavior to the app router in `apps/web/src/app/router.tsx`
+- [X] T163 [US4] Add execution logs for treasury check received, snapshot recorded, routing triggered, payout transferred, payout recorded on-chain, and warning emitted in `apps/api/src/keeperhub/treasury-check-handler.ts`
+- [X] T164 [US4] Run US4 contract, integration, and unit tests and fix failures in `tests/contracts/treasury-check.contract.test.ts`, `tests/contracts/operator-audit.contract.test.ts`, and `apps/api/src/test/operator-audit.integration.test.ts`
 
 **Checkpoint**: User Story 4 displays operator audit, runs balance checks, and routes batched creator recovery and referral transfers with registry records.
 

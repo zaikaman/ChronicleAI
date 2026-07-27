@@ -150,7 +150,6 @@ export interface US3Dependencies {
   execLogRepo: ExecutionLogRepository;
   watchRepo: SponsoredWatchRepository;
 }
-
 export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependencies): void {
   // Initialize payment adapters
   const adapters = new Map<PaymentRoute, PaymentAdapter>();
@@ -172,4 +171,73 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
     watchRepo: deps.watchRepo,
     adapters,
   }));
+}
+
+// ── US4: Operator Sustainability & Revenue Payouts Routes ─
+
+import {
+  type OperatorAuditRepository,
+  type PayoutRecordRepository,
+  type TreasurySnapshotRepository,
+  createOperatorAuditRepository,
+  createPayoutRecordRepository,
+  createTreasurySnapshotRepository,
+} from "@chronicleai/db";
+import { TreasuryCheckHandler } from "../keeperhub/treasury-check-handler.ts";
+import { RevenueRoutingHandler } from "../keeperhub/revenue-routing-handler.ts";
+import { createKeeperhubTreasuryRoutes } from "./keeperhub-treasury-routes.ts";
+import { createKeeperhubRevenueRoutes } from "./keeperhub-revenue-routes.ts";
+import { createOperatorRoutes } from "./operator-routes.ts";
+import { createOperatorAuditService } from "../services/operator-audit-service.ts";
+import { createOperatorNotificationService } from "../services/operator-notification-service.ts";
+import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
+import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
+
+export interface US4Dependencies {
+  treasuryRepo: TreasurySnapshotRepository;
+  payoutRepo: PayoutRecordRepository;
+  paymentRecordRepo: PaymentRecordRepository;
+  execLogRepo: ExecutionLogRepository;
+  auditRepo: OperatorAuditRepository;
+}
+
+export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependencies): void {
+  // Initialize services
+  const web3Client = createWeb3Client(env);
+  const registryService = createChronicleRegistryService(web3Client);
+  const treasuryService = createTreasuryStatusService();
+  const notificationService = createOperatorNotificationService(deps.execLogRepo);
+
+  const routingService = createRevenueRoutingService({
+    treasuryRepo: deps.treasuryRepo,
+    paymentRepo: deps.paymentRecordRepo,
+    payoutRepo: deps.payoutRepo,
+    execLogRepo: deps.execLogRepo,
+    treasuryService,
+    registryService,
+  });
+
+  const treasuryHandler = new TreasuryCheckHandler({
+    treasuryRepo: deps.treasuryRepo,
+    execLogRepo: deps.execLogRepo,
+    treasuryService,
+    notificationService,
+  });
+
+  const revenueHandler = new RevenueRoutingHandler({
+    routingService,
+    execLogRepo: deps.execLogRepo,
+  });
+
+  const auditService = createOperatorAuditService(deps.auditRepo);
+
+  // KeeperHub treasury check (with signature middleware)
+  const keeperhubRouter = Router();
+  keeperhubRouter.use("/keeperhub", keeperhubSignatureMiddleware(env.keeperhubWebhookSecret));
+  keeperhubRouter.use(createKeeperhubTreasuryRoutes(treasuryHandler));
+  keeperhubRouter.use(createKeeperhubRevenueRoutes(revenueHandler));
+  apiRouter.use(keeperhubRouter);
+
+  // Operator audit route (with bearer auth)
+  apiRouter.use(createOperatorRoutes(auditService, env));
 }

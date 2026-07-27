@@ -37,3 +37,9 @@ export interface TreasuryCheckPayload {
   currency: string;
   safetyBuffer: number;
 }
+
+// ── Revenue Routing Payload ─────────────────────────────
+export interface RevenueRoutingPayload {
+  periodHash: string;
+  force?: boolean;
+}
