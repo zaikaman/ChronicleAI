@@ -6,10 +6,13 @@ import { EmptyState, LoadingState, RetryState } from "../../components/state-vie
 import { AlertCard } from "../alerts/AlertCard.tsx";
 import { useAlerts } from "../alerts/use-alerts.ts";
 import { useLatestDigest } from "../digests/use-latest-digest.ts";
+import { usePremiumTeasers } from "../premium/use-premium.ts";
+import { PremiumTeaserCard } from "../premium/PremiumTeaserCard.tsx";
 
 export function HomePage(): ReactElement {
   const { alerts, isLoading, error, refetch } = useAlerts(3);
   const { state: digestState } = useLatestDigest();
+  const { items: premiumItems, isLoading: premiumLoading } = usePremiumTeasers();
 
   return (
     <div>
@@ -200,6 +203,64 @@ export function HomePage(): ReactElement {
                 Registry: {digestState.data.registryTxHash.slice(0, 10)}...
               </div>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* Premium Intelligence Teasers Section */}
+      <section style={{ marginBottom: "3rem" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "1.5rem",
+          }}
+        >
+          <h2 style={{ fontSize: "var(--font-size-xl)", fontWeight: 600 }}>Premium Intelligence</h2>
+          <Link
+            to="/premium"
+            style={{
+              fontSize: "var(--font-size-sm)",
+              color: "var(--accent-primary)",
+              textDecoration: "none",
+            }}
+          >
+            Browse all &rarr;
+          </Link>
+        </div>
+
+        {premiumLoading ? (
+          <LoadingState message="Loading premium items..." />
+        ) : premiumItems.length === 0 ? (
+          <div
+            style={{
+              padding: "2rem",
+              textAlign: "center",
+              background: "var(--bg-glass)",
+              borderRadius: "8px",
+              border: "1px solid var(--border-primary)",
+            }}
+          >
+            <p style={{ color: "var(--fg-tertiary)", margin: 0 }}>
+              Premium intelligence items coming soon. Subscribe to access deep analysis and sponsored monitoring.
+            </p>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+              gap: "1rem",
+            }}
+          >
+            {premiumItems.slice(0, 2).map((item) => (
+              <PremiumTeaserCard
+                key={item.id}
+                item={item}
+                onAccess={() => {}}
+              />
+            ))}
           </div>
         )}
       </section>

@@ -138,42 +138,42 @@
 
 ### Tests for User Story 2
 
-- [ ] T085 [P] [US2] Write contract tests for `POST /keeperhub/digests/run` valid, invalid, duplicate, and unsigned requests in `tests/contracts/digest-run.contract.test.ts`
-- [ ] T086 [P] [US2] Write contract tests for `GET /digests/latest` success and not-found responses in `tests/contracts/latest-digest.contract.test.ts`
-- [ ] T087 [P] [US2] Write unit tests for reporting window validation and duplicate window detection in `apps/api/src/test/digest-window-service.test.ts`
-- [ ] T088 [P] [US2] Write unit tests for digest generation with ranked highlights, no-major-events output, source references, and fact-versus-analysis separation in `apps/api/src/test/digest-generation-service.test.ts`
-- [ ] T089 [P] [US2] Write integration tests for scheduled digest trigger, persistence, publication status, Web3 publish transaction, Webflow update, SMTP email dispatch, and execution logs in `apps/api/src/test/digest-run.integration.test.ts`
-- [ ] T090a [P] [US2] Write unit tests for Chronicle Registry publishDigest contract call in `apps/api/src/test/registry-digest-service.test.ts`
-- [ ] T090b [P] [US2] Write unit tests for Webflow collection publishing in `apps/api/src/test/webflow-publishing-service.test.ts`
-- [ ] T090c [P] [US2] Write unit tests for SMTP email subscriber delivery in `apps/api/src/test/smtp-email-service.test.ts`
+- [x] T085 [P] [US2] Write contract tests for `POST /keeperhub/digests/run` valid, invalid, duplicate, and unsigned requests in `tests/contracts/digest-run.contract.test.ts`
+- [x] T086 [P] [US2] Write contract tests for `GET /digests/latest` success and not-found responses in `tests/contracts/latest-digest.contract.test.ts`
+- [x] T087 [P] [US2] Write unit tests for reporting window validation and duplicate window detection in `apps/api/src/test/digest-window-service.test.ts`
+- [x] T088 [P] [US2] Write unit tests for digest generation with ranked highlights, no-major-events output, source references, and fact-versus-analysis separation in `apps/api/src/test/digest-generation-service.test.ts`
+- [x] T089 [P] [US2] Write integration tests for scheduled digest trigger, persistence, publication status, Web3 publish transaction, Webflow update, SMTP email dispatch, and execution logs in `apps/api/src/test/digest-run.integration.test.ts`
+- [x] T090a [P] [US2] Write unit tests for Chronicle Registry publishDigest contract call in `apps/api/src/test/registry-digest-service.test.ts`
+- [x] T090b [P] [US2] Write unit tests for Webflow collection publishing in `apps/api/src/test/webflow-publishing-service.test.ts`
+- [x] T090c [P] [US2] Write unit tests for SMTP email subscriber delivery in `apps/api/src/test/smtp-email-service.test.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T090d [US2] Create Chronicle Registry Solidity contract defining `publishAlert`, `publishDigest`, `createSponsoredWatch`, `publishSponsoredReport`, and `recordPayout` in `packages/contracts/contracts/ChronicleRegistry.sol`
-- [ ] T090e [US2] Create compilation and deployment scripts for the Chronicle Registry contract in `packages/contracts/scripts/deploy.ts`
-- [ ] T090f [US2] Create Supabase migration to add `registry_tx_hash`, `source_event_hash`, `source_event_root`, and `content_uri` columns to core tables in `supabase/migrations/202607270001_add_registry_fields.sql`
-- [ ] T091 [P] [US2] Implement daily digest repository create, find-by-window, latest-public, and publication status methods with new columns in `packages/db/src/daily-digest-repository.ts`
-- [ ] T091a [US2] Implement Web3/Ethers helper for contract connection and transaction execution in `apps/api/src/services/web3-client-service.ts`
-- [ ] T091b [US2] Implement Chronicle Registry publish service that writes alert and digest metadata on-chain in `apps/api/src/services/chronicle-registry-service.ts`
-- [ ] T091c [US2] Implement Webflow collection update plugin in `apps/api/src/services/webflow-publishing-service.ts`
-- [ ] T091d [US2] Implement SMTP email subscription dispatch plugin in `apps/api/src/services/smtp-email-service.ts`
-- [ ] T092 [US2] Implement reporting window validation and idempotency service in `apps/api/src/services/digest-window-service.ts`
-- [ ] T093 [US2] Implement digest event selection service for top monitored events in a reporting period in `apps/api/src/services/digest-event-selection-service.ts`
-- [ ] T094 [US2] Implement digest generation service for highlights, no-major-events reports, source references, and analysis separation in `apps/api/src/services/digest-generation-service.ts`
-- [ ] T095 [US2] Implement digest publication service sequencing: 1. Chronicle Registry `publishDigest`, 2. Webflow publish, 3. SMTP email broadcast, and record results/execution logs in `apps/api/src/services/digest-publication-service.ts`
-- [ ] T096 [US2] Implement KeeperHub digest trigger handler with signed request validation and duplicate-window handling in `apps/api/src/keeperhub/digest-run-handler.ts`
-- [ ] T097 [US2] Implement `POST /keeperhub/digests/run` route in `apps/api/src/routes/keeperhub-digest-routes.ts`
-- [ ] T098 [US2] Implement `GET /digests/latest` route in `apps/api/src/routes/digest-routes.ts`
-- [ ] T099 [US2] Register digest routes in `apps/api/src/routes/index.ts`
-- [ ] T100 [P] [US2] Create digest fixtures for populated reporting windows, empty windows, invalid windows, and duplicates in `apps/api/src/test/fixtures/digests.ts`
-- [ ] T101 [P] [US2] Create frontend latest digest query hook with 404, loading, error, and retry handling in `apps/web/src/features/digests/use-latest-digest.ts`
-- [ ] T102 [P] [US2] Create digest highlight list and source reference components with registry transaction links in `apps/web/src/features/digests/DigestHighlights.tsx`
-- [ ] T103 [P] [US2] Create fact-versus-analysis digest section component in `apps/web/src/features/digests/DigestAnalysisSections.tsx`
-- [ ] T104 [US2] Create `/digests/latest` page displaying the clickable registry transaction hash linking to the explorer in `apps/web/src/features/digests/LatestDigestPage.tsx`
-- [ ] T105 [US2] Add latest digest preview to the home page in `apps/web/src/features/home/HomePage.tsx`
-- [ ] T106 [US2] Add digest route wiring to the app router in `apps/web/src/app/router.tsx`
-- [ ] T107 [US2] Add execution logs for digest trigger received, digest generated, no-events digest generated, duplicate skipped, publication failed, and publication completed in `apps/api/src/keeperhub/digest-run-handler.ts`
-- [ ] T108 [US2] Run US2 contract, integration, and unit tests and fix failures in `tests/contracts/digest-run.contract.test.ts`, `tests/contracts/latest-digest.contract.test.ts`, and `apps/api/src/test/digest-run.integration.test.ts`
+- [x] T090d [US2] Create Chronicle Registry Solidity contract defining `publishAlert`, `publishDigest`, `createSponsoredWatch`, `publishSponsoredReport`, and `recordPayout` in `packages/contracts/contracts/ChronicleRegistry.sol`
+- [x] T090e [US2] Create compilation and deployment scripts for the Chronicle Registry contract in `packages/contracts/scripts/deploy.ts`
+- [x] T090f [US2] Create Supabase migration to add `registry_tx_hash`, `source_event_hash`, `source_event_root`, and `content_uri` columns to core tables in `supabase/migrations/202607270001_add_registry_fields.sql`
+- [x] T091 [P] [US2] Implement daily digest repository create, find-by-window, latest-public, and publication status methods with new columns in `packages/db/src/daily-digest-repository.ts`
+- [x] T091a [US2] Implement Web3/Ethers helper for contract connection and transaction execution in `apps/api/src/services/web3-client-service.ts`
+- [x] T091b [US2] Implement Chronicle Registry publish service that writes alert and digest metadata on-chain in `apps/api/src/services/chronicle-registry-service.ts`
+- [x] T091c [US2] Implement Webflow collection update plugin in `apps/api/src/services/webflow-publishing-service.ts`
+- [x] T091d [US2] Implement SMTP email subscription dispatch plugin in `apps/api/src/services/smtp-email-service.ts`
+- [x] T092 [US2] Implement reporting window validation and idempotency service in `apps/api/src/services/digest-window-service.ts`
+- [x] T093 [US2] Implement digest event selection service for top monitored events in a reporting period in `apps/api/src/services/digest-event-selection-service.ts`
+- [x] T094 [US2] Implement digest generation service for highlights, no-major-events reports, source references, and analysis separation in `apps/api/src/services/digest-generation-service.ts`
+- [x] T095 [US2] Implement digest publication service sequencing: 1. Chronicle Registry `publishDigest`, 2. Webflow publish, 3. SMTP email broadcast, and record results/execution logs in `apps/api/src/services/digest-publication-service.ts`
+- [x] T096 [US2] Implement KeeperHub digest trigger handler with signed request validation and duplicate-window handling in `apps/api/src/keeperhub/digest-run-handler.ts`
+- [x] T097 [US2] Implement `POST /keeperhub/digests/run` route in `apps/api/src/routes/keeperhub-digest-routes.ts`
+- [x] T098 [US2] Implement `GET /digests/latest` route in `apps/api/src/routes/digest-routes.ts`
+- [x] T099 [US2] Register digest routes in `apps/api/src/routes/index.ts`
+- [x] T100 [P] [US2] Create digest fixtures for populated reporting windows, empty windows, invalid windows, and duplicates in `apps/api/src/test/fixtures/digests.ts`
+- [x] T101 [P] [US2] Create frontend latest digest query hook with 404, loading, error, and retry handling in `apps/web/src/features/digests/use-latest-digest.ts`
+- [x] T102 [P] [US2] Create digest highlight list and source reference components with registry transaction links in `apps/web/src/features/digests/DigestHighlights.tsx`
+- [x] T103 [P] [US2] Create fact-versus-analysis digest section component in `apps/web/src/features/digests/DigestAnalysisSections.tsx`
+- [x] T104 [US2] Create `/digests/latest` page displaying the clickable registry transaction hash linking to the explorer in `apps/web/src/features/digests/LatestDigestPage.tsx`
+- [x] T105 [US2] Add latest digest preview to the home page in `apps/web/src/features/home/HomePage.tsx`
+- [x] T106 [US2] Add digest route wiring to the app router in `apps/web/src/app/router.tsx`
+- [x] T107 [US2] Add execution logs for digest trigger received, digest generated, no-events digest generated, duplicate skipped, publication failed, and publication completed in `apps/api/src/keeperhub/digest-run-handler.ts`
+- [x] T108 [US2] Run US2 contract, integration, and unit tests and fix failures in `tests/contracts/digest-run.contract.test.ts`, `tests/contracts/latest-digest.contract.test.ts`, and `apps/api/src/test/digest-run.integration.test.ts`
 
 **Checkpoint**: User Story 2 is independently functional, publishes digests to Chronicle Registry on-chain, Webflow, and SMTP.
 
@@ -187,45 +187,45 @@
 
 ### Tests for User Story 3
 
-- [ ] T109 [P] [US3] Write contract tests for `GET /premium/items` teaser list response shape in `tests/contracts/premium-items.contract.test.ts`
-- [ ] T110 [P] [US3] Write contract tests for `GET /premium/items/{id}` payment required, settled, expired, forbidden, and not-found responses in `tests/contracts/premium-item-access.contract.test.ts`
-- [ ] T111 [P] [US3] Write contract tests for `POST /payments/challenges` for x402, MPP, unsupported route, and missing premium item in `tests/contracts/payment-challenges.contract.test.ts`
-- [ ] T112 [P] [US3] Write contract tests for `POST /payments/settlements` settled, underpaid, expired, failed, and malformed settlement paths in `tests/contracts/payment-settlements.contract.test.ts`
-- [ ] T113 [P] [US3] Write unit tests for x402 challenge creation, referral attributes, and settlement verification adapter behavior in `apps/api/src/test/x402-payment-adapter.test.ts`
-- [ ] T114 [P] [US3] Write unit tests for MPP challenge creation and settlement verification adapter behavior in `apps/api/src/test/mpp-payment-adapter.test.ts`
-- [ ] T115 [P] [US3] Write unit tests proving premium private content never appears in teaser or public alert responses in `apps/api/src/test/premium-content-visibility.test.ts`
-- [ ] T116 [P] [US3] Write integration tests for complete premium purchase flow and revenue recording in `apps/api/src/test/premium-access.integration.test.ts`
-- [ ] T116a [P] [US3] Write unit tests for Sponsored Watch campaign lifecycle, contract event monitoring, and registry `createSponsoredWatch`/`publishSponsoredReport` execution in `apps/api/src/test/sponsored-watch-service.test.ts`
-- [ ] T116b [P] [US3] Write contract tests for `POST /payments/settlements` triggering sponsored watch creation in `tests/contracts/sponsored-watch.contract.test.ts`
+- [X] T109 [P] [US3] Write contract tests for `GET /premium/items` teaser list response shape in `tests/contracts/premium-items.contract.test.ts`
+- [X] T110 [P] [US3] Write contract tests for `GET /premium/items/{id}` payment required, settled, expired, forbidden, and not-found responses in `tests/contracts/premium-item-access.contract.test.ts`
+- [X] T111 [P] [US3] Write contract tests for `POST /payments/challenges` for x402, MPP, unsupported route, and missing premium item in `tests/contracts/payment-challenges.contract.test.ts`
+- [X] T112 [P] [US3] Write contract tests for `POST /payments/settlements` settled, underpaid, expired, failed, and malformed settlement paths in `tests/contracts/payment-settlements.contract.test.ts`
+- [X] T113 [P] [US3] Write unit tests for x402 challenge creation, referral attributes, and settlement verification adapter behavior in `apps/api/src/test/x402-payment-adapter.test.ts`
+- [X] T114 [P] [US3] Write unit tests for MPP challenge creation and settlement verification adapter behavior in `apps/api/src/test/mpp-payment-adapter.test.ts`
+- [X] T115 [P] [US3] Write unit tests proving premium private content never appears in teaser or public alert responses in `apps/api/src/test/premium-content-visibility.test.ts`
+- [X] T116 [P] [US3] Write integration tests for complete premium purchase flow and revenue recording in `apps/api/src/test/premium-access.integration.test.ts`
+- [X] T116a [P] [US3] Write unit tests for Sponsored Watch campaign lifecycle, contract event monitoring, and registry `createSponsoredWatch`/`publishSponsoredReport` execution in `apps/api/src/test/sponsored-watch-service.test.ts`
+- [X] T116b [P] [US3] Write contract tests for `POST /payments/settlements` triggering sponsored watch creation in `tests/contracts/sponsored-watch.contract.test.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T117a [US3] Create Supabase migration for the `sponsored_watches` table (tracking target contract, campaign window, registry tx hashes, status) in `supabase/migrations/202607270002_create_sponsored_watches.sql`
-- [ ] T118 [P] [US3] Implement premium intelligence repository list-teasers, find-available, find-private-content, and create methods in `packages/db/src/premium-intelligence-repository.ts`
-- [ ] T118a [P] [US3] Implement sponsored watch repository create, update status, associate tx hashes, and list in `packages/db/src/sponsored-watch-repository.ts`
-- [ ] T119 [P] [US3] Implement payment record repository create-challenge, find-by-challenge, mark-settled, mark-underpaid, mark-expired, and list methods in `packages/db/src/payment-record-repository.ts`
-- [ ] T120 [US3] Implement premium content visibility service that strips private content from public responses in `apps/api/src/services/premium-content-visibility-service.ts`
-- [ ] T121 [US3] Implement payment route abstraction shared by x402 and MPP adapters in `apps/api/src/payments/payment-adapter.ts`
-- [ ] T122 [US3] Implement x402 payment adapter handling affiliate referral wallet attributes in `apps/api/src/payments/x402-payment-adapter.ts`
-- [ ] T123 [US3] Implement MPP payment adapter using HMAC challenge verification and deterministic local test mode in `apps/api/src/payments/mpp-payment-adapter.ts`
-- [ ] T124 [US3] Implement payment challenge service for route validation, pricing, challenge expiry, and record creation in `apps/api/src/services/payment-challenge-service.ts`
-- [ ] T125 [US3] Implement payment settlement service executing route-specific verification, underpayment detection, settlement recording, and triggering sponsored watches when applicable in `apps/api/src/services/payment-settlement-service.ts`
-- [ ] T125a [US3] Implement sponsored watch service executing `createSponsoredWatch` transaction on-chain via KeeperHub, running contract monitoring during the campaign window, and calling `publishSponsoredReport` on completion in `apps/api/src/services/sponsored-watch-service.ts`
-- [ ] T126 [US3] Implement premium access service that returns `402` challenges unless a settled payment record unlocks content in `apps/api/src/services/premium-access-service.ts`
-- [ ] T127 [US3] Implement `GET /premium/items` and `GET /premium/items/:id` routes in `apps/api/src/routes/premium-routes.ts`
-- [ ] T128 [US3] Implement `POST /payments/challenges` and `POST /payments/settlements` routes in `apps/api/src/routes/payment-routes.ts`
-- [ ] T129 [US3] Register premium and payment routes in `apps/api/src/routes/index.ts`
-- [ ] T130 [P] [US3] Create premium item and payment fixtures for x402, MPP, underpaid, expired, and failed cases in `apps/api/src/test/fixtures/payments.ts`
-- [ ] T131 [P] [US3] Create frontend premium teaser query hook and item access mutation hook in `apps/web/src/features/premium/use-premium.ts`
-- [ ] T132 [P] [US3] Create premium teaser card with price, route badges, and source summary in `apps/web/src/features/premium/PremiumTeaserCard.tsx`
-- [ ] T133 [P] [US3] Create payment challenge panel for x402 and MPP route selection and settlement feedback in `apps/web/src/features/premium/PaymentChallengePanel.tsx`
-- [ ] T134 [P] [US3] Create premium unlocked content view that renders only after settled access in `apps/web/src/features/premium/PremiumContentView.tsx`
-- [ ] T134a [P] [US3] Create frontend sponsored watch status and transaction hash list component in `apps/web/src/features/premium/SponsoredWatchList.tsx`
-- [ ] T135 [US3] Create `/premium` page displaying active sponsored campaigns and transaction hash metrics in `apps/web/src/features/premium/PremiumPage.tsx`
-- [ ] T136 [US3] Add premium teaser preview and call-to-action to the home page in `apps/web/src/features/home/HomePage.tsx`
-- [ ] T137 [US3] Add premium route wiring to the app router in `apps/web/src/app/router.tsx`
-- [ ] T138 [US3] Add execution logs for challenge issued, settlement pending, settlement succeeded, underpayment, expiry, failure, and premium content unlocked in `apps/api/src/services/payment-settlement-service.ts`
-- [ ] T139 [US3] Run US3 contract, integration, and unit tests and fix failures in `tests/contracts/premium-item-access.contract.test.ts`, `tests/contracts/payment-challenges.contract.test.ts`, and `apps/api/src/test/premium-access.integration.test.ts`
+- [X] T117a [US3] Create Supabase migration for the `sponsored_watches` table (tracking target contract, campaign window, registry tx hashes, status) in `supabase/migrations/202607270002_create_sponsored_watches.sql`
+- [X] T118 [P] [US3] Implement premium intelligence repository list-teasers, find-available, find-private-content, and create methods in `packages/db/src/premium-intelligence-repository.ts`
+- [X] T118a [P] [US3] Implement sponsored watch repository create, update status, associate tx hashes, and list in `packages/db/src/sponsored-watch-repository.ts`
+- [X] T119 [P] [US3] Implement payment record repository create-challenge, find-by-challenge, mark-settled, mark-underpaid, mark-expired, and list methods in `packages/db/src/payment-record-repository.ts`
+- [X] T120 [US3] Implement premium content visibility service that strips private content from public responses in `apps/api/src/services/premium-content-visibility-service.ts`
+- [X] T121 [US3] Implement payment route abstraction shared by x402 and MPP adapters in `apps/api/src/payments/payment-adapter.ts`
+- [X] T122 [US3] Implement x402 payment adapter handling affiliate referral wallet attributes in `apps/api/src/payments/x402-payment-adapter.ts`
+- [X] T123 [US3] Implement MPP payment adapter using HMAC challenge verification and deterministic local test mode in `apps/api/src/payments/mpp-payment-adapter.ts`
+- [X] T124 [US3] Implement payment challenge service for route validation, pricing, challenge expiry, and record creation in `apps/api/src/services/payment-challenge-service.ts`
+- [X] T125 [US3] Implement payment settlement service executing route-specific verification, underpayment detection, settlement recording, and triggering sponsored watches when applicable in `apps/api/src/services/payment-settlement-service.ts`
+- [X] T125a [US3] Implement sponsored watch service executing `createSponsoredWatch` transaction on-chain via KeeperHub, running contract monitoring during the campaign window, and calling `publishSponsoredReport` on completion in `apps/api/src/services/sponsored-watch-service.ts`
+- [X] T126 [US3] Implement premium access service that returns `402` challenges unless a settled payment record unlocks content in `apps/api/src/services/premium-access-service.ts`
+- [X] T127 [US3] Implement `GET /premium/items` and `GET /premium/items/:id` routes in `apps/api/src/routes/premium-routes.ts`
+- [X] T128 [US3] Implement `POST /payments/challenges` and `POST /payments/settlements` routes in `apps/api/src/routes/payment-routes.ts`
+- [X] T129 [US3] Register premium and payment routes in `apps/api/src/routes/index.ts`
+- [X] T130 [P] [US3] Create premium item and payment fixtures for x402, MPP, underpaid, expired, and failed cases in `apps/api/src/test/fixtures/payments.ts`
+- [X] T131 [P] [US3] Create frontend premium teaser query hook and item access mutation hook in `apps/web/src/features/premium/use-premium.ts`
+- [X] T132 [P] [US3] Create premium teaser card with price, route badges, and source summary in `apps/web/src/features/premium/PremiumTeaserCard.tsx`
+- [X] T133 [P] [US3] Create payment challenge panel for x402 and MPP route selection and settlement feedback in `apps/web/src/features/premium/PaymentChallengePanel.tsx`
+- [X] T134 [P] [US3] Create premium unlocked content view that renders only after settled access in `apps/web/src/features/premium/PremiumContentView.tsx`
+- [X] T134a [P] [US3] Create frontend sponsored watch status and transaction hash list component in `apps/web/src/features/premium/SponsoredWatchList.tsx`
+- [X] T135 [US3] Create `/premium` page displaying active sponsored campaigns and transaction hash metrics in `apps/web/src/features/premium/PremiumPage.tsx`
+- [X] T136 [US3] Add premium teaser preview and call-to-action to the home page in `apps/web/src/features/home/HomePage.tsx`
+- [X] T137 [US3] Add premium route wiring to the app router in `apps/web/src/app/router.tsx`
+- [X] T138 [US3] Add execution logs for challenge issued, settlement pending, settlement succeeded, underpayment, expiry, failure, and premium content unlocked in `apps/api/src/services/payment-settlement-service.ts`
+- [X] T139 [US3] Run US3 contract, integration, and unit tests and fix failures in `tests/contracts/premium-item-access.contract.test.ts`, `tests/contracts/payment-challenges.contract.test.ts`, and `apps/api/src/test/premium-access.integration.test.ts`
 
 **Checkpoint**: User Story 3 gates premium items, accepts x402/MPP payments, attributes referrals, and executes on-chain sponsored watch campaigns.
 

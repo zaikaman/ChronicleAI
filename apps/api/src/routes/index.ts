@@ -126,3 +126,50 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
   // Latest digest (no auth required)
   apiRouter.use(createDigestRoutes(deps.digestRepo));
 }
+
+// ── US3: Premium Access & Sponsored Watch Routes ────────
+
+import {
+  type PaymentRecordRepository,
+  type PremiumIntelligenceRepository,
+  type SponsoredWatchRepository,
+  createPaymentRecordRepository,
+  createPremiumIntelligenceRepository,
+  createSponsoredWatchRepository,
+} from "@chronicleai/db";
+import type { PaymentRoute } from "@chronicleai/schemas";
+import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
+import { MppPaymentAdapter } from "../payments/mpp-payment-adapter.ts";
+import type { PaymentAdapter } from "../payments/payment-adapter.ts";
+import { createPremiumRoutes } from "./premium-routes.ts";
+import { createPaymentRoutes } from "./payment-routes.ts";
+
+export interface US3Dependencies {
+  premiumRepo: PremiumIntelligenceRepository;
+  paymentRecordRepo: PaymentRecordRepository;
+  execLogRepo: ExecutionLogRepository;
+  watchRepo: SponsoredWatchRepository;
+}
+
+export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependencies): void {
+  // Initialize payment adapters
+  const adapters = new Map<PaymentRoute, PaymentAdapter>();
+  adapters.set("x402", new X402PaymentAdapter({ facilitatorUrl: env.x402FacilitatorUrl ?? undefined }));
+  adapters.set("mpp", new MppPaymentAdapter({ mppSecret: env.mppSecret ?? undefined }));
+
+  // Premium routes
+  apiRouter.use(createPremiumRoutes({
+    premiumRepo: deps.premiumRepo,
+    paymentRecordRepo: deps.paymentRecordRepo,
+    execLogRepo: deps.execLogRepo,
+  }));
+
+  // Payment routes
+  apiRouter.use(createPaymentRoutes({
+    premiumRepo: deps.premiumRepo,
+    paymentRecordRepo: deps.paymentRecordRepo,
+    execLogRepo: deps.execLogRepo,
+    watchRepo: deps.watchRepo,
+    adapters,
+  }));
+}

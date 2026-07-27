@@ -9,18 +9,10 @@ import type React from "react";
 import { AlertsPage } from "../features/alerts/AlertsPage.tsx";
 import { HomePage } from "../features/home/HomePage.tsx";
 import { LatestDigestPage } from "../features/digests/LatestDigestPage.tsx";
+import { PremiumPage } from "../features/premium/PremiumPage.tsx";
 
 function DigestPage(): React.ReactElement {
   return <LatestDigestPage />;
-}
-
-function PremiumPage(): React.ReactElement {
-  return (
-    <div style={{ padding: "2rem", textAlign: "center" }}>
-      <h2>Premium Intelligence</h2>
-      <p style={{ color: "#a1a1aa" }}>Coming soon in a future phase.</p>
-    </div>
-  );
 }
 
 function OperatorPage(): React.ReactElement {

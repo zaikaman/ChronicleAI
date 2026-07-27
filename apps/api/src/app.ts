@@ -4,8 +4,11 @@ import {
   createExecutionLogRepository,
   createLLMGenerationAttemptRepository,
   createMonitoredEventRepository,
+  createPaymentRecordRepository,
+  createPremiumIntelligenceRepository,
   createPublicAlertRepository,
   createServerSupabaseClient,
+  createSponsoredWatchRepository,
 } from "@chronicleai/db";
 import express, { type Express } from "express";
 import {
@@ -14,7 +17,7 @@ import {
   requestIdMiddleware,
   timingMiddleware,
 } from "./middleware/core.ts";
-import { registerRoutes, setupUS1Routes, setupUS2Routes } from "./routes/index.ts";
+import { registerRoutes, setupUS1Routes, setupUS2Routes, setupUS3Routes } from "./routes/index.ts";
 
 const app: Express = express();
 
@@ -30,7 +33,7 @@ app.use(corsMiddleware(frontendOrigin));
 // Register API routes
 registerRoutes(app);
 
-// Setup US1 and US2 routes when env is available
+// Setup US1 through US3 routes when env is available
 try {
   const env = loadServerEnv();
   const supabase = createServerSupabaseClient({
@@ -43,6 +46,9 @@ try {
   const execLogRepo = createExecutionLogRepository(supabase);
   const llmAttemptRepo = createLLMGenerationAttemptRepository(supabase);
   const digestRepo = createDailyDigestRepository(supabase);
+  const premiumRepo = createPremiumIntelligenceRepository(supabase);
+  const paymentRecordRepo = createPaymentRecordRepository(supabase);
+  const watchRepo = createSponsoredWatchRepository(supabase);
 
   // US1: Public Alerts
   setupUS1Routes(app, env, {
@@ -57,6 +63,14 @@ try {
     eventRepo,
     digestRepo,
     execLogRepo,
+  });
+
+  // US3: Premium Access & Sponsored Watch
+  setupUS3Routes(app, env, {
+    premiumRepo,
+    paymentRecordRepo,
+    execLogRepo,
+    watchRepo,
   });
 } catch (error) {
   // Log but don't crash - env vars may not be available in all contexts
