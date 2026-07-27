@@ -181,7 +181,7 @@
 
 ## Phase 5: User Story 3 - Purchase Premium Intelligence Access & Sponsor Contracts (Priority: P3)
 
-**Goal**: Human users and automated clients can purchase premium access via x402 (Base) or MPP (Tempo) and sponsor monitoring campaigns (Loop 4) on target contracts, executing on-chain registry transactions.
+**Goal**: Human users and automated clients can purchase premium access via x402 (Ethereum Sepolia) or MPP (Tempo) and sponsor monitoring campaigns (Loop 4) on target contracts, executing on-chain registry transactions.
 
 **Independent Test**: Request premium content without payment, receive a `402` challenge, complete a subscription (x402) or pay-per-call (MPP) challenge, retry to receive content; pay for a sponsored monitoring task, verifying that KeeperHub executes `createSponsoredWatch` and `publishSponsoredReport` on-chain.
 

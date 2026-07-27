@@ -1,16 +1,19 @@
 // Unit tests: Revenue Routing Service
 // Tests autonomous revenue routing, creator recovery calculations, referral capping, and registry payout logging
 
-import { describe, expect, it, vi } from "vitest";
-import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
-import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 import type {
   ExecutionLogRepository,
   PaymentRecordRepository,
   PayoutRecordRepository,
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
-import type { ChronicleRegistryService, RegistryPublishResult } from "../services/chronicle-registry-service.ts";
+import { describe, expect, it, vi } from "vitest";
+import type {
+  ChronicleRegistryService,
+  RegistryPublishResult,
+} from "../services/chronicle-registry-service.ts";
+import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
+import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 
 describe("RevenueRoutingService", () => {
   const treasuryService = createTreasuryStatusService();

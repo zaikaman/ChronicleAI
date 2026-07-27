@@ -1,15 +1,10 @@
 // Unit tests for Chronicle Registry digest service
 
 import { describe, expect, it } from "vitest";
-import {
-  createChronicleRegistryService,
-  type ChronicleRegistryService,
-} from "../services/chronicle-registry-service.ts";
+import { createChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import type { Web3Client } from "../services/web3-client-service.ts";
 
-function createMockWeb3Client(
-  overrides?: Partial<Web3Client>,
-): Web3Client {
+function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
   return {
     async getSignerAddress() {
       return "0xmock";

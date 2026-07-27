@@ -12,7 +12,10 @@ try {
       if (index !== -1) {
         const key = trimmed.slice(0, index).trim();
         let val = trimmed.slice(index + 1).trim();
-        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        if (
+          (val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))
+        ) {
           val = val.slice(1, -1);
         }
         if (!process.env[key]) {

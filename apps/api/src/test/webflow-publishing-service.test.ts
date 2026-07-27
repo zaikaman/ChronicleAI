@@ -1,9 +1,7 @@
 // Unit tests for Webflow publishing service
 
 import { describe, expect, it } from "vitest";
-import {
-  createWebflowPublishingService,
-} from "../services/webflow-publishing-service.ts";
+import { createWebflowPublishingService } from "../services/webflow-publishing-service.ts";
 
 describe("WebflowPublishingService", () => {
   it("handles unconfigured service gracefully", async () => {

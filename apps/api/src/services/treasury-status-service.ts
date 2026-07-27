@@ -55,9 +55,10 @@ export function createTreasuryStatusService(): TreasuryStatusService {
         status = "healthy";
       }
 
-      const deficitPercentage = safetyBuffer > 0
-        ? Math.max(0, ((safetyBuffer - availableBalance) / safetyBuffer) * 100)
-        : 0;
+      const deficitPercentage =
+        safetyBuffer > 0
+          ? Math.max(0, ((safetyBuffer - availableBalance) / safetyBuffer) * 100)
+          : 0;
 
       const changed = previousStatus !== undefined && previousStatus !== status;
 

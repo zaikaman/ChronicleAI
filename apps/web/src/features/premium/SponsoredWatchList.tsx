@@ -112,10 +112,7 @@ export function SponsoredWatchList({
                   {watch.targetContract.slice(0, 10)}...{watch.targetContract.slice(-6)}
                 </div>
               </div>
-              <StatusBadge
-                label={watch.status}
-                variant={getWatchStatusVariant(watch.status)}
-              />
+              <StatusBadge label={watch.status} variant={getWatchStatusVariant(watch.status)} />
             </div>
 
             <div

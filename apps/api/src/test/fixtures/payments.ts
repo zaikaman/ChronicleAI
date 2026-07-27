@@ -1,6 +1,6 @@
 // Payment test fixtures for premium items and payment records
 
-import type { PremiumIntelligenceItemRow, PaymentRecordRow } from "@chronicleai/db";
+import type { PaymentRecordRow, PremiumIntelligenceItemRow } from "@chronicleai/db";
 
 // ── Premium Item Fixtures ──────────────────────────────────
 
@@ -45,7 +45,8 @@ export const MOCK_PREMIUM_SPONSORED_MONITOR: PremiumIntelligenceItemRow = {
   summary_public: "Sponsor a 7-day monitoring campaign for a specific DEX liquidity pool.",
   content_private: {
     campaign: {
-      description: "Real-time monitoring of pool imbalance, large swaps, and impermanent loss alerts",
+      description:
+        "Real-time monitoring of pool imbalance, large swaps, and impermanent loss alerts",
       deliverables: ["Daily imbalance reports", "Swap anomaly alerts", "Final campaign summary"],
     },
   },

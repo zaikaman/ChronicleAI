@@ -1,9 +1,7 @@
 // Unit tests for digest generation service
 
 import { describe, expect, it } from "vitest";
-import {
-  createDigestGenerationService,
-} from "../services/digest-generation-service.ts";
+import { createDigestGenerationService } from "../services/digest-generation-service.ts";
 
 const service = createDigestGenerationService();
 

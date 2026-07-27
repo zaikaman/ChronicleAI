@@ -71,8 +71,8 @@ import { createDigestWindowService } from "../services/digest-window-service.ts"
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
 import { createWeb3Client } from "../services/web3-client-service.ts";
 import { createWebflowPublishingService } from "../services/webflow-publishing-service.ts";
-import { createKeeperhubDigestRoutes } from "./keeperhub-digest-routes.ts";
 import { createDigestRoutes } from "./digest-routes.ts";
+import { createKeeperhubDigestRoutes } from "./keeperhub-digest-routes.ts";
 
 export interface US2Dependencies {
   eventRepo: MonitoredEventRepository;
@@ -129,20 +129,17 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
 
 // ── US3: Premium Access & Sponsored Watch Routes ────────
 
-import {
-  type PaymentRecordRepository,
-  type PremiumIntelligenceRepository,
-  type SponsoredWatchRepository,
-  createPaymentRecordRepository,
-  createPremiumIntelligenceRepository,
-  createSponsoredWatchRepository,
+import type {
+  PaymentRecordRepository,
+  PremiumIntelligenceRepository,
+  SponsoredWatchRepository,
 } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
-import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 import { MppPaymentAdapter } from "../payments/mpp-payment-adapter.ts";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
-import { createPremiumRoutes } from "./premium-routes.ts";
+import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 import { createPaymentRoutes } from "./payment-routes.ts";
+import { createPremiumRoutes } from "./premium-routes.ts";
 
 export interface US3Dependencies {
   premiumRepo: PremiumIntelligenceRepository;
@@ -155,47 +152,51 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
 
   // Initialize payment adapters
   const adapters = new Map<PaymentRoute, PaymentAdapter>();
-  adapters.set("x402", new X402PaymentAdapter({ facilitatorUrl: env.x402FacilitatorUrl ?? undefined }));
+  adapters.set(
+    "x402",
+    new X402PaymentAdapter({ facilitatorUrl: env.x402FacilitatorUrl ?? undefined }),
+  );
   adapters.set("mpp", new MppPaymentAdapter({ mppSecret: env.mppSecret ?? undefined }));
 
   // Premium routes
-  apiRouter.use(createPremiumRoutes({
-    premiumRepo: deps.premiumRepo,
-    paymentRecordRepo: deps.paymentRecordRepo,
-    execLogRepo: deps.execLogRepo,
-    watchRepo: deps.watchRepo,
-  }));
+  apiRouter.use(
+    createPremiumRoutes({
+      premiumRepo: deps.premiumRepo,
+      paymentRecordRepo: deps.paymentRecordRepo,
+      execLogRepo: deps.execLogRepo,
+      watchRepo: deps.watchRepo,
+    }),
+  );
 
   // Payment routes
-  apiRouter.use(createPaymentRoutes({
-    premiumRepo: deps.premiumRepo,
-    paymentRecordRepo: deps.paymentRecordRepo,
-    execLogRepo: deps.execLogRepo,
-    watchRepo: deps.watchRepo,
-    adapters,
-    web3Client,
-  }));
+  apiRouter.use(
+    createPaymentRoutes({
+      premiumRepo: deps.premiumRepo,
+      paymentRecordRepo: deps.paymentRecordRepo,
+      execLogRepo: deps.execLogRepo,
+      watchRepo: deps.watchRepo,
+      adapters,
+      web3Client,
+    }),
+  );
 }
 
 // ── US4: Operator Sustainability & Revenue Payouts Routes ─
 
-import {
-  type OperatorAuditRepository,
-  type PayoutRecordRepository,
-  type TreasurySnapshotRepository,
-  createOperatorAuditRepository,
-  createPayoutRecordRepository,
-  createTreasurySnapshotRepository,
+import type {
+  OperatorAuditRepository,
+  PayoutRecordRepository,
+  TreasurySnapshotRepository,
 } from "@chronicleai/db";
-import { TreasuryCheckHandler } from "../keeperhub/treasury-check-handler.ts";
 import { RevenueRoutingHandler } from "../keeperhub/revenue-routing-handler.ts";
-import { createKeeperhubTreasuryRoutes } from "./keeperhub-treasury-routes.ts";
-import { createKeeperhubRevenueRoutes } from "./keeperhub-revenue-routes.ts";
-import { createOperatorRoutes } from "./operator-routes.ts";
+import { TreasuryCheckHandler } from "../keeperhub/treasury-check-handler.ts";
 import { createOperatorAuditService } from "../services/operator-audit-service.ts";
 import { createOperatorNotificationService } from "../services/operator-notification-service.ts";
 import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
 import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
+import { createKeeperhubRevenueRoutes } from "./keeperhub-revenue-routes.ts";
+import { createKeeperhubTreasuryRoutes } from "./keeperhub-treasury-routes.ts";
+import { createOperatorRoutes } from "./operator-routes.ts";
 
 export interface US4Dependencies {
   treasuryRepo: TreasurySnapshotRepository;

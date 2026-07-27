@@ -7,8 +7,8 @@ import { App } from "./App.tsx";
 // ── Page components ─────────────────────────────────────
 import type React from "react";
 import { AlertsPage } from "../features/alerts/AlertsPage.tsx";
-import { HomePage } from "../features/home/HomePage.tsx";
 import { LatestDigestPage } from "../features/digests/LatestDigestPage.tsx";
+import { HomePage } from "../features/home/HomePage.tsx";
 import { PremiumPage } from "../features/premium/PremiumPage.tsx";
 
 function DigestPage(): React.ReactElement {

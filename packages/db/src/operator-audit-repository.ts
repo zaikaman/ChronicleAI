@@ -2,17 +2,16 @@
 // Aggregates data for the operator dashboard across multiple tables
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { type Result, success, failure, PersistenceError } from "./errors.ts";
+import { PersistenceError, type Result, failure, success } from "./errors.ts";
 import { mapPostgrestError } from "./repository-utils.ts";
 import type {
-  MonitoredEventRow,
-  PublicAlertRow,
   DailyDigestRow,
+  ExecutionLogRow,
   PaymentRecordRow,
-  TreasurySnapshotRow,
+  PublicAlertRow,
   RevenuePayoutRow,
   SponsoredWatchRow,
-  ExecutionLogRow,
+  TreasurySnapshotRow,
 } from "./types.ts";
 
 export interface OperatorAuditData {
@@ -31,9 +30,7 @@ export interface OperatorAuditRepository {
   getAuditData(limitParam?: number): Promise<Result<OperatorAuditData>>;
 }
 
-export function createOperatorAuditRepository(
-  supabase: SupabaseClient,
-): OperatorAuditRepository {
+export function createOperatorAuditRepository(supabase: SupabaseClient): OperatorAuditRepository {
   return {
     async getAuditData(limitParam = 10) {
       const limit = Math.min(50, Math.max(1, limitParam));
@@ -129,7 +126,8 @@ export function createOperatorAuditRepository(
           totalQualifiedEvents: qualifiedEvents ?? 0,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error fetching audit data";
+        const message =
+          error instanceof Error ? error.message : "Unknown error fetching audit data";
         return failure(new PersistenceError(message));
       }
     },

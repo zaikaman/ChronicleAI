@@ -98,7 +98,13 @@ export function PremiumContentView({
                   Feed Entries
                 </h4>
                 <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", fontSize: "var(--font-size-xs)", borderCollapse: "collapse" }}>
+                  <table
+                    style={{
+                      width: "100%",
+                      fontSize: "var(--font-size-xs)",
+                      borderCollapse: "collapse",
+                    }}
+                  >
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--border-primary)" }}>
                         {Object.keys(value[0] ?? {}).map((col) => (
@@ -118,17 +124,15 @@ export function PremiumContentView({
                     </thead>
                     <tbody>
                       {value.map((entry, idx) => (
-                        <tr
-                          key={idx}
-                          style={{ borderBottom: "1px solid var(--border-primary)" }}
-                        >
+                        <tr key={idx} style={{ borderBottom: "1px solid var(--border-primary)" }}>
                           {Object.values(entry).map((val, vi) => (
                             <td
                               key={vi}
                               style={{
                                 padding: "0.5rem 0.75rem",
                                 color: "var(--fg-secondary)",
-                                fontFamily: typeof val === "number" ? "var(--font-mono)" : undefined,
+                                fontFamily:
+                                  typeof val === "number" ? "var(--font-mono)" : undefined,
                               }}
                             >
                               {String(val)}

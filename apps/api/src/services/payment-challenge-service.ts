@@ -1,12 +1,11 @@
 // Payment Challenge Service
 // Handles route validation, pricing, challenge expiry, and record creation.
 
-import type { PremiumIntelligenceItemRow, PaymentRecordRepository } from "@chronicleai/db";
+import type { PaymentRecordRepository, PremiumIntelligenceItemRow } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
 import { PAYMENT_ROUTES } from "@chronicleai/schemas";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
 import type { ChallengeResult } from "../payments/payment-adapter.ts";
-import { randomUUID } from "node:crypto";
 
 const CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes
 
@@ -37,10 +36,7 @@ export class PaymentChallengeService {
   /**
    * Validate that the premium item supports the requested route.
    */
-  validateRouteForItem(
-    item: PremiumIntelligenceItemRow,
-    route: PaymentRoute,
-  ): boolean {
+  validateRouteForItem(item: PremiumIntelligenceItemRow, route: PaymentRoute): boolean {
     return item.payment_routes.includes(route);
   }
 

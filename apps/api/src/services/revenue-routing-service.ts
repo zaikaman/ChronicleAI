@@ -4,7 +4,6 @@ import type {
   PaymentRecordRepository,
   PayoutRecordRepository,
   TreasurySnapshotRepository,
-  TreasurySnapshotUpdate,
 } from "@chronicleai/db";
 import type { ChronicleRegistryService } from "./chronicle-registry-service.ts";
 import type { TreasuryStatusService } from "./treasury-status-service.ts";
@@ -85,10 +84,16 @@ export function createRevenueRoutingService(
 
       // 2. Check treasury status
       const latestSnapshot = await deps.treasuryRepo.findLatest();
-      const availableBalance = latestSnapshot.ok ? (latestSnapshot.value?.available_balance ?? 0) : 0;
+      const availableBalance = latestSnapshot.ok
+        ? (latestSnapshot.value?.available_balance ?? 0)
+        : 0;
       const safetyBuffer = latestSnapshot.ok ? (latestSnapshot.value?.safety_buffer ?? 1000) : 1000;
 
-      const routeCheck = deps.treasuryService.shouldRouteRevenue(availableBalance, safetyBuffer, totalRevenue);
+      const routeCheck = deps.treasuryService.shouldRouteRevenue(
+        availableBalance,
+        safetyBuffer,
+        totalRevenue,
+      );
 
       if (!routeCheck.canRoute) {
         return {
@@ -238,7 +243,8 @@ export function createRevenueRoutingService(
         const updateFields: Record<string, unknown> = {
           last_routed_at: new Date().toISOString(),
           last_payout_period_hash: payoutPeriodHash,
-          total_routed_amount: ((latestSnapshot.value as any).total_routed_amount ?? 0) + distributable,
+          total_routed_amount:
+            ((latestSnapshot.value as any).total_routed_amount ?? 0) + distributable,
         };
         await deps.treasuryRepo.update(latestSnapshot.value.id, updateFields as never);
       }

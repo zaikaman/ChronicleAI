@@ -1,11 +1,8 @@
 // Unit tests for digest window service
 
-import { describe, expect, it } from "vitest";
 import type { DailyDigestRepository } from "@chronicleai/db";
-import {
-  createDigestWindowService,
-  type DigestWindowService,
-} from "../services/digest-window-service.ts";
+import { describe, expect, it } from "vitest";
+import { createDigestWindowService } from "../services/digest-window-service.ts";
 
 function createMockDigestRepo(existingWindow?: {
   periodStart: string;

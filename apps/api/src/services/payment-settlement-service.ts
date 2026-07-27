@@ -4,9 +4,8 @@
 
 import type { ExecutionLogRepository, PaymentRecordRepository } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
-import type { PaymentAdapter, SettlementVerificationResult } from "../payments/payment-adapter.ts";
-import type { ExecutionLogService } from "./execution-log-service.ts";
 import { badRequest } from "../errors.ts";
+import type { PaymentAdapter, SettlementVerificationResult } from "../payments/payment-adapter.ts";
 
 export interface SettlementResult {
   settled: boolean;

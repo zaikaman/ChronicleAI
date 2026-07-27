@@ -23,9 +23,7 @@ export interface DigestWindowService {
   }): Promise<WindowValidationResult>;
 }
 
-export function createDigestWindowService(
-  digestRepo: DailyDigestRepository,
-): DigestWindowService {
+export function createDigestWindowService(digestRepo: DailyDigestRepository): DigestWindowService {
   return {
     validateWindow({ periodStart, periodEnd }) {
       const start = new Date(periodStart);

@@ -30,10 +30,19 @@ export interface Web3Client {
   ): Promise<{ watchId: number; txHash: string }>;
 
   /** Publish a sponsored report on-chain. Returns the transaction hash. */
-  publishSponsoredReport(watchId: number, reportContentHash: string, reportUri: string): Promise<string>;
+  publishSponsoredReport(
+    watchId: number,
+    reportContentHash: string,
+    reportUri: string,
+  ): Promise<string>;
 
   /** Record a payout on-chain. Returns the transaction hash. */
-  recordPayout(payoutPeriodHash: string, recipient: string, amount: number, reasonHash: string): Promise<string>;
+  recordPayout(
+    payoutPeriodHash: string,
+    recipient: string,
+    amount: number,
+    reasonHash: string,
+  ): Promise<string>;
 
   /** Send native transfer. Returns the transaction hash. */
   sendTransfer(to: string, amountEth: number): Promise<string>;
@@ -50,7 +59,11 @@ const REGISTRY_ABI = [
 ] as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ContractMethod = (...args: any[]) => Promise<{ wait: () => Promise<{ hash: string; logs: Array<{ topics?: string[]; data?: string }> }> }>;
+type ContractMethod = (
+  ...args: any[]
+) => Promise<{
+  wait: () => Promise<{ hash: string; logs: Array<{ topics?: string[]; data?: string }> }>;
+}>;
 
 interface EthersContract {
   publishAlert: ContractMethod;
@@ -70,7 +83,11 @@ export function createWeb3Client(env: ServerEnv): Web3Client | null {
   const wallet = new ethers.Wallet(env.paraWalletPrivateKey, provider);
   const registryAddress = env.chronicleRegistryAddress;
 
-  const registryContract = new ethers.Contract(registryAddress, REGISTRY_ABI, wallet) as unknown as EthersContract;
+  const registryContract = new ethers.Contract(
+    registryAddress,
+    REGISTRY_ABI,
+    wallet,
+  ) as unknown as EthersContract;
 
   function hashString(input: string): string {
     return ethers.keccak256(ethers.toUtf8Bytes(input));
@@ -115,7 +132,9 @@ export function createWeb3Client(env: ServerEnv): Web3Client | null {
         throw new Error("createSponsoredWatch transaction failed");
       }
       const eventLog = receipt.logs.find(
-        (log) => log.topics?.[0] === hashString("SponsoredWatchCreated(uint256,address,bytes32,uint256,uint256)"),
+        (log) =>
+          log.topics?.[0] ===
+          hashString("SponsoredWatchCreated(uint256,address,bytes32,uint256,uint256)"),
       );
       const watchId = eventLog ? Number(eventLog.data ?? "0x0") : 0;
       return { watchId, txHash: receipt.hash };

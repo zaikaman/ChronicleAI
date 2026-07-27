@@ -2,12 +2,14 @@
 // GET /premium/items - List available premium item teasers
 // GET /premium/items/:id - Access a premium item (returns 402 if not paid)
 
-import type { ExecutionLogRepository, PremiumIntelligenceRepository, PaymentRecordRepository, SponsoredWatchRepository } from "@chronicleai/db";
+import type {
+  ExecutionLogRepository,
+  PaymentRecordRepository,
+  PremiumIntelligenceRepository,
+  SponsoredWatchRepository,
+} from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
-import {
-  PremiumAccessService,
-  PaymentRequiredError,
-} from "../services/premium-access-service.ts";
+import { PaymentRequiredError, PremiumAccessService } from "../services/premium-access-service.ts";
 import { PremiumContentVisibilityService } from "../services/premium-content-visibility-service.ts";
 
 export function createPremiumRoutes(params: {

@@ -1,12 +1,12 @@
 // Premium page with item listing, payment gating, content display, and sponsored watch status
 
-import { type ReactElement, useState, useCallback } from "react";
+import { type ReactElement, useCallback, useState } from "react";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
-import { PremiumTeaserCard } from "./PremiumTeaserCard.tsx";
 import { PaymentChallengePanel } from "./PaymentChallengePanel.tsx";
 import { PremiumContentView } from "./PremiumContentView.tsx";
-import { SponsoredWatchList, type SponsoredWatchModel } from "./SponsoredWatchList.tsx";
-import { usePremiumTeasers, usePremiumItemAccess, useSponsoredWatches } from "./use-premium.ts";
+import { PremiumTeaserCard } from "./PremiumTeaserCard.tsx";
+import { SponsoredWatchList } from "./SponsoredWatchList.tsx";
+import { usePremiumItemAccess, usePremiumTeasers, useSponsoredWatches } from "./use-premium.ts";
 
 export function PremiumPage(): ReactElement {
   const { items, isLoading, error, refetch } = usePremiumTeasers();

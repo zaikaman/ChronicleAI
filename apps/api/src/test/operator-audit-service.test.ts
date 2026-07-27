@@ -1,9 +1,9 @@
 // Unit tests: Operator Audit Service
 // Tests aggregation across alerts, digests, payments, treasury, payout records, and logs
 
+import type { OperatorAuditData, OperatorAuditRepository } from "@chronicleai/db";
 import { describe, expect, it, vi } from "vitest";
 import { createOperatorAuditService } from "../services/operator-audit-service.ts";
-import type { OperatorAuditRepository, OperatorAuditData } from "@chronicleai/db";
 
 describe("OperatorAuditService", () => {
   function createMockAuditData(overrides?: Partial<OperatorAuditData>): OperatorAuditData {

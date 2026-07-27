@@ -53,11 +53,7 @@ export function PremiumTeaserCard({
         </h3>
         <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0, flexWrap: "wrap" }}>
           {item.paymentRoutes.map((route) => (
-            <StatusBadge
-              key={route}
-              label={route.toUpperCase()}
-              variant="info"
-            />
+            <StatusBadge key={route} label={route.toUpperCase()} variant="info" />
           ))}
         </div>
       </div>

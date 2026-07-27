@@ -2,9 +2,9 @@
 // Handles CRUD for payout_records
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { RevenuePayoutInsert, RevenuePayoutRow, RevenuePayoutUpdate } from "./types.ts";
 import { type Result, failure, success } from "./errors.ts";
 import { buildInsertPayload, buildUpdatePayload, mapPostgrestError } from "./repository-utils.ts";
+import type { RevenuePayoutInsert, RevenuePayoutRow, RevenuePayoutUpdate } from "./types.ts";
 
 export interface PayoutRecordRepository {
   create(payout: RevenuePayoutInsert): Promise<Result<RevenuePayoutRow>>;
@@ -20,9 +20,7 @@ export interface PayoutRecordRepository {
   markFailed(id: string): Promise<Result<RevenuePayoutRow>>;
 }
 
-export function createPayoutRecordRepository(
-  supabase: SupabaseClient,
-): PayoutRecordRepository {
+export function createPayoutRecordRepository(supabase: SupabaseClient): PayoutRecordRepository {
   const table = () => supabase.from("payout_records");
 
   return {
@@ -35,10 +33,7 @@ export function createPayoutRecordRepository(
     },
 
     async findById(id) {
-      const { data, error } = await table()
-        .select("*")
-        .eq("id", id)
-        .limit(1);
+      const { data, error } = await table().select("*").eq("id", id).limit(1);
 
       if (error) return failure(mapPostgrestError(error));
 
@@ -70,11 +65,7 @@ export function createPayoutRecordRepository(
 
     async update(id, update) {
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
-      const { data, error } = await table()
-        .update(payload)
-        .eq("id", id)
-        .select()
-        .single();
+      const { data, error } = await table().update(payload).eq("id", id).select().single();
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as RevenuePayoutRow);

@@ -1,11 +1,11 @@
 // Payment Record Repository
 // Handles CRUD for payment_records
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { PaymentRecordInsert, PaymentRecordRow, PaymentRecordUpdate } from "./types.ts";
 import type { PaymentStatus } from "@chronicleai/schemas";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
 import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
+import type { PaymentRecordInsert, PaymentRecordRow, PaymentRecordUpdate } from "./types.ts";
 
 export interface PaymentRecordRepository {
   createChallenge(record: PaymentRecordInsert): Promise<Result<PaymentRecordRow>>;
@@ -27,20 +27,14 @@ export interface PaymentRecordRepository {
   ): Promise<Result<PaymentRecordRow | null>>;
 }
 
-export function createPaymentRecordRepository(
-  supabase: SupabaseClient,
-): PaymentRecordRepository {
+export function createPaymentRecordRepository(supabase: SupabaseClient): PaymentRecordRepository {
   const table = () => supabase.from("payment_records");
 
   const update = async (
     id: string,
     updates: PaymentRecordUpdate,
   ): Promise<Result<PaymentRecordRow>> => {
-    const { data, error } = await table()
-      .update(updates)
-      .eq("id", id)
-      .select()
-      .single();
+    const { data, error } = await table().update(updates).eq("id", id).select().single();
 
     if (error) return failure(mapPostgrestError(error));
     return success(data as unknown as PaymentRecordRow);
@@ -48,10 +42,7 @@ export function createPaymentRecordRepository(
 
   return {
     async createChallenge(record) {
-      const { data, error } = await table()
-        .insert(record)
-        .select()
-        .single();
+      const { data, error } = await table().insert(record).select().single();
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as PaymentRecordRow);

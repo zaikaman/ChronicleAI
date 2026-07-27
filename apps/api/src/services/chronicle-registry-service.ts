@@ -20,13 +20,16 @@ export interface ChronicleRegistryService {
   recordPayout(payoutPeriodHash: string, transferTxHash: string): Promise<RegistryPublishResult>;
 }
 
-export function createChronicleRegistryService(web3Client: Web3Client | null): ChronicleRegistryService {
+export function createChronicleRegistryService(
+  web3Client: Web3Client | null,
+): ChronicleRegistryService {
   return {
     async publishAlert(alertId, sourceEventHash) {
       if (!web3Client) {
         return {
           success: false,
-          errorMessage: "Web3 client not configured (missing RPC_URL, registry address, or wallet key)",
+          errorMessage:
+            "Web3 client not configured (missing RPC_URL, registry address, or wallet key)",
         };
       }
 
@@ -46,7 +49,8 @@ export function createChronicleRegistryService(web3Client: Web3Client | null): C
       if (!web3Client) {
         return {
           success: false,
-          errorMessage: "Web3 client not configured (missing RPC_URL, registry address, or wallet key)",
+          errorMessage:
+            "Web3 client not configured (missing RPC_URL, registry address, or wallet key)",
         };
       }
 
@@ -66,7 +70,8 @@ export function createChronicleRegistryService(web3Client: Web3Client | null): C
       if (!web3Client) {
         return {
           success: false,
-          errorMessage: "Web3 client not configured (missing RPC_URL, registry address, or wallet key)",
+          errorMessage:
+            "Web3 client not configured (missing RPC_URL, registry address, or wallet key)",
         };
       }
 
@@ -74,7 +79,12 @@ export function createChronicleRegistryService(web3Client: Web3Client | null): C
         const recipient = "0x0000000000000000000000000000000000000000";
         const amount = 0;
         const reasonHash = transferTxHash;
-        const txHash = await web3Client.recordPayout(payoutPeriodHash, recipient, amount, reasonHash);
+        const txHash = await web3Client.recordPayout(
+          payoutPeriodHash,
+          recipient,
+          amount,
+          reasonHash,
+        );
         return { success: true, txHash };
       } catch (error) {
         return {

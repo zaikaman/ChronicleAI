@@ -109,9 +109,8 @@ export function TreasuryStatusPanel({
   }
 
   const statusConfig = getStatusConfig(treasury.status);
-  const bufferRatio = treasury.safetyBuffer > 0
-    ? (treasury.availableBalance / treasury.safetyBuffer) * 100
-    : 0;
+  const bufferRatio =
+    treasury.safetyBuffer > 0 ? (treasury.availableBalance / treasury.safetyBuffer) * 100 : 0;
 
   return (
     <div
@@ -152,9 +151,7 @@ export function TreasuryStatusPanel({
             border: `1px solid ${statusConfig.borderColor}`,
           }}
         >
-          <span style={{ color: statusConfig.color, fontWeight: 700 }}>
-            {statusConfig.icon}
-          </span>
+          <span style={{ color: statusConfig.color, fontWeight: 700 }}>{statusConfig.icon}</span>
           <span
             style={{
               color: statusConfig.color,

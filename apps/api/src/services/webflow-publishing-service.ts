@@ -29,7 +29,8 @@ export function createWebflowPublishingService(
       if (!apiToken || !collectionId) {
         return {
           success: false,
-          errorMessage: "Webflow not configured (missing WEBFLOW_API_TOKEN or WEBFLOW_COLLECTION_ID)",
+          errorMessage:
+            "Webflow not configured (missing WEBFLOW_API_TOKEN or WEBFLOW_COLLECTION_ID)",
         };
       }
 
@@ -40,9 +41,9 @@ export function createWebflowPublishingService(
             slug: `chronicleai-digest-${params.reportDate.replace(/[^0-9]/g, "")}`,
             _archived: false,
             _draft: false,
-            "summary": params.summary,
-            "highlights": params.highlights.join("\n"),
-            "analysis": params.analysis ?? "",
+            summary: params.summary,
+            highlights: params.highlights.join("\n"),
+            analysis: params.analysis ?? "",
             "registry-tx-hash": params.registryTxHash ?? "",
             "report-date": params.reportDate,
           },

@@ -1,8 +1,8 @@
 // Operator Audit Service
 // Aggregates dashboard data under one typed response
 
-import type { OperatorAuditResponse, TreasuryStatus } from "@chronicleai/schemas";
 import type { OperatorAuditRepository } from "@chronicleai/db";
+import type { OperatorAuditResponse, TreasuryStatus } from "@chronicleai/schemas";
 
 export interface OperatorAuditService {
   getAudit(): Promise<{
@@ -44,7 +44,12 @@ export function createOperatorAuditService(
             title: a.title,
             summary: a.summary,
             sourceReferences: a.source_references,
-            deliveryStatus: a.delivery_status as "draft" | "queued" | "published" | "partial_failure" | "failed",
+            deliveryStatus: a.delivery_status as
+              | "draft"
+              | "queued"
+              | "published"
+              | "partial_failure"
+              | "failed",
             publishedAt: a.published_at ?? a.created_at,
           };
           if (a.confidence) {

@@ -31,9 +31,7 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-function getPayoutStatusVariant(
-  status: string,
-): "default" | "success" | "warning" | "error" {
+function getPayoutStatusVariant(status: string): "default" | "success" | "warning" | "error" {
   switch (status) {
     case "transferred":
       return "success";
@@ -195,7 +193,13 @@ export function PayoutLogsTable({
                     variant={getPayoutStatusVariant(payout.status)}
                   />
                 </td>
-                <td style={{ ...tableCellStyle, fontFamily: "var(--font-mono)", fontSize: "var(--font-size-xs)" }}>
+                <td
+                  style={{
+                    ...tableCellStyle,
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "var(--font-size-xs)",
+                  }}
+                >
                   {payout.payoutTxHash ? (
                     <span style={{ color: "var(--accent-success)" }}>
                       {truncateTxHash(payout.payoutTxHash)}
@@ -204,7 +208,13 @@ export function PayoutLogsTable({
                     <span style={{ color: "var(--fg-tertiary)" }}>-</span>
                   )}
                 </td>
-                <td style={{ ...tableCellStyle, fontFamily: "var(--font-mono)", fontSize: "var(--font-size-xs)" }}>
+                <td
+                  style={{
+                    ...tableCellStyle,
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "var(--font-size-xs)",
+                  }}
+                >
                   {payout.registryTxHash ? (
                     <span style={{ color: "var(--accent-primary)" }}>
                       {truncateTxHash(payout.registryTxHash)}

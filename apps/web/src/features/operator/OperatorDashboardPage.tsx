@@ -2,17 +2,13 @@
 // Displays treasury status, metrics, recent activity, payout logs, and execution logs
 
 import { type ReactElement, useMemo } from "react";
-import {
-  EmptyState,
-  LoadingState,
-  RetryState,
-} from "../../components/state-views.tsx";
-import { useOperatorAudit } from "./use-operator-audit.ts";
-import { TreasuryStatusPanel } from "./TreasuryStatusPanel.tsx";
-import { OperatorMetricGrid } from "./OperatorMetricGrid.tsx";
+import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { ExecutionLogTable } from "./ExecutionLogTable.tsx";
-import { RecentActivityPanels } from "./RecentActivityPanels.tsx";
+import { OperatorMetricGrid } from "./OperatorMetricGrid.tsx";
 import { PayoutLogsTable } from "./PayoutLogsTable.tsx";
+import { RecentActivityPanels } from "./RecentActivityPanels.tsx";
+import { TreasuryStatusPanel } from "./TreasuryStatusPanel.tsx";
+import { useOperatorAudit } from "./use-operator-audit.ts";
 
 export function OperatorDashboardPage(): ReactElement {
   const { data, isLoading, error, isUnauthenticated, refetch } = useOperatorAudit();
@@ -21,9 +17,8 @@ export function OperatorDashboardPage(): ReactElement {
   const metrics = useMemo(() => {
     if (!data) return null;
 
-    const totalRevenue = data.payments
-      .filter((p) => p.status === "settled")
-      .reduce((sum, p) => sum + 1, 0) * 5; // Estimate $5 per settled payment
+    const totalRevenue =
+      data.payments.filter((p) => p.status === "settled").reduce((sum, p) => sum + 1, 0) * 5; // Estimate $5 per settled payment
 
     return {
       totalRevenue,
@@ -101,8 +96,8 @@ export function OperatorDashboardPage(): ReactElement {
               marginBottom: "1.5rem",
             }}
           >
-            The operator dashboard requires a valid authentication token.
-            Please set the VITE_OPERATOR_TOKEN environment variable with your operator bearer token.
+            The operator dashboard requires a valid authentication token. Please set the
+            VITE_OPERATOR_TOKEN environment variable with your operator bearer token.
           </p>
           <p
             style={{

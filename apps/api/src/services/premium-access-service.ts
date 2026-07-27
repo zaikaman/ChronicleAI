@@ -9,7 +9,6 @@ import type {
 } from "@chronicleai/db";
 import type { PremiumIntelligenceItemRow } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
-import type { PaymentAdapter, ChallengeResult } from "../payments/payment-adapter.ts";
 import {
   PremiumContentVisibilityService,
   type PremiumItemFull,

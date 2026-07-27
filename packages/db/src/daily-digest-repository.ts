@@ -2,11 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
-import {
-  buildInsertPayload,
-  buildUpdatePayload,
-  mapPostgrestError,
-} from "./repository-utils.ts";
+import { buildInsertPayload, buildUpdatePayload, mapPostgrestError } from "./repository-utils.ts";
 import type { DailyDigestInsert, DailyDigestRow, DailyDigestUpdate } from "./types.ts";
 
 export interface DailyDigestRepository {

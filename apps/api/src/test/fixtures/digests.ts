@@ -89,7 +89,8 @@ export function createGeneratedDigestContent(
       "2. liquidation on Aave (ETH) $1,200,000 USD (significance: 68%)",
       "3. gas spike (850 gwei) (significance: 60%)",
     ],
-    analysis: "During this reporting period, ChronicleAI detected and qualified 3 noteworthy on-chain events across 1 chain(s). Event type distribution: large swap, liquidation, gas spike.",
+    analysis:
+      "During this reporting period, ChronicleAI detected and qualified 3 noteworthy on-chain events across 1 chain(s). Event type distribution: large swap, liquidation, gas spike.",
     sourceEventIds: ["evt-001", "evt-002", "evt-003"],
     ...overrides,
   };
@@ -100,7 +101,8 @@ export function createNoMajorEventsDigestContent() {
     title: "ChronicleAI Daily Digest — Monday, July 27, 2026",
     summary: "No significant on-chain events were detected during the reporting period.",
     highlights: ["No major events detected during this reporting period."],
-    analysis: "The absence of significant on-chain activity during this period suggests normal market conditions.",
+    analysis:
+      "The absence of significant on-chain activity during this period suggests normal market conditions.",
     sourceEventIds: [],
   };
 }

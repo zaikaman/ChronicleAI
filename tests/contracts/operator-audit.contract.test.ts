@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 import { assertOperatorAuditShape } from "./schema-assertions.ts";
 
 const API_URL = process.env["TEST_API_URL"] ?? "http://localhost:4000";
-const OPERATOR_TOKEN = process.env["TEST_OPERATOR_TOKEN"] ?? process.env["OPERATOR_AUTH_SECRET"] ?? "test-operator-secret-token-for-testing";
+const OPERATOR_TOKEN =
+  process.env["TEST_OPERATOR_TOKEN"] ??
+  process.env["OPERATOR_AUTH_SECRET"] ??
+  "test-operator-secret-token-for-testing";
 
 describe("Contract: GET /operator/audit", () => {
   it("should return 200 with audit data shape when authenticated", async () => {

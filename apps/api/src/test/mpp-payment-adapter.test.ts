@@ -36,9 +36,7 @@ describe("MppPaymentAdapter", () => {
         currency: "USDC",
       });
 
-      expect(result1.challengeData.challengeNonce).not.toBe(
-        result2.challengeData.challengeNonce,
-      );
+      expect(result1.challengeData.challengeNonce).not.toBe(result2.challengeData.challengeNonce);
     });
 
     it("should create a challenge with expiry within 5 minutes", async () => {
@@ -117,6 +115,41 @@ describe("MppPaymentAdapter", () => {
       });
 
       expect(result.verified).toBe(false);
+    });
+
+    it("should verify a real cryptographic HMAC signature", async () => {
+      const customAdapter = new MppPaymentAdapter({ mppSecret: "my-real-secret" });
+      const amount = 5;
+      const currency = "USDC";
+
+      // 1. Create challenge
+      const challenge = await customAdapter.createChallenge({
+        premiumItemId: "premium-001",
+        amount,
+        currency,
+      });
+
+      const challengeData = challenge.challengeData as {
+        expiresAt: string;
+        expectedHmac: string;
+      };
+      const { expiresAt, expectedHmac } = challengeData;
+
+      // Settlement reference format: <expiresAt>:<hmac_signature>
+      const settlementRef = `${expiresAt}:${expectedHmac}`;
+
+      // Verify the settlement
+      const result = await customAdapter.verifySettlement({
+        challengeReference: challenge.challengeReference,
+        settlementReference: settlementRef,
+        amountRequested: amount,
+        currency,
+        paymentRoute: "mpp",
+      });
+
+      expect(result.verified).toBe(true);
+      expect(result.amountSettled).toBe(amount);
+      expect(result.payerReference).toContain("mpp-client-");
     });
   });
 });

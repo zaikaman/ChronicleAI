@@ -20,7 +20,13 @@ import {
   requestIdMiddleware,
   timingMiddleware,
 } from "./middleware/core.ts";
-import { registerRoutes, setupUS1Routes, setupUS2Routes, setupUS3Routes, setupUS4Routes } from "./routes/index.ts";
+import {
+  registerRoutes,
+  setupUS1Routes,
+  setupUS2Routes,
+  setupUS3Routes,
+  setupUS4Routes,
+} from "./routes/index.ts";
 
 const app: Express = express();
 

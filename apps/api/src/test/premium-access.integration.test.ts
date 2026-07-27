@@ -2,7 +2,7 @@
 // Tests the full payment challenge -> settlement -> content unlock cycle
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PremiumAccessService, PaymentRequiredError } from "../services/premium-access-service.ts";
+import { PaymentRequiredError, PremiumAccessService } from "../services/premium-access-service.ts";
 
 describe("Premium Access Integration", () => {
   const mockPremiumRepo = {

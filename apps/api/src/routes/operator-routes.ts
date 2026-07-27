@@ -1,10 +1,10 @@
 // Operator routes: GET /operator/audit
 // Returns operator audit data aggregated from multiple tables
 
-import { Router, type Router as RouterType } from "express";
-import type { OperatorAuditService } from "../services/operator-audit-service.ts";
-import { operatorAuthMiddleware } from "../middleware/operator-auth.ts";
 import type { ServerEnv } from "@chronicleai/config";
+import { Router, type Router as RouterType } from "express";
+import { operatorAuthMiddleware } from "../middleware/operator-auth.ts";
+import type { OperatorAuditService } from "../services/operator-audit-service.ts";
 
 export function createOperatorRoutes(
   auditService: OperatorAuditService,

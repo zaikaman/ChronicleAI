@@ -6,8 +6,8 @@ import { EmptyState, LoadingState, RetryState } from "../../components/state-vie
 import { AlertCard } from "../alerts/AlertCard.tsx";
 import { useAlerts } from "../alerts/use-alerts.ts";
 import { useLatestDigest } from "../digests/use-latest-digest.ts";
-import { usePremiumTeasers } from "../premium/use-premium.ts";
 import { PremiumTeaserCard } from "../premium/PremiumTeaserCard.tsx";
+import { usePremiumTeasers } from "../premium/use-premium.ts";
 
 export function HomePage(): ReactElement {
   const { alerts, isLoading, error, refetch } = useAlerts(3);
@@ -46,8 +46,8 @@ export function HomePage(): ReactElement {
             lineHeight: 1.6,
           }}
         >
-          Autonomous on-chain intelligence monitoring, alert publication, and daily market intelligence
-          anchored with on-chain proof-of-publication.
+          Autonomous on-chain intelligence monitoring, alert publication, and daily market
+          intelligence anchored with on-chain proof-of-publication.
         </p>
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
           <Link
@@ -243,7 +243,8 @@ export function HomePage(): ReactElement {
             }}
           >
             <p style={{ color: "var(--fg-tertiary)", margin: 0 }}>
-              Premium intelligence items coming soon. Subscribe to access deep analysis and sponsored monitoring.
+              Premium intelligence items coming soon. Subscribe to access deep analysis and
+              sponsored monitoring.
             </p>
           </div>
         ) : (
@@ -255,11 +256,7 @@ export function HomePage(): ReactElement {
             }}
           >
             {premiumItems.slice(0, 2).map((item) => (
-              <PremiumTeaserCard
-                key={item.id}
-                item={item}
-                onAccess={() => {}}
-              />
+              <PremiumTeaserCard key={item.id} item={item} onAccess={() => {}} />
             ))}
           </div>
         )}

@@ -1,7 +1,7 @@
 // Operator audit test fixtures
 // Treasury, audit, payout, sponsored watch, and operator auth fixtures
 
-import type { TreasurySnapshotRow, RevenuePayoutRow, SponsoredWatchRow } from "@chronicleai/db";
+import type { RevenuePayoutRow, SponsoredWatchRow, TreasurySnapshotRow } from "@chronicleai/db";
 
 // ── Treasury Snapshot Fixtures ────────────────────────────
 
@@ -64,9 +64,7 @@ export function createCriticalTreasurySnapshot(
 
 // ── Payout Record Fixtures ───────────────────────────────
 
-export function createPendingPayout(
-  overrides?: Partial<RevenuePayoutRow>,
-): RevenuePayoutRow {
+export function createPendingPayout(overrides?: Partial<RevenuePayoutRow>): RevenuePayoutRow {
   return {
     id: `payout-pending-${Date.now()}`,
     payout_period_hash: `period_${Date.now()}`,
@@ -82,9 +80,7 @@ export function createPendingPayout(
   };
 }
 
-export function createTransferredPayout(
-  overrides?: Partial<RevenuePayoutRow>,
-): RevenuePayoutRow {
+export function createTransferredPayout(overrides?: Partial<RevenuePayoutRow>): RevenuePayoutRow {
   return {
     id: `payout-transferred-${Date.now()}`,
     payout_period_hash: `period_${Date.now() - 86400000}`,
@@ -100,9 +96,7 @@ export function createTransferredPayout(
   };
 }
 
-export function createFailedPayout(
-  overrides?: Partial<RevenuePayoutRow>,
-): RevenuePayoutRow {
+export function createFailedPayout(overrides?: Partial<RevenuePayoutRow>): RevenuePayoutRow {
   return {
     id: `payout-failed-${Date.now()}`,
     payout_period_hash: `period_${Date.now() - 172800000}`,

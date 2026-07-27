@@ -1,9 +1,15 @@
 // Digest publication service: orchestrates Chronicle Registry -> Webflow -> SMTP dispatch
 
 import type { DailyDigestRepository } from "@chronicleai/db";
-import type { ChronicleRegistryService, RegistryPublishResult } from "./chronicle-registry-service.ts";
-import type { WebflowPublishingService, WebflowPublishResult } from "./webflow-publishing-service.ts";
+import type {
+  ChronicleRegistryService,
+  RegistryPublishResult,
+} from "./chronicle-registry-service.ts";
 import type { SmtpEmailService, SmtpSendResult } from "./smtp-email-service.ts";
+import type {
+  WebflowPublishResult,
+  WebflowPublishingService,
+} from "./webflow-publishing-service.ts";
 
 export interface DigestPublicationResult {
   success: boolean;
@@ -85,11 +91,8 @@ export function createDigestPublicationService(
         failures.push(`SMTP: ${smtpResult.errorMessage ?? "unknown error"}`);
       }
 
-      const publicationStatus = failures.length === 0
-        ? "published"
-        : failures.length < 3
-          ? "partial_failure"
-          : "failed";
+      const publicationStatus =
+        failures.length === 0 ? "published" : failures.length < 3 ? "partial_failure" : "failed";
 
       await digestRepo.updatePublicationStatus(digest.id, publicationStatus, publishedAt);
 

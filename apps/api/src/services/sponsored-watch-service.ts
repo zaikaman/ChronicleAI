@@ -60,7 +60,10 @@ export function createSponsoredWatchService(params: {
           createTxHash = txRes.txHash;
           watchId = txRes.watchId;
         } catch (error) {
-          console.warn("On-chain createSponsoredWatch failed, falling back to simulated tx:", error);
+          console.warn(
+            "On-chain createSponsoredWatch failed, falling back to simulated tx:",
+            error,
+          );
         }
       }
 
@@ -112,7 +115,10 @@ export function createSponsoredWatchService(params: {
             reportUri,
           );
         } catch (error) {
-          console.warn("On-chain publishSponsoredReport failed, falling back to simulated tx:", error);
+          console.warn(
+            "On-chain publishSponsoredReport failed, falling back to simulated tx:",
+            error,
+          );
         }
       }
 

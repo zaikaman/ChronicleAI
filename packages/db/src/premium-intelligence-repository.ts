@@ -2,13 +2,13 @@
 // Handles CRUD for premium_intelligence_items
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { type Result, failure, success } from "./errors.ts";
+import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
 import type {
   PremiumIntelligenceItemInsert,
   PremiumIntelligenceItemRow,
   PremiumIntelligenceItemUpdate,
 } from "./types.ts";
-import { type Result, failure, success } from "./errors.ts";
-import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
 
 export interface PremiumIntelligenceRepository {
   listTeasers(): Promise<Result<PremiumIntelligenceItemRow[]>>;
@@ -54,10 +54,7 @@ export function createPremiumIntelligenceRepository(
       if (!uuidRegex.test(id)) {
         return success(null);
       }
-      const { data, error } = await table()
-        .select("*")
-        .eq("id", id)
-        .limit(1);
+      const { data, error } = await table().select("*").eq("id", id).limit(1);
 
       if (error) return failure(mapPostgrestError(error));
       return success(maybeRow(data ?? []));
@@ -68,10 +65,7 @@ export function createPremiumIntelligenceRepository(
       if (!uuidRegex.test(id)) {
         return success(null);
       }
-      const { data, error } = await table()
-        .select("content_private")
-        .eq("id", id)
-        .limit(1);
+      const { data, error } = await table().select("content_private").eq("id", id).limit(1);
 
       if (error) return failure(mapPostgrestError(error));
       const row = maybeRow(data ?? []);
@@ -79,21 +73,14 @@ export function createPremiumIntelligenceRepository(
     },
 
     async create(item) {
-      const { data, error } = await table()
-        .insert(item)
-        .select()
-        .single();
+      const { data, error } = await table().insert(item).select().single();
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as PremiumIntelligenceItemRow);
     },
 
     async update(id, update) {
-      const { data, error } = await table()
-        .update(update)
-        .eq("id", id)
-        .select()
-        .single();
+      const { data, error } = await table().update(update).eq("id", id).select().single();
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as PremiumIntelligenceItemRow);

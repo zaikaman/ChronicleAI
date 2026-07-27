@@ -2,13 +2,18 @@
 // Handles CRUD for treasury_snapshots and aggregate queries
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { type Result, failure, success } from "./errors.ts";
+import {
+  buildInsertPayload,
+  buildUpdatePayload,
+  mapPostgrestError,
+  maybeRow,
+} from "./repository-utils.ts";
 import type {
   TreasurySnapshotInsert,
   TreasurySnapshotRow,
   TreasurySnapshotUpdate,
 } from "./types.ts";
-import { type Result, failure, success } from "./errors.ts";
-import { buildInsertPayload, buildUpdatePayload, mapPostgrestError, maybeRow } from "./repository-utils.ts";
 
 export interface TreasurySnapshotRepository {
   create(snapshot: TreasurySnapshotInsert): Promise<Result<TreasurySnapshotRow>>;
@@ -53,10 +58,7 @@ export function createTreasurySnapshotRepository(
     },
 
     async findById(id) {
-      const { data, error } = await table()
-        .select("*")
-        .eq("id", id)
-        .limit(1);
+      const { data, error } = await table().select("*").eq("id", id).limit(1);
 
       if (error) return failure(mapPostgrestError(error));
       return success(maybeRow(data ?? []));
@@ -89,11 +91,7 @@ export function createTreasurySnapshotRepository(
     async update(id, update) {
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
       delete (payload as any).updated_at;
-      const { data, error } = await table()
-        .update(payload)
-        .eq("id", id)
-        .select()
-        .single();
+      const { data, error } = await table().update(payload).eq("id", id).select().single();
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as TreasurySnapshotRow);
@@ -134,7 +132,9 @@ export function createTreasurySnapshotRepository(
 
       return success({
         totalRevenue,
-        totalPaidRequests: countError ? (latest.paid_request_count ?? 0) : ((countData as unknown as { count: number } | null)?.count ?? 0),
+        totalPaidRequests: countError
+          ? (latest.paid_request_count ?? 0)
+          : ((countData as unknown as { count: number } | null)?.count ?? 0),
         latestBalance: latest.available_balance,
         latestStatus: latest.status,
       });

@@ -1,6 +1,5 @@
 // Integration tests for digest run
 
-import { describe, expect, it } from "vitest";
 import type {
   DailyDigestInsert,
   DailyDigestRepository,
@@ -9,14 +8,15 @@ import type {
   ExecutionLogRepository,
   MonitoredEventRepository,
 } from "@chronicleai/db";
+import { describe, expect, it } from "vitest";
 import { DigestRunHandler } from "../keeperhub/digest-run-handler.ts";
-import { createDigestWindowService } from "../services/digest-window-service.ts";
+import { createChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import { createDigestEventSelectionService } from "../services/digest-event-selection-service.ts";
 import { createDigestGenerationService } from "../services/digest-generation-service.ts";
 import { createDigestPublicationService } from "../services/digest-publication-service.ts";
-import { createChronicleRegistryService } from "../services/chronicle-registry-service.ts";
-import { createWebflowPublishingService } from "../services/webflow-publishing-service.ts";
+import { createDigestWindowService } from "../services/digest-window-service.ts";
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
+import { createWebflowPublishingService } from "../services/webflow-publishing-service.ts";
 
 function makeDigestRow(overrides: Partial<DailyDigestRow> = {}): DailyDigestRow {
   return {
@@ -57,7 +57,14 @@ describe("DigestRunHandler", () => {
       return { ok: true, value: null };
     },
     async updatePublicationStatus(id, status, publishedAt) {
-      return { ok: true, value: makeDigestRow({ id, publication_status: status as DailyDigestRow["publication_status"], published_at: publishedAt ?? null }) };
+      return {
+        ok: true,
+        value: makeDigestRow({
+          id,
+          publication_status: status as DailyDigestRow["publication_status"],
+          published_at: publishedAt ?? null,
+        }),
+      };
     },
     async updateRegistryMetadata(id, _metadata) {
       return { ok: true, value: makeDigestRow({ id }) };

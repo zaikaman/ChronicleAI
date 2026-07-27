@@ -47,9 +47,7 @@ export function createSmtpEmailService(config: {
     registryTxHash: string | undefined;
     contentUri: string | undefined;
   }): string {
-    const highlightsHtml = params.highlights
-      .map((h) => `<li>${h}</li>`)
-      .join("");
+    const highlightsHtml = params.highlights.map((h) => `<li>${h}</li>`).join("");
 
     return `
       <!DOCTYPE html>
@@ -131,7 +129,9 @@ export function createSmtpEmailService(config: {
           html,
         });
 
-        const recipientsReached = Array.isArray(info.accepted) ? info.accepted.length : recipients.length;
+        const recipientsReached = Array.isArray(info.accepted)
+          ? info.accepted.length
+          : recipients.length;
 
         return {
           success: true,

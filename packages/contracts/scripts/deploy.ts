@@ -1,5 +1,5 @@
 // Deployment script for ChronicleRegistry contract
-// Usage: npx hardhat run scripts/deploy.ts --network base-sepolia
+// Usage: npx hardhat run scripts/deploy.ts --network sepolia
 
 import { ethers } from "hardhat";
 
@@ -19,7 +19,7 @@ async function main(): Promise<void> {
 
   // Verify on Etherscan/BaseScan
   console.log(`\nVerification command:`);
-  console.log(`npx hardhat verify --network base-sepolia ${address}`);
+  console.log(`npx hardhat verify --network sepolia ${address}`);
 }
 
 main()

@@ -36,9 +36,7 @@ function getActionTypeLabel(actionType: string): string {
   return labels[actionType] ?? actionType;
 }
 
-function getStatusVariant(
-  status: string,
-): "default" | "success" | "warning" | "error" | "info" {
+function getStatusVariant(status: string): "default" | "success" | "warning" | "error" | "info" {
   switch (status) {
     case "succeeded":
       return "success";
@@ -182,15 +180,17 @@ export function ExecutionLogTable({
                   </div>
                 </td>
                 <td style={tableCellStyle}>
-                  <StatusBadge
-                    label={log.status}
-                    variant={getStatusVariant(log.status)}
-                  />
+                  <StatusBadge label={log.status} variant={getStatusVariant(log.status)} />
                 </td>
-                <td style={{ ...tableCellStyle, maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  <span style={{ fontSize: "var(--font-size-xs)" }}>
-                    {log.message ?? "-"}
-                  </span>
+                <td
+                  style={{
+                    ...tableCellStyle,
+                    maxWidth: "300px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  <span style={{ fontSize: "var(--font-size-xs)" }}>{log.message ?? "-"}</span>
                 </td>
                 <td style={{ ...tableCellStyle, whiteSpace: "nowrap" }}>
                   <TimestampDisplay timestamp={log.createdAt} format="relative" />

@@ -61,9 +61,8 @@ export function PaymentChallengePanel({
     setErrorMessage("");
 
     try {
-      const settlementRef = selectedRoute === "x402"
-        ? `0xsettlement_${Date.now()}`
-        : `mpp:hmac_${Date.now()}`;
+      const settlementRef =
+        selectedRoute === "x402" ? `0xsettlement_${Date.now()}` : `mpp:hmac_${Date.now()}`;
 
       const result = await settlePayment({
         challengeReference: challengeData.challengeReference as string,
@@ -134,8 +133,21 @@ export function PaymentChallengePanel({
       </div>
 
       <div style={{ marginBottom: "1rem" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.25rem", marginBottom: "0.5rem" }}>
-          <span style={{ fontSize: "var(--font-size-2xl)", fontWeight: 700, color: "var(--accent-primary)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: "0.25rem",
+            marginBottom: "0.5rem",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "var(--font-size-2xl)",
+              fontWeight: 700,
+              color: "var(--accent-primary)",
+            }}
+          >
             {priceAmount}
           </span>
           <span style={{ color: "var(--fg-tertiary)" }}>{priceCurrency}</span>
@@ -294,7 +306,13 @@ export function PaymentChallengePanel({
       {step === "settled" && (
         <div style={{ textAlign: "center", padding: "1rem" }}>
           <StatusBadge label="Payment Settled" variant="success" />
-          <p style={{ fontSize: "var(--font-size-sm)", color: "var(--fg-secondary)", marginTop: "0.75rem" }}>
+          <p
+            style={{
+              fontSize: "var(--font-size-sm)",
+              color: "var(--fg-secondary)",
+              marginTop: "0.75rem",
+            }}
+          >
             Content unlocked. Redirecting...
           </p>
         </div>
@@ -304,7 +322,13 @@ export function PaymentChallengePanel({
       {step === "error" && (
         <div style={{ textAlign: "center", padding: "1rem" }}>
           <StatusBadge label="Error" variant="error" />
-          <p style={{ fontSize: "var(--font-size-sm)", color: "var(--fg-error)", marginTop: "0.75rem" }}>
+          <p
+            style={{
+              fontSize: "var(--font-size-sm)",
+              color: "var(--fg-error)",
+              marginTop: "0.75rem",
+            }}
+          >
             {errorMessage}
           </p>
           <button

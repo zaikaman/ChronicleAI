@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 import { assertHasRequiredFields } from "./schema-assertions.ts";
 
 const API_URL = process.env["TEST_API_URL"] ?? "http://localhost:4000";
-const VALID_SIGNATURE = process.env["TEST_KEEPERHUB_SECRET"] ?? process.env["KEEPERHUB_WEBHOOK_SECRET"] ?? "test-secret-key-for-testing";
+const VALID_SIGNATURE =
+  process.env["TEST_KEEPERHUB_SECRET"] ??
+  process.env["KEEPERHUB_WEBHOOK_SECRET"] ??
+  "test-secret-key-for-testing";
 
 describe("Contract: POST /keeperhub/treasury/check", () => {
   it("should return 201 with valid treasury check payload", async () => {

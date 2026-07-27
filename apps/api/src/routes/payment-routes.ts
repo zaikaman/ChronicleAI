@@ -9,8 +9,8 @@ import type {
   SponsoredWatchRepository,
 } from "@chronicleai/db";
 import type { ExecutionLogInsert } from "@chronicleai/db";
-import { Router, type Router as RouterType } from "express";
 import type { PaymentRoute } from "@chronicleai/schemas";
+import { Router, type Router as RouterType } from "express";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
 import { PaymentChallengeService } from "../services/payment-challenge-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
@@ -142,19 +142,14 @@ export function createPaymentRoutes(params: {
    */
   router.post("/payments/settlements", async (req, res, next) => {
     try {
-      const {
-        challengeReference,
-        settlementReference,
-        paymentRoute,
-        amountSettled,
-        currency,
-      } = req.body as {
-        challengeReference?: string;
-        settlementReference?: string;
-        paymentRoute?: PaymentRoute;
-        amountSettled?: number;
-        currency?: string;
-      };
+      const { challengeReference, settlementReference, paymentRoute, amountSettled, currency } =
+        req.body as {
+          challengeReference?: string;
+          settlementReference?: string;
+          paymentRoute?: PaymentRoute;
+          amountSettled?: number;
+          currency?: string;
+        };
 
       if (!challengeReference) {
         res.status(400).json({ error: "challengeReference is required" });
@@ -193,9 +188,8 @@ export function createPaymentRoutes(params: {
       }
 
       // Check if the premium item is a sponsored_monitor to create a watch
-      const recordResult = await params.paymentRecordRepo.findByChallengeReference(
-        challengeReference,
-      );
+      const recordResult =
+        await params.paymentRecordRepo.findByChallengeReference(challengeReference);
 
       if (recordResult.ok && recordResult.value) {
         const premiumItemResult = await params.premiumRepo.findById(

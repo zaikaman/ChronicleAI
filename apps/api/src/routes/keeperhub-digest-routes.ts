@@ -3,7 +3,7 @@
 
 import type { DigestRunPayload } from "@chronicleai/schemas";
 import { Router, type Router as RouterType } from "express";
-import { badRequest, conflict } from "../errors.ts";
+import { badRequest } from "../errors.ts";
 import type { DigestRunHandler } from "../keeperhub/digest-run-handler.ts";
 
 export function createKeeperhubDigestRoutes(handler: DigestRunHandler): RouterType {

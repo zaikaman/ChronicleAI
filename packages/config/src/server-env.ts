@@ -76,7 +76,9 @@ export function loadServerEnv(): ServerEnv {
     smtpUser: optionalEnv("SMTP_USER"),
     smtpPass: optionalEnv("SMTP_PASS"),
     smtpFromAddress: optionalEnv("SMTP_FROM_ADDRESS"),
-    smtpSubscriberList: optionalEnv("SMTP_SUBSCRIBER_LIST")?.split(",").map((s) => s.trim()),
+    smtpSubscriberList: optionalEnv("SMTP_SUBSCRIBER_LIST")
+      ?.split(",")
+      .map((s) => s.trim()),
     frontendOrigin: requireEnv("FRONTEND_ORIGIN"),
     port: Number(optionalEnv("PORT", "4000")),
     nodeEnv,

@@ -1,5 +1,6 @@
 // Unit tests for x402 payment adapter
 
+import { ethers } from "ethers";
 import { describe, expect, it } from "vitest";
 import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 
@@ -103,6 +104,90 @@ describe("X402PaymentAdapter", () => {
       });
 
       expect(result.verified).toBe(false);
+    });
+
+    it("should verify a real EIP-712 signature settlement payload", async () => {
+      const wallet = ethers.Wallet.createRandom();
+      const amount = 5;
+      const currency = "USDC";
+
+      // 1. Create challenge
+      const challenge = await adapter.createChallenge({
+        premiumItemId: "premium-001",
+        amount,
+        currency,
+        payerReference: wallet.address,
+      });
+
+      interface EIP712Domain {
+        name: string;
+        version: string;
+        chainId: number;
+        verifyingContract: string;
+      }
+      interface TransferWithAuthorizationType {
+        name: string;
+        type: string;
+      }
+      interface TransferWithAuthorizationMessage {
+        from: string;
+        to: string;
+        value: number;
+        validAfter: number;
+        validBefore: number;
+        nonce: string;
+      }
+
+      // Extract EIP-712 parameters from challengeData
+      const challengeData = challenge.challengeData as {
+        domain: EIP712Domain;
+        types: {
+          TransferWithAuthorization: TransferWithAuthorizationType[];
+        };
+        message: TransferWithAuthorizationMessage;
+      };
+      const { domain, types, message } = challengeData;
+
+      // Update message.to and from with test values
+      const toAddress = "0x1234567890123456789012345678901234567890";
+      const messageToSign = {
+        ...message,
+        from: wallet.address,
+        to: toAddress,
+      };
+
+      // Sign the typed data using ethers Wallet
+      const signature = await wallet.signTypedData(
+        domain,
+        {
+          TransferWithAuthorization: types.TransferWithAuthorization,
+        },
+        messageToSign,
+      );
+
+      // Reconstruct settlement JSON reference
+      const settlementPayload = {
+        signature,
+        from: wallet.address,
+        to: toAddress,
+        value: messageToSign.value,
+        validAfter: messageToSign.validAfter,
+        validBefore: messageToSign.validBefore,
+        nonce: messageToSign.nonce,
+      };
+
+      // Verify the settlement
+      const result = await adapter.verifySettlement({
+        challengeReference: challenge.challengeReference,
+        settlementReference: JSON.stringify(settlementPayload),
+        amountRequested: amount,
+        currency,
+        paymentRoute: "x402",
+      });
+
+      expect(result.verified).toBe(true);
+      expect(result.amountSettled).toBe(amount);
+      expect(result.payerReference?.toLowerCase()).toBe(wallet.address.toLowerCase());
     });
   });
 });

@@ -141,21 +141,18 @@ async function callGemini(
     : `/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
   const url = `${host}${path}`;
 
-  const response = await fetch(
-    url,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 500,
-        },
-      }),
-      signal,
-    },
-  );
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 500,
+      },
+    }),
+    signal,
+  });
 
   if (!response.ok) {
     throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);

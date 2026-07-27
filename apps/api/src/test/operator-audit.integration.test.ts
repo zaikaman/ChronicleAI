@@ -1,11 +1,6 @@
 // Integration tests: Operator Audit
 // Tests treasury check webhook, operator audit data, and revenue routing
 
-import { describe, expect, it, vi } from "vitest";
-import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
-import { createOperatorNotificationService } from "../services/operator-notification-service.ts";
-import { createOperatorAuditService } from "../services/operator-audit-service.ts";
-import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
 import type {
   ExecutionLogRepository,
   OperatorAuditRepository,
@@ -13,7 +8,15 @@ import type {
   PayoutRecordRepository,
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
-import type { ChronicleRegistryService, RegistryPublishResult } from "../services/chronicle-registry-service.ts";
+import { describe, expect, it, vi } from "vitest";
+import type {
+  ChronicleRegistryService,
+  RegistryPublishResult,
+} from "../services/chronicle-registry-service.ts";
+import { createOperatorAuditService } from "../services/operator-audit-service.ts";
+import { createOperatorNotificationService } from "../services/operator-notification-service.ts";
+import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
+import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 
 describe("Operator Audit Integration", () => {
   const treasuryService = createTreasuryStatusService();

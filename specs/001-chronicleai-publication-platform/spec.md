@@ -45,7 +45,7 @@ Subscribers and operators can review a daily market intelligence digest that syn
 
 ### User Story 3 - Purchase Premium Intelligence Access & Sponsor Contracts (Priority: P3)
 
-Human readers and automated clients can pay a small fee to access deeper market intelligence (including full reports, historical feeds, and structured data) using x402 (Base) or MPP (Tempo) micro-payments. Additionally, protocols can pay to sponsor contract monitoring campaigns.
+Human readers and automated clients can pay a small fee to access deeper market intelligence (including full reports, historical feeds, and structured data) using x402 (Ethereum Sepolia) or MPP (Tempo) micro-payments. Additionally, protocols can pay to sponsor contract monitoring campaigns.
 
 **Why this priority**: Paid access and sponsored monitoring tasks prove the self-sustaining business model and enable ChronicleAI to fund its own operational gas and API costs autonomously.
 
@@ -54,7 +54,7 @@ Human readers and automated clients can pay a small fee to access deeper market 
 **Acceptance Scenarios**:
 
 1. **Given** a user requests premium content without payment, **When** evaluated, **Then** ChronicleAI returns a `402 Payment Required` challenge.
-2. **Given** a user settles a valid x402 (Base EVM subscription) or MPP (Tempo machine micro-payment), **When** they retry the request, **Then** ChronicleAI returns the private intelligence and logs the revenue.
+2. **Given** a user settles a valid x402 (Ethereum Sepolia EVM subscription) or MPP (Tempo machine micro-payment), **When** they retry the request, **Then** ChronicleAI returns the private intelligence and logs the revenue.
 3. **Given** a protocol pays for a sponsored monitoring task, **When** submitted, **Then** KeeperHub executes a `createSponsoredWatch` transaction on-chain, monitors the target contract, compiles a final report at the end of the campaign, and executes `publishSponsoredReport` on the Chronicle Registry.
 
 ---
@@ -98,7 +98,7 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - **FR-007**: ChronicleAI MUST publish public summaries through at least one public content destination and at least one public notification destination.
 - **FR-008**: ChronicleAI MUST support premium intelligence requests from both human readers and automated clients.
 - **FR-009**: ChronicleAI MUST require successful payment before returning premium intelligence content or structured premium feed data.
-- **FR-010**: ChronicleAI MUST support both x402 (Base network EVM subscriptions) and MPP (Tempo machine-to-machine micro-billing) payment flows for premium access.
+- **FR-010**: ChronicleAI MUST support both x402 (Ethereum Sepolia network EVM subscriptions) and MPP (Tempo machine-to-machine micro-billing) payment flows for premium access.
 - **FR-011**: ChronicleAI MUST record payment attempts, successful settlements, purchased content identifiers, and revenue totals for sustainability reporting.
 - **FR-012**: ChronicleAI MUST track operational sustainability indicators, including available treasury balance, estimated content generation costs, estimated transaction costs, paid request volume, and revenue.
 - **FR-013**: ChronicleAI MUST notify operators when available operating funds fall below the configured safety buffer.
@@ -157,4 +157,4 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - Publication destinations and notification channels may vary by deployment, but the experience must demonstrate both public content publishing (Webflow) and real-time community notification (Discord/Telegram).
 - Public alert generation uses the provider fallback order Gemini, then OpenAI, then Groq. Provider API keys are backend-only secrets and are never exposed to the frontend.
 - If all LLM providers fail, ChronicleAI records a failed generation state and retryable execution log rather than publishing a fabricated summary.
-- The Chronicle Registry contract is deployed to a supported testnet (such as Base Sepolia) and the agent uses a secure Para MPC wallet for gas funding and token payouts.
+- The Chronicle Registry contract is deployed to a supported testnet (such as Ethereum Sepolia) and the agent uses a secure Para MPC wallet for gas funding and token payouts.

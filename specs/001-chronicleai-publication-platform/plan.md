@@ -14,11 +14,11 @@ ChronicleAI will be built as a TypeScript monorepo with a Vite React frontend de
 
 **Primary Dependencies**: React, Vite, Node.js, Express, Supabase client libraries for application data/auth/storage, shadcn/ui and Radix UI for frontend components, Sonner for toasts, KeeperHub workflows and webhook/API integrations, x402 and MPP payment verification adapters, ethers/viem for Web3/Ethers smart contract interactions, Webflow API for public article publishing, SMTP/Nodemailer for premium daily newsletter broadcasts, Gemini API, OpenAI API, Groq API, and native `fetch` for external HTTP integrations
 
-**Storage**: Supabase Postgres for operational records (including monitored events, alerts, digests, payments, sponsored watch campaigns, payout records, treasury snapshots, and execution logs); Supabase Auth for operator and subscriber identity; smart contract state on Base Sepolia for proofs-of-publication, sponsored watch acceptances, and recorded payouts
-
+**Storage**: Supabase Postgres for operational records (including monitored events, alerts, digests, payments, sponsored watch campaigns, payout records, treasury snapshots, and execution logs); Supabase Auth for operator and subscriber identity; smart contract state on Ethereum Sepolia for proofs-of-publication, sponsored watch acceptances, and recorded payouts
+ 
 **Testing**: Vitest for unit and integration tests; contract tests for API payment gating, KeeperHub webhook ingestion, and premium feed responses; local validation via `pnpm type-check` and `pnpm check`/`pnpm fix`; manual verification for user flows
-
-**Target Platform**: Vercel-hosted Vite frontend; Heroku-hosted Express backend; Supabase managed services; Chronicle Registry smart contract on Base Sepolia; KeeperHub production or sandbox workflows for scheduled, event, webhook, and manual triggers
+ 
+**Target Platform**: Vercel-hosted Vite frontend; Heroku-hosted Express backend; Supabase managed services; Chronicle Registry smart contract on Ethereum Sepolia; KeeperHub production or sandbox workflows for scheduled, event, webhook, and manual triggers
 
 **Project Type**: Monorepo web application with separate frontend app, backend API service, shared TypeScript packages, Solidity smart contract package, database migrations, and feature documentation
 
