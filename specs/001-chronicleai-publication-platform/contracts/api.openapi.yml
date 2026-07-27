@@ -1,0 +1,409 @@
+openapi: 3.1.0
+info:
+  title: ChronicleAI API
+  version: 0.1.0
+  description: Contract for ChronicleAI public alerts, premium intelligence, KeeperHub ingestion, payments, and operator audit data.
+servers:
+  - url: https://api.chronicleai.example
+    description: Production API
+  - url: http://localhost:4000
+    description: Local API
+paths:
+  /health:
+    get:
+      summary: Check API health
+      responses:
+        "200":
+          description: API is healthy
+  /alerts:
+    get:
+      summary: List public alerts
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Public alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PublicAlert"
+  /digests/latest:
+    get:
+      summary: Get latest public digest
+      responses:
+        "200":
+          description: Latest digest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyDigest"
+        "404":
+          description: No digest available
+  /premium/items:
+    get:
+      summary: List public metadata for premium intelligence
+      responses:
+        "200":
+          description: Premium item teasers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PremiumItemTeaser"
+  /premium/items/{id}:
+    get:
+      summary: Get premium intelligence content after payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paid premium content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PremiumItem"
+        "402":
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentChallenge"
+        "403":
+          description: Payment invalid or expired
+        "404":
+          description: Premium item not found
+  /payments/challenges:
+    post:
+      summary: Create a payment challenge for premium content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [premiumItemId, paymentRoute]
+              properties:
+                premiumItemId:
+                  type: string
+                paymentRoute:
+                  type: string
+                  enum: [x402, mpp]
+                payerReference:
+                  type: string
+      responses:
+        "201":
+          description: Payment challenge created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentChallenge"
+  /payments/settlements:
+    post:
+      summary: Submit or receive payment settlement evidence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeReference, paymentRoute, settlementReference]
+              properties:
+                challengeReference:
+                  type: string
+                paymentRoute:
+                  type: string
+                  enum: [x402, mpp]
+                settlementReference:
+                  type: string
+                amountSettled:
+                  type: number
+                currency:
+                  type: string
+      responses:
+        "200":
+          description: Settlement evaluated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRecord"
+  /keeperhub/events:
+    post:
+      summary: Ingest monitored on-chain event from KeeperHub
+      security:
+        - KeeperHubWebhook: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeeperHubEvent"
+      responses:
+        "202":
+          description: Event accepted for processing
+        "400":
+          description: Invalid event payload
+        "401":
+          description: Invalid webhook authentication
+        "409":
+          description: Duplicate event already received
+  /keeperhub/digests/run:
+    post:
+      summary: Trigger daily digest generation from KeeperHub scheduled workflow
+      security:
+        - KeeperHubWebhook: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [periodStart, periodEnd]
+              properties:
+                periodStart:
+                  type: string
+                  format: date-time
+                periodEnd:
+                  type: string
+                  format: date-time
+      responses:
+        "202":
+          description: Digest generation accepted
+  /keeperhub/treasury/check:
+    post:
+      summary: Trigger treasury sustainability check from KeeperHub scheduled workflow
+      security:
+        - KeeperHubWebhook: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capturedAt, availableBalance, currency, safetyBuffer]
+              properties:
+                capturedAt:
+                  type: string
+                  format: date-time
+                availableBalance:
+                  type: number
+                currency:
+                  type: string
+                safetyBuffer:
+                  type: number
+      responses:
+        "202":
+          description: Treasury snapshot accepted
+        "400":
+          description: Snapshot invalid
+        "401":
+          description: Invalid webhook authentication
+  /operator/audit:
+    get:
+      summary: Get operator audit dashboard data
+      security:
+        - OperatorSession: []
+      responses:
+        "200":
+          description: Operator audit data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorAudit"
+        "401":
+          description: Operator authentication required
+components:
+  securitySchemes:
+    KeeperHubWebhook:
+      type: apiKey
+      in: header
+      name: X-ChronicleAI-Signature
+    OperatorSession:
+      type: http
+      scheme: bearer
+  schemas:
+    PublicAlert:
+      type: object
+      required: [id, title, summary, sourceReferences, deliveryStatus, publishedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        sourceReferences:
+          type: array
+          items:
+            type: string
+        deliveryStatus:
+          type: string
+          enum: [draft, queued, published, partial_failure, failed]
+        publishedAt:
+          type: string
+          format: date-time
+        confidence:
+          type: string
+          enum: [high, medium, low]
+    DailyDigest:
+      type: object
+      required: [id, reportDate, title, summary, highlights, publicationStatus]
+      properties:
+        id:
+          type: string
+        reportDate:
+          type: string
+          format: date
+        title:
+          type: string
+        summary:
+          type: string
+        highlights:
+          type: array
+          items:
+            type: string
+        publicationStatus:
+          type: string
+          enum: [draft, queued, published, partial_failure, failed]
+    PremiumItemTeaser:
+      type: object
+      required: [id, title, summaryPublic, priceAmount, priceCurrency, paymentRoutes]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        summaryPublic:
+          type: string
+        priceAmount:
+          type: number
+        priceCurrency:
+          type: string
+        paymentRoutes:
+          type: array
+          items:
+            type: string
+            enum: [x402, mpp]
+    PremiumItem:
+      allOf:
+        - $ref: "#/components/schemas/PremiumItemTeaser"
+        - type: object
+          required: [contentPrivate, sourceReferences]
+          properties:
+            contentPrivate:
+              type: object
+            sourceReferences:
+              type: array
+              items:
+                type: string
+    PaymentChallenge:
+      type: object
+      required: [challengeReference, premiumItemId, paymentRoute, amountRequested, currency, expiresAt]
+      properties:
+        challengeReference:
+          type: string
+        premiumItemId:
+          type: string
+        paymentRoute:
+          type: string
+          enum: [x402, mpp]
+        amountRequested:
+          type: number
+        currency:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    PaymentRecord:
+      type: object
+      required: [id, premiumItemId, paymentRoute, status]
+      properties:
+        id:
+          type: string
+        premiumItemId:
+          type: string
+        paymentRoute:
+          type: string
+          enum: [x402, mpp]
+        status:
+          type: string
+          enum: [challenge_issued, pending, settled, underpaid, expired, failed]
+        settlementReference:
+          type: string
+    KeeperHubEvent:
+      type: object
+      required: [sourceEventId, eventType, chainId, capturedAt, rawPayload]
+      properties:
+        sourceEventId:
+          type: string
+        eventType:
+          type: string
+          enum: [large_swap, liquidation, gas_spike, volume_anomaly, contract_deployment]
+        chainId:
+          type: integer
+        protocol:
+          type: string
+        transactionHash:
+          type: string
+        magnitude:
+          type: object
+          properties:
+            value:
+              type: number
+            unit:
+              type: string
+        capturedAt:
+          type: string
+          format: date-time
+        rawPayload:
+          type: object
+    OperatorAudit:
+      type: object
+      required: [alerts, digests, payments, treasury, executionLogs]
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicAlert"
+        digests:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyDigest"
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentRecord"
+        treasury:
+          type: object
+          required: [availableBalance, safetyBuffer, status]
+          properties:
+            availableBalance:
+              type: number
+            safetyBuffer:
+              type: number
+            status:
+              type: string
+              enum: [healthy, warning, critical]
+        executionLogs:
+          type: array
+          items:
+            type: object

@@ -1,0 +1,372 @@
+# Tasks: ChronicleAI Publication Platform
+
+**Input**: Design documents from `specs/001-chronicleai-publication-platform/`
+
+**Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)
+
+**Tests**: Required by the project constitution and quickstart. Unit, integration, and contract tasks are included and should be written before the corresponding implementation.
+
+**Organization**: Tasks are grouped by user story so each story can be independently implemented, tested, and demonstrated.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel because it touches different files and does not depend on an incomplete task in the same phase
+- **[Story]**: User story label for story-phase tasks only
+- Every task includes an exact target file path
+
+## Phase 1: Setup (Shared Infrastructure)
+
+**Purpose**: Initialize the pnpm TypeScript monorepo, app shells, shared packages, and local tooling required by all stories.
+
+- [ ] T001 Create pnpm workspace manifest with `apps/*` and `packages/*` entries in `pnpm-workspace.yaml`
+- [ ] T002 Create root package scripts for `dev`, `build`, `type-check`, `check`, `fix`, `test`, `db:migrate`, and `db:seed` in `./package.json`
+- [ ] T003 Create root TypeScript base configuration with strict mode and no implicit any in `./tsconfig.base.json`
+- [ ] T004 Create frontend TypeScript configuration extending the base config in `apps/web/tsconfig.json`
+- [ ] T005 Create backend TypeScript configuration extending the base config in `apps/api/tsconfig.json`
+- [ ] T006 [P] Create shared schemas package manifest in `packages/schemas/package.json`
+- [ ] T007 [P] Create shared database package manifest in `packages/db/package.json`
+- [ ] T008 [P] Create shared config package manifest in `packages/config/package.json`
+- [ ] T009 [P] Create shared testing package manifest in `packages/testing/package.json`
+- [ ] T010 [P] Create shared UI package manifest in `packages/ui/package.json`
+- [ ] T011 Initialize Vite React application entry files in `apps/web/index.html`, `apps/web/src/main.tsx`, and `apps/web/src/app/App.tsx`
+- [ ] T012 Initialize Express API application entry files in `apps/api/src/server.ts` and `apps/api/src/app.ts`
+- [ ] T013 Create Heroku process declaration for the backend API in `apps/api/Procfile`
+- [ ] T014 Create Vercel frontend project configuration with SPA fallback in `apps/web/vercel.json`
+- [ ] T015 Configure Vitest workspace coverage for app and package tests in `./vitest.config.ts`
+- [ ] T017 Configure linting and formatting commands for the monorepo in `./biome.jsonc`
+- [ ] T018 Create root environment example documenting all backend and frontend variables in `./.env.example`
+- [ ] T019 Create frontend environment example for browser-safe variables in `apps/web/.env.example`
+- [ ] T020 Create backend environment example for server-only variables in `apps/api/.env.example`
+- [ ] T021 Create Git ignore rules for local env files, build outputs, and Supabase temp files in `./.gitignore`
+- [ ] T022 Create shared path aliases for packages in `./tsconfig.base.json`
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: Build core types, configuration, persistence, API infrastructure, and UI shell that all user stories depend on.
+
+**Critical**: No user story implementation should begin until this phase is complete.
+
+- [ ] T023 Define domain enums and branded ID helpers for events, alerts, digests, payments, treasury snapshots, and logs in `packages/schemas/src/domain.ts`
+- [ ] T024 Define API request and response schemas matching the OpenAPI contract in `packages/schemas/src/api.ts`
+- [ ] T025 Define KeeperHub webhook payload schemas in `packages/schemas/src/keeperhub.ts`
+- [ ] T026 Define frontend route and view model schemas in `packages/schemas/src/frontend.ts`
+- [ ] T027 Export package schemas without barrel indirection conflicts in `packages/schemas/src/index.ts`
+- [ ] T028 Create typed environment loader for backend server-only variables in `packages/config/src/server-env.ts`
+- [ ] T029 Create typed environment loader for frontend browser-safe variables in `packages/config/src/client-env.ts`
+- [ ] T030 Create shared constants for event thresholds, dedupe windows, payment defaults, and dashboard limits in `packages/config/src/defaults.ts`
+- [ ] T031 Create Supabase server client factory with typed configuration in `packages/db/src/supabase-server.ts`
+- [ ] T032 Create Supabase browser client factory for authenticated frontend flows in `packages/db/src/supabase-browser.ts`
+- [ ] T033 Create first Supabase migration for `monitored_events`, `public_alerts`, `daily_digests`, `premium_intelligence_items`, `payment_records`, `treasury_snapshots`, and `execution_logs` in `supabase/migrations/202607270001_create_chronicleai_core.sql`
+- [ ] T034 Create Supabase migration for indexes, dedupe uniqueness, reporting window uniqueness, and payment lookup constraints in `supabase/migrations/202607270002_add_chronicleai_indexes.sql`
+- [ ] T035 Create Supabase seed data for demo alerts, digests, premium items, payments, treasury snapshots, and logs in `supabase/seed/chronicleai_demo.sql`
+- [ ] T036 Create TypeScript database row and insert types for all core tables in `packages/db/src/types.ts`
+- [ ] T037 Create shared repository error types and result helpers in `packages/db/src/errors.ts`
+- [ ] T038 Create base repository utilities for Supabase select, insert, update, pagination, and single-row handling in `packages/db/src/repository-utils.ts`
+- [ ] T039 Create Express middleware for JSON parsing, request IDs, CORS, timing headers, and secure error responses in `apps/api/src/middleware/core.ts`
+- [ ] T040 Create Express middleware for KeeperHub webhook signature verification in `apps/api/src/middleware/keeperhub-signature.ts`
+- [ ] T041 Create Express middleware for operator bearer authentication in `apps/api/src/middleware/operator-auth.ts`
+- [ ] T042 Create centralized API error classes and response mapping in `apps/api/src/errors.ts`
+- [ ] T043 Create structured execution logger service that writes to `execution_logs` in `apps/api/src/services/execution-log-service.ts`
+- [ ] T044 Create health route and route registration shell in `apps/api/src/routes/health-routes.ts` and `apps/api/src/routes/index.ts`
+- [ ] T045 Create frontend API client with typed fetch wrapper and error mapping in `apps/web/src/lib/api-client.ts`
+- [ ] T046 Create frontend app router with routes `/`, `/alerts`, `/digests/latest`, `/premium`, and `/operator` in `apps/web/src/app/router.tsx`
+- [ ] T047 Create app-level layout, navigation, responsive shell, and Sonner provider in `apps/web/src/app/App.tsx`
+- [ ] T048 Create shared glassmorphic design tokens and base styles in `apps/web/src/app/styles.css`
+- [ ] T049 Create accessible loading, empty, error, and retry state components in `apps/web/src/components/state-views.tsx`
+- [ ] T050 Create reusable metric, status badge, source reference, and timestamp components in `apps/web/src/components/data-primitives.tsx`
+- [ ] T051 Create test server bootstrap helpers for API integration tests in `packages/testing/src/api-test-server.ts`
+- [ ] T052 Create Supabase test fixture helpers for seed, cleanup, and deterministic timestamps in `packages/testing/src/db-fixtures.ts`
+- [ ] T054 Create contract test utilities for validating JSON responses against shared schemas in `tests/contracts/schema-assertions.ts`
+- [ ] T055 Verify the empty scaffold builds and type-checks by wiring package exports in `./package.json`
+
+**Checkpoint**: Foundation ready. User stories can now be implemented in priority order or by parallel teams.
+
+---
+
+## Phase 3: User Story 1 - Receive Timely Public Market Alerts (Priority: P1) MVP
+
+**Goal**: Public readers receive deduplicated, sourced, plain-language alerts when KeeperHub sends significant on-chain events.
+
+**Independent Test**: Submit a signed qualifying KeeperHub event, confirm the API accepts it, records it, generates one public alert with source references, rejects duplicate replay, and shows the alert on `/alerts`.
+
+### Tests for User Story 1
+
+- [ ] T056 [P] [US1] Write contract tests for `POST /keeperhub/events` success, invalid payload, invalid signature, and duplicate replay in `tests/contracts/keeperhub-events.contract.test.ts`
+- [ ] T057 [P] [US1] Write contract tests for `GET /alerts` pagination and public alert response shape in `tests/contracts/alerts.contract.test.ts`
+- [ ] T058 [P] [US1] Write unit tests for event qualification thresholds and ignored-event behavior in `apps/api/src/test/event-qualification-service.test.ts`
+- [ ] T059 [P] [US1] Write unit tests for alert dedupe key generation and duplicate-window matching in `apps/api/src/test/alert-dedupe-service.test.ts`
+- [ ] T060 [P] [US1] Write unit tests for public alert content safety to prevent premium-only analysis leakage in `apps/api/src/test/public-alert-content-service.test.ts`
+- [ ] T061 [P] [US1] Write integration tests for event ingestion, event persistence, alert generation, execution logs, and duplicate replay in `apps/api/src/test/keeperhub-events.integration.test.ts`
+
+### Implementation for User Story 1
+
+- [ ] T063 [P] [US1] Implement monitored event repository create, find-by-source, qualify update, and list methods in `packages/db/src/monitored-event-repository.ts`
+- [ ] T064 [P] [US1] Implement public alert repository create, find-by-dedupe-key, list, and delivery status methods in `packages/db/src/public-alert-repository.ts`
+- [ ] T065 [P] [US1] Implement execution log repository append and list-by-entity methods in `packages/db/src/execution-log-repository.ts`
+- [ ] T066 [US1] Implement event qualification service for supported event types and configurable thresholds in `apps/api/src/services/event-qualification-service.ts`
+- [ ] T067 [US1] Implement alert deduplication service using source event identifiers and dedupe keys in `apps/api/src/services/alert-dedupe-service.ts`
+- [ ] T068 [US1] Implement public alert content generator with source references, event magnitude, confidence, and no premium-only content in `apps/api/src/services/public-alert-content-service.ts`
+- [ ] T069 [US1] Implement alert publication service with destination result tracking and partial failure states in `apps/api/src/services/alert-publication-service.ts`
+- [ ] T070 [US1] Implement KeeperHub event ingestion orchestrator that records raw payloads before generation in `apps/api/src/keeperhub/event-ingestion-handler.ts`
+- [ ] T071 [US1] Implement `POST /keeperhub/events` route with signature middleware and idempotent responses in `apps/api/src/routes/keeperhub-event-routes.ts`
+- [ ] T072 [US1] Implement `GET /alerts` route with limit validation and newest-first ordering in `apps/api/src/routes/alert-routes.ts`
+- [ ] T073 [US1] Register KeeperHub event and alert routes in `apps/api/src/routes/index.ts`
+- [ ] T074 [P] [US1] Create qualifying, ignored, malformed, unsigned, and duplicate KeeperHub event fixtures in `apps/api/src/test/fixtures/keeperhub-events.ts`
+- [ ] T075 [P] [US1] Create frontend alert query hook with loading, retry, and schema validation in `apps/web/src/features/alerts/use-alerts.ts`
+- [ ] T076 [P] [US1] Create public alert card component with event type, magnitude, confidence, source references, and timestamp in `apps/web/src/features/alerts/AlertCard.tsx`
+- [ ] T077 [P] [US1] Create alert filter controls for event type and chain with stable test IDs in `apps/web/src/features/alerts/AlertFilters.tsx`
+- [ ] T078 [US1] Create `/alerts` page with empty, error, loading, filtered, and populated states in `apps/web/src/features/alerts/AlertsPage.tsx`
+- [ ] T079 [US1] Add latest alerts preview to the home page in `apps/web/src/features/home/HomePage.tsx`
+- [ ] T080 [US1] Add public alert route wiring to the app router in `apps/web/src/app/router.tsx`
+- [ ] T081 [US1] Add execution logs for event received, event ignored, alert generated, alert published, duplicate skipped, and publication failed in `apps/api/src/keeperhub/event-ingestion-handler.ts`
+- [ ] T082 [US1] Add API documentation comments for `POST /keeperhub/events` and `GET /alerts` in `apps/api/src/routes/keeperhub-event-routes.ts` and `apps/api/src/routes/alert-routes.ts`
+- [ ] T083 [US1] Run US1 contract, integration, and unit tests and fix failures in `tests/contracts/keeperhub-events.contract.test.ts`, `tests/contracts/alerts.contract.test.ts`, and `apps/api/src/test/keeperhub-events.integration.test.ts`
+
+**Checkpoint**: User Story 1 is a complete MVP and can be demonstrated independently.
+
+---
+
+## Phase 4: User Story 2 - Read Daily Intelligence Digest (Priority: P2)
+
+**Goal**: Readers and operators can view a scheduled daily digest that summarizes the reporting period, including no-major-events periods.
+
+**Independent Test**: Seed a 24-hour reporting period, trigger digest generation, verify one digest exists with highlights and source references, and view it on `/digests/latest`.
+
+### Tests for User Story 2
+
+- [ ] T084 [P] [US2] Write contract tests for `POST /keeperhub/digests/run` valid, invalid, duplicate, and unsigned requests in `tests/contracts/digest-run.contract.test.ts`
+- [ ] T085 [P] [US2] Write contract tests for `GET /digests/latest` success and not-found responses in `tests/contracts/latest-digest.contract.test.ts`
+- [ ] T086 [P] [US2] Write unit tests for reporting window validation and duplicate window detection in `apps/api/src/test/digest-window-service.test.ts`
+- [ ] T087 [P] [US2] Write unit tests for digest generation with ranked highlights, no-major-events output, source references, and fact-versus-analysis separation in `apps/api/src/test/digest-generation-service.test.ts`
+- [ ] T088 [P] [US2] Write integration tests for scheduled digest trigger, persistence, publication status, and execution logs in `apps/api/src/test/digest-run.integration.test.ts`
+
+### Implementation for User Story 2
+
+- [ ] T090 [P] [US2] Implement daily digest repository create, find-by-window, latest-public, and publication status methods in `packages/db/src/daily-digest-repository.ts`
+- [ ] T091 [US2] Implement reporting window validation and idempotency service in `apps/api/src/services/digest-window-service.ts`
+- [ ] T092 [US2] Implement digest event selection service for top monitored events in a reporting period in `apps/api/src/services/digest-event-selection-service.ts`
+- [ ] T093 [US2] Implement digest generation service for highlights, no-major-events reports, source references, and analysis separation in `apps/api/src/services/digest-generation-service.ts`
+- [ ] T094 [US2] Implement digest publication service with queued, published, partial failure, and failed states in `apps/api/src/services/digest-publication-service.ts`
+- [ ] T095 [US2] Implement KeeperHub digest trigger handler with signed request validation and duplicate-window handling in `apps/api/src/keeperhub/digest-run-handler.ts`
+- [ ] T096 [US2] Implement `POST /keeperhub/digests/run` route in `apps/api/src/routes/keeperhub-digest-routes.ts`
+- [ ] T097 [US2] Implement `GET /digests/latest` route in `apps/api/src/routes/digest-routes.ts`
+- [ ] T098 [US2] Register digest routes in `apps/api/src/routes/index.ts`
+- [ ] T099 [P] [US2] Create digest fixtures for populated reporting windows, empty windows, invalid windows, and duplicates in `apps/api/src/test/fixtures/digests.ts`
+- [ ] T100 [P] [US2] Create frontend latest digest query hook with 404, loading, error, and retry handling in `apps/web/src/features/digests/use-latest-digest.ts`
+- [ ] T101 [P] [US2] Create digest highlight list and source reference components in `apps/web/src/features/digests/DigestHighlights.tsx`
+- [ ] T102 [P] [US2] Create fact-versus-analysis digest section component in `apps/web/src/features/digests/DigestAnalysisSections.tsx`
+- [ ] T103 [US2] Create `/digests/latest` page with populated, no-major-events, not-found, loading, and error states in `apps/web/src/features/digests/LatestDigestPage.tsx`
+- [ ] T104 [US2] Add latest digest preview to the home page in `apps/web/src/features/home/HomePage.tsx`
+- [ ] T105 [US2] Add digest route wiring to the app router in `apps/web/src/app/router.tsx`
+- [ ] T106 [US2] Add execution logs for digest trigger received, digest generated, no-events digest generated, duplicate skipped, publication failed, and publication completed in `apps/api/src/keeperhub/digest-run-handler.ts`
+- [ ] T107 [US2] Run US2 contract, integration, and unit tests and fix failures in `tests/contracts/digest-run.contract.test.ts`, `tests/contracts/latest-digest.contract.test.ts`, and `apps/api/src/test/digest-run.integration.test.ts`
+
+**Checkpoint**: User Story 2 is independently functional and does not require premium payments or operator dashboard completion.
+
+---
+
+## Phase 5: User Story 3 - Purchase Premium Intelligence Access (Priority: P3)
+
+**Goal**: Human users and automated clients can see premium teasers, receive payment challenges, settle through x402 or MPP, and access premium content only after settlement.
+
+**Independent Test**: Request premium content without payment, receive a `402` challenge, submit valid settlement evidence, retry the premium request, and confirm the private content is returned and payment is recorded.
+
+### Tests for User Story 3
+
+- [ ] T108 [P] [US3] Write contract tests for `GET /premium/items` teaser list response shape in `tests/contracts/premium-items.contract.test.ts`
+- [ ] T109 [P] [US3] Write contract tests for `GET /premium/items/{id}` payment required, settled, expired, forbidden, and not-found responses in `tests/contracts/premium-item-access.contract.test.ts`
+- [ ] T110 [P] [US3] Write contract tests for `POST /payments/challenges` for x402, MPP, unsupported route, and missing premium item in `tests/contracts/payment-challenges.contract.test.ts`
+- [ ] T111 [P] [US3] Write contract tests for `POST /payments/settlements` settled, underpaid, expired, failed, and malformed settlement paths in `tests/contracts/payment-settlements.contract.test.ts`
+- [ ] T112 [P] [US3] Write unit tests for x402 challenge creation and settlement verification adapter behavior in `apps/api/src/test/x402-payment-adapter.test.ts`
+- [ ] T113 [P] [US3] Write unit tests for MPP challenge creation and settlement verification adapter behavior in `apps/api/src/test/mpp-payment-adapter.test.ts`
+- [ ] T114 [P] [US3] Write unit tests proving premium private content never appears in teaser or public alert responses in `apps/api/src/test/premium-content-visibility.test.ts`
+- [ ] T115 [P] [US3] Write integration tests for complete premium purchase flow and revenue recording in `apps/api/src/test/premium-access.integration.test.ts`
+
+### Implementation for User Story 3
+
+- [ ] T117 [P] [US3] Implement premium intelligence repository list-teasers, find-available, find-private-content, and create methods in `packages/db/src/premium-intelligence-repository.ts`
+- [ ] T118 [P] [US3] Implement payment record repository create-challenge, find-by-challenge, mark-settled, mark-underpaid, mark-expired, and list methods in `packages/db/src/payment-record-repository.ts`
+- [ ] T119 [US3] Implement premium content visibility service that strips private content from public responses in `apps/api/src/services/premium-content-visibility-service.ts`
+- [ ] T120 [US3] Implement payment route abstraction shared by x402 and MPP adapters in `apps/api/src/payments/payment-adapter.ts`
+- [ ] T121 [US3] Implement x402 payment adapter using native fetch for facilitator calls and deterministic local test mode in `apps/api/src/payments/x402-payment-adapter.ts`
+- [ ] T122 [US3] Implement MPP payment adapter using HMAC challenge verification and deterministic local test mode in `apps/api/src/payments/mpp-payment-adapter.ts`
+- [ ] T123 [US3] Implement payment challenge service for route validation, pricing, challenge expiry, and record creation in `apps/api/src/services/payment-challenge-service.ts`
+- [ ] T124 [US3] Implement payment settlement service for route-specific verification, underpayment detection, settlement recording, and execution logs in `apps/api/src/services/payment-settlement-service.ts`
+- [ ] T125 [US3] Implement premium access service that returns `402` challenges unless a settled payment record unlocks content in `apps/api/src/services/premium-access-service.ts`
+- [ ] T126 [US3] Implement `GET /premium/items` and `GET /premium/items/:id` routes in `apps/api/src/routes/premium-routes.ts`
+- [ ] T127 [US3] Implement `POST /payments/challenges` and `POST /payments/settlements` routes in `apps/api/src/routes/payment-routes.ts`
+- [ ] T128 [US3] Register premium and payment routes in `apps/api/src/routes/index.ts`
+- [ ] T129 [P] [US3] Create premium item and payment fixtures for x402, MPP, underpaid, expired, and failed cases in `apps/api/src/test/fixtures/payments.ts`
+- [ ] T130 [P] [US3] Create frontend premium teaser query hook and item access mutation hook in `apps/web/src/features/premium/use-premium.ts`
+- [ ] T131 [P] [US3] Create premium teaser card with price, route badges, and source summary in `apps/web/src/features/premium/PremiumTeaserCard.tsx`
+- [ ] T132 [P] [US3] Create payment challenge panel for x402 and MPP route selection and settlement feedback in `apps/web/src/features/premium/PaymentChallengePanel.tsx`
+- [ ] T133 [P] [US3] Create premium unlocked content view that renders only after settled access in `apps/web/src/features/premium/PremiumContentView.tsx`
+- [ ] T134 [US3] Create `/premium` page with teaser list, payment required state, settlement simulation controls, unlocked content, and error states in `apps/web/src/features/premium/PremiumPage.tsx`
+- [ ] T135 [US3] Add premium teaser preview and call-to-action to the home page in `apps/web/src/features/home/HomePage.tsx`
+- [ ] T136 [US3] Add premium route wiring to the app router in `apps/web/src/app/router.tsx`
+- [ ] T137 [US3] Add execution logs for challenge issued, settlement pending, settlement succeeded, underpayment, expiry, failure, and premium content unlocked in `apps/api/src/services/payment-settlement-service.ts`
+- [ ] T138 [US3] Run US3 contract, integration, and unit tests and fix failures in `tests/contracts/premium-item-access.contract.test.ts`, `tests/contracts/payment-challenges.contract.test.ts`, and `apps/api/src/test/premium-access.integration.test.ts`
+
+**Checkpoint**: User Story 3 is independently functional and enforces payment before premium content access.
+
+---
+
+## Phase 6: User Story 4 - Monitor Agent Sustainability (Priority: P4)
+
+**Goal**: Operators can inspect ChronicleAI operating health, treasury safety-buffer status, recent revenue, estimated costs, alert volume, paid access volume, and execution outcomes.
+
+**Independent Test**: Seed alerts, digests, payment records, execution logs, and a treasury snapshot, sign in as an operator, and confirm `/operator` shows accurate audit data and warning states.
+
+### Tests for User Story 4
+
+- [ ] T139 [P] [US4] Write contract tests for `POST /keeperhub/treasury/check` valid, invalid, and unsigned requests in `tests/contracts/treasury-check.contract.test.ts`
+- [ ] T140 [P] [US4] Write contract tests for `GET /operator/audit` authenticated, unauthenticated, and response-shape cases in `tests/contracts/operator-audit.contract.test.ts`
+- [ ] T141 [P] [US4] Write unit tests for treasury status calculation and safety-buffer warning transitions in `apps/api/src/test/treasury-status-service.test.ts`
+- [ ] T142 [P] [US4] Write unit tests for operator audit aggregation across alerts, digests, payments, treasury, and logs in `apps/api/src/test/operator-audit-service.test.ts`
+- [ ] T143 [P] [US4] Write integration tests for treasury check webhook, warning log creation, and operator audit data in `apps/api/src/test/operator-audit.integration.test.ts`
+
+### Implementation for User Story 4
+
+- [ ] T145 [P] [US4] Implement treasury snapshot repository create, latest, status history, and aggregate methods in `packages/db/src/treasury-snapshot-repository.ts`
+- [ ] T146 [P] [US4] Implement operator audit repository queries for recent alerts, digests, payments, treasury, and logs in `packages/db/src/operator-audit-repository.ts`
+- [ ] T147 [US4] Implement treasury status service for healthy, warning, and critical transitions in `apps/api/src/services/treasury-status-service.ts`
+- [ ] T148 [US4] Implement operator notification service for low-balance warnings using configurable notification destinations in `apps/api/src/services/operator-notification-service.ts`
+- [ ] T149 [US4] Implement KeeperHub treasury check handler that records snapshots and creates warning logs in `apps/api/src/keeperhub/treasury-check-handler.ts`
+- [ ] T150 [US4] Implement operator audit service that aggregates dashboard data under one typed response in `apps/api/src/services/operator-audit-service.ts`
+- [ ] T151 [US4] Implement `POST /keeperhub/treasury/check` route in `apps/api/src/routes/keeperhub-treasury-routes.ts`
+- [ ] T152 [US4] Implement `GET /operator/audit` route with bearer auth in `apps/api/src/routes/operator-routes.ts`
+- [ ] T153 [US4] Register treasury and operator routes in `apps/api/src/routes/index.ts`
+- [ ] T154 [P] [US4] Create treasury, audit, and operator auth fixtures in `apps/api/src/test/fixtures/operator-audit.ts`
+- [ ] T155 [P] [US4] Create frontend operator audit query hook with authenticated error handling in `apps/web/src/features/operator/use-operator-audit.ts`
+- [ ] T156 [P] [US4] Create treasury status panel with healthy, warning, and critical visual states in `apps/web/src/features/operator/TreasuryStatusPanel.tsx`
+- [ ] T157 [P] [US4] Create operator metric grid for revenue, costs, paid requests, alert count, and digest count in `apps/web/src/features/operator/OperatorMetricGrid.tsx`
+- [ ] T158 [P] [US4] Create execution log table with action type, status, entity reference, timestamp, and retry visibility in `apps/web/src/features/operator/ExecutionLogTable.tsx`
+- [ ] T159 [P] [US4] Create recent publications and payment activity panels in `apps/web/src/features/operator/RecentActivityPanels.tsx`
+- [ ] T160 [US4] Create `/operator` page with route guard, loading, error, populated, and warning states in `apps/web/src/features/operator/OperatorDashboardPage.tsx`
+- [ ] T161 [US4] Add operator route wiring and authenticated guard behavior to the app router in `apps/web/src/app/router.tsx`
+- [ ] T162 [US4] Add execution logs for treasury check received, snapshot recorded, warning emitted, critical status emitted, and operator audit viewed in `apps/api/src/keeperhub/treasury-check-handler.ts`
+- [ ] T163 [US4] Run US4 contract, integration, and unit tests and fix failures in `tests/contracts/treasury-check.contract.test.ts`, `tests/contracts/operator-audit.contract.test.ts`, and `apps/api/src/test/operator-audit.integration.test.ts`
+
+**Checkpoint**: User Story 4 is independently functional and proves the autonomous sustainability loop.
+
+---
+
+## Phase 7: Polish, Deployment, and Cross-Cutting Completion
+
+**Purpose**: Finalize the complete app, harden edge cases, prepare deployment targets, and run full-story validation.
+
+- [ ] T164 [P] Add OpenAPI contract validation script for `specs/001-chronicleai-publication-platform/contracts/api.openapi.yaml` in `tests/contracts/openapi-contract.test.ts`
+- [ ] T165 [P] Add KeeperHub webhook replay fixtures for all webhook contracts in `tests/contracts/fixtures/keeperhub-webhooks.ts`
+- [ ] T166 [P] Add full homepage composition with alerts, digest, premium teasers, and audit credibility signals in `apps/web/src/features/home/HomePage.tsx`
+- [ ] T167 Add final route navigation polish, active states, and mobile responsive behavior in `apps/web/src/app/App.tsx`
+- [ ] T168 Add global API timeout, retry, and user-facing error copy behavior in `apps/web/src/lib/api-client.ts`
+- [ ] T169 Add backend request timeout handling and third-party integration failure mapping in `apps/api/src/middleware/core.ts`
+- [ ] T170 Add no-leak regression tests across public endpoints for premium content fields in `tests/contracts/public-content-no-leak.contract.test.ts`
+- [ ] T171 Add performance timing tests for critical API handlers excluding third-party settlement and LLM latency in `apps/api/src/test/performance-critical-paths.test.ts`
+- [ ] T174 Create Supabase migration verification test for required tables, indexes, uniqueness constraints, and status enums in `packages/db/src/test/migration-shape.test.ts`
+- [ ] T175 Create demo seed verification test proving quickstart scenarios have usable data in `packages/db/src/test/demo-seed.test.ts`
+- [ ] T176 Configure Vercel build and output settings for the Vite frontend in `apps/web/vercel.json`
+- [ ] T177 Configure Heroku start, build, and health-check expectations for Express API in `apps/api/package.json` and `apps/api/Procfile`
+- [ ] T178 Create deployment checklist for required Vercel, Heroku, Supabase, KeeperHub, x402, and MPP environment variables in `specs/001-chronicleai-publication-platform/deployment-checklist.md`
+- [ ] T179 Update quickstart commands and expected validation results after implementation in `specs/001-chronicleai-publication-platform/quickstart.md`
+- [ ] T180 Run full unit and integration suite with `pnpm test` and fix failures in `apps/api/src/test/`, `packages/db/src/test/`, and `tests/contracts/`
+- [ ] T182 Run full TypeScript validation with `pnpm type-check` and fix failures in `apps/web/src/`, `apps/api/src/`, and `packages/schemas/src/`
+- [ ] T183 Run lint and formatting validation with `pnpm check`, then `pnpm fix` if needed, and fix remaining issues in `apps/web/src/`, `apps/api/src/`, and `packages/`
+- [ ] T184 Execute quickstart Scenario 1 manually and record pass/fail notes in `specs/001-chronicleai-publication-platform/quickstart.md`
+- [ ] T185 Execute quickstart Scenario 2 manually and record pass/fail notes in `specs/001-chronicleai-publication-platform/quickstart.md`
+- [ ] T186 Execute quickstart Scenario 3 manually and record pass/fail notes in `specs/001-chronicleai-publication-platform/quickstart.md`
+- [ ] T187 Execute quickstart Scenario 4 manually and record pass/fail notes in `specs/001-chronicleai-publication-platform/quickstart.md`
+- [ ] T188 Execute quickstart Scenario 5 manually and record pass/fail notes in `specs/001-chronicleai-publication-platform/quickstart.md`
+- [ ] T189 Review all source files for `any`, dead code, unnecessary SDK dependencies, native dialogs, missing stable selectors, and server secret exposure in `apps/web/src/`, `apps/api/src/`, and `packages/`
+- [ ] T190 Verify KeeperHub folder remains read-only and ChronicleAI implementation files do not modify `keeperhub/AGENTS.md` or any file under `keeperhub/`
+
+---
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Phase 1: Setup** has no dependencies and can begin immediately.
+- **Phase 2: Foundational** depends on Phase 1 and blocks all user stories.
+- **Phase 3: US1 Public Alerts** depends on Phase 2 and is the MVP.
+- **Phase 4: US2 Daily Digest** depends on Phase 2; it can run in parallel with US1 after the foundation, but benefits from US1 monitored event fixtures.
+- **Phase 5: US3 Premium Access** depends on Phase 2; it can run in parallel with US1 and US2 after the foundation.
+- **Phase 6: US4 Operator Sustainability** depends on Phase 2; it can run in parallel after foundation but has the richest demo after US1-US3 generate data.
+- **Phase 7: Polish and Deployment** depends on all selected user stories.
+
+### User Story Dependencies
+
+- **US1 (P1)**: No dependency on other stories after foundation. Recommended MVP scope.
+- **US2 (P2)**: Can be independently tested with seeded monitored events; production-quality digest value improves after US1.
+- **US3 (P3)**: Can be independently tested with seeded premium items and payment fixtures.
+- **US4 (P4)**: Can be independently tested with seeded audit data; full value improves after US1-US3.
+
+### Within Each User Story
+
+- Contract, unit, and integration tests should be written before implementation and confirmed failing where practical.
+- Repositories and schema fixtures precede services.
+- Services precede route handlers and frontend hooks.
+- Route handlers precede frontend page integration.
+- Manual validation comes after backend and frontend pieces for the story are wired.
+
+---
+
+## Parallel Opportunities
+
+- Setup tasks T006-T010 can run in parallel after root workspace files are established.
+- Foundational schema/config tasks T023-T030 can run in parallel with frontend shell tasks T045-T050 and test helper tasks T051-T054.
+- US1 tests T056-T061 can run in parallel, then repositories T063-T065 and frontend components T075-T077 can run in parallel.
+- US2 tests T084-T088 can run in parallel, then backend repository/service work T090-T094 can run alongside frontend components T100-T102.
+- US3 tests T108-T115 can run in parallel, then payment adapters T120-T122 can run alongside frontend premium components T130-T133.
+- US4 tests T139-T143 can run in parallel, then repositories T145-T146 can run alongside dashboard components T155-T159.
+- Polish tasks T164-T166, T170-T175, and T176-T178 can be split across developers after all story phases are stable.
+
+## Parallel Example: User Story 1
+
+```text
+Task: "T056 [P] [US1] Write contract tests for POST /keeperhub/events in tests/contracts/keeperhub-events.contract.test.ts"
+Task: "T057 [P] [US1] Write contract tests for GET /alerts in tests/contracts/alerts.contract.test.ts"
+Task: "T058 [P] [US1] Write unit tests for event qualification thresholds in apps/api/src/test/event-qualification-service.test.ts"
+```
+
+## Parallel Example: User Story 3
+
+```text
+Task: "T120 [US3] Implement payment route abstraction in apps/api/src/payments/payment-adapter.ts"
+Task: "T121 [US3] Implement x402 payment adapter in apps/api/src/payments/x402-payment-adapter.ts"
+Task: "T122 [US3] Implement MPP payment adapter in apps/api/src/payments/mpp-payment-adapter.ts"
+Task: "T131 [P] [US3] Create premium teaser card in apps/web/src/features/premium/PremiumTeaserCard.tsx"
+Task: "T132 [P] [US3] Create payment challenge panel in apps/web/src/features/premium/PaymentChallengePanel.tsx"
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First
+
+1. Complete Phase 1 setup.
+2. Complete Phase 2 foundation.
+3. Complete Phase 3 US1 public alerts.
+4. Validate `POST /keeperhub/events`, `GET /alerts`, `/alerts`, and duplicate replay.
+5. Deploy or demo the MVP if time is constrained.
+
+### Incremental Delivery
+
+1. Add US1 public alerts and verify end to end.
+2. Add US2 daily digest and verify scheduled/no-major-events flows.
+3. Add US3 premium access and verify payment gating.
+4. Add US4 operator sustainability and verify audit dashboard.
+5. Complete Phase 7 hardening and deployment readiness.
+
+### Completion Bar
+
+The app is not complete until:
+- All user story checkpoints pass independently.
+- All quickstart scenarios pass.
+- `pnpm type-check`, `pnpm check`, and `pnpm test` pass.
+- Premium content is proven not to leak into public routes.
+- KeeperHub webhook endpoints are idempotent and signed.
+- Vercel, Heroku, Supabase, KeeperHub, x402, and MPP configuration requirements are documented and validated.

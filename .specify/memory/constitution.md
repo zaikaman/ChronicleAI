@@ -1,15 +1,12 @@
 <!--
 Sync Impact Report:
-- Version change: 1.0.0 -> 1.1.0
-- List of modified principles: None
+- Version change: 1.1.0 -> 1.2.0
+- List of modified principles: Core Principle II (Testing Standards & Verification Discipline)
 - Added sections: None
 - Modified sections:
-  - Development and Branching Strategy (simplified to master branch only)
+  - II. Testing Standards & Verification Discipline (removed E2E / Playwright requirement)
 - Removed sections: None
-- Templates requiring updates:
-  - .specify/templates/plan-template.md (✅ updated)
-  - .specify/templates/spec-template.md (✅ updated)
-  - .specify/templates/tasks-template.md (✅ updated)
+- Templates requiring updates: None
 - Follow-up TODOs: None
 -->
 
@@ -21,7 +18,7 @@ Sync Impact Report:
 Every line of code written MUST be clean, explicit, and typed. Strictly avoid using the `any` type in favor of `unknown` or specific interfaces. Remove all dead or unused code prior to commits. To minimize security vulnerability surface area, utilize native `fetch` rather than adding unnecessary external SDK dependencies for API integrations. Never use emojis in code, commit messages, or developer-facing documentation.
 
 ### II. Testing Standards & Verification Discipline
-All new features and user journeys MUST be covered by corresponding automated tests. Use Vitest for unit and integration testing, and Playwright for E2E user-flow verification. Write E2E selectors targeting stable semantic elements (e.g., `data-testid`) rather than unstable CSS structures. Before every commit, locally run `pnpm type-check` and `pnpm check`/`pnpm fix` to ensure all checks pass without error.
+Every new feature and user journey MUST be verified through Vitest unit and integration testing or manual validation. Before every commit, locally run `pnpm type-check` and `pnpm check`/`pnpm fix` to ensure all checks pass without error.
 
 ### III. User Experience & Theme Consistency
 All visual elements MUST present a premium, cohesive glassmorphic design that utilizes consistent styling tokens. Standardize on shadcn/ui and Radix UI components; custom duplicate implementations are prohibited. Never use native browser dialogs like `alert()` or `confirm()`; use semantic dialogs or Sonner toasts instead. Maintain typographical pairing consistency and high-contrast color palettes defined in CSS variables.
@@ -45,4 +42,4 @@ This constitution serves as the source of truth for engineering practices in Chr
 3. Propagation of changes to all dependent specification, plan, and task templates.
 All code reviews and automated workflows must enforce compliance with these principles.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-06 | **Last Amended**: 2026-07-06
+**Version**: 1.2.0 | **Ratified**: 2026-07-27 | **Last Amended**: 2026-07-27
