@@ -1,37 +1,60 @@
-export function App() {
+// Application shell with navigation, layout, and toast provider
+import { NavLink, Outlet } from "react-router-dom";
+import { Toaster } from "sonner";
+import type React from "react";
+
+const NAV_ITEMS = [
+  { to: "/", label: "Home" },
+  { to: "/alerts", label: "Alerts" },
+  { to: "/digests/latest", label: "Digest" },
+  { to: "/premium", label: "Premium" },
+  { to: "/operator", label: "Operator" },
+] as const;
+
+export function App(): React.ReactElement {
   return (
-    <main
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-        fontFamily: "system-ui, -apple-system, sans-serif",
-        backgroundColor: "#0a0a0f",
-        color: "#e4e4e7",
-      }}
-    >
-      <h1
+    <div className="app-layout">
+      <nav className="nav" role="navigation" aria-label="Main navigation">
+        <span className="nav-brand">ChronicleAI</span>
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
+            className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+          >
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <main className="app-content">
+        <Outlet />
+      </main>
+
+      <footer
         style={{
-          fontSize: "2.5rem",
-          fontWeight: 700,
-          marginBottom: "0.5rem",
-        }}
-      >
-        ChronicleAI
-      </h1>
-      <p
-        style={{
-          fontSize: "1.125rem",
-          color: "#a1a1aa",
-          maxWidth: "480px",
           textAlign: "center",
+          padding: "var(--space-6)",
+          borderTop: "1px solid var(--border-primary)",
+          fontSize: "var(--font-size-xs)",
+          color: "var(--fg-tertiary)",
         }}
       >
-        Autonomous on-chain intelligence. Monitoring, alerting, and premium market intelligence for
-        the decentralized world.
-      </p>
-    </main>
+        ChronicleAI &mdash; Autonomous On-Chain Intelligence
+      </footer>
+
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: "var(--bg-glass)",
+            backdropFilter: "var(--glass-blur)",
+            border: "1px solid var(--border-primary)",
+            color: "var(--fg-primary)",
+          },
+        }}
+      />
+    </div>
   );
 }

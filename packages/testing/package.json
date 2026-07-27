@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*"
   },
   "scripts": {
     "build": "tsc",
@@ -15,7 +16,14 @@
     "@chronicleai/schemas": "workspace:*"
   },
   "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.14.1",
+    "express": "^5.1.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": ">=2.0.0",
+    "express": "^5.0.0"
   }
 }

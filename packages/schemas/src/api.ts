@@ -1,0 +1,130 @@
+// API contract schemas matching the OpenAPI specification
+import type {
+  AlertDeliveryStatus,
+  Confidence,
+  DigestPublicationStatus,
+  EventType,
+  PaymentRoute,
+  PaymentStatus,
+  PremiumItemStatus,
+  TreasuryStatus,
+} from "./domain.ts";
+
+// ── Public Alert ────────────────────────────────────────
+export interface PublicAlertResponse {
+  id: string;
+  title: string;
+  summary: string;
+  sourceReferences: string[];
+  deliveryStatus: AlertDeliveryStatus;
+  publishedAt: string;
+  confidence?: Confidence;
+}
+
+// ── Daily Digest ────────────────────────────────────────
+export interface DailyDigestResponse {
+  id: string;
+  reportDate: string;
+  title: string;
+  summary: string;
+  highlights: string[];
+  publicationStatus: DigestPublicationStatus;
+}
+
+// ── Premium Item Teaser ─────────────────────────────────
+export interface PremiumItemTeaserResponse {
+  id: string;
+  title: string;
+  summaryPublic: string;
+  priceAmount: number;
+  priceCurrency: string;
+  paymentRoutes: string[];
+}
+
+// ── Premium Item (full, after payment) ──────────────────
+export interface PremiumItemResponse extends PremiumItemTeaserResponse {
+  contentPrivate: Record<string, unknown>;
+  sourceReferences: string[];
+}
+
+// ── Payment Challenge ───────────────────────────────────
+export interface PaymentChallengeResponse {
+  challengeReference: string;
+  premiumItemId: string;
+  paymentRoute: PaymentRoute;
+  amountRequested: number;
+  currency: string;
+  expiresAt: string;
+}
+
+// ── Payment Record ──────────────────────────────────────
+export interface PaymentRecordResponse {
+  id: string;
+  premiumItemId: string;
+  paymentRoute: PaymentRoute;
+  status: PaymentStatus;
+  settlementReference?: string;
+}
+
+// ── KeeperHub Event (ingestion payload) ─────────────────
+export interface KeeperHubEventPayload {
+  sourceEventId: string;
+  eventType: EventType;
+  chainId: number;
+  protocol?: string;
+  transactionHash?: string;
+  magnitude?: {
+    value: number;
+    unit: string;
+  };
+  capturedAt: string;
+  rawPayload: Record<string, unknown>;
+}
+
+// ── KeeperHub Digest Trigger ────────────────────────────
+export interface KeeperHubDigestTriggerPayload {
+  periodStart: string;
+  periodEnd: string;
+}
+
+// ── KeeperHub Treasury Check ────────────────────────────
+export interface KeeperHubTreasuryCheckPayload {
+  capturedAt: string;
+  availableBalance: number;
+  currency: string;
+  safetyBuffer: number;
+}
+
+// ── Payment Challenge Request ───────────────────────────
+export interface PaymentChallengeRequest {
+  premiumItemId: string;
+  paymentRoute: PaymentRoute;
+  payerReference?: string;
+}
+
+// ── Payment Settlement Request ──────────────────────────
+export interface PaymentSettlementRequest {
+  challengeReference: string;
+  paymentRoute: PaymentRoute;
+  settlementReference: string;
+  amountSettled?: number;
+  currency?: string;
+}
+
+// ── Operator Audit ──────────────────────────────────────
+export interface OperatorAuditResponse {
+  alerts: PublicAlertResponse[];
+  digests: DailyDigestResponse[];
+  payments: PaymentRecordResponse[];
+  treasury: {
+    availableBalance: number;
+    safetyBuffer: number;
+    status: TreasuryStatus;
+  };
+  executionLogs: Array<Record<string, unknown>>;
+}
+
+// ── Response Wrappers ───────────────────────────────────
+export interface ItemsResponse<T> {
+  items: T[];
+}

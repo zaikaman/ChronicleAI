@@ -12,7 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@chronicleai/schemas": "workspace:*"
+    "@chronicleai/schemas": "workspace:*",
+    "@supabase/supabase-js": "^2.49.1"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

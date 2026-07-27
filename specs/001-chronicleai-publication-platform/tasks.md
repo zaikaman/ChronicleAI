@@ -48,38 +48,38 @@
 
 **Critical**: No user story implementation should begin until this phase is complete.
 
-- [ ] T023 Define domain enums and branded ID helpers for events, alerts, digests, payments, treasury snapshots, and logs in `packages/schemas/src/domain.ts`
-- [ ] T024 Define API request and response schemas matching the OpenAPI contract in `packages/schemas/src/api.ts`
-- [ ] T025 Define KeeperHub webhook payload schemas in `packages/schemas/src/keeperhub.ts`
-- [ ] T026 Define frontend route and view model schemas in `packages/schemas/src/frontend.ts`
-- [ ] T027 Export package schemas without barrel indirection conflicts in `packages/schemas/src/index.ts`
-- [ ] T028 Create typed environment loader for backend server-only variables in `packages/config/src/server-env.ts`
-- [ ] T029 Create typed environment loader for frontend browser-safe variables in `packages/config/src/client-env.ts`
-- [ ] T030 Create shared constants for event thresholds, dedupe windows, payment defaults, and dashboard limits in `packages/config/src/defaults.ts`
-- [ ] T031 Create Supabase server client factory with typed configuration in `packages/db/src/supabase-server.ts`
-- [ ] T032 Create Supabase browser client factory for authenticated frontend flows in `packages/db/src/supabase-browser.ts`
-- [ ] T033 Create first Supabase migration for `monitored_events`, `public_alerts`, `daily_digests`, `premium_intelligence_items`, `payment_records`, `treasury_snapshots`, and `execution_logs` in `supabase/migrations/202607060001_create_chronicleai_core.sql`
-- [ ] T034 Create Supabase migration for indexes, dedupe uniqueness, reporting window uniqueness, and payment lookup constraints in `supabase/migrations/202607060002_add_chronicleai_indexes.sql`
-- [ ] T035 Create Supabase seed data for demo alerts, digests, premium items, payments, treasury snapshots, and logs in `supabase/seed/chronicleai_demo.sql`
-- [ ] T036 Create TypeScript database row and insert types for all core tables in `packages/db/src/types.ts`
-- [ ] T037 Create shared repository error types and result helpers in `packages/db/src/errors.ts`
-- [ ] T038 Create base repository utilities for Supabase select, insert, update, pagination, and single-row handling in `packages/db/src/repository-utils.ts`
-- [ ] T039 Create Express middleware for JSON parsing, request IDs, CORS, timing headers, and secure error responses in `apps/api/src/middleware/core.ts`
-- [ ] T040 Create Express middleware for KeeperHub webhook signature verification in `apps/api/src/middleware/keeperhub-signature.ts`
-- [ ] T041 Create Express middleware for operator bearer authentication in `apps/api/src/middleware/operator-auth.ts`
-- [ ] T042 Create centralized API error classes and response mapping in `apps/api/src/errors.ts`
-- [ ] T043 Create structured execution logger service that writes to `execution_logs` in `apps/api/src/services/execution-log-service.ts`
-- [ ] T044 Create health route and route registration shell in `apps/api/src/routes/health-routes.ts` and `apps/api/src/routes/index.ts`
-- [ ] T045 Create frontend API client with typed fetch wrapper and error mapping in `apps/web/src/lib/api-client.ts`
-- [ ] T046 Create frontend app router with routes `/`, `/alerts`, `/digests/latest`, `/premium`, and `/operator` in `apps/web/src/app/router.tsx`
-- [ ] T047 Create app-level layout, navigation, responsive shell, and Sonner provider in `apps/web/src/app/App.tsx`
-- [ ] T048 Create shared glassmorphic design tokens and base styles in `apps/web/src/app/styles.css`
-- [ ] T049 Create accessible loading, empty, error, and retry state components in `apps/web/src/components/state-views.tsx`
-- [ ] T050 Create reusable metric, status badge, source reference, and timestamp components in `apps/web/src/components/data-primitives.tsx`
-- [ ] T051 Create test server bootstrap helpers for API integration tests in `packages/testing/src/api-test-server.ts`
-- [ ] T052 Create Supabase test fixture helpers for seed, cleanup, and deterministic timestamps in `packages/testing/src/db-fixtures.ts`
-- [ ] T054 Create contract test utilities for validating JSON responses against shared schemas in `tests/contracts/schema-assertions.ts`
-- [ ] T055 Verify the empty scaffold builds and type-checks by wiring package exports in `./package.json`
+- [X] T023 Define domain enums and branded ID helpers for events, alerts, digests, payments, treasury snapshots, and logs in `packages/schemas/src/domain.ts`
+- [X] T024 Define API request and response schemas matching the OpenAPI contract in `packages/schemas/src/api.ts`
+- [X] T025 Define KeeperHub webhook payload schemas in `packages/schemas/src/keeperhub.ts`
+- [X] T026 Define frontend route and view model schemas in `packages/schemas/src/frontend.ts`
+- [X] T027 Export package schemas without barrel indirection conflicts in `packages/schemas/src/index.ts`
+- [X] T028 Create typed environment loader for backend server-only variables in `packages/config/src/server-env.ts`
+- [X] T029 Create typed environment loader for frontend browser-safe variables in `packages/config/src/client-env.ts`
+- [X] T030 Create shared constants for event thresholds, dedupe windows, payment defaults, and dashboard limits in `packages/config/src/defaults.ts`
+- [X] T031 Create Supabase server client factory with typed configuration in `packages/db/src/supabase-server.ts`
+- [X] T032 Create Supabase browser client factory for authenticated frontend flows in `packages/db/src/supabase-browser.ts`
+- [X] T033 Create first Supabase migration for `monitored_events`, `public_alerts`, `daily_digests`, `premium_intelligence_items`, `payment_records`, `treasury_snapshots`, and `execution_logs` in `supabase/migrations/202607270001_create_chronicleai_core.sql`
+- [X] T034 Create Supabase migration for indexes, dedupe uniqueness, reporting window uniqueness, and payment lookup constraints in `supabase/migrations/202607270002_add_chronicleai_indexes.sql`
+- [X] T035 Create Supabase seed data for demo alerts, digests, premium items, payments, treasury snapshots, and logs in `supabase/seed/chronicleai_demo.sql`
+- [X] T036 Create TypeScript database row and insert types for all core tables in `packages/db/src/types.ts`
+- [X] T037 Create shared repository error types and result helpers in `packages/db/src/errors.ts`
+- [X] T038 Create base repository utilities for Supabase select, insert, update, pagination, and single-row handling in `packages/db/src/repository-utils.ts`
+- [X] T039 Create Express middleware for JSON parsing, request IDs, CORS, timing headers, and secure error responses in `apps/api/src/middleware/core.ts`
+- [X] T040 Create Express middleware for KeeperHub webhook signature verification in `apps/api/src/middleware/keeperhub-signature.ts`
+- [X] T041 Create Express middleware for operator bearer authentication in `apps/api/src/middleware/operator-auth.ts`
+- [X] T042 Create centralized API error classes and response mapping in `apps/api/src/errors.ts`
+- [X] T043 Create structured execution logger service that writes to `execution_logs` in `apps/api/src/services/execution-log-service.ts`
+- [X] T044 Create health route and route registration shell in `apps/api/src/routes/health-routes.ts` and `apps/api/src/routes/index.ts`
+- [X] T045 Create frontend API client with typed fetch wrapper and error mapping in `apps/web/src/lib/api-client.ts`
+- [X] T046 Create frontend app router with routes `/`, `/alerts`, `/digests/latest`, `/premium`, and `/operator` in `apps/web/src/app/router.tsx`
+- [X] T047 Create app-level layout, navigation, responsive shell, and Sonner provider in `apps/web/src/app/App.tsx`
+- [X] T048 Create shared glassmorphic design tokens and base styles in `apps/web/src/app/styles.css`
+- [X] T049 Create accessible loading, empty, error, and retry state components in `apps/web/src/components/state-views.tsx`
+- [X] T050 Create reusable metric, status badge, source reference, and timestamp components in `apps/web/src/components/data-primitives.tsx`
+- [X] T051 Create test server bootstrap helpers for API integration tests in `packages/testing/src/api-test-server.ts`
+- [X] T052 Create Supabase test fixture helpers for seed, cleanup, and deterministic timestamps in `packages/testing/src/db-fixtures.ts`
+- [X] T054 Create contract test utilities for validating JSON responses against shared schemas in `tests/contracts/schema-assertions.ts`
+- [X] T055 Verify the empty scaffold builds and type-checks by wiring package exports in `./package.json`
 
 **Checkpoint**: Foundation ready. User stories can now be implemented in priority order or by parallel teams.
 

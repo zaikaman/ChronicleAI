@@ -1,0 +1,40 @@
+-- Seed data: ChronicleAI demo content
+-- Deterministic UUIDs for test reproducibility
+
+-- ── Monitored Events ────────────────────────────────────
+INSERT INTO public.monitored_events (id, source, source_event_id, event_type, chain_id, protocol, asset_symbols, magnitude, transaction_hash, captured_at, significance_score, raw_payload, status) VALUES
+  ('a0000000-0000-0000-0000-000000000001', 'keeperhub', 'whale-001', 'large_swap', 1, 'Uniswap', ARRAY['ETH', 'USDC'], '{"value": 2500000, "unit": "USD"}', '0xabc123', NOW() - INTERVAL '2 hours', 0.85, '{"block": 12345678, "tx": "0xabc123", "from": "0xwhale1", "to": "0xpool1"}', 'qualified'),
+  ('a0000000-0000-0000-0000-000000000002', 'keeperhub', 'liq-001', 'liquidation', 1, 'Aave', ARRAY['ETH'], '{"value": 1200000, "unit": "USD"}', '0xdef456', NOW() - INTERVAL '4 hours', 0.92, '{"block": 12345670, "tx": "0xdef456", "liquidated": "0xuser1"}', 'qualified'),
+  ('a0000000-0000-0000-0000-000000000003', 'keeperhub', 'gas-001', 'gas_spike', 1, NULL, NULL, '{"value": 850, "unit": "gwei"}', NULL, NOW() - INTERVAL '6 hours', 0.78, '{"average_gas": 850, "peak_gas": 1200, "block": 12345660}', 'qualified'),
+  ('a0000000-0000-0000-0000-000000000004', 'keeperhub', 'vol-001', 'volume_anomaly', 1, 'Curve', ARRAY['crvUSD'], '{"value": 3.2, "unit": "z_score"}', NULL, NOW() - INTERVAL '8 hours', 0.65, '{"hourly_volume": 45000000, "hourly_average": 14000000, "block_range": [12345640, 12345680]}', 'qualified'),
+  ('a0000000-0000-0000-0000-000000000005', 'keeperhub', 'deploy-001', 'contract_deployment', 137, NULL, NULL, '{"value": 0, "unit": "any"}', '0x789012', NOW() - INTERVAL '12 hours', 0.45, '{"address": "0xnewcontract", "creator": "0xcreator", "block": 12345620}', 'qualified');
+
+-- ── Public Alerts ──────────────────────────────────────
+INSERT INTO public.public_alerts (id, monitored_event_id, title, summary, source_references, delivery_status, published_at, dedupe_key, confidence) VALUES
+  ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Large Swap Detected: 2.5M USDC on Uniswap', 'A significant swap of 2.5M USDC was executed on Uniswap (Ethereum). The transaction involves ETH/USDC pair and may indicate large position adjustments.', '["0xabc123", "keeperhub/whale-001"]'::jsonb, 'published', NOW() - INTERVAL '1 hour', 'whale-001-large_swap', 'high'),
+  ('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'Liquidation Alert: 1.2M ETH Position on Aave', 'A 1.2M USD ETH position was liquidated on Aave (Ethereum). This was triggered by collateral threshold breach during market volatility.', '["0xdef456", "keeperhub/liq-001"]'::jsonb, 'published', NOW() - INTERVAL '3 hours', 'liq-001-liquidation', 'high'),
+  ('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'Gas Spike: Network Fees Reach 850 Gwei', 'Ethereum gas prices spiked to 850 gwei average with peaks of 1200 gwei. This may affect transaction costs across the network.', '["block-12345660", "keeperhub/gas-001"]'::jsonb, 'published', NOW() - INTERVAL '5 hours', 'gas-001-gas_spike', 'medium');
+
+-- ── Daily Digests ─────────────────────────────────────
+INSERT INTO public.daily_digests (id, report_date, period_start, period_end, title, summary, highlights, analysis, source_event_ids, audience, publication_status, published_at) VALUES
+  ('c0000000-0000-0000-0000-000000000001', CURRENT_DATE, CURRENT_DATE - INTERVAL '1 day', CURRENT_DATE, 'Market Intelligence Digest: Notable On-Chain Activity', 'The past 24 hours saw significant market activity with large swaps, liquidations, and a gas spike on Ethereum.', '["Large swap of 2.5M USDC detected on Uniswap", "1.2M USD ETH liquidation on Aave", "Gas spike to 850 gwei observed"]'::jsonb, 'Analysis: The large swap and liquidation events occurring within a 4-hour window suggest active position adjustments by major market participants. The gas spike indicates network congestion coinciding with these activities.', ARRAY['a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000003'], 'public', 'published', NOW() - INTERVAL '30 minutes'),
+  ('c0000000-0000-0000-0000-000000000002', CURRENT_DATE - INTERVAL '1 day', CURRENT_DATE - INTERVAL '2 days', CURRENT_DATE - INTERVAL '1 day', 'No Major Events: Quiet Period', 'No significant on-chain events were detected during this reporting period.', '["No monitored events exceeded configured thresholds"]'::jsonb, 'Analysis: This is within normal expectations. Event activity tends to be unevenly distributed across reporting periods.', '{}'::uuid[], 'public', 'published', CURRENT_DATE - INTERVAL '1 day');
+
+-- ── Premium Intelligence Items ─────────────────────────
+INSERT INTO public.premium_intelligence_items (id, slug, title, content_type, summary_public, content_private, source_event_ids, price_amount, price_currency, payment_routes, status) VALUES
+  ('d0000000-0000-0000-0000-000000000001', 'deep-dive-whale-001', 'Deep Dive: Whale Swap Analysis', 'deep_dive', 'Detailed analysis of the 2.5M USDC swap including wallet clustering, historical activity, and market impact assessment.', '{"analysis": "The 2.5M USDC swap was executed by wallet 0xwhale1 which has a history of large position adjustments before major market moves. This wallet has executed 7 similar swaps totaling 18M USDC in the past 30 days.", "clustering": ["0xwhale1", "0xwhale2", "0xwhale3"], "market_impact": "moderate", "historical_context": "Similar sized swaps by this cluster preceded 3 major price movements in the past quarter."}', ARRAY['a0000000-0000-0000-0000-000000000001'], 0.01, 'ETH', ARRAY['x402', 'mpp'], 'available');
+
+-- ── Payment Records ────────────────────────────────────
+INSERT INTO public.payment_records (id, premium_item_id, payment_route, payer_reference, amount_requested, amount_settled, currency, status, challenge_reference, settlement_reference, requested_at, settled_at) VALUES
+  ('e0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001', 'x402', '0xpayer1', 0.01, 0.01, 'ETH', 'settled', 'challenge-001', 'settlement-001', NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day');
+
+-- ── Treasury Snapshots ──────────────────────────────────
+INSERT INTO public.treasury_snapshots (id, available_balance, currency, safety_buffer, revenue_total, estimated_generation_cost, estimated_transaction_cost, paid_request_count, status, captured_at) VALUES
+  ('f0000000-0000-0000-0000-000000000001', 1.5, 'ETH', 0.5, 0.05, 0.02, 0.01, 1, 'healthy', NOW());
+
+-- ── Execution Logs ─────────────────────────────────────
+INSERT INTO public.execution_logs (id, action_type, entity_type, entity_id, status, message, details, started_at, completed_at) VALUES
+  ('g0000000-0000-0000-0000-000000000001', 'monitor', 'monitored_event', 'a0000000-0000-0000-0000-000000000001', 'succeeded', 'Event received and qualified', '{"source_event_id": "whale-001", "significance_score": 0.85}'::jsonb, NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours' + INTERVAL '5 seconds'),
+  ('g0000000-0000-0000-0000-000000000002', 'generate_alert', 'public_alert', 'b0000000-0000-0000-0000-000000000001', 'succeeded', 'Alert generated for whale swap event', '{"title": "Large Swap Detected: 2.5M USDC on Uniswap"}'::jsonb, NOW() - INTERVAL '2 hours' + INTERVAL '10 seconds', NOW() - INTERVAL '2 hours' + INTERVAL '15 seconds'),
+  ('g0000000-0000-0000-0000-000000000003', 'publish_alert', 'public_alert', 'b0000000-0000-0000-0000-000000000001', 'succeeded', 'Alert published to public feed', '{"destination": "public_feed"}'::jsonb, NOW() - INTERVAL '2 hours' + INTERVAL '20 seconds', NOW() - INTERVAL '2 hours' + INTERVAL '25 seconds'),
+  ('g0000000-0000-0000-0000-000000000004', 'payment', 'payment_record', 'e0000000-0000-0000-0000-000000000001', 'succeeded', 'Payment settled for premium access', '{"route": "x402", "amount": 0.01, "currency": "ETH"}'::jsonb, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day' + INTERVAL '10 seconds');
