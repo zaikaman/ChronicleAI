@@ -28,13 +28,14 @@ const STABLE_DECIMALS: Record<string, { symbol: string; decimals: number }> = {
   "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": { symbol: "USDC", decimals: 6 },
   "0xdac17f958d2ee523a2206206994597c13d831ec7": { symbol: "USDT", decimals: 6 },
   "0x6b175474e89094c44da98b954eedeac495271d0f": { symbol: "DAI", decimals: 18 },
-  "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": { symbol: "USDC", decimals: 6 }, // Base USDC
+  "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": { symbol: "USDC", decimals: 6 }, // Base mainnet USDC
+  "0x036cbd53842c5426634e7929541ec2318f3dcf7e": { symbol: "USDC", decimals: 6 }, // Base Sepolia USDC (Circle)
+  "0xba50cd2a20f6da35d788639e581bca8d0b5d4d5f": { symbol: "USDC", decimals: 6 }, // Base Sepolia Aave USDC
 };
 
 const WETH_ADDRESSES = new Set([
-  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-  "0x7b79995e5f793a07bc00c21412e50ecae098e7f9", // Sepolia WETH
-  "0x4200000000000000000000000000000000000006", // OP/Base WETH
+  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // Ethereum mainnet WETH
+  "0x4200000000000000000000000000000000000006", // OP / Base / Base Sepolia WETH
 ]);
 
 function isClassifiedEvent(body: Record<string, unknown>): boolean {

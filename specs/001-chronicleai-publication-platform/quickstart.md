@@ -112,7 +112,7 @@ pnpm --filter @chronicleai/web dev
 
 1. Request `GET /premium/items/{id}` without settlement evidence.
 2. Confirm the response is `402` with payment challenge details.
-3. Settle a subscription challenge via x402 on Ethereum Sepolia or a machine-billing challenge via MPP on Tempo.
+3. Settle a subscription challenge via x402 on Base Sepolia or a machine-billing challenge via MPP on Tempo.
 4. Retry the premium item request.
 
 **Expected outcome**: Premium content remains locked until settlement and is returned in under 30 seconds once a settled payment record exists.

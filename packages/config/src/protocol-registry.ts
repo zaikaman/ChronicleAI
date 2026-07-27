@@ -1,5 +1,8 @@
 // Known on-chain protocols ChronicleAI can normalize from KeeperHub Event Tracker payloads.
-// Addresses are checksummed mainnet / Sepolia deployments — not placeholders.
+// Addresses are checksummed mainnet / Base Sepolia deployments — not placeholders.
+
+/** Primary testnet used by ChronicleAI (Base Sepolia). */
+export const CHAIN_ID_BASE_SEPOLIA = 84_532;
 
 export type ProtocolKind =
   | "uniswap_v3_pool"
@@ -30,7 +33,8 @@ export interface ProtocolContract {
 /** Chainlink ETH/USD aggregator addresses (8-decimal answers). */
 export const CHAINLINK_ETH_USD: Readonly<Record<number, string>> = {
   1: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
-  11155111: "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+  // Base Sepolia — Chainlink ETH/USD (also used as Aave WETH oracle on that market)
+  [CHAIN_ID_BASE_SEPOLIA]: "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1",
 };
 
 const USDC_MAINNET: TokenMeta = {
@@ -117,20 +121,20 @@ export const PROTOCOL_CONTRACTS: readonly ProtocolContract[] = [
     address: "0x9008D19f58AAbD9eD0D60971565AA8510560ab41",
     eventNames: ["Trade"],
   },
-  // Uniswap V3 Factory — Sepolia
+  // Uniswap V3 Factory — Base Sepolia
   {
     kind: "uniswap_v3_factory",
     protocol: "Uniswap V3",
-    chainId: 11155111,
-    address: "0x0227628f3F09760B5199B4CA03A6873F0CbfA77F",
+    chainId: CHAIN_ID_BASE_SEPOLIA,
+    address: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
     eventNames: ["PoolCreated"],
   },
-  // Aave V3 Pool — Sepolia
+  // Aave V3 Pool — Base Sepolia
   {
     kind: "aave_v3_pool",
     protocol: "Aave V3",
-    chainId: 11155111,
-    address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+    chainId: CHAIN_ID_BASE_SEPOLIA,
+    address: "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27",
     eventNames: ["LiquidationCall"],
   },
 ] as const;

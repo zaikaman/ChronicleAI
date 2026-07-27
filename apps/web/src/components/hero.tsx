@@ -19,7 +19,7 @@ const fadeInScale = {
 const logos: LogoItem[] = [
   { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Ethereum</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Sepolia EVM</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Base Sepolia</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">x402 Micropayments</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">MPP Tempo</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Gemini 3.5</span> },
@@ -33,7 +33,7 @@ function HeroDashboard(): ReactNode {
   const signals = [
     { name: "Uniswap V3 Swap", details: "$2.4M volume threshold crossed", tag: "USDC/ETH" },
     { name: "Aave V3 Liquidation", details: "Health factor breached. Liquidation: $450k", tag: "AAVE-EVM" },
-    { name: "Sepolia Gas Spike", details: "Gas price spike to 182 gwei", tag: "Network" },
+    { name: "Base Sepolia Gas Spike", details: "Gas price spike to 182 gwei", tag: "Network" },
   ];
 
   return (

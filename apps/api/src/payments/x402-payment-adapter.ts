@@ -1,5 +1,5 @@
 // x402 Payment Adapter
-// Implements the x402 (Base EVM subscription) payment route.
+// Implements the x402 (Base Sepolia EVM subscription) payment route.
 // x402 uses ERC-20 permit/transfer patterns for subscription-based access.
 
 import { randomUUID } from "node:crypto";
@@ -9,6 +9,10 @@ import type {
   PaymentAdapter,
   SettlementVerificationResult,
 } from "./payment-adapter.ts";
+
+/** Base Sepolia chain ID and Circle official USDC for x402 EIP-712 domain. */
+const X402_CHAIN_ID = 84_532;
+const X402_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
 const CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes
 
@@ -53,12 +57,12 @@ export class X402PaymentAdapter implements PaymentAdapter {
     const challengeReference = `x402_${randomUUID()}`;
     const nonce = ethers.keccak256(ethers.toUtf8Bytes(challengeReference));
 
-    // Reconstruct domain
+    // Reconstruct domain (Base Sepolia USDC)
     const domain = {
       name: "USD Coin",
       version: "2",
-      chainId: 8453, // Base mainnet
-      verifyingContract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      chainId: X402_CHAIN_ID,
+      verifyingContract: X402_USDC,
     };
 
     const types = {
@@ -172,8 +176,8 @@ export class X402PaymentAdapter implements PaymentAdapter {
         const domain = {
           name: "USD Coin",
           version: "2",
-          chainId: 8453,
-          verifyingContract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          chainId: X402_CHAIN_ID,
+          verifyingContract: X402_USDC,
         };
 
         const types = {

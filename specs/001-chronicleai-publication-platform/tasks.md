@@ -150,7 +150,7 @@
 
 - [x] T090d [US2] Create Chronicle Registry Solidity contract defining `publishAlert`, `publishDigest`, `createSponsoredWatch`, `publishSponsoredReport`, and `recordPayout` in `packages/contracts/contracts/ChronicleRegistry.sol`
 - [x] T090e [US2] Create compilation and deployment scripts for the Chronicle Registry contract in `packages/contracts/scripts/deploy.ts`
-- [x] T090f [US2] Create Supabase migration to add `registry_tx_hash`, `source_event_hash`, `source_event_root`, and `content_uri` columns to core tables in `supabase/migrations/202607270001_add_registry_fields.sql`
+- [x] T090f [US2] Create Supabase migration to add `registry_tx_hash`, `source_event_hash`, `source_event_root`, and `content_uri` columns to core tables in `supabase/migrations/202607070001_add_registry_fields.sql`
 - [x] T091 [P] [US2] Implement daily digest repository create, find-by-window, latest-public, and publication status methods with new columns in `packages/db/src/daily-digest-repository.ts`
 - [x] T091a [US2] Implement Web3/Ethers helper for contract connection and transaction execution in `apps/api/src/services/web3-client-service.ts`
 - [x] T091b [US2] Implement Chronicle Registry publish service that writes alert and digest metadata on-chain in `apps/api/src/services/chronicle-registry-service.ts`
@@ -179,7 +179,7 @@
 
 ## Phase 5: User Story 3 - Purchase Premium Intelligence Access & Sponsor Contracts (Priority: P3)
 
-**Goal**: Human users and automated clients can purchase premium access via x402 (Ethereum Sepolia) or MPP (Tempo) and sponsor monitoring campaigns (Loop 4) on target contracts, executing on-chain registry transactions.
+**Goal**: Human users and automated clients can purchase premium access via x402 (Base Sepolia) or MPP (Tempo) and sponsor monitoring campaigns (Loop 4) on target contracts, executing on-chain registry transactions.
 
 **Independent Test**: Request premium content without payment, receive a `402` challenge, complete a subscription (x402) or pay-per-call (MPP) challenge, retry to receive content; pay for a sponsored monitoring task, verifying that KeeperHub executes `createSponsoredWatch` and `publishSponsoredReport` on-chain.
 
@@ -198,7 +198,7 @@
 
 ### Implementation for User Story 3
 
-- [X] T117a [US3] Create Supabase migration for the `sponsored_watches` table (tracking target contract, campaign window, registry tx hashes, status) in `supabase/migrations/202607270002_create_sponsored_watches.sql`
+- [X] T117a [US3] Create Supabase migration for the `sponsored_watches` table (tracking target contract, campaign window, registry tx hashes, status) in `supabase/migrations/202607070002_create_sponsored_watches.sql`
 - [X] T118 [P] [US3] Implement premium intelligence repository list-teasers, find-available, find-private-content, and create methods in `packages/db/src/premium-intelligence-repository.ts`
 - [X] T118a [P] [US3] Implement sponsored watch repository create, update status, associate tx hashes, and list in `packages/db/src/sponsored-watch-repository.ts`
 - [X] T119 [P] [US3] Implement payment record repository create-challenge, find-by-challenge, mark-settled, mark-underpaid, mark-expired, and list methods in `packages/db/src/payment-record-repository.ts`
@@ -247,7 +247,7 @@
 
 ### Implementation for User Story 4
 
-- [X] T145a [US4] Create Supabase migration for the `payout_records` table (tracking payout period, recipient address, amount, reason hash, transfer tx hash, registry tx hash, status) in `supabase/migrations/202607270003_create_payout_records.sql`
+- [X] T145a [US4] Create Supabase migration for the `payout_records` table (tracking payout period, recipient address, amount, reason hash, transfer tx hash, registry tx hash, status) in `supabase/migrations/202607070003_create_payout_records.sql`
 - [X] T146 [P] [US4] Implement treasury snapshot repository create, latest, status history, and aggregate methods in `packages/db/src/treasury-snapshot-repository.ts`
 - [X] T146a [P] [US4] Implement payout record repository create, find-by-period, and list methods in `packages/db/src/payout-record-repository.ts`
 - [X] T147 [P] [US4] Implement operator audit repository queries for recent alerts, digests, payments, treasury snapshots, active sponsored campaigns, payout records, and logs in `packages/db/src/operator-audit-repository.ts`

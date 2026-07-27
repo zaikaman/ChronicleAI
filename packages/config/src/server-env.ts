@@ -71,7 +71,7 @@ export function loadServerEnv(): ServerEnv {
     groqModel: optionalEnv("GROQ_MODEL", "llama-3.3-70b-versatile") as string,
     groqBaseUrl: optionalEnv("GROQ_BASE_URL"),
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),
-    mppSecret: optionalEnv("MPP_SECRET") ?? optionalEnv("MPP_SECRET_KEY"),
+    mppSecret: optionalEnv("MPP_SECRET"),
     premiumAccessSecret: optionalEnv("PREMIUM_ACCESS_SECRET"),
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),
     creatorRecoveryWallet: optionalEnv("CREATOR_RECOVERY_WALLET"),

@@ -127,7 +127,7 @@ Invoke-Smoke -Name "Raw Aave V3 LiquidationCall" -Path "/keeperhub/events" -Body
 
 # 4) Block analysis (needs RPC_URL on the API)
 Invoke-Smoke -Name "Block analysis (gas/volume; needs RPC_URL)" -Path "/keeperhub/blocks" -Body @{
-  chainId     = 11155111
+  chainId     = 84532
   blockNumber = 7000000
   sourceEventId = "local-smoke-block-$(Get-Date -Format 'yyyyMMddHHmmss')"
 }

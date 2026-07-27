@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { sepoliaTxUrl } from "../../lib/explorer.ts";
+import { baseSepoliaTxUrl } from "../../lib/explorer.ts";
 
 export interface DigestHighlightsProps {
   highlights: string[];
@@ -41,11 +41,11 @@ export function DigestHighlights({
         >
           <span className="text-muted-foreground">On-chain proof: </span>
           <a
-            href={sepoliaTxUrl(registryTxHash)}
+            href={baseSepoliaTxUrl(registryTxHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-accent font-semibold font-mono hover:underline break-all"
-            title={`View transaction ${registryTxHash} on Etherscan`}
+            title={`View transaction ${registryTxHash} on BaseScan`}
           >
             {registryTxHash}
           </a>

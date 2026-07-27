@@ -1,11 +1,11 @@
 // Deployment script for ChronicleRegistry contract
-// Usage: npx hardhat run scripts/deploy.ts --network sepolia
+// Usage: npx hardhat run scripts/deploy.ts --network baseSepolia
 
 import hre from "hardhat";
 const { ethers } = hre;
 
 async function main(): Promise<void> {
-  console.log("Deploying ChronicleRegistry...");
+  console.log("Deploying ChronicleRegistry to Base Sepolia...");
 
   const signers = await ethers.getSigners();
   const deployer = signers[0];
@@ -22,9 +22,9 @@ async function main(): Promise<void> {
   const address = await contract.getAddress();
   console.log("ChronicleRegistry deployed to:", address);
 
-  // Verify on Etherscan/BaseScan
+  // Verify on BaseScan
   console.log("\nVerification command:");
-  console.log(`npx hardhat verify --network sepolia ${address}`);
+  console.log(`npx hardhat verify --network baseSepolia ${address}`);
 }
 
 main()

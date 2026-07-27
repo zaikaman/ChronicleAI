@@ -124,7 +124,7 @@ ChronicleAI operates via five decoupled loops managed by KeeperHub's execution s
 
 ## 5. Chronicle Registry Contract (On-Chain Execution Target)
 
-To satisfy the hackathon requirement with real, useful transactions, ChronicleAI includes a minimal registry contract deployed to a supported KeeperHub chain such as Ethereum Sepolia for the demo.
+To satisfy the hackathon requirement with real, useful transactions, ChronicleAI includes a minimal registry contract deployed to a supported KeeperHub chain such as Base Sepolia for the demo.
 
 ### Required Contract Methods
 * **`publishAlert(bytes32 contentHash, bytes32 sourceEventHash, string contentUri)`**: Stores a public alert proof-of-publication.

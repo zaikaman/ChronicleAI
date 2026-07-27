@@ -14,7 +14,7 @@ const footerLinks = {
   ],
   company: [
     { label: "KeeperHub", href: "https://keeperhub.com" },
-    { label: "Sepolia Explorer", href: "https://sepolia.etherscan.io" },
+    { label: "Base Sepolia Explorer", href: "https://sepolia.basescan.org" },
   ],
   social: [
     { label: "Twitter / X", href: "https://twitter.com/chronicle_ai" },

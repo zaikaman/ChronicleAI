@@ -51,7 +51,7 @@ KEEPERHUB_WEBHOOK_SECRET=local-dev-secret-at-least-16
 FRONTEND_ORIGIN=http://localhost:5173
 
 # Optional but needed for /keeperhub/blocks + ETH USD on swaps:
-RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+RPC_URL=https://base-sepolia-rpc.publicnode.com
 
 # Optional: real LLM alerts (else generation may fail after qualify)
 GEMINI_API_KEY=
@@ -122,7 +122,7 @@ Invoke-RestMethod -Method POST -Uri "$base/keeperhub/events" -Headers $h -Body (
 
 # Block (needs RPC_URL)
 Invoke-RestMethod -Method POST -Uri "$base/keeperhub/blocks" -Headers $h -Body (@{
-  chainId = 11155111
+  chainId = 84532
   blockNumber = 7000000
 } | ConvertTo-Json)
 ```
@@ -176,7 +176,7 @@ KeeperHub export rules require **https** webhook URLs, so plain `http://localhos
 - Heroku / Vercel deploy  
 - Importing workflows into production KeeperHub  
 - Replacing placeholders for a production API host  
-- Mainnet paid RPC (public Sepolia RPC is fine for block smoke)
+- Mainnet paid RPC (public Base Sepolia RPC is fine for block smoke)
 
 ---
 

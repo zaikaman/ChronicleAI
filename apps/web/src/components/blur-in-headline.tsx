@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 const headline =
-  "ChronicleAI brings autonomous on-chain intelligence to your fingertips: monitoring live blockchain events, generating instant public alerts, publishing daily digests anchored to Sepolia, and gating premium feeds via x402 and MPP micro-payments — funding its own circular economy.";
+  "ChronicleAI brings autonomous on-chain intelligence to your fingertips: monitoring live blockchain events, generating instant public alerts, publishing daily digests anchored to Base Sepolia, and gating premium feeds via x402 and MPP micro-payments — funding its own circular economy.";
 
 export function BlurInHeadline(): ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);

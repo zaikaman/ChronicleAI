@@ -3,7 +3,7 @@
 
 import type React from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
-import { sepoliaAddressUrl, sepoliaTxUrl } from "../../lib/explorer.ts";
+import { baseSepoliaAddressUrl, baseSepoliaTxUrl } from "../../lib/explorer.ts";
 
 interface PayoutEntry {
   id: string;
@@ -176,7 +176,7 @@ export function PayoutLogsTable({
                 </td>
                 <td style={tableCellStyle}>
                   <a
-                    href={sepoliaAddressUrl(payout.recipient)}
+                    href={baseSepoliaAddressUrl(payout.recipient)}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -208,7 +208,7 @@ export function PayoutLogsTable({
                 >
                   {payout.payoutTxHash ? (
                     <a
-                      href={sepoliaTxUrl(payout.payoutTxHash)}
+                      href={baseSepoliaTxUrl(payout.payoutTxHash)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: "var(--accent-success)", textDecoration: "none" }}
@@ -229,7 +229,7 @@ export function PayoutLogsTable({
                 >
                   {payout.registryTxHash ? (
                     <a
-                      href={sepoliaTxUrl(payout.registryTxHash)}
+                      href={baseSepoliaTxUrl(payout.registryTxHash)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: "var(--accent-primary)", textDecoration: "none" }}

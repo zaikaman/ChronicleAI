@@ -22,7 +22,7 @@ Import these JSON files into KeeperHub (Hub → Upload) to wire **Block Dispatch
 | `cow-protocol-trade.workflow.json` | Event `Trade` | `POST /keeperhub/events` | CoW Protocol trades |
 | `uniswap-v3-pool-created.workflow.json` | Event `PoolCreated` | `POST /keeperhub/events` | New Uniswap V3 pool deployments |
 
-Default chain is **Ethereum Mainnet (`network: "1"`)**. For Sepolia, change `network` to `"11155111"` and update contract addresses (see `@chronicleai/config` protocol registry).
+Default chain is **Ethereum Mainnet (`network: "1"`)**. For Base Sepolia, change `network` to `"84532"` and update contract addresses (see `@chronicleai/config` protocol registry).
 
 ## After import
 

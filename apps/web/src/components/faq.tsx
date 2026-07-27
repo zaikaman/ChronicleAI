@@ -12,12 +12,12 @@ const faqs = [
   {
     question: "How is content verified?",
     answer:
-      "Every major digest is anchored on Ethereum Sepolia via KeeperHub writes to the Chronicle Registry. Open any report for a clickable proof transaction, or visit Agent Activity for the public execution trail, treasury health, and payout receipts — no login required.",
+      "Every major digest is anchored on Base Sepolia via KeeperHub writes to the Chronicle Registry. Open any report for a clickable proof transaction, or visit Agent Activity for the public execution trail, treasury health, and payout receipts — no login required.",
   },
   {
     question: "How does the paid intelligence access work?",
     answer:
-      "Deeper market intelligence, historical feeds, and structured data are gated. Access can be purchased by automated machine clients or human readers using x402 (Ethereum Sepolia subscription) or MPP (Tempo micro-payments) payment routes.",
+      "Deeper market intelligence, historical feeds, and structured data are gated. Access can be purchased by automated machine clients or human readers using x402 (Base Sepolia subscription) or MPP (Tempo micro-payments) payment routes.",
   },
   {
     question: "How is ChronicleAI self-sustaining?",
@@ -134,7 +134,7 @@ export function FAQ(): ReactNode {
               </Link>
             </motion.div>
             <motion.a
-              href="https://sepolia.etherscan.io"
+              href="https://sepolia.basescan.org"
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.02 }}

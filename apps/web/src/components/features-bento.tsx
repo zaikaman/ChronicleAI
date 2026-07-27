@@ -12,7 +12,7 @@ const AVATAR_URLS = [
 ];
 
 const DEPLOYMENT_STATS = [
-  { icon: <Zap className="size-4.5 text-accent" />, label: "Sepolia node connected", change: "Live" },
+  { icon: <Zap className="size-4.5 text-accent" />, label: "Base Sepolia node connected", change: "Live" },
   { icon: <Unlock className="size-4.5 text-accent" />, label: "Registry contract", change: "Verified" },
 ];
 
@@ -188,7 +188,7 @@ function ProjectCardContent(): ReactNode {
       <div className="absolute bottom-3 left-5 flex items-center gap-2 text-neutral-700 text-xs tracking-widest" aria-hidden="true">
         <span>ETH</span>
         <span>/</span>
-        <span>SEPOLIA</span>
+        <span>BASE SEPOLIA</span>
         <span>/</span>
         <span>ANALYSED</span>
       </div>
@@ -208,7 +208,7 @@ function DashboardCard(): ReactNode {
           Verifiable Daily Digests
         </h3>
         <p className="text-card-foreground-muted text-sm">
-          Chronicle Registry stores cryptographic publication hashes on the Sepolia network.
+          Chronicle Registry stores cryptographic publication hashes on the Base Sepolia network.
         </p>
       </div>
 
@@ -242,7 +242,7 @@ function DashboardCard(): ReactNode {
               Anchored <Check className="h-4.5 w-4.5 text-accent inline-block" />
             </span>
             <span className="text-xs font-medium text-accent bg-accent/20 px-2 py-0.5 rounded">
-              SEPOLIA
+              BASE SEPOLIA
             </span>
           </div>
         </div>
@@ -273,7 +273,7 @@ function TrustedByCard(): ReactNode {
 
       <div className="flex items-center gap-2 mt-5 text-card-foreground-muted transition-transform duration-500 ease-out group-hover:scale-105">
         <Star className="size-4 fill-current text-accent" />
-        <span className="text-xs font-medium">Gated with x402 Sepolia EVM & MPP Tempo</span>
+        <span className="text-xs font-medium">Gated with x402 Base Sepolia & MPP Tempo</span>
       </div>
     </motion.div>
   );
