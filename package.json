@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "echo 'TODO: Supabase migration command'",
-    "db:seed": "echo 'TODO: Supabase seed command'"
+    "db:seed": "echo 'TODO: Supabase seed command'",
+    "db:types": "supabase gen types typescript --project-id luhrtrmizufucvrxnzbs > packages/db/src/database.types.ts" 
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
