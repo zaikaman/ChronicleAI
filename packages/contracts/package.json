@@ -13,6 +13,7 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@types/node": "^22.14.1",
+    "dotenv": "^16.4.7",
     "hardhat": "^2.22.18",
     "typescript": "^5.8.3"
   }

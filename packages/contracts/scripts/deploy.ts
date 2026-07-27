@@ -1,7 +1,8 @@
 // Deployment script for ChronicleRegistry contract
 // Usage: npx hardhat run scripts/deploy.ts --network sepolia
 
-import { ethers } from "hardhat";
+import hre from "hardhat";
+const { ethers } = hre;
 
 async function main(): Promise<void> {
   console.log("Deploying ChronicleRegistry...");
