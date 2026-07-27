@@ -7,3 +7,4 @@ export * from "./monitored-event-repository.ts";
 export * from "./public-alert-repository.ts";
 export * from "./execution-log-repository.ts";
 export * from "./llm-generation-attempt-repository.ts";
+export * from "./daily-digest-repository.ts";

@@ -1,5 +1,6 @@
 import { loadServerEnv } from "@chronicleai/config";
 import {
+  createDailyDigestRepository,
   createExecutionLogRepository,
   createLLMGenerationAttemptRepository,
   createMonitoredEventRepository,
@@ -13,7 +14,7 @@ import {
   requestIdMiddleware,
   timingMiddleware,
 } from "./middleware/core.ts";
-import { registerRoutes, setupUS1Routes } from "./routes/index.ts";
+import { registerRoutes, setupUS1Routes, setupUS2Routes } from "./routes/index.ts";
 
 const app: Express = express();
 
@@ -29,7 +30,7 @@ app.use(corsMiddleware(frontendOrigin));
 // Register API routes
 registerRoutes(app);
 
-// Setup US1 routes when env is available
+// Setup US1 and US2 routes when env is available
 try {
   const env = loadServerEnv();
   const supabase = createServerSupabaseClient({
@@ -37,17 +38,29 @@ try {
     supabaseServiceRoleKey: env.supabaseServiceRoleKey,
   });
 
-  const deps = {
-    eventRepo: createMonitoredEventRepository(supabase),
-    alertRepo: createPublicAlertRepository(supabase),
-    execLogRepo: createExecutionLogRepository(supabase),
-    llmAttemptRepo: createLLMGenerationAttemptRepository(supabase),
-  };
+  const eventRepo = createMonitoredEventRepository(supabase);
+  const alertRepo = createPublicAlertRepository(supabase);
+  const execLogRepo = createExecutionLogRepository(supabase);
+  const llmAttemptRepo = createLLMGenerationAttemptRepository(supabase);
+  const digestRepo = createDailyDigestRepository(supabase);
 
-  setupUS1Routes(app, env, deps);
+  // US1: Public Alerts
+  setupUS1Routes(app, env, {
+    eventRepo,
+    alertRepo,
+    execLogRepo,
+    llmAttemptRepo,
+  });
+
+  // US2: Daily Digests
+  setupUS2Routes(app, env, {
+    eventRepo,
+    digestRepo,
+    execLogRepo,
+  });
 } catch (error) {
   // Log but don't crash - env vars may not be available in all contexts
-  console.warn("US1 routes not fully configured:", error instanceof Error ? error.message : error);
+  console.warn("Routes not fully configured:", error instanceof Error ? error.message : error);
 }
 
 // Error handler (must be last)

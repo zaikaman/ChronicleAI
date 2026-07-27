@@ -68,6 +68,9 @@ export interface PublicAlertRow {
   confidence: Confidence | null;
   generation_provider: string | null;
   generation_attempt_ids: string[];
+  registry_tx_hash: string | null;
+  source_event_hash: string | null;
+  content_uri: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +88,9 @@ export interface PublicAlertInsert {
   confidence?: Confidence | null;
   generation_provider?: string | null;
   generation_attempt_ids?: string[];
+  registry_tx_hash?: string | null;
+  source_event_hash?: string | null;
+  content_uri?: string | null;
 }
 
 export type PublicAlertUpdate = Partial<PublicAlertInsert>;
@@ -103,6 +109,9 @@ export interface DailyDigestRow {
   audience: string;
   publication_status: DigestPublicationStatus;
   published_at: string | null;
+  registry_tx_hash: string | null;
+  source_event_root: string | null;
+  content_uri: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -119,9 +128,68 @@ export interface DailyDigestInsert {
   audience?: string;
   publication_status?: DigestPublicationStatus;
   published_at?: string | null;
+  registry_tx_hash?: string | null;
+  source_event_root?: string | null;
+  content_uri?: string | null;
 }
 
 export type DailyDigestUpdate = Partial<DailyDigestInsert>;
+
+// ── SponsoredWatch ───────────────────────────────────────
+export interface SponsoredWatchRow {
+  id: string;
+  target_contract: string;
+  watch_spec_hash: string;
+  starts_at: string;
+  ends_at: string;
+  create_tx_hash: string | null;
+  report_tx_hash: string | null;
+  report_content_hash: string | null;
+  content_uri: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SponsoredWatchInsert {
+  target_contract: string;
+  watch_spec_hash: string;
+  starts_at: string;
+  ends_at: string;
+  create_tx_hash?: string | null;
+  report_tx_hash?: string | null;
+  report_content_hash?: string | null;
+  content_uri?: string | null;
+  status?: string;
+}
+
+export type SponsoredWatchUpdate = Partial<SponsoredWatchInsert>;
+
+// ── RevenuePayout ────────────────────────────────────────
+export interface RevenuePayoutRow {
+  id: string;
+  payout_period_hash: string;
+  recipient: string;
+  amount: number;
+  reason_hash: string;
+  payout_tx_hash: string | null;
+  registry_tx_hash: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RevenuePayoutInsert {
+  payout_period_hash: string;
+  recipient: string;
+  amount: number;
+  reason_hash: string;
+  payout_tx_hash?: string | null;
+  registry_tx_hash?: string | null;
+  status?: string;
+}
+
+export type RevenuePayoutUpdate = Partial<RevenuePayoutInsert>;
 
 // ── Premium Intelligence Items ──────────────────────────
 export interface PremiumIntelligenceItemRow {

@@ -37,7 +37,20 @@ export interface DailyDigestResponse {
   title: string;
   summary: string;
   highlights: string[];
+  analysis?: string;
   publicationStatus: DigestPublicationStatus;
+  publishedAt?: string;
+  registryTxHash?: string;
+  sourceEventRoot?: string;
+  contentUri?: string;
+}
+
+// ── Digest Run Response (from KeeperHub trigger) ───────
+export interface DigestRunResponse {
+  accepted: boolean;
+  digestId?: string;
+  statusCode: number;
+  message: string;
 }
 
 // ── Premium Item Teaser ─────────────────────────────────

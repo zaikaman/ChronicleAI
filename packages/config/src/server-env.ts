@@ -18,6 +18,17 @@ export interface ServerEnv {
   x402FacilitatorUrl: string | undefined;
   mppSecret: string | undefined;
   treasuryWalletAddress: string | undefined;
+  chronicleRegistryAddress: string | undefined;
+  rpcUrl: string | undefined;
+  paraWalletPrivateKey: string | undefined;
+  webflowApiToken: string | undefined;
+  webflowCollectionId: string | undefined;
+  smtpHost: string | undefined;
+  smtpPort: number | undefined;
+  smtpUser: string | undefined;
+  smtpPass: string | undefined;
+  smtpFromAddress: string | undefined;
+  smtpSubscriberList: string[] | undefined;
   frontendOrigin: string;
   port: number;
   nodeEnv: string;
@@ -55,6 +66,17 @@ export function loadServerEnv(): ServerEnv {
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),
     mppSecret: optionalEnv("MPP_SECRET"),
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),
+    chronicleRegistryAddress: optionalEnv("CHRONICLE_REGISTRY_ADDRESS"),
+    rpcUrl: optionalEnv("RPC_URL"),
+    paraWalletPrivateKey: optionalEnv("PARA_WALLET_PRIVATE_KEY"),
+    webflowApiToken: optionalEnv("WEBFLOW_API_TOKEN"),
+    webflowCollectionId: optionalEnv("WEBFLOW_COLLECTION_ID"),
+    smtpHost: optionalEnv("SMTP_HOST"),
+    smtpPort: optionalEnv("SMTP_PORT") ? Number(optionalEnv("SMTP_PORT")) : undefined,
+    smtpUser: optionalEnv("SMTP_USER"),
+    smtpPass: optionalEnv("SMTP_PASS"),
+    smtpFromAddress: optionalEnv("SMTP_FROM_ADDRESS"),
+    smtpSubscriberList: optionalEnv("SMTP_SUBSCRIBER_LIST")?.split(",").map((s) => s.trim()),
     frontendOrigin: requireEnv("FRONTEND_ORIGIN"),
     port: Number(optionalEnv("PORT", "4000")),
     nodeEnv,

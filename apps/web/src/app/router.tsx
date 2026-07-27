@@ -8,14 +8,10 @@ import { App } from "./App.tsx";
 import type React from "react";
 import { AlertsPage } from "../features/alerts/AlertsPage.tsx";
 import { HomePage } from "../features/home/HomePage.tsx";
+import { LatestDigestPage } from "../features/digests/LatestDigestPage.tsx";
 
 function DigestPage(): React.ReactElement {
-  return (
-    <div style={{ padding: "2rem", textAlign: "center" }}>
-      <h2>Latest Digest</h2>
-      <p style={{ color: "#a1a1aa" }}>Coming soon in a future phase.</p>
-    </div>
-  );
+  return <LatestDigestPage />;
 }
 
 function PremiumPage(): React.ReactElement {

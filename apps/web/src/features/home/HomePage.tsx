@@ -5,9 +5,11 @@ import { Link } from "react-router-dom";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { AlertCard } from "../alerts/AlertCard.tsx";
 import { useAlerts } from "../alerts/use-alerts.ts";
+import { useLatestDigest } from "../digests/use-latest-digest.ts";
 
 export function HomePage(): ReactElement {
   const { alerts, isLoading, error, refetch } = useAlerts(3);
+  const { state: digestState } = useLatestDigest();
 
   return (
     <div>
@@ -41,8 +43,8 @@ export function HomePage(): ReactElement {
             lineHeight: 1.6,
           }}
         >
-          Autonomous on-chain intelligence monitoring and alert publication. Real-time alerts for
-          significant blockchain events.
+          Autonomous on-chain intelligence monitoring, alert publication, and daily market intelligence
+          anchored with on-chain proof-of-publication.
         </p>
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
           <Link
@@ -65,6 +67,30 @@ export function HomePage(): ReactElement {
             }}
           >
             View Alerts
+          </Link>
+          <Link
+            to="/digests/latest"
+            style={{
+              padding: "0.75rem 1.5rem",
+              background: "var(--bg-glass)",
+              color: "var(--fg-primary)",
+              border: "1px solid var(--border-primary)",
+              borderRadius: "8px",
+              fontWeight: 500,
+              fontSize: "var(--font-size-sm)",
+              textDecoration: "none",
+              transition: "all 0.15s ease",
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = "var(--bg-glass-hover)";
+              e.currentTarget.style.borderColor = "var(--border-hover)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = "var(--bg-glass)";
+              e.currentTarget.style.borderColor = "var(--border-primary)";
+            }}
+          >
+            Latest Digest
           </Link>
           <Link
             to="/premium"
@@ -91,6 +117,91 @@ export function HomePage(): ReactElement {
             Premium Intelligence
           </Link>
         </div>
+      </section>
+
+      {/* Latest Digest Preview Section */}
+      <section style={{ marginBottom: "3rem" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "1.5rem",
+          }}
+        >
+          <h2 style={{ fontSize: "var(--font-size-xl)", fontWeight: 600 }}>Latest Digest</h2>
+          <Link
+            to="/digests/latest"
+            style={{
+              fontSize: "var(--font-size-sm)",
+              color: "var(--accent-primary)",
+              textDecoration: "none",
+            }}
+          >
+            View full digest &rarr;
+          </Link>
+        </div>
+
+        {digestState.status === "loading" ? (
+          <LoadingState message="Loading latest digest..." />
+        ) : digestState.status === "not-found" ? (
+          <div
+            style={{
+              padding: "2rem",
+              textAlign: "center",
+              background: "var(--bg-glass)",
+              borderRadius: "8px",
+              border: "1px solid var(--border-primary)",
+            }}
+          >
+            <p style={{ color: "var(--fg-tertiary)", margin: 0 }}>
+              No daily digest published yet. Digests are generated on schedule.
+            </p>
+          </div>
+        ) : digestState.status === "error" ? (
+          <RetryState title="Digest unavailable" message={digestState.error} onRetry={() => {}} />
+        ) : (
+          <div
+            style={{
+              padding: "1.5rem",
+              background: "var(--bg-glass)",
+              borderRadius: "8px",
+              border: "1px solid var(--border-primary)",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "var(--font-size-md)",
+                fontWeight: 600,
+                marginBottom: "0.5rem",
+                color: "var(--fg-primary)",
+              }}
+            >
+              {digestState.data.title}
+            </h3>
+            <p
+              style={{
+                fontSize: "var(--font-size-sm)",
+                color: "var(--fg-secondary)",
+                lineHeight: 1.5,
+                marginBottom: "1rem",
+              }}
+            >
+              {digestState.data.summary.slice(0, 200)}...
+            </p>
+            {digestState.data.registryTxHash && (
+              <div
+                style={{
+                  fontSize: "var(--font-size-xs)",
+                  color: "var(--fg-tertiary)",
+                  fontFamily: "monospace",
+                }}
+              >
+                Registry: {digestState.data.registryTxHash.slice(0, 10)}...
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Latest Alerts Section */}

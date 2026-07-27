@@ -83,7 +83,9 @@ export type ExecutionLogActionType =
   | "publish_digest"
   | "payment"
   | "treasury_check"
-  | "operator_notification";
+  | "operator_notification"
+  | "registry_write"
+  | "payout";
 
 export const EXECUTION_LOG_ACTION_TYPES: readonly ExecutionLogActionType[] = [
   "monitor",
@@ -94,6 +96,8 @@ export const EXECUTION_LOG_ACTION_TYPES: readonly ExecutionLogActionType[] = [
   "payment",
   "treasury_check",
   "operator_notification",
+  "registry_write",
+  "payout",
 ] as const;
 
 export type ExecutionLogStatus = "started" | "succeeded" | "retrying" | "failed";
