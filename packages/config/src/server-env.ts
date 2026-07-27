@@ -17,6 +17,13 @@ export interface ServerEnv {
   x402FacilitatorUrl: string | undefined;
   mppSecret: string | undefined;
   treasuryWalletAddress: string | undefined;
+  /** Creator recovery payout recipient (required for revenue routing). */
+  creatorRecoveryWallet: string | undefined;
+  /**
+   * Converts currency-unit payout amounts to native ETH for transfers.
+   * Defaults to 1e-6 when unset (1_000 units → 0.001 ETH).
+   */
+  revenueEthPerCurrencyUnit: number;
   chronicleRegistryAddress: string | undefined;
   rpcUrl: string | undefined;
   paraWalletPrivateKey: string | undefined;
@@ -62,6 +69,10 @@ export function loadServerEnv(): ServerEnv {
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),
     mppSecret: optionalEnv("MPP_SECRET") ?? optionalEnv("MPP_SECRET_KEY"),
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),
+    creatorRecoveryWallet: optionalEnv("CREATOR_RECOVERY_WALLET"),
+    revenueEthPerCurrencyUnit: Number(
+      optionalEnv("REVENUE_ETH_PER_CURRENCY_UNIT", "0.000001"),
+    ),
     chronicleRegistryAddress: optionalEnv("CHRONICLE_REGISTRY_ADDRESS"),
     rpcUrl: optionalEnv("RPC_URL"),
     paraWalletPrivateKey: optionalEnv("PARA_WALLET_PRIVATE_KEY"),

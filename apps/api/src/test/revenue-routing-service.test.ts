@@ -14,6 +14,9 @@ import type {
 } from "../services/chronicle-registry-service.ts";
 import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
 import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
+import type { Web3Client } from "../services/web3-client-service.ts";
+
+const CREATOR_WALLET = "0x90F8bf6A479f320ced073E570619A864489a3000";
 
 describe("RevenueRoutingService", () => {
   const treasuryService = createTreasuryStatusService();
@@ -41,7 +44,13 @@ describe("RevenueRoutingService", () => {
         payouts.push(payout);
         return { ok: true as const, value: payout };
       }),
-      findById: vi.fn(),
+      findById: vi.fn().mockImplementation(async (id: string) => {
+        const payout = payouts.find((p) => p.id === id);
+        if (!payout) {
+          return { ok: true as const, value: null };
+        }
+        return { ok: true as const, value: payout };
+      }),
       findByPeriod: vi.fn(),
       list: vi.fn(),
       update: vi.fn(),
@@ -55,7 +64,13 @@ describe("RevenueRoutingService", () => {
         }
         return { ok: true as const, value: payout };
       }),
-      markFailed: vi.fn(),
+      markFailed: vi.fn().mockImplementation(async (id: string) => {
+        const payout = payouts.find((p) => p.id === id);
+        if (payout) {
+          payout.status = "failed";
+        }
+        return { ok: true as const, value: payout };
+      }),
     };
 
     const mockPaymentRepo: PaymentRecordRepository = {
@@ -73,7 +88,8 @@ describe("RevenueRoutingService", () => {
     const mockTreasuryRepo: TreasurySnapshotRepository = {
       create: vi.fn(),
       findLatest: vi.fn().mockResolvedValue({
-        ok: true as const,          value: {
+        ok: true as const,
+        value: {
           id: "treasury-001",
           available_balance: 50000,
           currency: "USDC",
@@ -120,11 +136,22 @@ describe("RevenueRoutingService", () => {
           _recipient: string,
           _amount: number,
           _transferTxHash: string,
-        ) => ({
-          success: true,
-          txHash: "0x" + "a".repeat(64),
-        } as RegistryPublishResult),
+        ) =>
+          ({
+            success: true,
+            txHash: "0x" + "d".repeat(64),
+          }) as RegistryPublishResult,
       ),
+    };
+
+    const mockWeb3Client: Web3Client = {
+      getSignerAddress: vi.fn().mockResolvedValue("0xsigner"),
+      publishAlert: vi.fn(),
+      publishDigest: vi.fn(),
+      createSponsoredWatch: vi.fn(),
+      publishSponsoredReport: vi.fn(),
+      recordPayout: vi.fn(),
+      sendTransfer: vi.fn().mockResolvedValue("0x" + "c".repeat(64)),
     };
 
     return {
@@ -133,10 +160,19 @@ describe("RevenueRoutingService", () => {
       treasuryRepo: mockTreasuryRepo,
       execLogRepo: mockExecLogRepo,
       registryService: mockRegistryService,
+      web3Client: mockWeb3Client,
     };
   }
 
-  it("should route revenue when conditions are met", async () => {
+  const baseConfig = {
+    creatorRecoveryWallet: CREATOR_WALLET,
+    referralRewardCap: 1000,
+    maxPayoutShare: 0.5,
+    routingIntervalMs: 99999999,
+    ethPerCurrencyUnit: 0.000001,
+  };
+
+  it("should route revenue with real transfer and registry hashes when conditions are met", async () => {
     const repos = createMockRepos();
 
     const service = createRevenueRoutingService(
@@ -144,12 +180,7 @@ describe("RevenueRoutingService", () => {
         ...repos,
         treasuryService,
       },
-      {
-        creatorRecoveryWallet: "0xcreatorrecovery00000000000000000000000000001",
-        referralRewardCap: 1000,
-        maxPayoutShare: 0.5,
-        routingIntervalMs: 99999999,
-      },
+      baseConfig,
     );
 
     const result = await service.routeRevenue(`test-period-${Date.now()}`);
@@ -158,13 +189,73 @@ describe("RevenueRoutingService", () => {
     expect(result.payoutIds.length).toBeGreaterThan(0);
     expect(result.creatorRecoveryAmount).toBeGreaterThan(0);
     expect(result.totalRevenue).toBe(25000);
-    expect(result.registryTxHash).toBeDefined();
+    expect(result.registryTxHash).toBe("0x" + "d".repeat(64));
+    expect(repos.web3Client.sendTransfer).toHaveBeenCalled();
+    expect(repos.registryService.recordPayout).toHaveBeenCalled();
+    expect(repos.payoutRepo.markTransferred).toHaveBeenCalledWith(
+      expect.any(String),
+      "0x" + "c".repeat(64),
+      "0x" + "d".repeat(64),
+    );
+  });
+
+  it("should fail without inventing hashes when web3 client is missing", async () => {
+    const repos = createMockRepos();
+
+    const service = createRevenueRoutingService(
+      {
+        ...repos,
+        treasuryService,
+        web3Client: null,
+      },
+      baseConfig,
+    );
+
+    const result = await service.routeRevenue(`test-period-noweb3-${Date.now()}`);
+
+    expect(result.routed).toBe(false);
+    expect(result.payoutIds.length).toBe(0);
+    expect(result.errorMessage).toContain("Web3 client not configured");
+  });
+
+  it("should fail when on-chain transfer fails (no simulated fallback)", async () => {
+    const repos = createMockRepos();
+    (repos.web3Client.sendTransfer as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("insufficient funds"),
+    );
+
+    const service = createRevenueRoutingService(
+      {
+        ...repos,
+        treasuryService,
+      },
+      baseConfig,
+    );
+
+    const result = await service.routeRevenue(`test-period-failtx-${Date.now()}`);
+
+    expect(result.routed).toBe(false);
+    expect(result.errorMessage).toContain("On-chain transfer failed");
+    expect(repos.payoutRepo.markTransferred).not.toHaveBeenCalled();
+  });
+
+  it("should reject invalid creator recovery wallet at construction", () => {
+    const repos = createMockRepos();
+
+    expect(() =>
+      createRevenueRoutingService(
+        {
+          ...repos,
+          treasuryService,
+        },
+        { ...baseConfig, creatorRecoveryWallet: "not-an-address" },
+      ),
+    ).toThrow("creatorRecoveryWallet");
   });
 
   it("should skip routing when conditions are not met", async () => {
     const repos = createMockRepos();
 
-    // Override treasury aggregates to show zero revenue
     (repos.treasuryRepo.getAggregates as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true as const,
       value: {
@@ -176,7 +267,8 @@ describe("RevenueRoutingService", () => {
     });
 
     (repos.treasuryRepo.findLatest as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true as const,          value: {
+      ok: true as const,
+      value: {
         id: "treasury-002",
         available_balance: 5000,
         currency: "USDC",
@@ -199,12 +291,7 @@ describe("RevenueRoutingService", () => {
         ...repos,
         treasuryService,
       },
-      {
-        creatorRecoveryWallet: "0xcreatorrecovery00000000000000000000000000001",
-        referralRewardCap: 1000,
-        maxPayoutShare: 0.5,
-        routingIntervalMs: 99999999,
-      },
+      baseConfig,
     );
 
     const result = await service.routeRevenue(`test-period-skip-${Date.now()}`);
@@ -222,12 +309,7 @@ describe("RevenueRoutingService", () => {
         ...repos,
         treasuryService,
       },
-      {
-        creatorRecoveryWallet: "0xcreatorrecovery00000000000000000000000000001",
-        referralRewardCap: 1000,
-        maxPayoutShare: 0.5,
-        routingIntervalMs: 99999999,
-      },
+      baseConfig,
     );
 
     const result = await service.routeRevenue(`test-period-calc-${Date.now()}`);
@@ -236,7 +318,8 @@ describe("RevenueRoutingService", () => {
     // Max payout share = 50% = 20000
     // Creator recovery = 80% of distributable = 16000
     // Referral rewards = 20% = 4000, capped at 1000
-    expect(result.creatorRecoveryAmount).toBeGreaterThan(0);
-    expect(result.referralRewardsAmount).toBeGreaterThanOrEqual(0);
+    expect(result.routed).toBe(true);
+    expect(result.creatorRecoveryAmount).toBe(16000);
+    expect(result.referralRewardsAmount).toBe(1000);
   });
 });

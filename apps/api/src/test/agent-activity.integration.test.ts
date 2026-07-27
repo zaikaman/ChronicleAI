@@ -221,6 +221,32 @@ describe("Agent Activity Integration", () => {
       ),
     };
 
+    const mockWeb3Client = {
+      getSignerAddress: vi.fn().mockResolvedValue("0xsigner"),
+      publishAlert: vi.fn(),
+      publishDigest: vi.fn(),
+      createSponsoredWatch: vi.fn(),
+      publishSponsoredReport: vi.fn(),
+      recordPayout: vi.fn(),
+      sendTransfer: vi.fn().mockResolvedValue("0x" + "c".repeat(64)),
+    };
+
+    (payoutRepo.findById as ReturnType<typeof vi.fn>).mockImplementation(async (id: string) => ({
+      ok: true as const,
+      value: {
+        id,
+        payout_period_hash: "period",
+        recipient: "0x90F8bf6A479f320ced073E570619A864489a3000",
+        amount: 1000,
+        reason_hash: "reason",
+        payout_tx_hash: null,
+        registry_tx_hash: null,
+        status: "pending",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    }));
+
     const routingService = createRevenueRoutingService(
       {
         treasuryRepo,
@@ -229,12 +255,14 @@ describe("Agent Activity Integration", () => {
         execLogRepo,
         treasuryService,
         registryService: mockRegistryService,
+        web3Client: mockWeb3Client as never,
       },
       {
-        creatorRecoveryWallet: "0xrecovery-wallet",
+        creatorRecoveryWallet: "0x90F8bf6A479f320ced073E570619A864489a3000",
         referralRewardCap: 1000,
         maxPayoutShare: 0.5,
         routingIntervalMs: 99999999,
+        ethPerCurrencyUnit: 0.000001,
       },
     );
 

@@ -13,17 +13,32 @@ const CHALLENGE_EXPIRY_MS = 300_000; // 5 minutes for machine payments
 /**
  * MPP payment adapter.
  *
- * This adapter supports:
- * 1. Production cryptographic HMAC verification using the server's configured secret
- * 2. Fallback mode in development/testing for simulation bypasses
+ * Production mode requires a configured shared secret and exact HMAC match.
+ * Opt-in `allowTestMode` enables a local test secret and length-based bypass
+ * for unit/integration tests only — never enable in production wiring.
  */
 export class MppPaymentAdapter implements PaymentAdapter {
   readonly route = "mpp" as const;
 
   private readonly mppSecret: string | undefined;
+  private readonly allowTestMode: boolean;
 
-  constructor(options?: { mppSecret?: string | undefined }) {
+  constructor(options?: {
+    mppSecret?: string | undefined;
+    /**
+     * When true, accepts a default test secret when none is configured and
+     * allows non-matching HMAC strings of length ≥ 32. Defaults to false.
+     */
+    allowTestMode?: boolean | undefined;
+  }) {
     this.mppSecret = options?.mppSecret;
+    this.allowTestMode = options?.allowTestMode ?? false;
+  }
+
+  private resolveSecret(): string | undefined {
+    if (this.mppSecret) return this.mppSecret;
+    if (this.allowTestMode) return "mpp-test-secret";
+    return undefined;
   }
 
   async createChallenge(params: {
@@ -32,14 +47,17 @@ export class MppPaymentAdapter implements PaymentAdapter {
     currency: string;
     payerReference?: string | undefined;
   }): Promise<ChallengeResult> {
+    const secret = this.resolveSecret();
+    if (!secret) {
+      throw new Error("MPP secret key is not configured on the server (MPP_SECRET)");
+    }
+
     const now = new Date();
     const expiresAt = new Date(now.getTime() + CHALLENGE_EXPIRY_MS).toISOString();
 
     const challengeNonce = randomUUID();
     const challengeReference = `mpp_${challengeNonce}`;
 
-    // Generate HMAC challenge material
-    const secret = this.mppSecret ?? "mpp-test-secret";
     const hmacPayload = `${challengeReference}|${params.amount}|${params.currency}|${expiresAt}`;
     const expectedHmac = createHmac("sha256", secret).update(hmacPayload).digest("hex");
 
@@ -49,11 +67,18 @@ export class MppPaymentAdapter implements PaymentAdapter {
       expectedAmount: params.amount,
       expectedCurrency: params.currency,
       challengeNonce,
-      expectedHmac,
+      // HMAC material the machine client must recompute with the shared secret.
+      // The full expected HMAC is not exposed — clients compute it themselves.
+      hmacPayloadTemplate: `${challengeReference}|${params.amount}|${params.currency}|${expiresAt}`,
       expiresAt,
-      // In production, the client includes the HMAC in the settlement reference
       verificationType: "hmac_sha256",
     };
+
+    // Keep expectedHmac available only in test mode so unit tests can assert shape
+    // without shipping the answer in production challenge payloads.
+    if (this.allowTestMode) {
+      challengeData.expectedHmac = expectedHmac;
+    }
 
     return {
       challengeReference,
@@ -72,7 +97,6 @@ export class MppPaymentAdapter implements PaymentAdapter {
     currency: string;
     paymentRoute: string;
   }): Promise<SettlementVerificationResult> {
-    // Verify route matches
     if (params.paymentRoute !== "mpp") {
       return {
         verified: false,
@@ -82,11 +106,6 @@ export class MppPaymentAdapter implements PaymentAdapter {
         errorMessage: "Invalid payment route for MPP adapter",
       };
     }
-
-    // Production-ready flow:
-    // 1. Reconstruct and verify the cryptographic HMAC signature against the secret.
-    // 2. Return the machine client ID as payerReference.
-    // (Note: challenge lookup and expiry checks are handled upstream by PaymentSettlementService).
 
     if (!params.settlementReference || params.settlementReference.length < 10) {
       return {
@@ -98,7 +117,6 @@ export class MppPaymentAdapter implements PaymentAdapter {
       };
     }
 
-    // Settle MPP challenge
     // Settlement reference format: <expiresAt>:<hmac_signature>
     const lastColonIndex = params.settlementReference.lastIndexOf(":");
     if (lastColonIndex === -1) {
@@ -115,9 +133,7 @@ export class MppPaymentAdapter implements PaymentAdapter {
     const expiresAt = params.settlementReference.slice(0, lastColonIndex);
     const providedHmac = params.settlementReference.slice(lastColonIndex + 1);
 
-    // Resolve secret (default to test secret in dev/test if not configured)
-    const secret =
-      this.mppSecret ?? (process.env.NODE_ENV !== "production" ? "mpp-test-secret" : undefined);
+    const secret = this.resolveSecret();
     if (!secret) {
       return {
         verified: false,
@@ -128,34 +144,22 @@ export class MppPaymentAdapter implements PaymentAdapter {
       };
     }
 
-    // Verify HMAC signature
     const hmacPayload = `${params.challengeReference}|${params.amountRequested}|${params.currency}|${expiresAt}`;
     const expectedHmac = createHmac("sha256", secret).update(hmacPayload).digest("hex");
 
     const isMatch = providedHmac === expectedHmac;
 
-    // In production, we require an exact match
-    if (process.env.NODE_ENV === "production") {
-      if (!isMatch) {
+    if (!isMatch) {
+      // Explicit opt-in test bypass only (mirrors x402 allowTestMode)
+      if (this.allowTestMode && providedHmac.length >= 32) {
+        // fall through as verified for test adapters
+      } else {
         return {
           verified: false,
           amountSettled: 0,
           currency: params.currency,
           settlementReference: params.settlementReference,
           errorMessage: "HMAC signature verification failed",
-        };
-      }
-    } else {
-      // In dev/test environments, allow simulated signature bypass if length is >= 32
-      const isSimulatedBypass = providedHmac.length >= 32;
-      if (!isMatch && !isSimulatedBypass) {
-        return {
-          verified: false,
-          amountSettled: 0,
-          currency: params.currency,
-          settlementReference: params.settlementReference,
-          errorMessage:
-            "HMAC signature verification failed (invalid signature or simulation bypass length)",
         };
       }
     }

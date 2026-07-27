@@ -72,9 +72,22 @@ export class X402PaymentAdapter implements PaymentAdapter {
       ],
     };
 
-    const treasuryTo = this.treasuryWalletAddress ?? "0x0000000000000000000000000000000000000000";
+    if (
+      !this.treasuryWalletAddress ||
+      !/^0x[a-fA-F0-9]{40}$/.test(this.treasuryWalletAddress)
+    ) {
+      throw new Error(
+        "Treasury wallet address is not configured for x402 payments (TREASURY_WALLET_ADDRESS)",
+      );
+    }
+
+    const treasuryTo = this.treasuryWalletAddress;
+    // `from` is filled by the payer wallet at sign time when not pre-bound
     const message = {
-      from: params.payerReference ?? treasuryTo,
+      from:
+        params.payerReference && /^0x[a-fA-F0-9]{40}$/.test(params.payerReference)
+          ? params.payerReference
+          : "0x0000000000000000000000000000000000000000",
       to: treasuryTo,
       value: Math.round(params.amount * 1_000_000), // Scale USDC to 6 decimals
       validAfter: 0,

@@ -4,11 +4,18 @@ import { ethers } from "ethers";
 import { describe, expect, it } from "vitest";
 import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 
+const TREASURY = "0x1234567890123456789012345678901234567890";
+
 describe("X402PaymentAdapter", () => {
   // Test adapter with allowTestMode enabled so plain-string settlement references work
-  const adapter = new X402PaymentAdapter({ allowTestMode: true });
+  const adapter = new X402PaymentAdapter({
+    allowTestMode: true,
+    treasuryWalletAddress: TREASURY,
+  });
   // Production adapter (no test mode) - rejects non-EIP-712 settlements
-  const prodAdapter = new X402PaymentAdapter();
+  const prodAdapter = new X402PaymentAdapter({
+    treasuryWalletAddress: TREASURY,
+  });
 
   describe("createChallenge", () => {
     it("should create a challenge with expected shape", async () => {
@@ -16,7 +23,7 @@ describe("X402PaymentAdapter", () => {
         premiumItemId: "premium-001",
         amount: 5,
         currency: "USDC",
-        payerReference: "0xpayer",
+        payerReference: "0x1111111111111111111111111111111111111111",
       });
 
       expect(result.challengeReference).toMatch(/^x402_/);
@@ -25,7 +32,11 @@ describe("X402PaymentAdapter", () => {
       expect(result.currency).toBe("USDC");
       expect(result.expiresAt).toBeTruthy();
       expect(result.challengeData).toHaveProperty("expectedAmount", 5);
-      expect(result.challengeData).toHaveProperty("referralAddress", "0xpayer");
+      expect(result.challengeData).toHaveProperty(
+        "referralAddress",
+        "0x1111111111111111111111111111111111111111",
+      );
+      expect((result.challengeData.message as { to: string }).to).toBe(TREASURY);
     });
 
     it("should create a challenge with default expiry within 10 minutes", async () => {
@@ -51,6 +62,20 @@ describe("X402PaymentAdapter", () => {
       });
 
       expect(result.challengeData.referralAddress).toBeNull();
+      expect((result.challengeData.message as { from: string }).from).toBe(
+        "0x0000000000000000000000000000000000000000",
+      );
+    });
+
+    it("should throw when treasury wallet is not configured", async () => {
+      const noTreasury = new X402PaymentAdapter();
+      await expect(
+        noTreasury.createChallenge({
+          premiumItemId: "premium-001",
+          amount: 5,
+          currency: "USDC",
+        }),
+      ).rejects.toThrow("Treasury wallet address is not configured");
     });
   });
 
@@ -122,9 +147,7 @@ describe("X402PaymentAdapter", () => {
         });
 
         expect(result.verified).toBe(false);
-        expect(result.errorMessage).toContain(
-          "JSON serialized EIP-712 authorization payload",
-        );
+        expect(result.errorMessage).toContain("JSON serialized EIP-712 authorization payload");
       });
 
       it("should accept a valid EIP-712 signature settlement payload", async () => {
@@ -167,11 +190,10 @@ describe("X402PaymentAdapter", () => {
         };
         const { domain, types, message } = challengeData;
 
-        const toAddress = "0x1234567890123456789012345678901234567890";
         const messageToSign = {
           ...message,
           from: wallet.address,
-          to: toAddress,
+          to: TREASURY,
         };
 
         const signature = await wallet.signTypedData(
@@ -185,7 +207,7 @@ describe("X402PaymentAdapter", () => {
         const settlementPayload = {
           signature,
           from: wallet.address,
-          to: toAddress,
+          to: TREASURY,
           value: messageToSign.value,
           validAfter: messageToSign.validAfter,
           validBefore: messageToSign.validBefore,

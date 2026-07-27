@@ -221,15 +221,45 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
   const treasuryService = createTreasuryStatusService();
   const notificationService = createNotificationService(deps.execLogRepo);
 
-  const routingService = createRevenueRoutingService({
-    treasuryRepo: deps.treasuryRepo,
-    paymentRepo: deps.paymentRecordRepo,
-    payoutRepo: deps.payoutRepo,
-    execLogRepo: deps.execLogRepo,
-    treasuryService,
-    registryService,
-    web3Client,
-  });
+  if (!env.creatorRecoveryWallet) {
+    console.warn(
+      "CREATOR_RECOVERY_WALLET is not set — KeeperHub revenue routing will reject until configured",
+    );
+  }
+
+  const routingService = env.creatorRecoveryWallet
+    ? createRevenueRoutingService(
+        {
+          treasuryRepo: deps.treasuryRepo,
+          paymentRepo: deps.paymentRecordRepo,
+          payoutRepo: deps.payoutRepo,
+          execLogRepo: deps.execLogRepo,
+          treasuryService,
+          registryService,
+          web3Client,
+        },
+        {
+          creatorRecoveryWallet: env.creatorRecoveryWallet,
+          referralRewardCap: 1000,
+          maxPayoutShare: 0.5,
+          routingIntervalMs: 7 * 24 * 60 * 60 * 1000,
+          ethPerCurrencyUnit: env.revenueEthPerCurrencyUnit,
+        },
+      )
+    : {
+        async routeRevenue(periodHash?: string) {
+          return {
+            routed: false,
+            totalRevenue: 0,
+            creatorRecoveryAmount: 0,
+            referralRewardsAmount: 0,
+            payoutPeriodHash: periodHash ?? `period_${Date.now()}`,
+            payoutIds: [] as string[],
+            errorMessage:
+              "CREATOR_RECOVERY_WALLET is not configured — cannot route revenue",
+          };
+        },
+      };
 
   const treasuryHandler = new TreasuryCheckHandler({
     treasuryRepo: deps.treasuryRepo,

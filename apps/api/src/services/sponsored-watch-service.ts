@@ -42,29 +42,46 @@ export function createSponsoredWatchService(params: {
 }): SponsoredWatchService {
   const { watchRepo, execLogRepo, web3Client } = params;
 
+  function requireWeb3(): Web3Client {
+    if (!web3Client) {
+      throw new Error(
+        "Web3 client not configured — sponsored watch requires RPC_URL, CHRONICLE_REGISTRY_ADDRESS, and PARA_WALLET_PRIVATE_KEY",
+      );
+    }
+    return web3Client;
+  }
+
   return {
     async createSponsoredWatch({ targetContract, watchSpecHash, startsAt, endsAt }) {
-      let createTxHash = `0x${"a".repeat(64)}`;
-      let watchId = 0;
+      const client = requireWeb3();
 
-      if (web3Client) {
-        try {
-          const startsAtUnix = Math.floor(new Date(startsAt).getTime() / 1000);
-          const endsAtUnix = Math.floor(new Date(endsAt).getTime() / 1000);
-          const txRes = await web3Client.createSponsoredWatch(
-            targetContract,
-            watchSpecHash,
-            startsAtUnix,
-            endsAtUnix,
-          );
-          createTxHash = txRes.txHash;
-          watchId = txRes.watchId;
-        } catch (error) {
-          console.warn(
-            "On-chain createSponsoredWatch failed, falling back to simulated tx:",
-            error,
-          );
-        }
+      const startsAtUnix = Math.floor(new Date(startsAt).getTime() / 1000);
+      const endsAtUnix = Math.floor(new Date(endsAt).getTime() / 1000);
+
+      let createTxHash: string;
+      let watchId: number;
+      try {
+        const txRes = await client.createSponsoredWatch(
+          targetContract,
+          watchSpecHash,
+          startsAtUnix,
+          endsAtUnix,
+        );
+        createTxHash = txRes.txHash;
+        watchId = txRes.watchId;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown on-chain error";
+        await execLogRepo.append({
+          action_type: "registry_write",
+          entity_type: "sponsored_watch",
+          entity_id: null,
+          status: "failed",
+          message: `On-chain createSponsoredWatch failed: ${message}`,
+          details: { targetContract, watchSpecHash, startsAt, endsAt },
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        });
+        throw new Error(`On-chain createSponsoredWatch failed: ${message}`);
       }
 
       const result = await watchRepo.create({
@@ -80,7 +97,6 @@ export function createSponsoredWatchService(params: {
         throw new Error(`Failed to create sponsored watch: ${result.error.message}`);
       }
 
-      // Log the creation
       await execLogRepo.append({
         action_type: "registry_write",
         entity_type: "sponsored_watch",
@@ -103,23 +119,30 @@ export function createSponsoredWatchService(params: {
     },
 
     async completeWatch(watchId, reportContentHash) {
-      let reportTxHash = `0x${"b".repeat(64)}`;
+      const client = requireWeb3();
 
-      if (web3Client) {
-        try {
-          const numericId = Number(watchId.replace(/[^0-9]/g, "")) || 0;
-          const reportUri = `chronicleai://sponsored-reports/${watchId}`;
-          reportTxHash = await web3Client.publishSponsoredReport(
-            numericId,
-            reportContentHash,
-            reportUri,
-          );
-        } catch (error) {
-          console.warn(
-            "On-chain publishSponsoredReport failed, falling back to simulated tx:",
-            error,
-          );
-        }
+      let reportTxHash: string;
+      try {
+        const numericId = Number(watchId.replace(/[^0-9]/g, "")) || 0;
+        const reportUri = `chronicleai://sponsored-reports/${watchId}`;
+        reportTxHash = await client.publishSponsoredReport(
+          numericId,
+          reportContentHash,
+          reportUri,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown on-chain error";
+        await execLogRepo.append({
+          action_type: "registry_write",
+          entity_type: "sponsored_watch",
+          entity_id: watchId,
+          status: "failed",
+          message: `On-chain publishSponsoredReport failed: ${message}`,
+          details: { reportContentHash },
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        });
+        throw new Error(`On-chain publishSponsoredReport failed: ${message}`);
       }
 
       const result = await watchRepo.updateStatus(watchId, "completed", {
@@ -131,7 +154,6 @@ export function createSponsoredWatchService(params: {
         throw new Error(`Failed to complete sponsored watch: ${result.error.message}`);
       }
 
-      // Log the completion
       await execLogRepo.append({
         action_type: "registry_write",
         entity_type: "sponsored_watch",

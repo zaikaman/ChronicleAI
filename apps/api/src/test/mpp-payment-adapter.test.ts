@@ -1,10 +1,16 @@
 // Unit tests for MPP payment adapter
 
+import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MppPaymentAdapter } from "../payments/mpp-payment-adapter.ts";
 
 describe("MppPaymentAdapter", () => {
   const adapter = new MppPaymentAdapter({ mppSecret: "test-secret-key" });
+  const testModeAdapter = new MppPaymentAdapter({
+    mppSecret: "test-secret-key",
+    allowTestMode: true,
+  });
+  const prodNoSecret = new MppPaymentAdapter();
 
   describe("createChallenge", () => {
     it("should create a challenge with expected shape", async () => {
@@ -19,9 +25,20 @@ describe("MppPaymentAdapter", () => {
       expect(result.amountRequested).toBe(5);
       expect(result.currency).toBe("USDC");
       expect(result.expiresAt).toBeTruthy();
-      expect(result.challengeData).toHaveProperty("expectedHmac");
       expect(result.challengeData).toHaveProperty("challengeNonce");
       expect(result.challengeData).toHaveProperty("verificationType", "hmac_sha256");
+      // Production mode must not leak the expected HMAC
+      expect(result.challengeData).not.toHaveProperty("expectedHmac");
+    });
+
+    it("should include expectedHmac only when allowTestMode is true", async () => {
+      const result = await testModeAdapter.createChallenge({
+        premiumItemId: "premium-001",
+        amount: 5,
+        currency: "USDC",
+      });
+
+      expect(result.challengeData).toHaveProperty("expectedHmac");
     });
 
     it("should create a challenge with different nonces each time", async () => {
@@ -53,20 +70,29 @@ describe("MppPaymentAdapter", () => {
       expect(diffMs).toBeGreaterThan(0);
       expect(diffMs).toBeLessThanOrEqual(300_000 + 1000); // 5 min + 1s tolerance
     });
+
+    it("should throw when secret is not configured and test mode is off", async () => {
+      await expect(
+        prodNoSecret.createChallenge({
+          premiumItemId: "premium-001",
+          amount: 5,
+          currency: "USDC",
+        }),
+      ).rejects.toThrow("MPP secret key is not configured");
+    });
   });
 
   describe("verifySettlement", () => {
-    it("should verify a valid settlement with HMAC signature (test mode accepts 32+ char sig)", async () => {
-      // First create a challenge to get the expected HMAC
-      const challenge = await adapter.createChallenge({
+    it("should accept a non-matching long HMAC only when allowTestMode is true", async () => {
+      const challenge = await testModeAdapter.createChallenge({
         premiumItemId: "premium-001",
         amount: 5,
         currency: "USDC",
       });
 
-      const settlementRef = `${challenge.challengeReference}:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2`;
+      const settlementRef = `${challenge.expiresAt}:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2`;
 
-      const result = await adapter.verifySettlement({
+      const result = await testModeAdapter.verifySettlement({
         challengeReference: challenge.challengeReference,
         settlementReference: settlementRef,
         amountRequested: 5,
@@ -76,7 +102,27 @@ describe("MppPaymentAdapter", () => {
 
       expect(result.verified).toBe(true);
       expect(result.amountSettled).toBe(5);
-      expect(result.currency).toBe("USDC");
+    });
+
+    it("should reject non-matching HMAC when allowTestMode is false", async () => {
+      const challenge = await adapter.createChallenge({
+        premiumItemId: "premium-001",
+        amount: 5,
+        currency: "USDC",
+      });
+
+      const settlementRef = `${challenge.expiresAt}:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2`;
+
+      const result = await adapter.verifySettlement({
+        challengeReference: challenge.challengeReference,
+        settlementReference: settlementRef,
+        amountRequested: 5,
+        currency: "USDC",
+        paymentRoute: "mpp",
+      });
+
+      expect(result.verified).toBe(false);
+      expect(result.errorMessage).toContain("HMAC signature verification failed");
     });
 
     it("should reject invalid payment route", async () => {
@@ -118,27 +164,22 @@ describe("MppPaymentAdapter", () => {
     });
 
     it("should verify a real cryptographic HMAC signature", async () => {
-      const customAdapter = new MppPaymentAdapter({ mppSecret: "my-real-secret" });
+      const secret = "my-real-secret";
+      const customAdapter = new MppPaymentAdapter({ mppSecret: secret });
       const amount = 5;
       const currency = "USDC";
 
-      // 1. Create challenge
       const challenge = await customAdapter.createChallenge({
         premiumItemId: "premium-001",
         amount,
         currency,
       });
 
-      const challengeData = challenge.challengeData as {
-        expiresAt: string;
-        expectedHmac: string;
-      };
-      const { expiresAt, expectedHmac } = challengeData;
-
-      // Settlement reference format: <expiresAt>:<hmac_signature>
+      const expiresAt = challenge.expiresAt;
+      const hmacPayload = `${challenge.challengeReference}|${amount}|${currency}|${expiresAt}`;
+      const expectedHmac = createHmac("sha256", secret).update(hmacPayload).digest("hex");
       const settlementRef = `${expiresAt}:${expectedHmac}`;
 
-      // Verify the settlement
       const result = await customAdapter.verifySettlement({
         challengeReference: challenge.challengeReference,
         settlementReference: settlementRef,
