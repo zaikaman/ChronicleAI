@@ -17,7 +17,8 @@
     "cors": "^2.8.5",
     "ethers": "^6.17.0",
     "express": "^5.1.0",
-    "nodemailer": "^9.0.3"
+    "nodemailer": "^9.0.3",
+    "openai": "^6.45.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

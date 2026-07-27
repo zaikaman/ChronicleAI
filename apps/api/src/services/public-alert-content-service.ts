@@ -1,5 +1,6 @@
 // LLM-backed public alert content generator with Gemini -> OpenAI -> Groq fallback
 
+import OpenAI from "openai";
 import { ALERT_GENERATION_TIMEOUT_MS, LLM_FALLBACK_ORDER } from "@chronicleai/config";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
 import type { Confidence, EventType, LLMProvider } from "@chronicleai/schemas";
@@ -179,38 +180,22 @@ async function callOpenAI(
   prompt: string,
   signal: AbortSignal,
 ): Promise<string> {
-  let host = config.baseUrl || "https://api.openai.com/v1";
-  if (host.endsWith("/")) host = host.slice(0, -1);
-  const url = `${host}/chat/completions`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
-        },
-        { role: "user", content: prompt },
-      ],
-    }),
-    signal,
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseUrl || "https://api.openai.com/v1",
   });
 
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
-  }
+  const response = await client.responses.create(
+    {
+      model: config.model,
+      instructions:
+        "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
+      input: prompt,
+    },
+    { signal },
+  );
 
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const text = data.choices?.[0]?.message?.content;
+  const text = response.output_text;
   if (!text) throw new Error("OpenAI returned empty response");
   return text;
 }
@@ -220,38 +205,22 @@ async function callGroq(
   prompt: string,
   signal: AbortSignal,
 ): Promise<string> {
-  let host = config.baseUrl || "https://api.groq.com/openai/v1";
-  if (host.endsWith("/")) host = host.slice(0, -1);
-  const url = `${host}/chat/completions`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
-        },
-        { role: "user", content: prompt },
-      ],
-    }),
-    signal,
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseUrl || "https://api.groq.com/openai/v1",
   });
 
-  if (!response.ok) {
-    throw new Error(`Groq API error: ${response.status} ${response.statusText}`);
-  }
+  const response = await client.responses.create(
+    {
+      model: config.model,
+      instructions:
+        "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
+      input: prompt,
+    },
+    { signal },
+  );
 
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const text = data.choices?.[0]?.message?.content;
+  const text = response.output_text;
   if (!text) throw new Error("Groq returned empty response");
   return text;
 }
