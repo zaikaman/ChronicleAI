@@ -1,0 +1,51 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "organizeImports": {
+    "enabled": true
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      },
+      "style": {
+        "noDefaultExport": "off",
+        "useConst": "error"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "files": {
+    "include": ["apps/**/*", "packages/**/*", "tests/**/*", "*.ts", "*.json", "*.yaml"],
+    "ignore": [
+      "node_modules",
+      "dist",
+      "coverage",
+      ".git",
+      "keeperhub",
+      ".specify",
+      "*.log",
+      ".turbo",
+      ".vercel",
+      "playwright-report",
+      "test-results",
+      ".supabase"
+    ]
+  }
+}

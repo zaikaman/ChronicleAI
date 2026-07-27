@@ -1,1 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Coverage
+coverage/
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel/
+
+# Turbo
+.turbo/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Supabase
+.supabase/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp files
+*.tmp
+
+# KeeperHub (read-only reference)
 keeperhub

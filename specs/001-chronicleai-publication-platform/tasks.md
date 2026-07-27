@@ -18,27 +18,27 @@
 
 **Purpose**: Initialize the pnpm TypeScript monorepo, app shells, shared packages, and local tooling required by all stories.
 
-- [ ] T001 Create pnpm workspace manifest with `apps/*` and `packages/*` entries in `pnpm-workspace.yaml`
-- [ ] T002 Create root package scripts for `dev`, `build`, `type-check`, `check`, `fix`, `test`, `db:migrate`, and `db:seed` in `./package.json`
-- [ ] T003 Create root TypeScript base configuration with strict mode and no implicit any in `./tsconfig.base.json`
-- [ ] T004 Create frontend TypeScript configuration extending the base config in `apps/web/tsconfig.json`
-- [ ] T005 Create backend TypeScript configuration extending the base config in `apps/api/tsconfig.json`
-- [ ] T006 [P] Create shared schemas package manifest in `packages/schemas/package.json`
-- [ ] T007 [P] Create shared database package manifest in `packages/db/package.json`
-- [ ] T008 [P] Create shared config package manifest in `packages/config/package.json`
-- [ ] T009 [P] Create shared testing package manifest in `packages/testing/package.json`
-- [ ] T010 [P] Create shared UI package manifest in `packages/ui/package.json`
-- [ ] T011 Initialize Vite React application entry files in `apps/web/index.html`, `apps/web/src/main.tsx`, and `apps/web/src/app/App.tsx`
-- [ ] T012 Initialize Express API application entry files in `apps/api/src/server.ts` and `apps/api/src/app.ts`
-- [ ] T013 Create Heroku process declaration for the backend API in `apps/api/Procfile`
-- [ ] T014 Create Vercel frontend project configuration with SPA fallback in `apps/web/vercel.json`
-- [ ] T015 Configure Vitest workspace coverage for app and package tests in `./vitest.config.ts`
-- [ ] T017 Configure linting and formatting commands for the monorepo in `./biome.jsonc`
-- [ ] T018 Create root environment example documenting all backend and frontend variables in `./.env.example`
-- [ ] T019 Create frontend environment example for browser-safe variables in `apps/web/.env.example`
-- [ ] T020 Create backend environment example for server-only variables in `apps/api/.env.example`
-- [ ] T021 Create Git ignore rules for local env files, build outputs, and Supabase temp files in `./.gitignore`
-- [ ] T022 Create shared path aliases for packages in `./tsconfig.base.json`
+- [X] T001 Create pnpm workspace manifest with `apps/*` and `packages/*` entries in `pnpm-workspace.yaml`
+- [X] T002 Create root package scripts for `dev`, `build`, `type-check`, `check`, `fix`, `test`, `db:migrate`, and `db:seed` in `./package.json`
+- [X] T003 Create root TypeScript base configuration with strict mode and no implicit any in `./tsconfig.base.json`
+- [X] T004 Create frontend TypeScript configuration extending the base config in `apps/web/tsconfig.json`
+- [X] T005 Create backend TypeScript configuration extending the base config in `apps/api/tsconfig.json`
+- [X] T006 [P] Create shared schemas package manifest in `packages/schemas/package.json`
+- [X] T007 [P] Create shared database package manifest in `packages/db/package.json`
+- [X] T008 [P] Create shared config package manifest in `packages/config/package.json`
+- [X] T009 [P] Create shared testing package manifest in `packages/testing/package.json`
+- [X] T010 [P] Create shared UI package manifest in `packages/ui/package.json`
+- [X] T011 Initialize Vite React application entry files in `apps/web/index.html`, `apps/web/src/main.tsx`, and `apps/web/src/app/App.tsx`
+- [X] T012 Initialize Express API application entry files in `apps/api/src/server.ts` and `apps/api/src/app.ts`
+- [X] T013 Create Heroku process declaration for the backend API in `apps/api/Procfile`
+- [X] T014 Create Vercel frontend project configuration with SPA fallback in `apps/web/vercel.json`
+- [X] T015 Configure Vitest workspace coverage for app and package tests in `./vitest.config.ts`
+- [X] T017 Configure linting and formatting commands for the monorepo in `./biome.jsonc`
+- [X] T018 Create root environment example documenting all backend and frontend variables in `./.env.example`
+- [X] T019 Create frontend environment example for browser-safe variables in `apps/web/.env.example`
+- [X] T020 Create backend environment example for server-only variables in `apps/api/.env.example`
+- [X] T021 Create Git ignore rules for local env files, build outputs, and Supabase temp files in `./.gitignore`
+- [X] T022 Create shared path aliases for packages in `./tsconfig.base.json`
 
 ---
 
@@ -58,8 +58,8 @@
 - [ ] T030 Create shared constants for event thresholds, dedupe windows, payment defaults, and dashboard limits in `packages/config/src/defaults.ts`
 - [ ] T031 Create Supabase server client factory with typed configuration in `packages/db/src/supabase-server.ts`
 - [ ] T032 Create Supabase browser client factory for authenticated frontend flows in `packages/db/src/supabase-browser.ts`
-- [ ] T033 Create first Supabase migration for `monitored_events`, `public_alerts`, `daily_digests`, `premium_intelligence_items`, `payment_records`, `treasury_snapshots`, and `execution_logs` in `supabase/migrations/202607270001_create_chronicleai_core.sql`
-- [ ] T034 Create Supabase migration for indexes, dedupe uniqueness, reporting window uniqueness, and payment lookup constraints in `supabase/migrations/202607270002_add_chronicleai_indexes.sql`
+- [ ] T033 Create first Supabase migration for `monitored_events`, `public_alerts`, `daily_digests`, `premium_intelligence_items`, `payment_records`, `treasury_snapshots`, and `execution_logs` in `supabase/migrations/202607060001_create_chronicleai_core.sql`
+- [ ] T034 Create Supabase migration for indexes, dedupe uniqueness, reporting window uniqueness, and payment lookup constraints in `supabase/migrations/202607060002_add_chronicleai_indexes.sql`
 - [ ] T035 Create Supabase seed data for demo alerts, digests, premium items, payments, treasury snapshots, and logs in `supabase/seed/chronicleai_demo.sql`
 - [ ] T036 Create TypeScript database row and insert types for all core tables in `packages/db/src/types.ts`
 - [ ] T037 Create shared repository error types and result helpers in `packages/db/src/errors.ts`

@@ -1,0 +1,28 @@
+{
+  "name": "chronicleai",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.7.1",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,yellow \"pnpm --filter @chronicleai/web dev\" \"pnpm --filter @chronicleai/api dev\"",
+    "build": "pnpm --filter @chronicleai/schemas build && pnpm --filter @chronicleai/db build && pnpm --filter @chronicleai/config build && pnpm --filter @chronicleai/testing build && pnpm --filter @chronicleai/ui build && pnpm --filter @chronicleai/web build && pnpm --filter @chronicleai/api build",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "check": "biome check .",
+    "fix": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "echo 'TODO: Supabase migration command'",
+    "db:seed": "echo 'TODO: Supabase seed command'"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@vitest/coverage-v8": "^3.1.1",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}
