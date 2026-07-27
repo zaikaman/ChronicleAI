@@ -1,20 +1,15 @@
 <!--
 Sync Impact Report:
-- Version change: None (Initial) -> 1.0.0
-- List of modified principles:
-  - [PRINCIPLE_1_NAME] -> I. Code Quality & Technical Standards
-  - [PRINCIPLE_2_NAME] -> II. Testing Standards & Verification Discipline
-  - [PRINCIPLE_3_NAME] -> III. User Experience & Theme Consistency
-  - [PRINCIPLE_4_NAME] -> IV. Performance & On-Chain Reliability
-  - [PRINCIPLE_5_NAME] -> V. Database Schema & Migration Integrity
-- Added sections:
-  - Development and Branching Strategy
-  - Public Documentation & Release Gates
+- Version change: 1.0.0 -> 1.1.0
+- List of modified principles: None
+- Added sections: None
+- Modified sections:
+  - Development and Branching Strategy (simplified to master branch only)
 - Removed sections: None
 - Templates requiring updates:
-  - .specify/templates/plan-template.md (✅ updated - verified aligned)
-  - .specify/templates/spec-template.md (✅ updated - verified aligned)
-  - .specify/templates/tasks-template.md (✅ updated - verified aligned)
+  - .specify/templates/plan-template.md (✅ updated)
+  - .specify/templates/spec-template.md (✅ updated)
+  - .specify/templates/tasks-template.md (✅ updated)
 - Follow-up TODOs: None
 -->
 
@@ -38,7 +33,7 @@ Every integration must satisfy strict latency guidelines, targeting sub-200ms re
 All database schema updates MUST use file-based migrations tracked via monotonic journal timestamps. Any heavy DDL schema migration that cannot run inside a transaction block (e.g., creating indexes concurrently) MUST include the `-- @requires-db-prep` directive on the first line of the migration file. This triggers mandatory out-of-band application by operators prior to PR merge.
 
 ## Development and Branching Strategy
-All development takes place in feature branches named `feature/KEEP-XXXX-description`. All pull requests MUST target the `staging` branch. Commit messages and pull request titles MUST strictly adhere to the Conventional Commits specification. No ticket IDs or phase numbers should be referenced in public-facing documentation.
+All development takes place directly on the `master` branch. Commit messages MUST strictly adhere to the Conventional Commits specification. No ticket IDs or phase numbers should be referenced in public-facing documentation.
 
 ## Public Documentation & Release Gates
 Public-facing documentation in the `docs/` folder is published directly and MUST contain no internal references, ticket IDs, or version tags. Release gates require complete automated test suite validation, zero linter or type-checker errors, and explicit confirmation of pre-requisite database migration steps on staging and production before code deployment.
@@ -50,4 +45,4 @@ This constitution serves as the source of truth for engineering practices in Chr
 3. Propagation of changes to all dependent specification, plan, and task templates.
 All code reviews and automated workflows must enforce compliance with these principles.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-27 | **Last Amended**: 2026-07-27
+**Version**: 1.1.0 | **Ratified**: 2026-07-27 | **Last Amended**: 2026-07-27
