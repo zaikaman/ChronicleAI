@@ -205,9 +205,27 @@ export function createPaymentRoutes(params: {
             const now = new Date();
             const endsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
+            // Extract target contract from premium item's content_private
+            const contentPrivate = premiumItemResult.value.content_private as
+              | { targetContract?: string; watchSpecHash?: string }
+              | undefined;
+            const targetContract = contentPrivate?.targetContract;
+            const watchSpecHash =
+              contentPrivate?.watchSpecHash ??
+              `0x${"c".repeat(64)}`;
+
+            if (!targetContract) {
+              res.status(400).json({
+                settled: false,
+                error:
+                  "Sponsored monitor premium item is missing targetContract in content_private",
+              });
+              return;
+            }
+
             const watch = await watchService.createSponsoredWatch({
-              targetContract: "0x0000000000000000000000000000000000000000",
-              watchSpecHash: `0x${"c".repeat(64)}`,
+              targetContract,
+              watchSpecHash,
               startsAt: now.toISOString(),
               endsAt,
             });

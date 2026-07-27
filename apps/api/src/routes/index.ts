@@ -149,7 +149,10 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
   const adapters = new Map<PaymentRoute, PaymentAdapter>();
   adapters.set(
     "x402",
-    new X402PaymentAdapter({ facilitatorUrl: env.x402FacilitatorUrl ?? undefined }),
+    new X402PaymentAdapter({
+      facilitatorUrl: env.x402FacilitatorUrl ?? undefined,
+      treasuryWalletAddress: env.treasuryWalletAddress ?? undefined,
+    }),
   );
   adapters.set("mpp", new MppPaymentAdapter({ mppSecret: env.mppSecret ?? undefined }));
 

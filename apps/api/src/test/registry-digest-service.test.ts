@@ -21,7 +21,12 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
     async publishSponsoredReport() {
       return "0xreport-tx-hash";
     },
-    async recordPayout() {
+    async recordPayout(
+      _payoutPeriodHash: string,
+      _recipient: string,
+      _amount: number,
+      _reasonHash: string,
+    ) {
       return "0xpayout-tx-hash";
     },
     async sendTransfer() {

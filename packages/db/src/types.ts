@@ -268,6 +268,9 @@ export interface TreasurySnapshotRow {
   estimated_transaction_cost: number | null;
   paid_request_count: number | null;
   status: TreasuryStatus;
+  last_routed_at: string | null;
+  last_payout_period_hash: string | null;
+  total_routed_amount: number | null;
   captured_at: string;
   created_at: string;
 }

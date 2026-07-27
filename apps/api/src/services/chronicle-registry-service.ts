@@ -17,7 +17,12 @@ export interface ChronicleRegistryService {
   publishDigest(digestId: string, sourceEventRoot: string): Promise<RegistryPublishResult>;
 
   /** Record a payout on-chain. Returns the transaction hash. */
-  recordPayout(payoutPeriodHash: string, transferTxHash: string): Promise<RegistryPublishResult>;
+  recordPayout(
+    payoutPeriodHash: string,
+    recipient: string,
+    amount: number,
+    transferTxHash: string,
+  ): Promise<RegistryPublishResult>;
 }
 
 export function createChronicleRegistryService(
@@ -66,7 +71,7 @@ export function createChronicleRegistryService(
       }
     },
 
-    async recordPayout(payoutPeriodHash, transferTxHash) {
+    async recordPayout(payoutPeriodHash, recipient, amount, transferTxHash) {
       if (!web3Client) {
         return {
           success: false,
@@ -76,14 +81,11 @@ export function createChronicleRegistryService(
       }
 
       try {
-        const recipient = "0x0000000000000000000000000000000000000000";
-        const amount = 0;
-        const reasonHash = transferTxHash;
         const txHash = await web3Client.recordPayout(
           payoutPeriodHash,
           recipient,
           amount,
-          reasonHash,
+          transferTxHash,
         );
         return { success: true, txHash };
       } catch (error) {

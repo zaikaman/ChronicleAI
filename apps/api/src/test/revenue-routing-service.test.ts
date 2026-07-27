@@ -73,8 +73,7 @@ describe("RevenueRoutingService", () => {
     const mockTreasuryRepo: TreasurySnapshotRepository = {
       create: vi.fn(),
       findLatest: vi.fn().mockResolvedValue({
-        ok: true as const,
-        value: {
+        ok: true as const,          value: {
           id: "treasury-001",
           available_balance: 50000,
           currency: "USDC",
@@ -84,6 +83,9 @@ describe("RevenueRoutingService", () => {
           estimated_transaction_cost: 1000,
           paid_request_count: 150,
           status: "healthy",
+          last_routed_at: null,
+          last_payout_period_hash: null,
+          total_routed_amount: null,
           captured_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
         },
@@ -112,10 +114,17 @@ describe("RevenueRoutingService", () => {
     const mockRegistryService: ChronicleRegistryService = {
       publishAlert: vi.fn(),
       publishDigest: vi.fn(),
-      recordPayout: vi.fn().mockResolvedValue({
-        success: true,
-        txHash: "0x" + "a".repeat(64),
-      } as RegistryPublishResult),
+      recordPayout: vi.fn().mockImplementation(
+        async (
+          _payoutPeriodHash: string,
+          _recipient: string,
+          _amount: number,
+          _transferTxHash: string,
+        ) => ({
+          success: true,
+          txHash: "0x" + "a".repeat(64),
+        } as RegistryPublishResult),
+      ),
     };
 
     return {
@@ -167,8 +176,7 @@ describe("RevenueRoutingService", () => {
     });
 
     (repos.treasuryRepo.findLatest as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true as const,
-      value: {
+      ok: true as const,          value: {
         id: "treasury-002",
         available_balance: 5000,
         currency: "USDC",
@@ -178,6 +186,9 @@ describe("RevenueRoutingService", () => {
         estimated_transaction_cost: 500,
         paid_request_count: 10,
         status: "warning",
+        last_routed_at: null,
+        last_payout_period_hash: null,
+        total_routed_amount: null,
         captured_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
       },

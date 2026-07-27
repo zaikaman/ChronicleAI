@@ -30,8 +30,7 @@ describe("Operator Audit Integration", () => {
 
     const treasuryRepo: TreasurySnapshotRepository = {
       create: vi.fn().mockResolvedValue({
-        ok: true as const,
-        value: {
+        ok: true as const,          value: {
           id: "treasury-test-001",
           available_balance: 50000,
           currency: "USDC",
@@ -41,13 +40,15 @@ describe("Operator Audit Integration", () => {
           estimated_transaction_cost: null,
           paid_request_count: null,
           status: "healthy",
+          last_routed_at: null,
+          last_payout_period_hash: null,
+          total_routed_amount: null,
           captured_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
         },
       }),
       findLatest: vi.fn().mockResolvedValue({
-        ok: true as const,
-        value: {
+        ok: true as const,          value: {
           id: "treasury-prev-001",
           available_balance: 45000,
           currency: "USDC",
@@ -57,6 +58,9 @@ describe("Operator Audit Integration", () => {
           estimated_transaction_cost: 800,
           paid_request_count: 120,
           status: "healthy",
+          last_routed_at: null,
+          last_payout_period_hash: null,
+          total_routed_amount: null,
           captured_at: new Date(Date.now() - 3600000).toISOString(),
           created_at: new Date(Date.now() - 3600000).toISOString(),
         },
@@ -142,6 +146,9 @@ describe("Operator Audit Integration", () => {
               estimated_transaction_cost: 1000,
               paid_request_count: 150,
               status: "healthy",
+              last_routed_at: null,
+              last_payout_period_hash: null,
+              total_routed_amount: null,
               captured_at: new Date().toISOString(),
               created_at: new Date().toISOString(),
             },
@@ -208,8 +215,7 @@ describe("Operator Audit Integration", () => {
     const treasuryRepo: TreasurySnapshotRepository = {
       create: vi.fn(),
       findLatest: vi.fn().mockResolvedValue({
-        ok: true as const,
-        value: {
+        ok: true as const,          value: {
           id: "treasury-routing-001",
           available_balance: 50000,
           currency: "USDC",
@@ -219,6 +225,9 @@ describe("Operator Audit Integration", () => {
           estimated_transaction_cost: 1000,
           paid_request_count: 150,
           status: "healthy",
+          last_routed_at: null,
+          last_payout_period_hash: null,
+          total_routed_amount: null,
           captured_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
         },
@@ -247,10 +256,17 @@ describe("Operator Audit Integration", () => {
     const mockRegistryService: ChronicleRegistryService = {
       publishAlert: vi.fn(),
       publishDigest: vi.fn(),
-      recordPayout: vi.fn().mockResolvedValue({
-        success: true,
-        txHash: "0x" + "a".repeat(64),
-      } as RegistryPublishResult),
+      recordPayout: vi.fn().mockImplementation(
+        async (
+          _payoutPeriodHash: string,
+          _recipient: string,
+          _amount: number,
+          _transferTxHash: string,
+        ) => ({
+          success: true,
+          txHash: "0x" + "a".repeat(64),
+        } as RegistryPublishResult),
+      ),
     };
 
     const routingService = createRevenueRoutingService(

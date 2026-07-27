@@ -230,13 +230,34 @@ export function createRevenueRoutingService(
         });
       }
 
-      // 7. Call recordPayout on the registry
-      const registryResult = await deps.registryService.recordPayout(
-        payoutPeriodHash,
-        payoutTxHash,
-      );
+      // 7. Call recordPayout on the registry for each payout
+      // Record the creator recovery payout as the primary on-chain record
+      let finalRegistryTxHash: string | undefined;
 
-      const finalRegistryTxHash = registryResult.txHash;
+      if (creatorRecoveryAmount > 0 && cfg.creatorRecoveryWallet) {
+        const registryResult = await deps.registryService.recordPayout(
+          payoutPeriodHash,
+          cfg.creatorRecoveryWallet,
+          creatorRecoveryAmount,
+          payoutTxHash,
+        );
+        finalRegistryTxHash = registryResult.txHash;
+      }
+
+      // Also record referral reward payouts
+      for (const payoutId of payoutIds.slice(1)) {
+        const payoutRecord = await deps.payoutRepo.findById(payoutId);
+        if (payoutRecord.ok && payoutRecord.value && referralRewardsAmount > 0) {
+          await deps.registryService.recordPayout(
+            payoutPeriodHash,
+            payoutRecord.value.recipient,
+            payoutRecord.value.amount,
+            payoutTxHash,
+          );
+        }
+      }
+
+      // finalRegistryTxHash is now set above from the primary creator payout
 
       // Update treasury snapshot with routing info
       if (latestSnapshot.ok && latestSnapshot.value) {
@@ -244,7 +265,7 @@ export function createRevenueRoutingService(
           last_routed_at: new Date().toISOString(),
           last_payout_period_hash: payoutPeriodHash,
           total_routed_amount:
-            ((latestSnapshot.value as any).total_routed_amount ?? 0) + distributable,
+            (latestSnapshot.value.total_routed_amount ?? 0) + distributable,
         };
         await deps.treasuryRepo.update(latestSnapshot.value.id, updateFields as never);
       }

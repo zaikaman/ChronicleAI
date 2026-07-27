@@ -67,7 +67,7 @@ export interface OperatorAuditState {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
-const OPERATOR_TOKEN = (import.meta.env as any).VITE_OPERATOR_TOKEN ?? "";
+const OPERATOR_TOKEN = import.meta.env.VITE_OPERATOR_TOKEN ?? "";
 
 export function useOperatorAudit(): OperatorAuditState {
   const [data, setData] = useState<OperatorAuditData | null>(null);

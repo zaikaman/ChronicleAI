@@ -17,15 +17,28 @@ const CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes
  *
  * This adapter supports:
  * 1. Production EIP-712 typed data challenge generation and verification
- * 2. Fallback mode in development/testing for plain-string settlement references
+ * 2. Fallback mode (opt-in via `allowTestMode`) for dev/test with plain-string settlement references
  */
 export class X402PaymentAdapter implements PaymentAdapter {
   readonly route = "x402" as const;
 
   private readonly facilitatorUrl: string | undefined;
+  private readonly treasuryWalletAddress: string | undefined;
+  private readonly allowTestMode: boolean;
 
-  constructor(options?: { facilitatorUrl?: string | undefined }) {
+  constructor(options?: {
+    facilitatorUrl?: string | undefined;
+    treasuryWalletAddress?: string | undefined;
+    /**
+     * When true, the adapter will accept plain-string settlement references
+     * without EIP-712 signature verification. Intended for local development
+     * and integration tests only. Defaults to false.
+     */
+    allowTestMode?: boolean | undefined;
+  }) {
     this.facilitatorUrl = options?.facilitatorUrl;
+    this.treasuryWalletAddress = options?.treasuryWalletAddress;
+    this.allowTestMode = options?.allowTestMode ?? false;
   }
 
   async createChallenge(params: {
@@ -59,9 +72,10 @@ export class X402PaymentAdapter implements PaymentAdapter {
       ],
     };
 
+    const treasuryTo = this.treasuryWalletAddress ?? "0x0000000000000000000000000000000000000000";
     const message = {
-      from: params.payerReference ?? "0x0000000000000000000000000000000000000000",
-      to: "0x0000000000000000000000000000000000000000", // Will be resolved to treasury wallet in production
+      from: params.payerReference ?? treasuryTo,
+      to: treasuryTo,
       value: Math.round(params.amount * 1_000_000), // Scale USDC to 6 decimals
       validAfter: 0,
       validBefore: Math.floor(new Date(expiresAt).getTime() / 1000),
@@ -225,8 +239,8 @@ export class X402PaymentAdapter implements PaymentAdapter {
       };
     }
 
-    // Fallback to local test mode for non-JSON settlement reference in dev/test environment
-    if (process.env.NODE_ENV !== "production") {
+    // Fallback to local test mode when explicitly opted in via allowTestMode
+    if (this.allowTestMode) {
       if (params.settlementReference.length < 5) {
         return {
           verified: false,
@@ -253,7 +267,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
       currency: params.currency,
       settlementReference: params.settlementReference,
       errorMessage:
-        "Production settlement requires a JSON serialized EIP-712 authorization payload",
+        "Settlement requires a JSON serialized EIP-712 authorization payload. For test/development, construct the X402PaymentAdapter with { allowTestMode: true }",
     };
   }
 }

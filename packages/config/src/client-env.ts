@@ -12,6 +12,7 @@ export interface ClientEnv {
 declare global {
   interface ImportMetaEnv {
     VITE_API_BASE_URL: string;
+    VITE_OPERATOR_TOKEN?: string;
     VITE_SUPABASE_URL?: string;
     VITE_SUPABASE_ANON_KEY?: string;
   }
