@@ -1,7 +1,9 @@
 // Web3/Ethers client service for Chronicle Registry contract interaction
+// and treasury-signed native transfers for revenue routing.
 
 import type { ServerEnv } from "@chronicleai/config";
 import { ethers } from "ethers";
+import { resolveTreasuryWallet } from "./treasury-wallet.ts";
 
 /**
  * TRUSTED_CLIENT_OK: ethers is the canonical Ethereum SDK used here because
@@ -12,8 +14,11 @@ import { ethers } from "ethers";
  */
 
 export interface Web3Client {
-  /** Return the connected signer address. */
+  /** Return the Para/registry signer address. */
   getSignerAddress(): Promise<string>;
+
+  /** Return the treasury address that funds revenue splits (if configured). */
+  getTreasuryAddress(): Promise<string | undefined>;
 
   /** Publish an alert hash on-chain. Returns the transaction hash. */
   publishAlert(alertHash: string, ipfsUri: string): Promise<string>;
@@ -44,7 +49,10 @@ export interface Web3Client {
     reasonHash: string,
   ): Promise<string>;
 
-  /** Send native transfer. Returns the transaction hash. */
+  /**
+   * Send native transfer from the treasury wallet (not Para).
+   * Requires TREASURY_WALLET_PRIVATE_KEY so the receive address can actually spend.
+   */
   sendTransfer(to: string, amountEth: number): Promise<string>;
 }
 
@@ -80,14 +88,21 @@ export function createWeb3Client(env: ServerEnv): Web3Client | null {
   }
 
   const provider = new ethers.JsonRpcProvider(env.rpcUrl);
-  const wallet = new ethers.Wallet(env.paraWalletPrivateKey, provider);
+  // Para: registry / agent operations only
+  const paraWallet = new ethers.Wallet(env.paraWalletPrivateKey, provider);
   const registryAddress = env.chronicleRegistryAddress;
 
   const registryContract = new ethers.Contract(
     registryAddress,
     REGISTRY_ABI,
-    wallet,
+    paraWallet,
   ) as unknown as EthersContract;
+
+  // Treasury: holds inbound payment destination + signs revenue-routing transfers
+  const treasury = resolveTreasuryWallet(env);
+  const treasuryWallet = treasury.privateKey
+    ? new ethers.Wallet(treasury.privateKey, provider)
+    : undefined;
 
   function hashString(input: string): string {
     return ethers.keccak256(ethers.toUtf8Bytes(input));
@@ -95,7 +110,14 @@ export function createWeb3Client(env: ServerEnv): Web3Client | null {
 
   return {
     async getSignerAddress() {
-      return await wallet.getAddress();
+      return await paraWallet.getAddress();
+    },
+
+    async getTreasuryAddress() {
+      if (treasuryWallet) {
+        return await treasuryWallet.getAddress();
+      }
+      return treasury.address;
     },
 
     async publishAlert(alertHash, ipfsUri) {
@@ -168,7 +190,12 @@ export function createWeb3Client(env: ServerEnv): Web3Client | null {
     },
 
     async sendTransfer(to, amountEth) {
-      const tx = await wallet.sendTransaction({
+      if (!treasuryWallet) {
+        throw new Error(
+          "Treasury spending key is not configured — set TREASURY_WALLET_PRIVATE_KEY so the treasury can sign revenue-routing transfers (distinct from CREATOR_RECOVERY_WALLET destination and PARA_WALLET_PRIVATE_KEY registry key)",
+        );
+      }
+      const tx = await treasuryWallet.sendTransaction({
         to,
         value: ethers.parseEther(String(amountEth)),
       });

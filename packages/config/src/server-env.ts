@@ -21,7 +21,19 @@ export interface ServerEnv {
    * Falls back to keeperhubWebhookSecret when unset.
    */
   premiumAccessSecret: string | undefined;
+  /**
+   * Optional public treasury address for x402 `to`.
+   * Prefer deriving this from TREASURY_WALLET_PRIVATE_KEY (see apps/api treasury-wallet).
+   * If both are set, they must match.
+   */
   treasuryWalletAddress: string | undefined;
+  /**
+   * Private key for the treasury wallet that receives premium payments and
+   * signs outbound revenue-routing transfers. Required for real payouts.
+   * Distinct from CREATOR_RECOVERY_WALLET (payout destination) and
+   * PARA_WALLET_PRIVATE_KEY (registry / agent ops).
+   */
+  treasuryWalletPrivateKey: string | undefined;
   /** Creator recovery payout recipient (required for revenue routing). */
   creatorRecoveryWallet: string | undefined;
   /**
@@ -31,6 +43,7 @@ export interface ServerEnv {
   revenueEthPerCurrencyUnit: number;
   chronicleRegistryAddress: string | undefined;
   rpcUrl: string | undefined;
+  /** Para / agent key for registry writes (alerts, digests, watches, recordPayout). */
   paraWalletPrivateKey: string | undefined;
   smtpHost: string | undefined;
   smtpPort: number | undefined;
@@ -74,6 +87,7 @@ export function loadServerEnv(): ServerEnv {
     mppSecret: optionalEnv("MPP_SECRET"),
     premiumAccessSecret: optionalEnv("PREMIUM_ACCESS_SECRET"),
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),
+    treasuryWalletPrivateKey: optionalEnv("TREASURY_WALLET_PRIVATE_KEY"),
     creatorRecoveryWallet: optionalEnv("CREATOR_RECOVERY_WALLET"),
     revenueEthPerCurrencyUnit: Number(
       optionalEnv("REVENUE_ETH_PER_CURRENCY_UNIT", "0.000001"),

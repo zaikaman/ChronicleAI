@@ -81,6 +81,7 @@ import { createDigestGenerationService } from "../services/digest-generation-ser
 import { createDigestPublicationService } from "../services/digest-publication-service.ts";
 import { createDigestWindowService } from "../services/digest-window-service.ts";
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
+import { resolveTreasuryWallet } from "../services/treasury-wallet.ts";
 import { createWeb3Client } from "../services/web3-client-service.ts";
 import { createDigestRoutes } from "./digest-routes.ts";
 import { createKeeperhubDigestRoutes } from "./keeperhub-digest-routes.ts";
@@ -171,6 +172,7 @@ export interface US3Dependencies {
 }
 export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependencies): void {
   const web3Client = createWeb3Client(env);
+  const treasury = resolveTreasuryWallet(env);
 
   // Initialize payment adapters
   const adapters = new Map<PaymentRoute, PaymentAdapter>();
@@ -178,7 +180,8 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
     "x402",
     new X402PaymentAdapter({
       facilitatorUrl: env.x402FacilitatorUrl ?? undefined,
-      treasuryWalletAddress: env.treasuryWalletAddress ?? undefined,
+      // Prefer address derived from TREASURY_WALLET_PRIVATE_KEY so receive === spend key
+      treasuryWalletAddress: treasury.address,
     }),
   );
   adapters.set("mpp", new MppPaymentAdapter({ mppSecret: env.mppSecret ?? undefined }));
@@ -246,10 +249,24 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
   const registryService = createChronicleRegistryService(web3Client);
   const treasuryService = createTreasuryStatusService();
   const notificationService = createNotificationService(deps.execLogRepo);
+  const treasury = resolveTreasuryWallet(env);
+
+  if (!treasury.privateKey) {
+    console.warn(
+      "TREASURY_WALLET_PRIVATE_KEY is not set — revenue routing transfers will fail until the treasury can sign payouts",
+    );
+  }
 
   if (!env.creatorRecoveryWallet) {
     console.warn(
       "CREATOR_RECOVERY_WALLET is not set — KeeperHub revenue routing will reject until configured",
+    );
+  } else if (
+    treasury.address &&
+    env.creatorRecoveryWallet.toLowerCase() === treasury.address.toLowerCase()
+  ) {
+    console.warn(
+      "CREATOR_RECOVERY_WALLET matches TREASURY address — payouts will send treasury funds back to itself. Use a separate creator destination wallet.",
     );
   }
 

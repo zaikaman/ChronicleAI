@@ -224,6 +224,7 @@ describe("Agent Activity Integration", () => {
 
     const mockWeb3Client = {
       getSignerAddress: vi.fn().mockResolvedValue("0xsigner"),
+      getTreasuryAddress: vi.fn().mockResolvedValue("0xtreasury"),
       publishAlert: vi.fn(),
       publishDigest: vi.fn(),
       createSponsoredWatch: vi.fn(),

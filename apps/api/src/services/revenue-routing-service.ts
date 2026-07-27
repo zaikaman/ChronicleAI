@@ -41,8 +41,8 @@ export interface RevenueRoutingService {
    * 2. Subtract reserve buffer
    * 3. Calculate creator recovery share
    * 4. Calculate referral rewards
-   * 5. Execute real native transfers via Para MPC wallet
-   * 6. Call recordPayout on the registry with real hashes only
+   * 5. Execute real native transfers from the treasury wallet (TREASURY_WALLET_PRIVATE_KEY)
+   * 6. Call recordPayout on the registry (Para key) with real hashes only
    */
   routeRevenue(periodHash?: string): Promise<RevenueRoutingResult>;
 }
@@ -95,7 +95,7 @@ export function createRevenueRoutingService(
         return ZERO_RESULT(
           payoutPeriodHash,
           0,
-          "Web3 client not configured — revenue routing requires RPC_URL, CHRONICLE_REGISTRY_ADDRESS, and PARA_WALLET_PRIVATE_KEY",
+          "Web3 client not configured — revenue routing requires RPC_URL, CHRONICLE_REGISTRY_ADDRESS, PARA_WALLET_PRIVATE_KEY (registry), and TREASURY_WALLET_PRIVATE_KEY (payout transfers)",
         );
       }
 

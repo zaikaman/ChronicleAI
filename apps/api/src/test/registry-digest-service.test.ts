@@ -9,6 +9,9 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
     async getSignerAddress() {
       return "0xmock";
     },
+    async getTreasuryAddress() {
+      return "0xtreasury";
+    },
     async publishAlert(alertHash: string, ipfsUri: string) {
       return "0xalert-tx-hash";
     },
