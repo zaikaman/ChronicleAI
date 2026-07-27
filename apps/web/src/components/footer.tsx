@@ -7,11 +7,12 @@ const footerLinks = {
     { label: "Daily Digest", href: "/digests/latest" },
     { label: "Market Alerts", href: "/alerts" },
     { label: "Publications Archive", href: "/publications" },
-    { label: "Operator Console", href: "/operator" },
+    { label: "Premium Intelligence", href: "/premium" },
+    { label: "Agent Activity", href: "/activity" },
   ],
   company: [
-    { label: "KeeperHub Node", href: "https://keeperhub.network" },
-    { label: "Chronicle Registry", href: "https://sepolia.etherscan.io" },
+    { label: "KeeperHub", href: "https://keeperhub.com" },
+    { label: "Sepolia Explorer", href: "https://sepolia.etherscan.io" },
   ],
   social: [
     { label: "Twitter / X", href: "https://twitter.com/chronicle_ai" },

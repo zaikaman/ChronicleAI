@@ -1,20 +1,15 @@
-import { ArrowDownRight, ChevronDown } from "lucide-react";
+import { ArrowDownRight } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useLocation, Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 
-const menus = {
-  publications: [
-    { label: "Daily Digest", description: "Read the latest compiled on-chain intelligence report", href: "/digests/latest" },
-    { label: "Market Alerts", description: "Real-time automated summaries of significant blockchain events", href: "/alerts" },
-    { label: "Archive Feed", description: "Search and filter all past public updates and newsletters", href: "/publications" },
-  ],
-  features: [
-    { label: "Premium Feeds", description: "Unlock historical data and advanced analysis using x402 & MPP", href: "/premium" },
-    { label: "Sponsorships", description: "Fund monitoring campaigns for specific contracts or protocols", href: "/premium" },
-    { label: "Operator Console", description: "Audit sustainability metrics, payouts, and execution logs", href: "/operator" },
-  ],
-};
+const navLinks = [
+  { label: "Alerts", href: "/alerts", description: "Live public market bulletins" },
+  { label: "Digest", href: "/digests/latest", description: "Latest daily intelligence report" },
+  { label: "Archive", href: "/publications", description: "All publications in one feed" },
+  { label: "Premium", href: "/premium", description: "Paid deep analysis & sponsorships" },
+  { label: "Activity", href: "/activity", description: "Public on-chain agent trail" },
+];
 
 const ease = [0.23, 1, 0.32, 1] as const;
 
@@ -35,126 +30,23 @@ function HamburgerIcon({ isOpen }: { isOpen: boolean }): ReactNode {
   );
 }
 
-function DesktopDropdown({ 
-  label, 
-  menuKey, 
-  isOpen, 
-  onOpen, 
-  onClose 
-}: { 
-  label: string; 
-  menuKey: keyof typeof menus; 
-  isOpen: boolean; 
-  onOpen: () => void; 
-  onClose: () => void; 
-}): ReactNode {
-  return (
-    <div className="relative" onMouseEnter={onOpen} onMouseLeave={onClose}>
-      <button 
-        className="flex items-center gap-1 px-4 py-2 max-[1200px]:px-3 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors rounded-full hover:bg-foreground/5 cursor-pointer"
-        aria-expanded={isOpen}
-        aria-haspopup="true"
-      >
-        {label}
-        <ChevronDown className="w-4 h-4" aria-hidden="true" />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-            transition={{ duration: 0.2, ease }}
-            className="absolute top-full left-0 pt-2 w-72"
-          >
-            <div className="bg-frame border border-border rounded-2xl shadow-lg overflow-hidden p-2">
-              {menus[menuKey].map((item) => (
-                <Link 
-                  key={item.label} 
-                  to={item.href} 
-                  className="block px-4 py-3 rounded-xl hover:bg-muted transition-colors"
-                  onClick={onClose}
-                >
-                  <div className="text-sm font-medium text-foreground">{item.label}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{item.description}</div>
-                </Link>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function MobileExpandable({ 
-  label, 
-  menuKey, 
-  isExpanded, 
-  onToggle, 
-  onClose 
-}: { 
-  label: string; 
-  menuKey: keyof typeof menus; 
-  isExpanded: boolean; 
-  onToggle: () => void; 
-  onClose: () => void; 
-}): ReactNode {
-  return (
-    <div className="border-b border-foreground/10">
-      <button
-        className="flex items-center justify-between py-4 w-full text-base font-medium text-foreground"
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-      >
-        {label}
-        <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
-        </motion.div>
-      </button>
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="pb-2 space-y-1">
-              {menus[menuKey].map((item) => (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  className="block py-2 text-sm text-foreground/80 hover:text-foreground"
-                  onClick={onClose}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 const CornerSVG = ({ className }: { className: string }) => (
   <svg className={className} width="50" height="50" viewBox="0 0 50 50" fill="none" aria-hidden="true">
     <path d="M5.50871e-06 0C-0.00788227 37.3001 8.99616 50.0116 50 50H5.50871e-06V0Z" fill="currentColor" />
   </svg>
 );
 
+function isActivePath(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function Header(): ReactNode {
   const location = useLocation();
   const pathname = location.pathname;
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
 
   const closeMobile = () => setMobileMenuOpen(false);
-  const toggleExpanded = (key: string) => setMobileExpanded(mobileExpanded === key ? null : key);
 
   return (
     <motion.header
@@ -164,40 +56,45 @@ export function Header(): ReactNode {
       className="fixed shadow-2xl/20 rounded-b-4xl top-2.5 left-1/2 -translate-x-1/2 w-full max-w-5xl max-[1200px]:max-w-2xl bg-frame z-[9990] max-[850px]:top-0 max-[850px]:left-0 max-[850px]:right-0 max-[850px]:translate-x-0 max-[850px]:w-full max-[850px]:max-w-none max-[850px]:rounded-none max-[850px]:rounded-b-4xl max-[850px]:overflow-hidden border-b border-border/10"
     >
       <div className="h-20 max-[850px]:h-18 flex items-center justify-between px-4 max-[850px]:px-6">
-        <Link to="/" className="flex items-center gap-2 ml-4 max-[850px]:ml-0">
+        <Link to="/" className="flex items-center gap-2 ml-4 max-[850px]:ml-0" onClick={closeMobile}>
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
             CAI
           </div>
-          <span className="text-lg font-semibold text-foreground leading-none max-[1200px]:hidden max-[850px]:inline">ChronicleAI</span>
+          <span className="text-lg font-semibold text-foreground leading-none max-[1200px]:hidden max-[850px]:inline">
+            ChronicleAI
+          </span>
         </Link>
 
-        <nav className="flex items-center gap-1 max-[1200px]:gap-0 max-[850px]:hidden">
-          <DesktopDropdown
-            label="Publications"
-            menuKey="publications"
-            isOpen={activeMenu === "publications"}
-            onOpen={() => setActiveMenu("publications")}
-            onClose={() => setActiveMenu(null)}
-          />
-          <DesktopDropdown
-            label="Features"
-            menuKey="features"
-            isOpen={activeMenu === "features"}
-            onOpen={() => setActiveMenu("features")}
-            onClose={() => setActiveMenu(null)}
-          />
-          <Link to="/publications" className="px-4 py-2 max-[1200px]:px-3 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors rounded-full hover:bg-foreground/5">
-            Newspaper
-          </Link>
+        <nav className="flex items-center gap-0.5 max-[1200px]:gap-0 max-[850px]:hidden" aria-label="Primary">
+          {navLinks.map((link) => {
+            const active = isActivePath(pathname, link.href);
+            return (
+              <Link
+                key={link.href}
+                to={link.href}
+                title={link.description}
+                className={`px-3 py-2 max-[1200px]:px-2.5 text-sm font-medium transition-colors rounded-full hover:bg-foreground/5 ${
+                  active ? "text-foreground bg-foreground/5" : "text-foreground/80 hover:text-foreground"
+                }`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="flex items-center gap-4 max-[850px]:hidden">
-          <Link to="/premium" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors">
-            Pricing
+        <div className="flex items-center gap-3 max-[850px]:hidden">
+          <Link
+            to="/premium"
+            className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
+          >
+            Premium
           </Link>
-          <Link to="/operator" className="group relative inline-flex items-center">
+          <Link to="/digests/latest" className="group relative inline-flex items-center">
             <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-xl bg-accent" />
-            <span className="relative z-10 px-5 py-2.5 rounded-xl bg-foreground text-background text-sm font-medium">Dashboard</span>
+            <span className="relative z-10 px-5 py-2.5 rounded-xl bg-foreground text-background text-sm font-medium">
+              Read digest
+            </span>
             <span className="relative -left-px z-10 w-9 h-9 rounded-xl flex items-center justify-center text-black">
               <ArrowDownRight className="w-4 h-4 transition-transform duration-300 group-hover:-rotate-45" />
             </span>
@@ -205,6 +102,7 @@ export function Header(): ReactNode {
         </div>
 
         <button
+          type="button"
           className="hidden max-[850px]:flex items-center justify-center w-10 h-10 cursor-pointer"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
@@ -224,36 +122,46 @@ export function Header(): ReactNode {
             className="hidden max-[850px]:block overflow-hidden"
           >
             <div className="px-6 pb-4">
-              <nav className="space-y-0">
-                <Link to="/" className="flex items-center justify-between py-4 text-base font-medium text-foreground border-b border-foreground/10" onClick={closeMobile}>
+              <nav className="space-y-0" aria-label="Mobile">
+                <Link
+                  to="/"
+                  className="flex items-center justify-between py-4 text-base font-medium text-foreground border-b border-foreground/10"
+                  onClick={closeMobile}
+                >
                   Home
                 </Link>
-                <MobileExpandable
-                  label="Publications"
-                  menuKey="publications"
-                  isExpanded={mobileExpanded === "publications"}
-                  onToggle={() => toggleExpanded("publications")}
-                  onClose={closeMobile}
-                />
-                <MobileExpandable
-                  label="Features"
-                  menuKey="features"
-                  isExpanded={mobileExpanded === "features"}
-                  onToggle={() => toggleExpanded("features")}
-                  onClose={closeMobile}
-                />
-                <Link to="/publications" className="flex items-center justify-between py-4 text-base font-medium text-foreground" onClick={closeMobile}>
-                  Archive
-                </Link>
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    className="flex flex-col py-4 text-base font-medium text-foreground border-b border-foreground/10"
+                    onClick={closeMobile}
+                  >
+                    <span>{link.label}</span>
+                    <span className="text-xs text-muted-foreground font-normal mt-0.5">
+                      {link.description}
+                    </span>
+                  </Link>
+                ))}
               </nav>
 
               <div className="flex items-center justify-between pt-8 pb-2">
-                <Link to="/premium" className="text-base font-medium text-foreground" onClick={closeMobile}>
-                  Premium Feeds
+                <Link
+                  to="/premium"
+                  className="text-base font-medium text-foreground"
+                  onClick={closeMobile}
+                >
+                  Unlock premium
                 </Link>
-                <Link to="/operator" className="group relative inline-flex items-center" onClick={closeMobile}>
+                <Link
+                  to="/digests/latest"
+                  className="group relative inline-flex items-center"
+                  onClick={closeMobile}
+                >
                   <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-2xl bg-accent" />
-                  <span className="relative z-10 px-5 py-3 rounded-2xl bg-foreground text-background text-sm font-medium">Dashboard</span>
+                  <span className="relative z-10 px-5 py-3 rounded-2xl bg-foreground text-background text-sm font-medium">
+                    Read digest
+                  </span>
                   <span className="relative -left-px z-10 w-10 h-10 rounded-2xl flex items-center justify-center text-foreground">
                     <ArrowDownRight className="w-4 h-4 transition-transform duration-300 group-hover:-rotate-45" />
                   </span>

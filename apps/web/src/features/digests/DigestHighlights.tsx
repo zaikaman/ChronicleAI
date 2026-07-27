@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { sepoliaTxUrl } from "../../lib/explorer.ts";
 
 export interface DigestHighlightsProps {
   highlights: string[];
@@ -40,7 +41,7 @@ export function DigestHighlights({
         >
           <span className="text-muted-foreground">On-chain proof: </span>
           <a
-            href={`https://sepolia.etherscan.io/tx/${registryTxHash}`}
+            href={sepoliaTxUrl(registryTxHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-accent font-semibold font-mono hover:underline break-all"

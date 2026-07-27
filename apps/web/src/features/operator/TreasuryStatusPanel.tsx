@@ -138,7 +138,7 @@ export function TreasuryStatusPanel({
             margin: 0,
           }}
         >
-          Treasury Status
+          Agent treasury
         </h3>
         <div
           style={{

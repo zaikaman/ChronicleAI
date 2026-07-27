@@ -2,7 +2,13 @@
 import type { Confidence, EventType } from "./domain.ts";
 
 // ── Navigation Route IDs ────────────────────────────────
-export type RouteId = "home" | "publications" | "alerts" | "digests" | "premium" | "operator";
+export type RouteId =
+  | "home"
+  | "publications"
+  | "alerts"
+  | "digests"
+  | "premium"
+  | "activity";
 
 export interface RouteDefinition {
   id: RouteId;
@@ -13,10 +19,11 @@ export interface RouteDefinition {
 
 export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { id: "home", path: "/", label: "Home" },
+  { id: "publications", path: "/publications", label: "Archive" },
   { id: "alerts", path: "/alerts", label: "Alerts" },
   { id: "digests", path: "/digests/latest", label: "Latest Digest" },
   { id: "premium", path: "/premium", label: "Premium" },
-  { id: "operator", path: "/operator", label: "Operator" },
+  { id: "activity", path: "/activity", label: "Activity" },
 ];
 
 // ── Loading / Error / Empty State Models ────────────────

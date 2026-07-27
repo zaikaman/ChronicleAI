@@ -3,6 +3,7 @@
 
 import type React from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
+import { sepoliaAddressUrl, sepoliaTxUrl } from "../../lib/explorer.ts";
 
 interface PayoutEntry {
   id: string;
@@ -174,15 +175,20 @@ export function PayoutLogsTable({
                   </code>
                 </td>
                 <td style={tableCellStyle}>
-                  <code
+                  <a
+                    href={sepoliaAddressUrl(payout.recipient)}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     style={{
                       fontSize: "var(--font-size-xs)",
                       fontFamily: "var(--font-mono)",
-                      color: "var(--fg-primary)",
+                      color: "var(--accent-primary)",
+                      textDecoration: "none",
                     }}
+                    title={payout.recipient}
                   >
                     {truncateAddress(payout.recipient)}
-                  </code>
+                  </a>
                 </td>
                 <td style={{ ...tableCellStyle, fontWeight: 600, color: "var(--fg-primary)" }}>
                   {formatCurrency(payout.amount)}
@@ -201,9 +207,15 @@ export function PayoutLogsTable({
                   }}
                 >
                   {payout.payoutTxHash ? (
-                    <span style={{ color: "var(--accent-success)" }}>
+                    <a
+                      href={sepoliaTxUrl(payout.payoutTxHash)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "var(--accent-success)", textDecoration: "none" }}
+                      title={payout.payoutTxHash}
+                    >
                       {truncateTxHash(payout.payoutTxHash)}
-                    </span>
+                    </a>
                   ) : (
                     <span style={{ color: "var(--fg-tertiary)" }}>-</span>
                   )}
@@ -216,9 +228,15 @@ export function PayoutLogsTable({
                   }}
                 >
                   {payout.registryTxHash ? (
-                    <span style={{ color: "var(--accent-primary)" }}>
+                    <a
+                      href={sepoliaTxUrl(payout.registryTxHash)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "var(--accent-primary)", textDecoration: "none" }}
+                      title={payout.registryTxHash}
+                    >
                       {truncateTxHash(payout.registryTxHash)}
-                    </span>
+                    </a>
                   ) : (
                     <span style={{ color: "var(--fg-tertiary)" }}>-</span>
                   )}

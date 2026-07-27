@@ -178,25 +178,31 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            Monitor real-time events, generate multi-provider intelligence reports, and access verifiable daily digests. Gated with x402 and MPP micropayments.
+            An autonomous on-chain newspaper. Read free alerts and digests, verify KeeperHub publication proofs, and unlock deeper analysis with x402 or MPP — only when you pay.
           </motion.p>
 
           <motion.div
             variants={fadeInScale}
             transition={{ duration: 0.8, ease }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="inline-flex max-[850px]:w-full"
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 max-[850px]:w-full"
           >
             <Link
               to="/publications"
               className="group relative cursor-pointer inline-flex items-center max-[850px]:w-full"
             >
               <span className="absolute right-0 inset-y-0 w-[calc(100%-2rem)] max-[850px]:w-full rounded-xl bg-accent" />
-              <span className="relative z-10 px-6 py-3 rounded-xl bg-black text-white font-medium max-[850px]:flex-1">Explore Newspaper</span>
+              <span className="relative z-10 px-6 py-3 rounded-xl bg-black text-white font-medium max-[850px]:flex-1">
+                Explore Newspaper
+              </span>
               <span className="relative -left-px z-10 w-11 h-11 rounded-xl flex items-center justify-center text-black">
                 <ArrowDownRight className="w-5 h-5 transition-transform duration-300 group-hover:-rotate-45" />
               </span>
+            </Link>
+            <Link
+              to="/alerts"
+              className="inline-flex items-center justify-center rounded-xl border border-black/15 bg-white/80 px-6 py-3 text-sm font-semibold text-black hover:bg-white transition-colors max-[850px]:w-full"
+            >
+              Live alerts
             </Link>
           </motion.div>
         </motion.div>
