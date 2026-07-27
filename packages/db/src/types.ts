@@ -73,6 +73,8 @@ export interface PublicAlertRow {
   registry_tx_hash: string | null;
   source_event_hash: string | null;
   content_uri: string | null;
+  keeper_hub_run_id: string | null;
+  explorer_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +95,8 @@ export interface PublicAlertInsert {
   registry_tx_hash?: string | null;
   source_event_hash?: string | null;
   content_uri?: string | null;
+  keeper_hub_run_id?: string | null;
+  explorer_url?: string | null;
 }
 
 export type PublicAlertUpdate = Partial<PublicAlertInsert>;
@@ -114,6 +118,8 @@ export interface DailyDigestRow {
   registry_tx_hash: string | null;
   source_event_root: string | null;
   content_uri: string | null;
+  keeper_hub_run_id: string | null;
+  explorer_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -133,6 +139,8 @@ export interface DailyDigestInsert {
   registry_tx_hash?: string | null;
   source_event_root?: string | null;
   content_uri?: string | null;
+  keeper_hub_run_id?: string | null;
+  explorer_url?: string | null;
 }
 
 export type DailyDigestUpdate = Partial<DailyDigestInsert>;
@@ -148,6 +156,10 @@ export interface SponsoredWatchRow {
   report_tx_hash: string | null;
   report_content_hash: string | null;
   content_uri: string | null;
+  create_keeper_hub_run_id: string | null;
+  create_explorer_url: string | null;
+  report_keeper_hub_run_id: string | null;
+  report_explorer_url: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -162,6 +174,10 @@ export interface SponsoredWatchInsert {
   report_tx_hash?: string | null;
   report_content_hash?: string | null;
   content_uri?: string | null;
+  create_keeper_hub_run_id?: string | null;
+  create_explorer_url?: string | null;
+  report_keeper_hub_run_id?: string | null;
+  report_explorer_url?: string | null;
   status?: string;
 }
 
@@ -176,6 +192,10 @@ export interface RevenuePayoutRow {
   reason_hash: string;
   payout_tx_hash: string | null;
   registry_tx_hash: string | null;
+  keeper_hub_run_id: string | null;
+  explorer_url: string | null;
+  transfer_keeper_hub_run_id: string | null;
+  transfer_explorer_url: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -188,6 +208,10 @@ export interface RevenuePayoutInsert {
   reason_hash: string;
   payout_tx_hash?: string | null;
   registry_tx_hash?: string | null;
+  keeper_hub_run_id?: string | null;
+  explorer_url?: string | null;
+  transfer_keeper_hub_run_id?: string | null;
+  transfer_explorer_url?: string | null;
   status?: string;
 }
 

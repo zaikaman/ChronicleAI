@@ -27,6 +27,16 @@ export interface PublicAlertRepository {
       generationAttemptIds?: string[];
     },
   ): Promise<Result<PublicAlertRow>>;
+  updateRegistryMetadata(
+    id: string,
+    metadata: {
+      registryTxHash?: string;
+      sourceEventHash?: string;
+      contentUri?: string;
+      keeperHubRunId?: string;
+      explorerUrl?: string;
+    },
+  ): Promise<Result<PublicAlertRow>>;
 }
 
 export function createPublicAlertRepository(supabase: SupabaseClient): PublicAlertRepository {
@@ -107,6 +117,34 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       }
       if (metadata.generationAttemptIds) {
         update.generation_attempt_ids = metadata.generationAttemptIds;
+      }
+
+      const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
+      const { data: rows, error } = await table().update(payload).eq("id", id).select().single();
+
+      if (error) {
+        return failure(mapPostgrestError(error));
+      }
+
+      return success(rows as unknown as PublicAlertRow);
+    },
+
+    async updateRegistryMetadata(id, metadata) {
+      const update: PublicAlertUpdate = {};
+      if (metadata.registryTxHash) {
+        update.registry_tx_hash = metadata.registryTxHash;
+      }
+      if (metadata.sourceEventHash) {
+        update.source_event_hash = metadata.sourceEventHash;
+      }
+      if (metadata.contentUri) {
+        update.content_uri = metadata.contentUri;
+      }
+      if (metadata.keeperHubRunId) {
+        update.keeper_hub_run_id = metadata.keeperHubRunId;
+      }
+      if (metadata.explorerUrl) {
+        update.explorer_url = metadata.explorerUrl;
       }
 
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);

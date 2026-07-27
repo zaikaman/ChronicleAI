@@ -29,6 +29,8 @@ function createMockDigestRepo(existingWindow?: {
           publication_status: "published" as const,
           published_at: new Date().toISOString(),
           registry_tx_hash: null,
+          keeper_hub_run_id: null,
+          explorer_url: null,
           source_event_root: null,
           content_uri: null,
           created_at: new Date().toISOString(),

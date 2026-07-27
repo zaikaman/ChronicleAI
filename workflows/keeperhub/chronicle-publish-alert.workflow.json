@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T18:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Publish Alert (Registry Write)",
+    "description": "Material write: publishAlert on Chronicle Registry via web3/write-contract. Triggered by Chronicle API with alertHash + ipfsUri."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": {
+          "triggerType": "Manual"
+        }
+      }
+    },
+    {
+      "id": "write-publish-alert",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "publishAlert on Chronicle Registry",
+        "config": {
+          "actionType": "web3/write-contract",
+          "network": "84532",
+          "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
+          "abiFunction": "publishAlert",
+          "functionArgs": "[\"{{@trigger-manual:Trigger.alertHash}}\",\"{{@trigger-manual:Trigger.ipfsUri}}\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"alertHash\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"ipfsUri\",\"type\":\"string\"}],\"name\":\"publishAlert\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-manual", "target": "write-publish-alert" }
+  ],
+  "integrationBindings": []
+}

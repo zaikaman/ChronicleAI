@@ -24,13 +24,20 @@ describe("SponsoredWatchService", () => {
   const mockWeb3Client: Web3Client = {
     getSignerAddress: vi.fn().mockResolvedValue("0xsigner"),
     getTreasuryAddress: vi.fn().mockResolvedValue("0xtreasury"),
+    isKeeperHubBacked: vi.fn().mockReturnValue(true),
     publishAlert: vi.fn(),
     publishDigest: vi.fn(),
     createSponsoredWatch: vi.fn().mockResolvedValue({
       watchId: 42,
       txHash: "0x" + "a".repeat(64),
+      keeperHubRunId: "exec_watch_create",
+      explorerUrl: "https://sepolia.basescan.org/tx/0x" + "a".repeat(64),
     }),
-    publishSponsoredReport: vi.fn().mockResolvedValue("0x" + "b".repeat(64)),
+    publishSponsoredReport: vi.fn().mockResolvedValue({
+      txHash: "0x" + "b".repeat(64),
+      keeperHubRunId: "exec_watch_report",
+      explorerUrl: "https://sepolia.basescan.org/tx/0x" + "b".repeat(64),
+    }),
     recordPayout: vi.fn(),
     sendTransfer: vi.fn(),
   };
@@ -51,6 +58,10 @@ describe("SponsoredWatchService", () => {
     report_tx_hash: null,
     report_content_hash: null,
     content_uri: null,
+    create_keeper_hub_run_id: null,
+    create_explorer_url: null,
+    report_keeper_hub_run_id: null,
+    report_explorer_url: null,
     status: "accepted",
     created_at: "2026-07-06T00:00:00.000Z",
     updated_at: "2026-07-06T00:00:00.000Z",
@@ -58,13 +69,18 @@ describe("SponsoredWatchService", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    (mockWeb3Client.isKeeperHubBacked as ReturnType<typeof vi.fn>).mockReturnValue(true);
     (mockWeb3Client.createSponsoredWatch as ReturnType<typeof vi.fn>).mockResolvedValue({
       watchId: 42,
       txHash: "0x" + "a".repeat(64),
+      keeperHubRunId: "exec_watch_create",
+      explorerUrl: "https://sepolia.basescan.org/tx/0x" + "a".repeat(64),
     });
-    (mockWeb3Client.publishSponsoredReport as ReturnType<typeof vi.fn>).mockResolvedValue(
-      "0x" + "b".repeat(64),
-    );
+    (mockWeb3Client.publishSponsoredReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      txHash: "0x" + "b".repeat(64),
+      keeperHubRunId: "exec_watch_report",
+      explorerUrl: "https://sepolia.basescan.org/tx/0x" + "b".repeat(64),
+    });
   });
 
   describe("createSponsoredWatch", () => {

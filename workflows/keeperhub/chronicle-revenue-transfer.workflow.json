@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T18:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Revenue Transfer (Native Payout)",
+    "description": "Material write: native ETH transfer for autonomous revenue routing. Triggered with recipientAddress + amount."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": {
+          "triggerType": "Manual"
+        }
+      }
+    },
+    {
+      "id": "transfer-native",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "Transfer native ETH to payout recipient",
+        "config": {
+          "actionType": "web3/transfer-funds",
+          "network": "84532",
+          "toAddress": "{{@trigger-manual:Trigger.recipientAddress}}",
+          "amount": "{{@trigger-manual:Trigger.amount}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-manual", "target": "transfer-native" }
+  ],
+  "integrationBindings": []
+}

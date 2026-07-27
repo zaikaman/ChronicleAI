@@ -13,6 +13,8 @@ interface PayoutEntry {
   reasonHash: string;
   payoutTxHash?: string;
   registryTxHash?: string;
+  keeperHubRunId?: string;
+  explorerUrl?: string;
   status: string;
   createdAt: string;
 }
@@ -146,6 +148,7 @@ export function PayoutLogsTable({
               <th style={tableHeaderStyle}>Recipient</th>
               <th style={tableHeaderStyle}>Amount</th>
               <th style={tableHeaderStyle}>Status</th>
+              <th style={tableHeaderStyle}>KeeperHub</th>
               <th style={tableHeaderStyle}>Transfer Tx</th>
               <th style={tableHeaderStyle}>Registry Tx</th>
               <th style={tableHeaderStyle}>Created</th>
@@ -199,6 +202,40 @@ export function PayoutLogsTable({
                     variant={getPayoutStatusVariant(payout.status)}
                   />
                 </td>
+                <td style={tableCellStyle}>
+                  {payout.keeperHubRunId ? (
+                    <div
+                      style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}
+                      data-testid="payout-executed-via-keeperhub"
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                          color: "var(--accent-primary)",
+                        }}
+                      >
+                        Executed via KeeperHub
+                      </span>
+                      <code
+                        style={{
+                          fontSize: "var(--font-size-xs)",
+                          fontFamily: "var(--font-mono)",
+                          color: "var(--fg-tertiary)",
+                        }}
+                        title={payout.keeperHubRunId}
+                      >
+                        {payout.keeperHubRunId.length > 16
+                          ? `${payout.keeperHubRunId.slice(0, 10)}...`
+                          : payout.keeperHubRunId}
+                      </code>
+                    </div>
+                  ) : (
+                    <span style={{ color: "var(--fg-tertiary)" }}>-</span>
+                  )}
+                </td>
                 <td
                   style={{
                     ...tableCellStyle,
@@ -208,7 +245,7 @@ export function PayoutLogsTable({
                 >
                   {payout.payoutTxHash ? (
                     <a
-                      href={baseSepoliaTxUrl(payout.payoutTxHash)}
+                      href={payout.explorerUrl ?? baseSepoliaTxUrl(payout.payoutTxHash)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: "var(--accent-success)", textDecoration: "none" }}
@@ -229,7 +266,7 @@ export function PayoutLogsTable({
                 >
                   {payout.registryTxHash ? (
                     <a
-                      href={baseSepoliaTxUrl(payout.registryTxHash)}
+                      href={payout.explorerUrl ?? baseSepoliaTxUrl(payout.registryTxHash)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: "var(--accent-primary)", textDecoration: "none" }}

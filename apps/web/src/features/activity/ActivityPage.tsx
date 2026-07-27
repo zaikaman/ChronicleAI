@@ -8,17 +8,53 @@ import { PayoutLogsTable } from "./PayoutLogsTable.tsx";
 import { TreasuryStatusPanel } from "./TreasuryStatusPanel.tsx";
 import { useAgentActivity } from "./use-agent-activity.ts";
 
-function ProofLink({ txHash, label }: { txHash: string; label?: string }): ReactElement {
+function ProofLink({
+  txHash,
+  label,
+  explorerUrl,
+}: {
+  txHash: string;
+  label?: string;
+  explorerUrl?: string;
+}): ReactElement {
   return (
     <a
-      href={baseSepoliaTxUrl(txHash)}
+      href={explorerUrl ?? baseSepoliaTxUrl(txHash)}
       target="_blank"
       rel="noopener noreferrer"
       className="font-mono text-xs text-accent hover:underline break-all"
-      title={`View ${txHash} on Base Sepolia explorer`}
+      title={`View ${txHash} on block explorer`}
     >
       {label ?? truncateHash(txHash)}
     </a>
+  );
+}
+
+function KeeperHubBadge({
+  runId,
+  txHash,
+  explorerUrl,
+}: {
+  runId?: string;
+  txHash?: string;
+  explorerUrl?: string;
+}): ReactElement | null {
+  if (!runId && !txHash) return null;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 text-[11px]"
+      data-testid="executed-via-keeperhub"
+    >
+      <span className="rounded-full bg-accent/15 text-accent px-2 py-0.5 font-semibold tracking-wide uppercase">
+        Executed via KeeperHub
+      </span>
+      {runId ? (
+        <code className="font-mono text-muted-foreground" title={runId}>
+          run {runId.length > 16 ? `${runId.slice(0, 10)}…${runId.slice(-4)}` : runId}
+        </code>
+      ) : null}
+      {txHash ? <ProofLink txHash={txHash} explorerUrl={explorerUrl} /> : null}
+    </div>
   );
 }
 
@@ -46,15 +82,45 @@ export function ActivityPage(): ReactElement {
 
   const executionLogs = useMemo(() => {
     if (!data) return [];
-    return data.executionLogs.map((log) => ({
-      id: log.id,
-      actionType: log.actionType,
-      entityType: log.entityType,
-      entityId: log.entityId,
-      status: log.status,
-      message: log.message,
-      createdAt: log.createdAt,
-    }));
+    return data.executionLogs.map((log) => {
+      const details = log.details ?? undefined;
+      const keeperHubRunId =
+        typeof details?.keeper_hub_run_id === "string"
+          ? details.keeper_hub_run_id
+          : typeof details?.createKeeperHubRunId === "string"
+            ? details.createKeeperHubRunId
+            : typeof details?.reportKeeperHubRunId === "string"
+              ? details.reportKeeperHubRunId
+              : undefined;
+      const txHash =
+        typeof details?.registry_tx_hash === "string"
+          ? details.registry_tx_hash
+          : typeof details?.payout_tx_hash === "string"
+            ? details.payout_tx_hash
+            : typeof details?.createTxHash === "string"
+              ? details.createTxHash
+              : typeof details?.reportTxHash === "string"
+                ? details.reportTxHash
+                : undefined;
+      const explorerUrl =
+        typeof details?.explorer_url === "string" ? details.explorer_url : undefined;
+      const executedViaKeeperHub =
+        details?.executedViaKeeperHub === true || Boolean(keeperHubRunId);
+
+      return {
+        id: log.id,
+        actionType: log.actionType,
+        entityType: log.entityType,
+        entityId: log.entityId,
+        status: log.status,
+        message: log.message,
+        createdAt: log.createdAt,
+        keeperHubRunId,
+        txHash,
+        explorerUrl,
+        executedViaKeeperHub,
+      };
+    });
   }, [data]);
 
   const payoutEntries = useMemo(() => {
@@ -68,6 +134,8 @@ export function ActivityPage(): ReactElement {
         reasonHash: string;
         payoutTxHash?: string;
         registryTxHash?: string;
+        keeperHubRunId?: string;
+        explorerUrl?: string;
         status: string;
         createdAt: string;
       } = {
@@ -81,6 +149,8 @@ export function ActivityPage(): ReactElement {
       };
       if (p.payoutTxHash) entry.payoutTxHash = p.payoutTxHash;
       if (p.registryTxHash) entry.registryTxHash = p.registryTxHash;
+      if (p.keeperHubRunId) entry.keeperHubRunId = p.keeperHubRunId;
+      if (p.explorerUrl) entry.explorerUrl = p.explorerUrl;
       return entry;
     });
   }, [data]);
@@ -199,22 +269,33 @@ export function ActivityPage(): ReactElement {
                         ) : null}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <StatusBadge
-                        label={digest.publicationStatus}
-                        variant={
-                          digest.publicationStatus === "published"
-                            ? "success"
-                            : digest.publicationStatus === "partial_failure"
-                              ? "warning"
-                              : "default"
-                        }
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                      <div className="flex items-center gap-3">
+                        <StatusBadge
+                          label={digest.publicationStatus}
+                          variant={
+                            digest.publicationStatus === "published"
+                              ? "success"
+                              : digest.publicationStatus === "partial_failure"
+                                ? "warning"
+                                : "default"
+                          }
+                        />
+                        {digest.registryTxHash && !digest.keeperHubRunId ? (
+                          <ProofLink
+                            txHash={digest.registryTxHash}
+                            explorerUrl={digest.explorerUrl}
+                          />
+                        ) : null}
+                        {!digest.registryTxHash ? (
+                          <span className="text-xs text-muted-foreground">No tx yet</span>
+                        ) : null}
+                      </div>
+                      <KeeperHubBadge
+                        runId={digest.keeperHubRunId}
+                        txHash={digest.registryTxHash}
+                        explorerUrl={digest.explorerUrl}
                       />
-                      {digest.registryTxHash ? (
-                        <ProofLink txHash={digest.registryTxHash} />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No tx yet</span>
-                      )}
                     </div>
                   </article>
                 ))}
@@ -252,14 +333,21 @@ export function ActivityPage(): ReactElement {
                         ? `${alert.summary.slice(0, 160)}…`
                         : alert.summary}
                     </p>
-                    {alert.generationProvider ? (
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        Generated by{" "}
-                        <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
-                          {alert.generationProvider}
-                        </code>
-                      </p>
-                    ) : null}
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      {alert.generationProvider ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Generated by{" "}
+                          <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
+                            {alert.generationProvider}
+                          </code>
+                        </p>
+                      ) : null}
+                      <KeeperHubBadge
+                        runId={alert.keeperHubRunId}
+                        txHash={alert.registryTxHash}
+                        explorerUrl={alert.explorerUrl}
+                      />
+                    </div>
                   </article>
                 ))}
               </div>

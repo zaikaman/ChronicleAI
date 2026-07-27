@@ -56,6 +56,9 @@ export function createAgentActivityService(
           if (a.generation_provider) {
             alert.generationProvider = a.generation_provider;
           }
+          if (a.registry_tx_hash) alert.registryTxHash = a.registry_tx_hash;
+          if (a.keeper_hub_run_id) alert.keeperHubRunId = a.keeper_hub_run_id;
+          if (a.explorer_url) alert.explorerUrl = a.explorer_url;
           return alert;
         });
 
@@ -73,6 +76,8 @@ export function createAgentActivityService(
           if (d.registry_tx_hash) digest.registryTxHash = d.registry_tx_hash;
           if (d.source_event_root) digest.sourceEventRoot = d.source_event_root;
           if (d.content_uri) digest.contentUri = d.content_uri;
+          if (d.keeper_hub_run_id) digest.keeperHubRunId = d.keeper_hub_run_id;
+          if (d.explorer_url) digest.explorerUrl = d.explorer_url;
           return digest;
         });
 
@@ -112,6 +117,12 @@ export function createAgentActivityService(
           };
           if (p.payout_tx_hash) payout.payoutTxHash = p.payout_tx_hash;
           if (p.registry_tx_hash) payout.registryTxHash = p.registry_tx_hash;
+          if (p.keeper_hub_run_id) payout.keeperHubRunId = p.keeper_hub_run_id;
+          if (p.explorer_url) payout.explorerUrl = p.explorer_url;
+          if (p.transfer_keeper_hub_run_id) {
+            payout.transferKeeperHubRunId = p.transfer_keeper_hub_run_id;
+          }
+          if (p.transfer_explorer_url) payout.transferExplorerUrl = p.transfer_explorer_url;
           return payout;
         });
 
@@ -129,6 +140,10 @@ export function createAgentActivityService(
           if (w.report_tx_hash) watch.reportTxHash = w.report_tx_hash;
           if (w.report_content_hash) watch.reportContentHash = w.report_content_hash;
           if (w.content_uri) watch.contentUri = w.content_uri;
+          if (w.create_keeper_hub_run_id) watch.createKeeperHubRunId = w.create_keeper_hub_run_id;
+          if (w.create_explorer_url) watch.createExplorerUrl = w.create_explorer_url;
+          if (w.report_keeper_hub_run_id) watch.reportKeeperHubRunId = w.report_keeper_hub_run_id;
+          if (w.report_explorer_url) watch.reportExplorerUrl = w.report_explorer_url;
           return watch;
         });
 

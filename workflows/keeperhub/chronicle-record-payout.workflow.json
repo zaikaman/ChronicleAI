@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T18:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Record Payout (Registry Write)",
+    "description": "Material write: recordPayout on Chronicle Registry after a KeeperHub transfer. Triggered with payoutPeriodHash, recipient, amount, reasonHash."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": {
+          "triggerType": "Manual"
+        }
+      }
+    },
+    {
+      "id": "write-record-payout",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "recordPayout on Chronicle Registry",
+        "config": {
+          "actionType": "web3/write-contract",
+          "network": "84532",
+          "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
+          "abiFunction": "recordPayout",
+          "functionArgs": "[\"{{@trigger-manual:Trigger.payoutPeriodHash}}\",\"{{@trigger-manual:Trigger.recipient}}\",\"{{@trigger-manual:Trigger.amount}}\",\"{{@trigger-manual:Trigger.reasonHash}}\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"payoutPeriodHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordPayout\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-manual", "target": "write-record-payout" }
+  ],
+  "integrationBindings": []
+}

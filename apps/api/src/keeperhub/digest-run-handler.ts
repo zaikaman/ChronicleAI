@@ -176,10 +176,13 @@ export class DigestRunHandler {
     });
 
     // 7. Log publication result
+    const viaKh = Boolean(publicationResult.keeperHubRunId);
     const pubResultMessage = publicationResult.success
-      ? publicationResult.registryTxHash
-        ? `Digest published (registry: ${publicationResult.registryTxHash.slice(0, 10)}...)`
-        : "Digest published"
+      ? viaKh
+        ? `Executed via KeeperHub (run ${publicationResult.keeperHubRunId}): digest published`
+        : publicationResult.registryTxHash
+          ? `Digest published (registry: ${publicationResult.registryTxHash.slice(0, 10)}...)`
+          : "Digest published"
       : `Digest publication failed: ${publicationResult.errorMessage ?? "unknown error"}`;
 
     await this.execLogRepo.append({
@@ -189,9 +192,12 @@ export class DigestRunHandler {
       status: publicationResult.success ? "succeeded" : "failed",
       message: pubResultMessage,
       details: {
-        registryTxHash: publicationResult.registryTxHash ?? null,
+        registry_tx_hash: publicationResult.registryTxHash ?? null,
+        keeper_hub_run_id: publicationResult.keeperHubRunId ?? null,
+        explorer_url: publicationResult.explorerUrl ?? null,
         contentUri: publicationResult.contentUri ?? null,
         smtpRecipients: publicationResult.smtpResult?.recipientsReached ?? null,
+        executedViaKeeperHub: viaKh,
       },
     });
 

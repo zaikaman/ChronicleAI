@@ -21,6 +21,8 @@ export interface DailyDigestRepository {
       registryTxHash?: string;
       sourceEventRoot?: string;
       contentUri?: string;
+      keeperHubRunId?: string;
+      explorerUrl?: string;
     },
   ): Promise<Result<DailyDigestRow>>;
   list(limitParam?: number): Promise<Result<DailyDigestRow[]>>;
@@ -114,6 +116,12 @@ export function createDailyDigestRepository(supabase: SupabaseClient): DailyDige
       }
       if (metadata.contentUri) {
         update.content_uri = metadata.contentUri;
+      }
+      if (metadata.keeperHubRunId) {
+        update.keeper_hub_run_id = metadata.keeperHubRunId;
+      }
+      if (metadata.explorerUrl) {
+        update.explorer_url = metadata.explorerUrl;
       }
 
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);

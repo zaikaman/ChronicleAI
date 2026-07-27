@@ -1,4 +1,28 @@
-# ChronicleAI ↔ KeeperHub Monitoring Workflows
+# ChronicleAI ↔ KeeperHub Workflows
+
+## Write workflows (P0 — material on-chain path)
+
+These are the **only** production write path for Chronicle Registry and revenue transfers. Chronicle API triggers them via KeeperHub Direct Execution (`POST /api/execute/contract-call` / `transfer`) or workflow execute when workflow IDs are set.
+
+| File | Registry / action | Trigger input |
+|------|-------------------|---------------|
+| `chronicle-publish-alert.workflow.json` | `publishAlert` | `alertHash`, `ipfsUri` |
+| `chronicle-publish-digest.workflow.json` | `publishDigest` | `digestHash`, `sourceEventRoot`, `ipfsUri` |
+| `chronicle-create-sponsored-watch.workflow.json` | `createSponsoredWatch` | `targetContract`, `watchSpecHash`, `startsAt`, `endsAt` |
+| `chronicle-publish-sponsored-report.workflow.json` | `publishSponsoredReport` | `watchId`, `reportContentHash`, `reportUri` |
+| `chronicle-record-payout.workflow.json` | `recordPayout` | `payoutPeriodHash`, `recipient`, `amount`, `reasonHash` |
+| `chronicle-revenue-transfer.workflow.json` | native transfer | `recipientAddress`, `amount` |
+
+**Setup**
+
+1. Deploy Chronicle Registry; set `CHRONICLE_REGISTRY_ADDRESS`.
+2. Create a KeeperHub org API key (`kh_…`); set `KEEPERHUB_API_KEY` + `KEEPERHUB_API_BASE_URL`.
+3. Import write workflow JSONs (replace `YOUR_CHRONICLE_REGISTRY_ADDRESS`), enable, optionally set `KEEPERHUB_WORKFLOW_*` IDs.
+4. Direct ethers `sendTransaction` is disabled unless `ALLOW_DIRECT_ETHERS_WRITES=true` (local tests only; never production).
+
+Each successful write stores `keeper_hub_run_id`, `tx_hash`, and `explorer_url`. Activity page shows **Executed via KeeperHub** with run id + tx.
+
+## Monitoring workflows
 
 Import these JSON files into KeeperHub (Hub → Upload) to wire **Block Dispatcher** and **Event Tracker** into ChronicleAI’s real ingestion endpoints.
 
@@ -36,7 +60,7 @@ Default chain is **Ethereum Mainnet (`network: "1"`)**. For Base Sepolia, change
 curl -X POST "https://YOUR_HOST/keeperhub/events" \
   -H "Content-Type: application/json" \
   -H "X-ChronicleAI-Signature: $KEEPERHUB_WEBHOOK_SECRET" \
-  -d '{"sourceEventId":"smoke-1","eventType":"gas_spike","chainId":1,"capturedAt":"2026-07-27T00:00:00Z","magnitude":{"value":600,"unit":"gwei"},"rawPayload":{}}'
+  -d '{"sourceEventId":"smoke-1","eventType":"gas_spike","chainId":1,"capturedAt":"2026-07-28T00:00:00Z","magnitude":{"value":600,"unit":"gwei"},"rawPayload":{}}'
 
 # Block analysis (requires RPC_URL)
 curl -X POST "https://YOUR_HOST/keeperhub/blocks" \

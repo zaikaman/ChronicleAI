@@ -11,6 +11,8 @@ export interface DigestPublicationResult {
   success: boolean;
   publishedAt: string;
   registryTxHash: string | undefined;
+  keeperHubRunId: string | undefined;
+  explorerUrl: string | undefined;
   contentUri: string | undefined;
   smtpResult: SmtpSendResult | undefined;
   errorMessage: string | undefined;
@@ -43,14 +45,23 @@ export function createDigestPublicationService(
       let smtpResult: SmtpSendResult | undefined;
       const failures: string[] = [];
 
-      // Step 1: Chronicle Registry on-chain publish
+      let keeperHubRunId: string | undefined;
+      let explorerUrl: string | undefined;
+
+      // Step 1: Chronicle Registry on-chain publish via KeeperHub
       const registryResult: RegistryPublishResult = await registryService.publishDigest(
         digest.id,
         digest.sourceEventRoot ?? digest.id,
       );
       if (registryResult.success && registryResult.txHash) {
         registryTxHash = registryResult.txHash;
-        await digestRepo.updateRegistryMetadata(digest.id, { registryTxHash });
+        keeperHubRunId = registryResult.keeperHubRunId;
+        explorerUrl = registryResult.explorerUrl;
+        await digestRepo.updateRegistryMetadata(digest.id, {
+          registryTxHash,
+          keeperHubRunId,
+          explorerUrl,
+        });
       } else {
         failures.push(`Registry: ${registryResult.errorMessage ?? "unknown error"}`);
       }
@@ -83,6 +94,8 @@ export function createDigestPublicationService(
         success: publicationStatus !== "failed",
         publishedAt,
         registryTxHash: registryTxHash ?? undefined,
+        keeperHubRunId: keeperHubRunId ?? undefined,
+        explorerUrl: explorerUrl ?? undefined,
         contentUri,
         smtpResult: smtpResult ?? undefined,
         errorMessage: failures.length > 0 ? failures.join("; ") : undefined,

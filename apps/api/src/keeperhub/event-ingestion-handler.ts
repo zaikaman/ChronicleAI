@@ -11,6 +11,7 @@ import { createEventQualificationService, type EventQualificationService } from 
 import { createAlertDedupeService, type AlertDedupeService } from "../services/alert-dedupe-service.ts";
 import { createPublicAlertContentService, type LLMProviderMap, type PublicAlertContentService } from "../services/public-alert-content-service.ts";
 import { createAlertPublicationService, type AlertPublicationService } from "../services/alert-publication-service.ts";
+import type { ChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
 
 export interface IngestionResult {
@@ -36,6 +37,7 @@ export class EventIngestionHandler {
     execLogRepo: ExecutionLogRepository;
     llmAttemptRepo: LLMGenerationAttemptRepository;
     providerConfigs: LLMProviderMap;
+    registryService?: ChronicleRegistryService | null;
   }) {
     this.eventRepo = deps.eventRepo;
     this.alertRepo = deps.alertRepo;
@@ -44,7 +46,10 @@ export class EventIngestionHandler {
     this.qualificationService = createEventQualificationService();
     this.dedupeService = createAlertDedupeService();
     this.contentService = createPublicAlertContentService(deps.providerConfigs, deps.llmAttemptRepo);
-    this.publicationService = createAlertPublicationService(deps.alertRepo);
+    this.publicationService = createAlertPublicationService(
+      deps.alertRepo,
+      deps.registryService ?? null,
+    );
   }
 
   async ingest(payload: EventIngestionPayload, source = "keeperhub"): Promise<IngestionResult> {
@@ -234,8 +239,11 @@ export class EventIngestionHandler {
       },
     });
 
-    // 8. Publish the alert
-    const publicationResult = await this.publicationService.publishAlert(alert.id);
+    // 8. Publish the alert (local feed + KeeperHub registry write)
+    const publicationResult = await this.publicationService.publishAlert(
+      alert.id,
+      payload.transactionHash ?? payload.sourceEventId,
+    );
 
     await this.execLogRepo.append({
       action_type: "publish_alert",
@@ -243,6 +251,12 @@ export class EventIngestionHandler {
       entity_id: alert.id,
       status: publicationResult.success ? "succeeded" : "failed",
       message: publicationResult.message,
+      details: {
+        registry_tx_hash: publicationResult.registryTxHash,
+        keeper_hub_run_id: publicationResult.keeperHubRunId,
+        explorer_url: publicationResult.explorerUrl,
+        executedViaKeeperHub: Boolean(publicationResult.keeperHubRunId),
+      },
     });
 
     return {

@@ -20,6 +20,9 @@ export interface PublicAlertResponse {
   publishedAt: string;
   confidence?: Confidence;
   generationProvider?: string;
+  registryTxHash?: string;
+  keeperHubRunId?: string;
+  explorerUrl?: string;
 }
 
 // ── LLM Generation Attempt (response) ───────────────────
@@ -44,6 +47,8 @@ export interface DailyDigestResponse {
   registryTxHash?: string;
   sourceEventRoot?: string;
   contentUri?: string;
+  keeperHubRunId?: string;
+  explorerUrl?: string;
 }
 
 // ── Digest Run Response (from KeeperHub trigger) ───────

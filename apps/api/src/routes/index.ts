@@ -43,6 +43,10 @@ export interface US1Dependencies {
 }
 
 export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependencies): void {
+  // KeeperHub-backed registry writes for publishAlert (null if not configured)
+  const web3Client = createWeb3Client(env);
+  const registryService = createChronicleRegistryService(web3Client);
+
   // Event ingestion handler
   const handler = new EventIngestionHandler({
     eventRepo: deps.eventRepo,
@@ -54,6 +58,7 @@ export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependenci
       openai: { apiKey: env.openaiApiKey, model: env.openaiModel, baseUrl: env.openaiBaseUrl },
       groq: { apiKey: env.groqApiKey, model: env.groqModel, baseUrl: env.groqBaseUrl },
     },
+    registryService,
   });
 
   const priceOracle = createPriceOracle(env.rpcUrl);

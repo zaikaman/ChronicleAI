@@ -16,6 +16,12 @@ export interface PayoutRecordRepository {
     id: string,
     payoutTxHash: string,
     registryTxHash: string,
+    metadata?: {
+      keeperHubRunId?: string;
+      explorerUrl?: string;
+      transferKeeperHubRunId?: string;
+      transferExplorerUrl?: string;
+    },
   ): Promise<Result<RevenuePayoutRow>>;
   markFailed(id: string): Promise<Result<RevenuePayoutRow>>;
 }
@@ -71,12 +77,25 @@ export function createPayoutRecordRepository(supabase: SupabaseClient): PayoutRe
       return success(data as unknown as RevenuePayoutRow);
     },
 
-    async markTransferred(id, payoutTxHash, registryTxHash) {
-      return this.update(id, {
+    async markTransferred(id, payoutTxHash, registryTxHash, metadata) {
+      const update: RevenuePayoutUpdate = {
         status: "transferred",
         payout_tx_hash: payoutTxHash,
         registry_tx_hash: registryTxHash,
-      } as RevenuePayoutUpdate);
+      };
+      if (metadata?.keeperHubRunId) {
+        update.keeper_hub_run_id = metadata.keeperHubRunId;
+      }
+      if (metadata?.explorerUrl) {
+        update.explorer_url = metadata.explorerUrl;
+      }
+      if (metadata?.transferKeeperHubRunId) {
+        update.transfer_keeper_hub_run_id = metadata.transferKeeperHubRunId;
+      }
+      if (metadata?.transferExplorerUrl) {
+        update.transfer_explorer_url = metadata.transferExplorerUrl;
+      }
+      return this.update(id, update);
     },
 
     async markFailed(id) {

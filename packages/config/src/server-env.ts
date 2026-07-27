@@ -43,8 +43,30 @@ export interface ServerEnv {
   revenueEthPerCurrencyUnit: number;
   chronicleRegistryAddress: string | undefined;
   rpcUrl: string | undefined;
-  /** Para / agent key for registry writes (alerts, digests, watches, recordPayout). */
+  /**
+   * Para / agent key for registry writes — ONLY used when
+   * ALLOW_DIRECT_ETHERS_WRITES=true (local unit tests). Production writes go
+   * through KeeperHub (KEEPERHUB_API_KEY).
+   */
   paraWalletPrivateKey: string | undefined;
+  /**
+   * When true (and NODE_ENV is not production), allow direct ethers
+   * sendTransaction for local unit tests. Default false — KeeperHub only.
+   */
+  allowDirectEthersWrites: boolean;
+  /** KeeperHub REST base URL (e.g. https://app.keeperhub.com). */
+  keeperhubApiBaseUrl: string | undefined;
+  /** Organization API key (kh_…). Required for material production writes. */
+  keeperhubApiKey: string | undefined;
+  /** KeeperHub network slug / chain id for writes (default base-sepolia). */
+  keeperhubNetwork: string;
+  /** Optional pre-imported workflow IDs for write actions. */
+  keeperhubWorkflowPublishAlert: string | undefined;
+  keeperhubWorkflowPublishDigest: string | undefined;
+  keeperhubWorkflowCreateSponsoredWatch: string | undefined;
+  keeperhubWorkflowPublishSponsoredReport: string | undefined;
+  keeperhubWorkflowRecordPayout: string | undefined;
+  keeperhubWorkflowTransfer: string | undefined;
   smtpHost: string | undefined;
   smtpPort: number | undefined;
   smtpUser: string | undefined;
@@ -95,6 +117,21 @@ export function loadServerEnv(): ServerEnv {
     chronicleRegistryAddress: optionalEnv("CHRONICLE_REGISTRY_ADDRESS"),
     rpcUrl: optionalEnv("RPC_URL"),
     paraWalletPrivateKey: optionalEnv("PARA_WALLET_PRIVATE_KEY"),
+    allowDirectEthersWrites:
+      optionalEnv("ALLOW_DIRECT_ETHERS_WRITES", "false")?.toLowerCase() === "true",
+    keeperhubApiBaseUrl: optionalEnv("KEEPERHUB_API_BASE_URL"),
+    keeperhubApiKey: optionalEnv("KEEPERHUB_API_KEY"),
+    keeperhubNetwork: optionalEnv("KEEPERHUB_NETWORK", "base-sepolia") as string,
+    keeperhubWorkflowPublishAlert: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_ALERT"),
+    keeperhubWorkflowPublishDigest: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_DIGEST"),
+    keeperhubWorkflowCreateSponsoredWatch: optionalEnv(
+      "KEEPERHUB_WORKFLOW_CREATE_SPONSORED_WATCH",
+    ),
+    keeperhubWorkflowPublishSponsoredReport: optionalEnv(
+      "KEEPERHUB_WORKFLOW_PUBLISH_SPONSORED_REPORT",
+    ),
+    keeperhubWorkflowRecordPayout: optionalEnv("KEEPERHUB_WORKFLOW_RECORD_PAYOUT"),
+    keeperhubWorkflowTransfer: optionalEnv("KEEPERHUB_WORKFLOW_TRANSFER"),
     smtpHost: optionalEnv("SMTP_HOST"),
     smtpPort: optionalEnv("SMTP_PORT") ? Number(optionalEnv("SMTP_PORT")) : undefined,
     smtpUser: optionalEnv("SMTP_USER"),

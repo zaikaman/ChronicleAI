@@ -225,12 +225,17 @@ describe("Agent Activity Integration", () => {
     const mockWeb3Client = {
       getSignerAddress: vi.fn().mockResolvedValue("0xsigner"),
       getTreasuryAddress: vi.fn().mockResolvedValue("0xtreasury"),
+      isKeeperHubBacked: vi.fn().mockReturnValue(true),
       publishAlert: vi.fn(),
       publishDigest: vi.fn(),
       createSponsoredWatch: vi.fn(),
       publishSponsoredReport: vi.fn(),
       recordPayout: vi.fn(),
-      sendTransfer: vi.fn().mockResolvedValue("0x" + "c".repeat(64)),
+      sendTransfer: vi.fn().mockResolvedValue({
+        txHash: "0x" + "c".repeat(64),
+        keeperHubRunId: "exec_transfer",
+        explorerUrl: "https://sepolia.basescan.org/tx/0x" + "c".repeat(64),
+      }),
     };
 
     (payoutRepo.findById as ReturnType<typeof vi.fn>).mockImplementation(async (id: string) => ({

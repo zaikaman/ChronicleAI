@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      daily_digests: {
+        Row: {
+          analysis: string | null
+          audience: string
+          content_uri: string | null
+          created_at: string
+          explorer_url: string | null
+          highlights: Json
+          id: string
+          keeper_hub_run_id: string | null
+          period_end: string
+          period_start: string
+          publication_status: string
+          published_at: string | null
+          registry_tx_hash: string | null
+          report_date: string
+          source_event_ids: string[]
+          source_event_root: string | null
+          summary: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          analysis?: string | null
+          audience?: string
+          content_uri?: string | null
+          created_at?: string
+          explorer_url?: string | null
+          highlights?: Json
+          id?: string
+          keeper_hub_run_id?: string | null
+          period_end: string
+          period_start: string
+          publication_status?: string
+          published_at?: string | null
+          registry_tx_hash?: string | null
+          report_date: string
+          source_event_ids?: string[]
+          source_event_root?: string | null
+          summary: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          analysis?: string | null
+          audience?: string
+          content_uri?: string | null
+          created_at?: string
+          explorer_url?: string | null
+          highlights?: Json
+          id?: string
+          keeper_hub_run_id?: string | null
+          period_end?: string
+          period_start?: string
+          publication_status?: string
+          published_at?: string | null
+          registry_tx_hash?: string | null
+          report_date?: string
+          source_event_ids?: string[]
+          source_event_root?: string | null
+          summary?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_subscribers: {
         Row: {
           created_at: string
@@ -58,66 +124,6 @@ export type Database = {
           subscribed_at?: string
           unsubscribe_token?: string
           unsubscribed_at?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      daily_digests: {
-        Row: {
-          analysis: string | null
-          audience: string
-          content_uri: string | null
-          created_at: string
-          highlights: Json
-          id: string
-          period_end: string
-          period_start: string
-          publication_status: string
-          published_at: string | null
-          registry_tx_hash: string | null
-          report_date: string
-          source_event_ids: string[]
-          source_event_root: string | null
-          summary: string
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          analysis?: string | null
-          audience?: string
-          content_uri?: string | null
-          created_at?: string
-          highlights?: Json
-          id?: string
-          period_end: string
-          period_start: string
-          publication_status?: string
-          published_at?: string | null
-          registry_tx_hash?: string | null
-          report_date: string
-          source_event_ids?: string[]
-          source_event_root?: string | null
-          summary: string
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          analysis?: string | null
-          audience?: string
-          content_uri?: string | null
-          created_at?: string
-          highlights?: Json
-          id?: string
-          period_end?: string
-          period_start?: string
-          publication_status?: string
-          published_at?: string | null
-          registry_tx_hash?: string | null
-          report_date?: string
-          source_event_ids?: string[]
-          source_event_root?: string | null
-          summary?: string
-          title?: string
           updated_at?: string
         }
         Relationships: []
@@ -338,37 +344,49 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          explorer_url: string | null
           id: string
+          keeper_hub_run_id: string | null
           payout_period_hash: string
           payout_tx_hash: string | null
           reason_hash: string
           recipient: string
           registry_tx_hash: string | null
           status: string
+          transfer_explorer_url: string | null
+          transfer_keeper_hub_run_id: string | null
           updated_at: string
         }
         Insert: {
           amount: number
           created_at?: string
+          explorer_url?: string | null
           id?: string
+          keeper_hub_run_id?: string | null
           payout_period_hash: string
           payout_tx_hash?: string | null
           reason_hash: string
           recipient: string
           registry_tx_hash?: string | null
           status?: string
+          transfer_explorer_url?: string | null
+          transfer_keeper_hub_run_id?: string | null
           updated_at?: string
         }
         Update: {
           amount?: number
           created_at?: string
+          explorer_url?: string | null
           id?: string
+          keeper_hub_run_id?: string | null
           payout_period_hash?: string
           payout_tx_hash?: string | null
           reason_hash?: string
           recipient?: string
           registry_tx_hash?: string | null
           status?: string
+          transfer_explorer_url?: string | null
+          transfer_keeper_hub_run_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -430,9 +448,11 @@ export type Database = {
           dedupe_key: string | null
           delivery_status: string
           destinations: Json | null
+          explorer_url: string | null
           generation_attempt_ids: string[]
           generation_provider: string | null
           id: string
+          keeper_hub_run_id: string | null
           monitored_event_id: string | null
           published_at: string | null
           registry_tx_hash: string | null
@@ -450,9 +470,11 @@ export type Database = {
           dedupe_key?: string | null
           delivery_status?: string
           destinations?: Json | null
+          explorer_url?: string | null
           generation_attempt_ids?: string[]
           generation_provider?: string | null
           id?: string
+          keeper_hub_run_id?: string | null
           monitored_event_id?: string | null
           published_at?: string | null
           registry_tx_hash?: string | null
@@ -470,9 +492,11 @@ export type Database = {
           dedupe_key?: string | null
           delivery_status?: string
           destinations?: Json | null
+          explorer_url?: string | null
           generation_attempt_ids?: string[]
           generation_provider?: string | null
           id?: string
+          keeper_hub_run_id?: string | null
           monitored_event_id?: string | null
           published_at?: string | null
           registry_tx_hash?: string | null
@@ -495,11 +519,15 @@ export type Database = {
       sponsored_watches: {
         Row: {
           content_uri: string | null
+          create_explorer_url: string | null
+          create_keeper_hub_run_id: string | null
           create_tx_hash: string | null
           created_at: string
           ends_at: string
           id: string
           report_content_hash: string | null
+          report_explorer_url: string | null
+          report_keeper_hub_run_id: string | null
           report_tx_hash: string | null
           starts_at: string
           status: string
@@ -509,11 +537,15 @@ export type Database = {
         }
         Insert: {
           content_uri?: string | null
+          create_explorer_url?: string | null
+          create_keeper_hub_run_id?: string | null
           create_tx_hash?: string | null
           created_at?: string
           ends_at: string
           id?: string
           report_content_hash?: string | null
+          report_explorer_url?: string | null
+          report_keeper_hub_run_id?: string | null
           report_tx_hash?: string | null
           starts_at: string
           status?: string
@@ -523,11 +555,15 @@ export type Database = {
         }
         Update: {
           content_uri?: string | null
+          create_explorer_url?: string | null
+          create_keeper_hub_run_id?: string | null
           create_tx_hash?: string | null
           created_at?: string
           ends_at?: string
           id?: string
           report_content_hash?: string | null
+          report_explorer_url?: string | null
+          report_keeper_hub_run_id?: string | null
           report_tx_hash?: string | null
           starts_at?: string
           status?: string

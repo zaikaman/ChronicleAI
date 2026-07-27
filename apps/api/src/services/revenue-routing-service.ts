@@ -95,7 +95,7 @@ export function createRevenueRoutingService(
         return ZERO_RESULT(
           payoutPeriodHash,
           0,
-          "Web3 client not configured — revenue routing requires RPC_URL, CHRONICLE_REGISTRY_ADDRESS, PARA_WALLET_PRIVATE_KEY (registry), and TREASURY_WALLET_PRIVATE_KEY (payout transfers)",
+          "Web3 client not configured — revenue routing requires KeeperHub (KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL + CHRONICLE_REGISTRY_ADDRESS) or ALLOW_DIRECT_ETHERS_WRITES for local tests",
         );
       }
 
@@ -216,8 +216,11 @@ export function createRevenueRoutingService(
         return ZERO_RESULT(payoutPeriodHash, totalRevenue, "Failed to create any payout records");
       }
 
-      // 6. Execute real on-chain transfers — no simulated hashes
-      const transferHashes = new Map<string, string>();
+      // 6. Execute real on-chain transfers via KeeperHub — no simulated hashes
+      const transferHashes = new Map<
+        string,
+        { txHash: string; keeperHubRunId?: string; explorerUrl?: string }
+      >();
 
       for (const payoutId of payoutIds) {
         const amount = payoutAmounts.get(payoutId) ?? 0;
@@ -231,8 +234,12 @@ export function createRevenueRoutingService(
         const ethAmount = amount * cfg.ethPerCurrencyUnit;
 
         try {
-          const payoutTxHash = await web3Client.sendTransfer(recipient, ethAmount);
-          transferHashes.set(payoutId, payoutTxHash);
+          const transferReceipt = await web3Client.sendTransfer(recipient, ethAmount);
+          transferHashes.set(payoutId, {
+            txHash: transferReceipt.txHash,
+            keeperHubRunId: transferReceipt.keeperHubRunId,
+            explorerUrl: transferReceipt.explorerUrl,
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown transfer error";
           await markPayoutsFailed(deps, payoutIds, message);
@@ -247,6 +254,7 @@ export function createRevenueRoutingService(
               recipient,
               amount,
               eth_amount: ethAmount,
+              executedViaKeeperHub: web3Client.isKeeperHubBacked(),
             },
           });
           return ZERO_RESULT(
@@ -266,12 +274,13 @@ export function createRevenueRoutingService(
           continue;
         }
 
-        const payoutTxHash = transferHashes.get(payoutId);
-        if (!payoutTxHash) {
+        const transferMeta = transferHashes.get(payoutId);
+        if (!transferMeta) {
           await markPayoutsFailed(deps, payoutIds, "Missing transfer hash");
           return ZERO_RESULT(payoutPeriodHash, totalRevenue, "Missing transfer hash after send");
         }
 
+        const payoutTxHash = transferMeta.txHash;
         const amount = payoutAmounts.get(payoutId) ?? payoutRecord.value.amount;
         const registryResult = await deps.registryService.recordPayout(
           payoutPeriodHash,
@@ -292,6 +301,7 @@ export function createRevenueRoutingService(
             details: {
               payout_period_hash: payoutPeriodHash,
               payout_tx_hash: payoutTxHash,
+              transfer_keeper_hub_run_id: transferMeta.keeperHubRunId,
             },
           });
           return ZERO_RESULT(
@@ -306,20 +316,36 @@ export function createRevenueRoutingService(
           finalRegistryTxHash = registryTxHash;
         }
 
-        await deps.payoutRepo.markTransferred(payoutId, payoutTxHash, registryTxHash);
+        await deps.payoutRepo.markTransferred(payoutId, payoutTxHash, registryTxHash, {
+          keeperHubRunId: registryResult.keeperHubRunId,
+          explorerUrl: registryResult.explorerUrl,
+          transferKeeperHubRunId: transferMeta.keeperHubRunId,
+          transferExplorerUrl: transferMeta.explorerUrl,
+        });
+
+        const viaKh =
+          Boolean(registryResult.keeperHubRunId || transferMeta.keeperHubRunId) ||
+          web3Client.isKeeperHubBacked();
 
         await deps.execLogRepo.append({
           action_type: "payout",
           entity_type: "payout_record",
           entity_id: payoutId,
           status: "succeeded",
-          message: `Payout transferred and recorded on-chain for ${payoutRecord.value.recipient}`,
+          message: viaKh
+            ? `Executed via KeeperHub: payout transferred and recorded for ${payoutRecord.value.recipient}`
+            : `Payout transferred and recorded on-chain for ${payoutRecord.value.recipient}`,
           details: {
             payout_period_hash: payoutPeriodHash,
             payout_tx_hash: payoutTxHash,
             registry_tx_hash: registryTxHash,
+            keeper_hub_run_id: registryResult.keeperHubRunId,
+            explorer_url: registryResult.explorerUrl,
+            transfer_keeper_hub_run_id: transferMeta.keeperHubRunId,
+            transfer_explorer_url: transferMeta.explorerUrl,
             amount,
             recipient: payoutRecord.value.recipient,
+            executedViaKeeperHub: viaKh,
           },
         });
       }

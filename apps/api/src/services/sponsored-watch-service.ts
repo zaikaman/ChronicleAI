@@ -1,6 +1,6 @@
 // Sponsored Watch Service
 // Manages the lifecycle of sponsored monitoring campaigns:
-// 1. Executes `createSponsoredWatch` transaction on-chain via Chronicle Registry
+// 1. Executes `createSponsoredWatch` via KeeperHub (or gated direct ethers in tests)
 // 2. During the campaign window, monitors the target contract for events
 // 3. On completion, calls `publishSponsoredReport` with the final report hash
 
@@ -9,9 +9,6 @@ import type { SponsoredWatchRow } from "@chronicleai/db";
 import type { Web3Client } from "./web3-client-service.ts";
 
 export interface SponsoredWatchService {
-  /**
-   * Create a sponsored watch campaign by executing the on-chain transaction.
-   */
   createSponsoredWatch(params: {
     targetContract: string;
     watchSpecHash: string;
@@ -19,19 +16,10 @@ export interface SponsoredWatchService {
     endsAt: string;
   }): Promise<SponsoredWatchRow>;
 
-  /**
-   * Complete a sponsored watch campaign and publish the report on-chain.
-   */
   completeWatch(watchId: string, reportContentHash: string): Promise<SponsoredWatchRow>;
 
-  /**
-   * Fail a sponsored watch campaign.
-   */
   failWatch(watchId: string, reason: string): Promise<SponsoredWatchRow>;
 
-  /**
-   * Get active watches that need monitoring.
-   */
   getActiveWatches(): Promise<SponsoredWatchRow[]>;
 }
 
@@ -45,7 +33,7 @@ export function createSponsoredWatchService(params: {
   function requireWeb3(): Web3Client {
     if (!web3Client) {
       throw new Error(
-        "Web3 client not configured — sponsored watch requires RPC_URL, CHRONICLE_REGISTRY_ADDRESS, and PARA_WALLET_PRIVATE_KEY",
+        "Web3 client not configured — sponsored watch requires KeeperHub (KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL + CHRONICLE_REGISTRY_ADDRESS) or ALLOW_DIRECT_ETHERS_WRITES for local tests",
       );
     }
     return web3Client;
@@ -59,6 +47,8 @@ export function createSponsoredWatchService(params: {
       const endsAtUnix = Math.floor(new Date(endsAt).getTime() / 1000);
 
       let createTxHash: string;
+      let createKeeperHubRunId: string | undefined;
+      let createExplorerUrl: string | undefined;
       let watchId: number;
       try {
         const txRes = await client.createSponsoredWatch(
@@ -68,6 +58,8 @@ export function createSponsoredWatchService(params: {
           endsAtUnix,
         );
         createTxHash = txRes.txHash;
+        createKeeperHubRunId = txRes.keeperHubRunId;
+        createExplorerUrl = txRes.explorerUrl;
         watchId = txRes.watchId;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown on-chain error";
@@ -90,6 +82,8 @@ export function createSponsoredWatchService(params: {
         starts_at: startsAt,
         ends_at: endsAt,
         create_tx_hash: createTxHash,
+        create_keeper_hub_run_id: createKeeperHubRunId ?? null,
+        create_explorer_url: createExplorerUrl ?? null,
         status: "accepted",
       });
 
@@ -102,14 +96,19 @@ export function createSponsoredWatchService(params: {
         entity_type: "sponsored_watch",
         entity_id: result.value.id,
         status: "succeeded",
-        message: `Sponsored watch created for contract ${targetContract}`,
+        message: createKeeperHubRunId
+          ? `Executed via KeeperHub (run ${createKeeperHubRunId}): sponsored watch created for ${targetContract}`
+          : `Sponsored watch created for contract ${targetContract}`,
         details: {
           targetContract,
           watchSpecHash,
           startsAt,
           endsAt,
           createTxHash,
+          createKeeperHubRunId,
+          createExplorerUrl,
           watchId,
+          executedViaKeeperHub: Boolean(createKeeperHubRunId || client.isKeeperHubBacked()),
         },
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),
@@ -122,14 +121,19 @@ export function createSponsoredWatchService(params: {
       const client = requireWeb3();
 
       let reportTxHash: string;
+      let reportKeeperHubRunId: string | undefined;
+      let reportExplorerUrl: string | undefined;
       try {
         const numericId = Number(watchId.replace(/[^0-9]/g, "")) || 0;
         const reportUri = `chronicleai://sponsored-reports/${watchId}`;
-        reportTxHash = await client.publishSponsoredReport(
+        const receipt = await client.publishSponsoredReport(
           numericId,
           reportContentHash,
           reportUri,
         );
+        reportTxHash = receipt.txHash;
+        reportKeeperHubRunId = receipt.keeperHubRunId;
+        reportExplorerUrl = receipt.explorerUrl;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown on-chain error";
         await execLogRepo.append({
@@ -148,6 +152,8 @@ export function createSponsoredWatchService(params: {
       const result = await watchRepo.updateStatus(watchId, "completed", {
         report_content_hash: reportContentHash,
         report_tx_hash: reportTxHash,
+        report_keeper_hub_run_id: reportKeeperHubRunId ?? null,
+        report_explorer_url: reportExplorerUrl ?? null,
       });
 
       if (!result.ok) {
@@ -159,10 +165,15 @@ export function createSponsoredWatchService(params: {
         entity_type: "sponsored_watch",
         entity_id: watchId,
         status: "succeeded",
-        message: "Sponsored watch completed with on-chain report publication",
+        message: reportKeeperHubRunId
+          ? `Executed via KeeperHub (run ${reportKeeperHubRunId}): sponsored report published`
+          : "Sponsored watch completed with on-chain report publication",
         details: {
           reportContentHash,
           reportTxHash,
+          reportKeeperHubRunId,
+          reportExplorerUrl,
+          executedViaKeeperHub: Boolean(reportKeeperHubRunId || client.isKeeperHubBacked()),
         },
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),

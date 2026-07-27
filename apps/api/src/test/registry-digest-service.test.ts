@@ -12,17 +12,28 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
     async getTreasuryAddress() {
       return "0xtreasury";
     },
-    async publishAlert(alertHash: string, ipfsUri: string) {
-      return "0xalert-tx-hash";
+    isKeeperHubBacked() {
+      return true;
     },
-    async publishDigest(digestHash: string, sourceEventRoot: string, ipfsUri: string) {
-      return "0xdigest-tx-hash";
+    async publishAlert(_alertHash: string, _ipfsUri: string) {
+      return {
+        txHash: "0xalert-tx-hash",
+        keeperHubRunId: "exec_alert_1",
+        explorerUrl: "https://sepolia.basescan.org/tx/0xalert-tx-hash",
+      };
+    },
+    async publishDigest(_digestHash: string, _sourceEventRoot: string, _ipfsUri: string) {
+      return {
+        txHash: "0xdigest-tx-hash",
+        keeperHubRunId: "exec_digest_1",
+        explorerUrl: "https://sepolia.basescan.org/tx/0xdigest-tx-hash",
+      };
     },
     async createSponsoredWatch() {
-      return { watchId: 1, txHash: "0xwatch-tx-hash" };
+      return { watchId: 1, txHash: "0xwatch-tx-hash", keeperHubRunId: "exec_watch_1" };
     },
     async publishSponsoredReport() {
-      return "0xreport-tx-hash";
+      return { txHash: "0xreport-tx-hash", keeperHubRunId: "exec_report_1" };
     },
     async recordPayout(
       _payoutPeriodHash: string,
@@ -30,17 +41,17 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
       _amount: number,
       _reasonHash: string,
     ) {
-      return "0xpayout-tx-hash";
+      return { txHash: "0xpayout-tx-hash", keeperHubRunId: "exec_payout_1" };
     },
     async sendTransfer() {
-      return "0xtransfer-tx-hash";
+      return { txHash: "0xtransfer-tx-hash", keeperHubRunId: "exec_transfer_1" };
     },
     ...overrides,
   };
 }
 
 describe("ChronicleRegistryService (digest)", () => {
-  it("publishes a digest with web3 client configured", async () => {
+  it("publishes a digest with web3 client configured and returns KeeperHub metadata", async () => {
     const web3Client = createMockWeb3Client();
     const service = createChronicleRegistryService(web3Client);
 
@@ -48,6 +59,8 @@ describe("ChronicleRegistryService (digest)", () => {
 
     expect(result.success).toBe(true);
     expect(result.txHash).toBe("0xdigest-tx-hash");
+    expect(result.keeperHubRunId).toBe("exec_digest_1");
+    expect(result.explorerUrl).toContain("0xdigest-tx-hash");
   });
 
   it("publishes an alert with web3 client configured", async () => {
@@ -58,6 +71,7 @@ describe("ChronicleRegistryService (digest)", () => {
 
     expect(result.success).toBe(true);
     expect(result.txHash).toBe("0xalert-tx-hash");
+    expect(result.keeperHubRunId).toBe("exec_alert_1");
   });
 
   it("returns failure when web3 client is null", async () => {

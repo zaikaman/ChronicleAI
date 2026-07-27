@@ -3,6 +3,7 @@
 
 import type React from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
+import { baseSepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
 
 interface ExecutionLogEntry {
   id: string;
@@ -12,6 +13,10 @@ interface ExecutionLogEntry {
   status: string;
   message: string | null;
   createdAt: string;
+  keeperHubRunId?: string;
+  txHash?: string;
+  explorerUrl?: string;
+  executedViaKeeperHub?: boolean;
 }
 
 interface ExecutionLogTableProps {
@@ -138,6 +143,7 @@ export function ExecutionLogTable({
               <th style={tableHeaderStyle}>Action</th>
               <th style={tableHeaderStyle}>Entity</th>
               <th style={tableHeaderStyle}>Status</th>
+              <th style={tableHeaderStyle}>KeeperHub</th>
               <th style={tableHeaderStyle}>Message</th>
               <th style={tableHeaderStyle}>Time</th>
             </tr>
@@ -181,6 +187,57 @@ export function ExecutionLogTable({
                 </td>
                 <td style={tableCellStyle}>
                   <StatusBadge label={log.status} variant={getStatusVariant(log.status)} />
+                </td>
+                <td style={tableCellStyle}>
+                  {log.executedViaKeeperHub || log.keeperHubRunId ? (
+                    <div
+                      style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
+                      data-testid="log-executed-via-keeperhub"
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                          color: "var(--accent-primary, #7dd3fc)",
+                        }}
+                      >
+                        Executed via KeeperHub
+                      </span>
+                      {log.keeperHubRunId ? (
+                        <code
+                          style={{
+                            fontSize: "var(--font-size-xs)",
+                            fontFamily: "var(--font-mono)",
+                            color: "var(--fg-tertiary)",
+                          }}
+                          title={log.keeperHubRunId}
+                        >
+                          {truncateEntityId(log.keeperHubRunId)}
+                        </code>
+                      ) : null}
+                      {log.txHash ? (
+                        <a
+                          href={log.explorerUrl ?? baseSepoliaTxUrl(log.txHash)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: "var(--font-size-xs)",
+                            fontFamily: "var(--font-mono)",
+                            color: "var(--accent-primary, #7dd3fc)",
+                          }}
+                          title={log.txHash}
+                        >
+                          {truncateHash(log.txHash)}
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span style={{ color: "var(--fg-tertiary)", fontSize: "var(--font-size-xs)" }}>
+                      —
+                    </span>
+                  )}
                 </td>
                 <td
                   style={{

@@ -32,6 +32,8 @@ function makeDigestRow(overrides: Partial<DailyDigestRow> = {}): DailyDigestRow 
     publication_status: "draft" as const,
     published_at: null,
     registry_tx_hash: null,
+    keeper_hub_run_id: null,
+    explorer_url: null,
     source_event_root: null,
     content_uri: null,
     created_at: new Date().toISOString(),

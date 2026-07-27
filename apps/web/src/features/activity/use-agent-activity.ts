@@ -12,6 +12,9 @@ export interface AgentActivityData {
     publishedAt: string;
     confidence?: string;
     generationProvider?: string;
+    registryTxHash?: string;
+    keeperHubRunId?: string;
+    explorerUrl?: string;
   }>;
   digests: Array<{
     id: string;
@@ -23,6 +26,8 @@ export interface AgentActivityData {
     publicationStatus: string;
     publishedAt?: string;
     registryTxHash?: string;
+    keeperHubRunId?: string;
+    explorerUrl?: string;
   }>;
   payments: Array<{
     id: string;
@@ -43,6 +48,7 @@ export interface AgentActivityData {
     entityId: string | null;
     status: string;
     message: string | null;
+    details?: Record<string, unknown> | null;
     createdAt: string;
   }>;
   payouts?: Array<{
@@ -53,6 +59,10 @@ export interface AgentActivityData {
     reasonHash: string;
     payoutTxHash?: string;
     registryTxHash?: string;
+    keeperHubRunId?: string;
+    explorerUrl?: string;
+    transferKeeperHubRunId?: string;
+    transferExplorerUrl?: string;
     status: string;
     createdAt: string;
   }>;
