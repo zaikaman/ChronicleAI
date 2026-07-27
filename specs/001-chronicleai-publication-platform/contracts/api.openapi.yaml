@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: ChronicleAI API
   version: 0.1.0
-  description: Contract for ChronicleAI public alerts, premium intelligence, KeeperHub ingestion, payments, and operator audit data.
+  description: Contract for ChronicleAI public alerts, premium intelligence, KeeperHub ingestion, payments, and public agent activity data.
 servers:
   - url: https://api.chronicleai.example
     description: Production API
@@ -245,29 +245,22 @@ paths:
           description: Invalid webhook authentication
         "409":
           description: Payouts for this period have already been routed
-  /operator/audit:
+  /activity:
     get:
-      summary: Get operator audit dashboard data
-      security:
-        - OperatorSession: []
+      summary: Get public agent activity dashboard data
       responses:
         "200":
-          description: Operator audit data
+          description: Public agent activity data
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OperatorAudit"
-        "401":
-          description: Operator authentication required
+                $ref: "#/components/schemas/AgentActivity"
 components:
   securitySchemes:
     KeeperHubWebhook:
       type: apiKey
       in: header
       name: X-ChronicleAI-Signature
-    OperatorSession:
-      type: http
-      scheme: bearer
   schemas:
     PublicAlert:
       type: object
@@ -442,7 +435,7 @@ components:
           minimum: 0
         failureReason:
           type: string
-    OperatorAudit:
+    AgentActivity:
       type: object
       required: [alerts, digests, payments, treasury, executionLogs, sponsoredWatches, payouts]
       properties:

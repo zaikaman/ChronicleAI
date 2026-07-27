@@ -1,5 +1,5 @@
-// Operator Notification Service
-// Sends low-balance warnings using configurable notification destinations
+// Notification Service
+// Sends low-balance and revenue-routing warnings via configurable destinations
 // Can be extended with Discord, Telegram, email, or webhook targets
 
 import type { ExecutionLogRepository } from "@chronicleai/db";
@@ -9,7 +9,7 @@ export interface NotificationDestination {
   target?: string;
 }
 
-export interface OperatorNotificationService {
+export interface NotificationService {
   /**
    * Send a low-balance warning notification.
    */
@@ -32,10 +32,10 @@ export interface OperatorNotificationService {
   }): Promise<{ delivered: boolean; destinations: string[] }>;
 }
 
-export function createOperatorNotificationService(
+export function createNotificationService(
   execLogRepo: ExecutionLogRepository,
   destinations: NotificationDestination[] = [{ type: "log" }],
-): OperatorNotificationService {
+): NotificationService {
   const defaultDestinations: NotificationDestination[] = destinations;
 
   return {
@@ -45,7 +45,7 @@ export function createOperatorNotificationService(
       for (const dest of defaultDestinations) {
         if (dest.type === "log") {
           await execLogRepo.append({
-            action_type: "operator_notification",
+            action_type: "notification",
             entity_type: "treasury_snapshot",
             entity_id: null,
             status: "succeeded",
@@ -71,9 +71,8 @@ export function createOperatorNotificationService(
             });
             delivered.push(`webhook:${dest.target}`);
           } catch {
-            // Webhook delivery failed, log but don't throw
             await execLogRepo.append({
-              action_type: "operator_notification",
+              action_type: "notification",
               entity_type: "treasury_snapshot",
               entity_id: null,
               status: "failed",
@@ -93,7 +92,7 @@ export function createOperatorNotificationService(
       for (const dest of defaultDestinations) {
         if (dest.type === "log") {
           await execLogRepo.append({
-            action_type: "operator_notification",
+            action_type: "notification",
             entity_type: "payout_record",
             entity_id: null,
             status: "succeeded",
@@ -121,7 +120,7 @@ export function createOperatorNotificationService(
             delivered.push(`webhook:${dest.target}`);
           } catch {
             await execLogRepo.append({
-              action_type: "operator_notification",
+              action_type: "notification",
               entity_type: "payout_record",
               entity_id: null,
               status: "failed",

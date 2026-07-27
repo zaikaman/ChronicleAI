@@ -1,35 +1,34 @@
-// Operator Audit Service
-// Aggregates dashboard data under one typed response
+// Agent Activity Service
+// Aggregates public dashboard data under one typed response
 
-import type { OperatorAuditRepository } from "@chronicleai/db";
-import type { OperatorAuditResponse, TreasuryStatus } from "@chronicleai/schemas";
+import type { AgentActivityRepository } from "@chronicleai/db";
+import type { AgentActivityResponse, TreasuryStatus } from "@chronicleai/schemas";
 
-export interface OperatorAuditService {
-  getAudit(): Promise<{
+export interface AgentActivityService {
+  getActivity(): Promise<{
     success: boolean;
-    data?: OperatorAuditResponse;
+    data?: AgentActivityResponse;
     error?: string;
   }>;
 }
 
-export function createOperatorAuditService(
-  auditRepo: OperatorAuditRepository,
-): OperatorAuditService {
+export function createAgentActivityService(
+  activityRepo: AgentActivityRepository,
+): AgentActivityService {
   return {
-    async getAudit() {
+    async getActivity() {
       try {
-        const auditResult = await auditRepo.getAuditData(10);
+        const activityResult = await activityRepo.getActivityData(10);
 
-        if (!auditResult.ok) {
+        if (!activityResult.ok) {
           return {
             success: false,
-            error: `Failed to fetch audit data: ${auditResult.error.message}`,
+            error: `Failed to fetch activity data: ${activityResult.error.message}`,
           };
         }
 
-        const data = auditResult.value;
+        const data = activityResult.value;
 
-        // Map treasury snapshots to a simplified treasury status
         const latestSnapshot = data.treasurySnapshots[0];
         const treasury = {
           availableBalance: latestSnapshot?.available_balance ?? 0,
@@ -37,7 +36,6 @@ export function createOperatorAuditService(
           status: (latestSnapshot?.status ?? "unknown") as TreasuryStatus,
         };
 
-        // Map alerts to response format
         const alerts = data.recentAlerts.map((a) => {
           const alert: any = {
             id: a.id,
@@ -61,7 +59,6 @@ export function createOperatorAuditService(
           return alert;
         });
 
-        // Map digests to response format
         const digests = data.recentDigests.map((d) => {
           const digest: any = {
             id: d.id,
@@ -79,7 +76,6 @@ export function createOperatorAuditService(
           return digest;
         });
 
-        // Map payments to response format
         const payments = data.recentPayments.map((p) => {
           const payment: any = {
             id: p.id,
@@ -93,7 +89,6 @@ export function createOperatorAuditService(
           return payment;
         });
 
-        // Map execution logs
         const executionLogs = data.recentLogs.map((l) => ({
           id: l.id,
           actionType: l.action_type,
@@ -105,7 +100,6 @@ export function createOperatorAuditService(
           createdAt: l.created_at,
         }));
 
-        // Map payouts
         const payouts = data.recentPayouts.map((p) => {
           const payout: any = {
             id: p.id,
@@ -121,7 +115,6 @@ export function createOperatorAuditService(
           return payout;
         });
 
-        // Map active sponsored watches
         const activeSponsoredWatches = data.activeSponsoredWatches.map((w) => {
           const watch: any = {
             id: w.id,
@@ -154,7 +147,7 @@ export function createOperatorAuditService(
       } catch (error) {
         return {
           success: false,
-          error: error instanceof Error ? error.message : "Unknown error building audit",
+          error: error instanceof Error ? error.message : "Unknown error building activity data",
         };
       }
     },

@@ -8,6 +8,8 @@
 
 **Authentication**: Requests must include a shared webhook signature in `X-ChronicleAI-Signature`. Invalid signatures return `401`.
 
+### Classified payload (workflow pre-maps the event)
+
 **Required payload fields**:
 - `sourceEventId`: KeeperHub workflow execution or event identifier
 - `eventType`: `large_swap`, `liquidation`, `gas_spike`, `volume_anomaly`, or `contract_deployment`
@@ -22,11 +24,45 @@
 - `magnitude`
 - `sourceReferences`
 
+### Raw Event Tracker payload (server-side normalization)
+
+When `eventType` is omitted, Chronicle accepts KeeperHub Event Tracker shapes and normalizes them using the protocol registry:
+
+- `eventName` + `chainId` (required)
+- `address` / `contractAddress`, `transactionHash`, `blockNumber`, `logIndex`, `args`
+- Supported events: `Swap` (Uniswap V3), `Trade` (CoW Protocol), `LiquidationCall` (Aave V3), `PoolCreated` / `ContractCreated` (deployments)
+- USD magnitudes use stablecoin decimals and/or Chainlink ETH/USD when `RPC_URL` is configured
+
 **Expected responses**:
 - `202`: Event accepted for processing
-- `400`: Required fields missing or invalid
+- `400`: Required fields missing or invalid / unmappable event
 - `401`: Signature invalid
 - `409`: Duplicate `sourceEventId` already received
+
+## Block Analysis Webhook
+
+**Endpoint**: `POST /keeperhub/blocks`
+
+**Purpose**: Accept Block Dispatcher triggers. Chronicle fetches the block via `RPC_URL`, measures base fee (gwei) and transaction count, computes a rolling z-score for volume anomalies, optionally scans receipts for contract creations, and feeds any threshold crossings into the same alert pipeline as `/keeperhub/events`.
+
+**Authentication**: `X-ChronicleAI-Signature` (same secret as other KeeperHub webhooks).
+
+**Required payload fields**:
+- `chainId`: EVM chain ID
+- `blockNumber`: Block height to analyze
+
+**Optional payload fields**:
+- `sourceEventId` / `executionId`
+- `blockHash`
+- `timestamp`
+- `capturedAt`
+- Nested `triggerData.{chainId,blockNumber,blockHash,timestamp}` (workflow expansion shape)
+
+**Expected responses**:
+- `202`: Block accepted (zero or more events emitted)
+- `400`: Invalid payload
+- `401`: Signature invalid
+- `502`: RPC failure or block not found
 
 ## Digest Trigger Webhook
 
@@ -87,5 +123,5 @@
 
 - KeeperHub webhook calls must be idempotent using the source event, reporting-window, or payout-period identifier.
 - The API must record the raw accepted payload before content generation or transaction processing begins.
-- Failures must create execution logs visible in the operator audit view.
+- Failures must create execution logs visible on the public Activity page.
 - Retries must not publish duplicate public alerts, duplicate daily digests, or execute duplicate payout transfers.

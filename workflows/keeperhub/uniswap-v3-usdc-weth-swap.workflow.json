@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Uniswap V3 USDC/WETH Swap Monitor",
+    "description": "Event Tracker listens to Swap on the mainnet USDC/WETH 0.05% pool. Raw event is posted to Chronicle for USD magnitude normalization and large_swap qualification."
+  },
+  "nodes": [
+    {
+      "id": "trigger-swap",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Uniswap V3 Swap",
+        "config": {
+          "triggerType": "Event",
+          "network": "1",
+          "contractAddress": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+          "eventName": "Swap",
+          "contractABI": "[{\"type\":\"event\",\"name\":\"Swap\",\"inputs\":[{\"indexed\":true,\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"recipient\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount0\",\"type\":\"int256\"},{\"indexed\":false,\"name\":\"amount1\",\"type\":\"int256\"},{\"indexed\":false,\"name\":\"sqrtPriceX96\",\"type\":\"uint160\"},{\"indexed\":false,\"name\":\"liquidity\",\"type\":\"uint128\"},{\"indexed\":false,\"name\":\"tick\",\"type\":\"int24\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-events",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "POST Chronicle /keeperhub/events",
+        "config": {
+          "actionType": "webhook/send-webhook",
+          "integrationType": "webhook",
+          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/events",
+          "webhookMethod": "POST",
+          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
+          "webhookPayload": "{\"chainId\":1,\"eventName\":\"Swap\",\"address\":\"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640\",\"transactionHash\":\"{{@trigger-swap:Trigger.transactionHash}}\",\"blockNumber\":{{@trigger-swap:Trigger.blockNumber}},\"logIndex\":{{@trigger-swap:Trigger.logIndex}},\"args\":{\"amount0\":\"{{@trigger-swap:Trigger.amount0}}\",\"amount1\":\"{{@trigger-swap:Trigger.amount1}}\",\"sender\":\"{{@trigger-swap:Trigger.sender}}\",\"recipient\":\"{{@trigger-swap:Trigger.recipient}}\"},\"protocol\":\"Uniswap V3\"}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-swap", "target": "post-chronicle-events" }
+  ],
+  "integrationBindings": [
+    { "nodeId": "post-chronicle-events", "integrationType": "webhook" }
+  ]
+}

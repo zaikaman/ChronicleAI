@@ -3,9 +3,9 @@ import { Link } from "react-router-dom";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
 import { sepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
-import { ExecutionLogTable } from "../operator/ExecutionLogTable.tsx";
-import { PayoutLogsTable } from "../operator/PayoutLogsTable.tsx";
-import { TreasuryStatusPanel } from "../operator/TreasuryStatusPanel.tsx";
+import { ExecutionLogTable } from "./ExecutionLogTable.tsx";
+import { PayoutLogsTable } from "./PayoutLogsTable.tsx";
+import { TreasuryStatusPanel } from "./TreasuryStatusPanel.tsx";
 import { useAgentActivity } from "./use-agent-activity.ts";
 
 function ProofLink({ txHash, label }: { txHash: string; label?: string }): ReactElement {

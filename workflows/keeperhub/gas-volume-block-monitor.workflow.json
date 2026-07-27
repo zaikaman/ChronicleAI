@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Gas & Volume Block Monitor",
+    "description": "Block Dispatcher fires every block. Chronicle fetches the block via RPC, detects gas spikes, transaction-volume anomalies, and contract deployments, then runs the public alert pipeline."
+  },
+  "nodes": [
+    {
+      "id": "trigger-block",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Every Block",
+        "config": {
+          "triggerType": "Block",
+          "network": "1",
+          "blockInterval": 1
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-blocks",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "POST Chronicle /keeperhub/blocks",
+        "config": {
+          "actionType": "webhook/send-webhook",
+          "integrationType": "webhook",
+          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/blocks",
+          "webhookMethod": "POST",
+          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
+          "webhookPayload": "{\"chainId\":1,\"blockNumber\":{{@trigger-block:Trigger.blockNumber}},\"blockHash\":\"{{@trigger-block:Trigger.blockHash}}\",\"timestamp\":{{@trigger-block:Trigger.timestamp}},\"sourceEventId\":\"kh-block-{{@trigger-block:Trigger.blockNumber}}\"}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-block", "target": "post-chronicle-blocks" }
+  ],
+  "integrationBindings": [
+    { "nodeId": "post-chronicle-blocks", "integrationType": "webhook" }
+  ]
+}

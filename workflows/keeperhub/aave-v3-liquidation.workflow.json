@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Aave V3 Liquidation Monitor",
+    "description": "Event Tracker listens to LiquidationCall on Aave V3 Pool (mainnet). Chronicle normalizes debtToCover into USD and qualifies liquidations."
+  },
+  "nodes": [
+    {
+      "id": "trigger-liq",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Aave V3 LiquidationCall",
+        "config": {
+          "triggerType": "Event",
+          "network": "1",
+          "contractAddress": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
+          "eventName": "LiquidationCall",
+          "contractABI": "[{\"type\":\"event\",\"name\":\"LiquidationCall\",\"inputs\":[{\"indexed\":true,\"name\":\"collateralAsset\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"debtAsset\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"user\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"debtToCover\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"liquidatedCollateralAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"liquidator\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"receiveAToken\",\"type\":\"bool\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-events",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "POST Chronicle /keeperhub/events",
+        "config": {
+          "actionType": "webhook/send-webhook",
+          "integrationType": "webhook",
+          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/events",
+          "webhookMethod": "POST",
+          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
+          "webhookPayload": "{\"chainId\":1,\"eventName\":\"LiquidationCall\",\"address\":\"0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2\",\"transactionHash\":\"{{@trigger-liq:Trigger.transactionHash}}\",\"blockNumber\":{{@trigger-liq:Trigger.blockNumber}},\"logIndex\":{{@trigger-liq:Trigger.logIndex}},\"args\":{\"collateralAsset\":\"{{@trigger-liq:Trigger.collateralAsset}}\",\"debtAsset\":\"{{@trigger-liq:Trigger.debtAsset}}\",\"user\":\"{{@trigger-liq:Trigger.user}}\",\"debtToCover\":\"{{@trigger-liq:Trigger.debtToCover}}\",\"liquidatedCollateralAmount\":\"{{@trigger-liq:Trigger.liquidatedCollateralAmount}}\",\"liquidator\":\"{{@trigger-liq:Trigger.liquidator}}\"},\"protocol\":\"Aave V3\"}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-liq", "target": "post-chronicle-events" }
+  ],
+  "integrationBindings": [
+    { "nodeId": "post-chronicle-events", "integrationType": "webhook" }
+  ]
+}

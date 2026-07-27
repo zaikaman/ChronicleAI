@@ -4,7 +4,7 @@ import {
   createExecutionLogRepository,
   createLLMGenerationAttemptRepository,
   createMonitoredEventRepository,
-  createOperatorAuditRepository,
+  createAgentActivityRepository,
   createPaymentRecordRepository,
   createPayoutRecordRepository,
   createPremiumIntelligenceRepository,
@@ -62,7 +62,7 @@ try {
   // US4 repositories
   const treasuryRepo = createTreasurySnapshotRepository(supabase);
   const payoutRepo = createPayoutRecordRepository(supabase);
-  const auditRepo = createOperatorAuditRepository(supabase);
+  const activityRepo = createAgentActivityRepository(supabase);
 
   // US1: Public Alerts
   setupUS1Routes(app, env, {
@@ -87,13 +87,13 @@ try {
     watchRepo,
   });
 
-  // US4: Operator Sustainability & Revenue Payouts
+  // US4: Public agent activity, treasury & revenue payouts
   setupUS4Routes(app, env, {
     treasuryRepo,
     payoutRepo,
     paymentRecordRepo,
     execLogRepo,
-    auditRepo,
+    activityRepo,
   });
 } catch (error) {
   // Log but don't crash - env vars may not be available in all contexts

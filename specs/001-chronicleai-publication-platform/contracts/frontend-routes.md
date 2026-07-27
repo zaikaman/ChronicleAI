@@ -51,11 +51,11 @@ Shows premium intelligence teasers, payment entry points, and active sponsored m
 - Payment-required state before premium content unlock
 - List of active sponsored monitoring contracts with their campaign windows and on-chain setup (`createSponsoredWatch`) and completion (`publishSponsoredReport`) transaction links
 
-## Operator Routes
+## Activity Routes
 
-### `/operator`
+### `/activity`
 
-Shows the operator audit dashboard.
+Shows the public Live Agent Activity page (no login).
 
 **Must include**:
 - Recent alerts with registry transaction hashes
@@ -67,8 +67,7 @@ Shows the operator audit dashboard.
 - Warning state when treasury falls below safety buffer
 
 **Access**:
-- Requires operator authentication.
-- Unauthenticated users are redirected to sign-in or shown an authenticated route guard.
+- Fully public. No authentication required.
 
 ## UX Requirements
 

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI CoW Protocol Trade Monitor",
+    "description": "Event Tracker listens to Trade on CoW GPv2Settlement (mainnet). Chronicle maps sell/buy amounts to large_swap with USD magnitude when tokens are known stables or WETH."
+  },
+  "nodes": [
+    {
+      "id": "trigger-trade",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "CoW Trade",
+        "config": {
+          "triggerType": "Event",
+          "network": "1",
+          "contractAddress": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41",
+          "eventName": "Trade",
+          "contractABI": "[{\"type\":\"event\",\"name\":\"Trade\",\"inputs\":[{\"indexed\":true,\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"sellToken\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"buyToken\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"sellAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"buyAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"feeAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"orderUid\",\"type\":\"bytes\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-events",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "POST Chronicle /keeperhub/events",
+        "config": {
+          "actionType": "webhook/send-webhook",
+          "integrationType": "webhook",
+          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/events",
+          "webhookMethod": "POST",
+          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
+          "webhookPayload": "{\"chainId\":1,\"eventName\":\"Trade\",\"address\":\"0x9008D19f58AAbD9eD0D60971565AA8510560ab41\",\"transactionHash\":\"{{@trigger-trade:Trigger.transactionHash}}\",\"blockNumber\":{{@trigger-trade:Trigger.blockNumber}},\"logIndex\":{{@trigger-trade:Trigger.logIndex}},\"args\":{\"owner\":\"{{@trigger-trade:Trigger.owner}}\",\"sellToken\":\"{{@trigger-trade:Trigger.sellToken}}\",\"buyToken\":\"{{@trigger-trade:Trigger.buyToken}}\",\"sellAmount\":\"{{@trigger-trade:Trigger.sellAmount}}\",\"buyAmount\":\"{{@trigger-trade:Trigger.buyAmount}}\",\"feeAmount\":\"{{@trigger-trade:Trigger.feeAmount}}\"},\"protocol\":\"CoW Protocol\"}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-trade", "target": "post-chronicle-events" }
+  ],
+  "integrationBindings": [
+    { "nodeId": "post-chronicle-events", "integrationType": "webhook" }
+  ]
+}

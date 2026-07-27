@@ -24,9 +24,14 @@ import type {
   MonitoredEventRepository,
   PublicAlertRepository,
 } from "@chronicleai/db";
+import { BlockIngestionHandler } from "../keeperhub/block-ingestion-handler.ts";
 import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
+import { createEventNormalizer } from "../monitoring/event-normalizer.ts";
+import { createOnChainBlockService } from "../monitoring/on-chain-block-service.ts";
+import { createPriceOracle } from "../monitoring/price-oracle-service.ts";
 import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
 import { createAlertRoutes } from "./alert-routes.ts";
+import { createKeeperhubBlockRoutes } from "./keeperhub-block-routes.ts";
 import { createKeeperhubEventRoutes } from "./keeperhub-event-routes.ts";
 
 export interface US1Dependencies {
@@ -50,10 +55,16 @@ export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependenci
     },
   });
 
-  // KeeperHub events (with signature middleware)
+  const priceOracle = createPriceOracle(env.rpcUrl);
+  const eventNormalizer = createEventNormalizer(priceOracle);
+  const blockService = createOnChainBlockService(env.rpcUrl);
+  const blockHandler = new BlockIngestionHandler(blockService, handler, deps.execLogRepo);
+
+  // KeeperHub events + blocks (with signature middleware)
   const keeperhubRouter = Router();
   keeperhubRouter.use("/keeperhub", keeperhubSignatureMiddleware(env.keeperhubWebhookSecret));
-  keeperhubRouter.use(createKeeperhubEventRoutes(handler));
+  keeperhubRouter.use(createKeeperhubEventRoutes(handler, eventNormalizer));
+  keeperhubRouter.use(createKeeperhubBlockRoutes(blockHandler));
   apiRouter.use(keeperhubRouter);
 
   // Public alerts (no auth required)
@@ -179,37 +190,36 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
   );
 }
 
-// ── US4: Operator Sustainability & Revenue Payouts Routes ─
+// ── US4: Public Agent Activity, Treasury & Revenue Payouts ─
 
 import type {
-  OperatorAuditRepository,
+  AgentActivityRepository,
   PayoutRecordRepository,
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
 import { RevenueRoutingHandler } from "../keeperhub/revenue-routing-handler.ts";
 import { TreasuryCheckHandler } from "../keeperhub/treasury-check-handler.ts";
-import { createOperatorAuditService } from "../services/operator-audit-service.ts";
-import { createOperatorNotificationService } from "../services/operator-notification-service.ts";
+import { createAgentActivityService } from "../services/agent-activity-service.ts";
+import { createNotificationService } from "../services/notification-service.ts";
 import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
 import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
+import { createActivityRoutes } from "./activity-routes.ts";
 import { createKeeperhubRevenueRoutes } from "./keeperhub-revenue-routes.ts";
 import { createKeeperhubTreasuryRoutes } from "./keeperhub-treasury-routes.ts";
-import { createOperatorRoutes } from "./operator-routes.ts";
 
 export interface US4Dependencies {
   treasuryRepo: TreasurySnapshotRepository;
   payoutRepo: PayoutRecordRepository;
   paymentRecordRepo: PaymentRecordRepository;
   execLogRepo: ExecutionLogRepository;
-  auditRepo: OperatorAuditRepository;
+  activityRepo: AgentActivityRepository;
 }
 
 export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependencies): void {
-  // Initialize services
   const web3Client = createWeb3Client(env);
   const registryService = createChronicleRegistryService(web3Client);
   const treasuryService = createTreasuryStatusService();
-  const notificationService = createOperatorNotificationService(deps.execLogRepo);
+  const notificationService = createNotificationService(deps.execLogRepo);
 
   const routingService = createRevenueRoutingService({
     treasuryRepo: deps.treasuryRepo,
@@ -233,7 +243,7 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
     execLogRepo: deps.execLogRepo,
   });
 
-  const auditService = createOperatorAuditService(deps.auditRepo);
+  const activityService = createAgentActivityService(deps.activityRepo);
 
   // KeeperHub treasury check (with signature middleware)
   const keeperhubRouter = Router();
@@ -242,6 +252,6 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
   keeperhubRouter.use(createKeeperhubRevenueRoutes(revenueHandler));
   apiRouter.use(keeperhubRouter);
 
-  // Operator audit route (public)
-  apiRouter.use(createOperatorRoutes(auditService));
+  // Public agent activity (no auth)
+  apiRouter.use(createActivityRoutes(activityService));
 }

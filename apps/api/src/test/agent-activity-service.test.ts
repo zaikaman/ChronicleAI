@@ -1,12 +1,12 @@
-// Unit tests: Operator Audit Service
+// Unit tests: Agent Activity Service
 // Tests aggregation across alerts, digests, payments, treasury, payout records, and logs
 
-import type { OperatorAuditData, OperatorAuditRepository } from "@chronicleai/db";
+import type { AgentActivityData, AgentActivityRepository } from "@chronicleai/db";
 import { describe, expect, it, vi } from "vitest";
-import { createOperatorAuditService } from "../services/operator-audit-service.ts";
+import { createAgentActivityService } from "../services/agent-activity-service.ts";
 
-describe("OperatorAuditService", () => {
-  function createMockAuditData(overrides?: Partial<OperatorAuditData>): OperatorAuditData {
+describe("AgentActivityService", () => {
+  function createMockActivityData(overrides?: Partial<AgentActivityData>): AgentActivityData {
     return {
       recentAlerts: [
         {
@@ -33,7 +33,7 @@ describe("OperatorAuditService", () => {
       recentDigests: [
         {
           id: "digest-001",
-          report_date: new Date().toISOString().split("T")[0] ?? "2026-07-27",
+          report_date: new Date().toISOString().split("T")[0] ?? "2026-07-07",
           period_start: new Date(Date.now() - 86400000).toISOString(),
           period_end: new Date().toISOString(),
           title: "Test Digest",
@@ -122,18 +122,18 @@ describe("OperatorAuditService", () => {
     };
   }
 
-  it("should return aggregated audit data", async () => {
-    const mockAuditData = createMockAuditData();
+  it("should return aggregated activity data", async () => {
+    const mockActivityData = createMockActivityData();
 
-    const mockRepo: OperatorAuditRepository = {
-      getAuditData: vi.fn().mockResolvedValue({
+    const mockRepo: AgentActivityRepository = {
+      getActivityData: vi.fn().mockResolvedValue({
         ok: true as const,
-        value: mockAuditData,
+        value: mockActivityData,
       }),
     };
 
-    const service = createOperatorAuditService(mockRepo);
-    const result = await service.getAudit();
+    const service = createAgentActivityService(mockRepo);
+    const result = await service.getActivity();
 
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
@@ -157,7 +157,7 @@ describe("OperatorAuditService", () => {
   });
 
   it("should handle empty data gracefully", async () => {
-    const mockEmptyData = createMockAuditData({
+    const mockEmptyData = createMockActivityData({
       recentAlerts: [],
       recentDigests: [],
       recentPayments: [],
@@ -167,15 +167,15 @@ describe("OperatorAuditService", () => {
       recentLogs: [],
     });
 
-    const mockRepo: OperatorAuditRepository = {
-      getAuditData: vi.fn().mockResolvedValue({
+    const mockRepo: AgentActivityRepository = {
+      getActivityData: vi.fn().mockResolvedValue({
         ok: true as const,
         value: mockEmptyData,
       }),
     };
 
-    const service = createOperatorAuditService(mockRepo);
-    const result = await service.getAudit();
+    const service = createAgentActivityService(mockRepo);
+    const result = await service.getActivity();
 
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
@@ -189,23 +189,23 @@ describe("OperatorAuditService", () => {
   });
 
   it("should return error when repository fails", async () => {
-    const mockRepo: OperatorAuditRepository = {
-      getAuditData: vi.fn().mockResolvedValue({
+    const mockRepo: AgentActivityRepository = {
+      getActivityData: vi.fn().mockResolvedValue({
         ok: false as const,
         error: new (await import("@chronicleai/db")).PersistenceError("Database error"),
       }),
     };
 
-    const service = createOperatorAuditService(mockRepo);
-    const result = await service.getAudit();
+    const service = createAgentActivityService(mockRepo);
+    const result = await service.getActivity();
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
-    expect(result.error).toContain("Failed to fetch audit data");
+    expect(result.error).toContain("Failed to fetch activity data");
   });
 
   it("should include treasury status from latest snapshot", async () => {
-    const mockAuditData = createMockAuditData({
+    const mockActivityData = createMockActivityData({
       treasurySnapshots: [
         {
           id: "treasury-002",
@@ -226,15 +226,15 @@ describe("OperatorAuditService", () => {
       ],
     });
 
-    const mockRepo: OperatorAuditRepository = {
-      getAuditData: vi.fn().mockResolvedValue({
+    const mockRepo: AgentActivityRepository = {
+      getActivityData: vi.fn().mockResolvedValue({
         ok: true as const,
-        value: mockAuditData,
+        value: mockActivityData,
       }),
     };
 
-    const service = createOperatorAuditService(mockRepo);
-    const result = await service.getAudit();
+    const service = createAgentActivityService(mockRepo);
+    const result = await service.getActivity();
 
     expect(result.success).toBe(true);
     expect(result.data?.treasury.status).toBe("warning");

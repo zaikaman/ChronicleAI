@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Uniswap V3 PoolCreated Monitor",
+    "description": "Event Tracker listens to PoolCreated on Uniswap V3 Factory (mainnet). Chronicle records each new pool as contract_deployment."
+  },
+  "nodes": [
+    {
+      "id": "trigger-pool",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Uniswap V3 PoolCreated",
+        "config": {
+          "triggerType": "Event",
+          "network": "1",
+          "contractAddress": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+          "eventName": "PoolCreated",
+          "contractABI": "[{\"type\":\"event\",\"name\":\"PoolCreated\",\"inputs\":[{\"indexed\":true,\"name\":\"token0\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"token1\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"fee\",\"type\":\"uint24\"},{\"indexed\":false,\"name\":\"tickSpacing\",\"type\":\"int24\"},{\"indexed\":false,\"name\":\"pool\",\"type\":\"address\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-events",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "POST Chronicle /keeperhub/events",
+        "config": {
+          "actionType": "webhook/send-webhook",
+          "integrationType": "webhook",
+          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/events",
+          "webhookMethod": "POST",
+          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
+          "webhookPayload": "{\"chainId\":1,\"eventName\":\"PoolCreated\",\"address\":\"0x1F98431c8aD98523631AE4a59f267346ea31F984\",\"transactionHash\":\"{{@trigger-pool:Trigger.transactionHash}}\",\"blockNumber\":{{@trigger-pool:Trigger.blockNumber}},\"logIndex\":{{@trigger-pool:Trigger.logIndex}},\"args\":{\"token0\":\"{{@trigger-pool:Trigger.token0}}\",\"token1\":\"{{@trigger-pool:Trigger.token1}}\",\"fee\":\"{{@trigger-pool:Trigger.fee}}\",\"pool\":\"{{@trigger-pool:Trigger.pool}}\"},\"protocol\":\"Uniswap V3\"}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-pool", "target": "post-chronicle-events" }
+  ],
+  "integrationBindings": [
+    { "nodeId": "post-chronicle-events", "integrationType": "webhook" }
+  ]
+}

@@ -1,7 +1,7 @@
 // Frontend app router with route definitions
 
 import type { RouteDefinition } from "@chronicleai/schemas";
-import { type RouteObject, createBrowserRouter, Navigate } from "react-router-dom";
+import { type RouteObject, createBrowserRouter } from "react-router-dom";
 import { App } from "./App.tsx";
 
 import type React from "react";
@@ -37,8 +37,6 @@ const routes: RouteObject[] = [
       { path: "digests/latest", element: <DigestPage /> },
       { path: "premium", element: <PremiumPage /> },
       { path: "activity", element: <ActivityPage /> },
-      // Legacy operator route → public activity (hackathon: fully public product)
-      { path: "operator", element: <Navigate to="/activity" replace /> },
     ],
   },
 ];

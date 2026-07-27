@@ -98,3 +98,22 @@ export function createAllProvidersFailedEvent(
     ...overrides,
   });
 }
+
+/** Raw Event Tracker Swap fixture (server-side normalization path). */
+export function createRawUniswapSwapEvent(
+  overrides?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    chainId: 1,
+    eventName: "Swap",
+    address: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+    transactionHash: `0xrawswap${Date.now().toString(16)}`,
+    logIndex: 0,
+    args: {
+      amount0: { value: String(2_500_000n * 1_000_000n), type: "int256" },
+      amount1: { value: String(-(10n ** 18n)), type: "int256" },
+    },
+    protocol: "Uniswap V3",
+    ...overrides,
+  };
+}

@@ -29,7 +29,7 @@ function getActionTypeLabel(actionType: string): string {
     publish_digest: "Publish Digest",
     payment: "Payment",
     treasury_check: "Treasury Check",
-    operator_notification: "Notification",
+    notification: "Notification",
     registry_write: "Registry Write",
     payout: "Payout",
   };

@@ -1,14 +1,14 @@
-// Contract tests: GET /operator/audit
-// Tests response-shape cases (public endpoint, no auth required)
+// Contract tests: GET /activity
+// Public endpoint — no authentication required
 
 import { describe, expect, it } from "vitest";
-import { assertOperatorAuditShape } from "./schema-assertions.ts";
+import { assertAgentActivityShape } from "./schema-assertions.ts";
 
 const API_URL = process.env["TEST_API_URL"] ?? "http://localhost:4000";
 
-describe("Contract: GET /operator/audit", () => {
-  it("should return 200 with audit data shape", async () => {
-    const response = await fetch(`${API_URL}/operator/audit`, {
+describe("Contract: GET /activity", () => {
+  it("should return 200 with activity data shape", async () => {
+    const response = await fetch(`${API_URL}/activity`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -18,9 +18,8 @@ describe("Contract: GET /operator/audit", () => {
     expect(response.status).toBe(200);
 
     const body = (await response.json()) as Record<string, unknown>;
-    assertOperatorAuditShape(body);
+    assertAgentActivityShape(body);
 
-    // Verify required sub-sections have correct types
     expect(Array.isArray(body.alerts)).toBe(true);
     expect(Array.isArray(body.digests)).toBe(true);
     expect(Array.isArray(body.payments)).toBe(true);
@@ -32,7 +31,7 @@ describe("Contract: GET /operator/audit", () => {
   });
 
   it("should return 200 with empty arrays when no data exists", async () => {
-    const response = await fetch(`${API_URL}/operator/audit`, {
+    const response = await fetch(`${API_URL}/activity`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -43,7 +42,6 @@ describe("Contract: GET /operator/audit", () => {
 
     const body = (await response.json()) as Record<string, unknown>;
 
-    // Should always have the expected structure even with empty data
     expect(Array.isArray(body.alerts)).toBe(true);
     expect(Array.isArray(body.digests)).toBe(true);
     expect(Array.isArray(body.payments)).toBe(true);
@@ -52,7 +50,7 @@ describe("Contract: GET /operator/audit", () => {
   });
 
   it("should return 200 with alerts containing required fields", async () => {
-    const response = await fetch(`${API_URL}/operator/audit`, {
+    const response = await fetch(`${API_URL}/activity`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -72,7 +70,7 @@ describe("Contract: GET /operator/audit", () => {
   });
 
   it("should return 200 with digests containing required fields", async () => {
-    const response = await fetch(`${API_URL}/operator/audit`, {
+    const response = await fetch(`${API_URL}/activity`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -92,7 +90,7 @@ describe("Contract: GET /operator/audit", () => {
   });
 
   it("should return 200 with execution logs containing required fields", async () => {
-    const response = await fetch(`${API_URL}/operator/audit`, {
+    const response = await fetch(`${API_URL}/activity`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",

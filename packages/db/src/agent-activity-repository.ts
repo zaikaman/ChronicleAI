@@ -1,5 +1,5 @@
-// Operator Audit Repository
-// Aggregates data for the operator dashboard across multiple tables
+// Agent Activity Repository
+// Aggregates public activity data for the Live Agent Activity page
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PersistenceError, type Result, failure, success } from "./errors.ts";
@@ -14,7 +14,7 @@ import type {
   TreasurySnapshotRow,
 } from "./types.ts";
 
-export interface OperatorAuditData {
+export interface AgentActivityData {
   recentAlerts: PublicAlertRow[];
   recentDigests: DailyDigestRow[];
   recentPayments: PaymentRecordRow[];
@@ -26,17 +26,16 @@ export interface OperatorAuditData {
   totalQualifiedEvents: number;
 }
 
-export interface OperatorAuditRepository {
-  getAuditData(limitParam?: number): Promise<Result<OperatorAuditData>>;
+export interface AgentActivityRepository {
+  getActivityData(limitParam?: number): Promise<Result<AgentActivityData>>;
 }
 
-export function createOperatorAuditRepository(supabase: SupabaseClient): OperatorAuditRepository {
+export function createAgentActivityRepository(supabase: SupabaseClient): AgentActivityRepository {
   return {
-    async getAuditData(limitParam = 10) {
+    async getActivityData(limitParam = 10) {
       const limit = Math.min(50, Math.max(1, limitParam));
 
       try {
-        // Fetch recent alerts
         const { data: alerts, error: alertsError } = await supabase
           .from("public_alerts")
           .select("*")
@@ -45,7 +44,6 @@ export function createOperatorAuditRepository(supabase: SupabaseClient): Operato
 
         if (alertsError) return failure(mapPostgrestError(alertsError));
 
-        // Fetch recent digests
         const { data: digests, error: digestsError } = await supabase
           .from("daily_digests")
           .select("*")
@@ -54,7 +52,6 @@ export function createOperatorAuditRepository(supabase: SupabaseClient): Operato
 
         if (digestsError) return failure(mapPostgrestError(digestsError));
 
-        // Fetch recent payments
         const { data: payments, error: paymentsError } = await supabase
           .from("payment_records")
           .select("*")
@@ -63,7 +60,6 @@ export function createOperatorAuditRepository(supabase: SupabaseClient): Operato
 
         if (paymentsError) return failure(mapPostgrestError(paymentsError));
 
-        // Fetch latest treasury snapshots
         const { data: snapshots, error: snapshotsError } = await supabase
           .from("treasury_snapshots")
           .select("*")
@@ -72,7 +68,6 @@ export function createOperatorAuditRepository(supabase: SupabaseClient): Operato
 
         if (snapshotsError) return failure(mapPostgrestError(snapshotsError));
 
-        // Fetch active sponsored watches
         const { data: watches, error: watchesError } = await supabase
           .from("sponsored_watches")
           .select("*")
@@ -81,7 +76,6 @@ export function createOperatorAuditRepository(supabase: SupabaseClient): Operato
 
         if (watchesError) return failure(mapPostgrestError(watchesError));
 
-        // Fetch recent payout records
         const { data: payouts, error: payoutsError } = await supabase
           .from("payout_records")
           .select("*")
@@ -90,7 +84,6 @@ export function createOperatorAuditRepository(supabase: SupabaseClient): Operato
 
         if (payoutsError) return failure(mapPostgrestError(payoutsError));
 
-        // Fetch recent execution logs
         const { data: logs, error: logsError } = await supabase
           .from("execution_logs")
           .select("*")
@@ -99,14 +92,12 @@ export function createOperatorAuditRepository(supabase: SupabaseClient): Operato
 
         if (logsError) return failure(mapPostgrestError(logsError));
 
-        // Count monitored events
         const { count: totalEvents, error: countError } = await supabase
           .from("monitored_events")
           .select("*", { count: "exact", head: true });
 
         if (countError) return failure(mapPostgrestError(countError));
 
-        // Count qualified events
         const { count: qualifiedEvents, error: qualifiedError } = await supabase
           .from("monitored_events")
           .select("*", { count: "exact", head: true })
@@ -127,7 +118,7 @@ export function createOperatorAuditRepository(supabase: SupabaseClient): Operato
         });
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Unknown error fetching audit data";
+          error instanceof Error ? error.message : "Unknown error fetching activity data";
         return failure(new PersistenceError(message));
       }
     },

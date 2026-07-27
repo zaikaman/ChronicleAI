@@ -5,7 +5,6 @@ export interface ServerEnv {
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
   keeperhubWebhookSecret: string;
-  operatorAuthSecret: string;
   geminiApiKey: string;
   geminiModel: string;
   geminiBaseUrl: string | undefined;
@@ -51,7 +50,6 @@ export function loadServerEnv(): ServerEnv {
     supabaseUrl: requireEnv("SUPABASE_URL"),
     supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
     keeperhubWebhookSecret: requireEnv("KEEPERHUB_WEBHOOK_SECRET"),
-    operatorAuthSecret: requireEnv("OPERATOR_AUTH_SECRET"),
     geminiApiKey: optionalEnv("GEMINI_API_KEY", "") as string,
     geminiModel: optionalEnv("GEMINI_MODEL", "gemini-2.0-flash") as string,
     geminiBaseUrl: optionalEnv("GEMINI_BASE_URL"),

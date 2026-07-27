@@ -15,7 +15,6 @@ Create local environment files for the frontend and backend without committing s
 
 Backend environment must include:
 - Supabase URL and service credentials required by the API
-- Operator auth configuration
 - KeeperHub webhook signature secret
 - Gemini API key and model for primary alert generation
 - OpenAI API key and model for secondary alert generation
@@ -128,15 +127,15 @@ pnpm --filter @chronicleai/web dev
 
 **Expected outcome**: The sponsored campaign is successfully initialized, tracked, published on-chain, and audited on the UI dashboard.
 
-### Scenario 5: Operator sustainability & autonomous payouts
+### Scenario 5: Public agent activity & autonomous payouts
 
 1. Trigger the weekly revenue routing webhook `POST /keeperhub/revenue/route`.
 2. Confirm that when Para wallet funds exceed the safety buffer, KeeperHub executes token payout transfers to allowlisted creator recovery wallets and referral partners.
 3. Confirm that KeeperHub executes `recordPayout` on the Chronicle Registry contract.
 4. Trigger a treasury check when available balance is below the safety buffer and verify the Refunding Loop issues warnings.
-5. Sign in as an operator and open `/operator`.
+5. Open the public Activity page at `/activity` (no login).
 
-**Expected outcome**: The dashboard shows total revenue, cost estimates, Para wallet balance, low-balance warnings, payout receipts with calculation basis and on-chain tx hashes, and execution logs.
+**Expected outcome**: The public Activity page shows total revenue, cost estimates, Para wallet balance, low-balance warnings, payout receipts with calculation basis and on-chain tx hashes, and execution logs.
 
 ## Required Checks
 

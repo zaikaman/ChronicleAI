@@ -80,8 +80,14 @@ export function assertPaymentRecordShape(record: Record<string, unknown>): void 
   assertHasRequiredFields(record, ["id", "premiumItemId", "paymentRoute", "status"]);
 }
 
-export function assertOperatorAuditShape(audit: Record<string, unknown>): void {
-  assertHasRequiredFields(audit, ["alerts", "digests", "payments", "treasury", "executionLogs"]);
+export function assertAgentActivityShape(activity: Record<string, unknown>): void {
+  assertHasRequiredFields(activity, [
+    "alerts",
+    "digests",
+    "payments",
+    "treasury",
+    "executionLogs",
+  ]);
 }
 
 // ── HTTP Status Assertions ─────────────────────────────

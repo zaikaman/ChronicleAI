@@ -83,7 +83,7 @@ export type ExecutionLogActionType =
   | "publish_digest"
   | "payment"
   | "treasury_check"
-  | "operator_notification"
+  | "notification"
   | "registry_write"
   | "payout";
 
@@ -95,7 +95,7 @@ export const EXECUTION_LOG_ACTION_TYPES: readonly ExecutionLogActionType[] = [
   "publish_digest",
   "payment",
   "treasury_check",
-  "operator_notification",
+  "notification",
   "registry_write",
   "payout",
 ] as const;
@@ -147,9 +147,9 @@ export type Confidence = "high" | "medium" | "low";
 export const CONFIDENCE_LEVELS: readonly Confidence[] = ["high", "medium", "low"] as const;
 
 // ── Audience ────────────────────────────────────────────
-export type Audience = "public" | "premium" | "operator";
+export type Audience = "public" | "premium";
 
-export const AUDIENCES: readonly Audience[] = ["public", "premium", "operator"] as const;
+export const AUDIENCES: readonly Audience[] = ["public", "premium"] as const;
 
 // ── LLM Providers ───────────────────────────────────────
 export type LLMProvider = "gemini" | "openai" | "groq";

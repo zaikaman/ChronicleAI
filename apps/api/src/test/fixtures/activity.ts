@@ -1,5 +1,5 @@
-// Operator audit test fixtures
-// Treasury, audit, payout, sponsored watch, and operator auth fixtures
+// Agent activity test fixtures
+// Treasury, payout, and sponsored watch fixtures
 
 import type { RevenuePayoutRow, SponsoredWatchRow, TreasurySnapshotRow } from "@chronicleai/db";
 
@@ -161,30 +161,4 @@ export function createCompletedSponsoredWatch(
     updated_at: new Date().toISOString(),
     ...overrides,
   };
-}
-
-// ── Operator Auth Fixtures ───────────────────────────────
-
-export function createValidOperatorToken(): string {
-  return "test-operator-secret-token-for-testing";
-}
-
-export function createInvalidOperatorToken(): string {
-  return "invalid-token-that-should-be-rejected";
-}
-
-export function createValidAuthHeader(token?: string): Record<string, string> {
-  return {
-    Authorization: `Bearer ${token ?? createValidOperatorToken()}`,
-  };
-}
-
-export function createInvalidAuthHeader(): Record<string, string> {
-  return {
-    Authorization: "Bearer invalid-token",
-  };
-}
-
-export function createMissingAuthHeader(): Record<string, unknown> {
-  return {};
 }

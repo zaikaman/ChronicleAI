@@ -133,8 +133,8 @@ export interface PaymentSettlementRequest {
   currency?: string;
 }
 
-// ── Operator Audit ──────────────────────────────────────
-export interface OperatorAuditResponse {
+// ── Public Agent Activity ───────────────────────────────
+export interface AgentActivityResponse {
   alerts: PublicAlertResponse[];
   digests: DailyDigestResponse[];
   payments: PaymentRecordResponse[];

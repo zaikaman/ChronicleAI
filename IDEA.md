@@ -35,7 +35,7 @@ ChronicleAI is built on top of the KeeperHub execution and reliability layer, ut
 * **Proof-of-Publication Receipts**: Each public article displays the transaction hash created by KeeperHub, proving the agent executed an on-chain publication receipt.
 * **Sponsored Watch Receipts**: When a project buys a sponsored monitoring task, ChronicleAI writes a watch receipt on-chain that records the monitored contract, campaign window, and content hash for the final report.
 * **Revenue Routing Payouts**: When settled revenue exceeds the operating safety buffer, the agent uses KeeperHub to transfer configured shares to the creator/deployer wallet, DAO treasury, and approved referral partners.
-* **Treasury-Gated Execution**: Registry writes only execute when the agent's Para wallet has enough funds above the safety buffer; otherwise the agent logs a failed execution attempt and warns the operator channel.
+* **Treasury-Gated Execution**: Registry writes only execute when the agent's Para wallet has enough funds above the safety buffer; otherwise the agent logs a failed execution attempt and surfaces a public low-balance warning on the Activity page.
 
 ### Monetization and Payments (x402 and MPP)
 * **Dual-Protocol Payments**: The agent exposes its full database of detailed analytics via an OpenAPI endpoint. Human readers or secondary trading bots access the full data feed by settling micro-payments via:
@@ -98,7 +98,7 @@ ChronicleAI operates via five decoupled loops managed by KeeperHub's execution s
 * **Action**:
   1. The agent checks its Para wallet balance.
   2. If the balance exceeds the safety buffer, it retains it for gas.
-  3. If the balance drops below the threshold, it triggers an audit report showing utility metrics and sends a warning to the operator channel.
+  3. If the balance drops below the threshold, it triggers an audit report showing utility metrics and records a public low-balance warning on the Activity page.
 
 ### Loop 4: The Sponsored Watch Loop (Paid On-Chain Execution)
 * **Trigger**: A protocol pays for a sponsored monitoring task through x402 or MPP and submits the contract address or event signature it wants monitored.
@@ -111,7 +111,7 @@ ChronicleAI operates via five decoupled loops managed by KeeperHub's execution s
   6. The dashboard shows both transaction hashes as the on-chain audit trail for the paid campaign.
 
 ### Loop 5: The Revenue Routing Loop (Autonomous Treasury Distribution)
-* **Trigger**: Scheduled Trigger (e.g., weekly) or a manual operator-approved KeeperHub workflow.
+* **Trigger**: Scheduled Trigger (e.g., weekly) or a KeeperHub workflow.
 * **Action**:
   1. The agent totals settled x402/MPP revenue for the payout period.
   2. The agent subtracts estimated gas, API costs, and the required operating reserve.

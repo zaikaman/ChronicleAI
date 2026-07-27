@@ -12,7 +12,6 @@ const ENV = {
   SUPABASE_URL: "http://localhost:54321",
   SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
   KEEPERHUB_WEBHOOK_SECRET: "test-webhook-secret",
-  OPERATOR_AUTH_SECRET: "test-operator-secret",
   FRONTEND_ORIGIN: "http://localhost:5173",
   GEMINI_API_KEY: "test-gemini-key",
   OPENAI_API_KEY: "test-openai-key",

@@ -105,7 +105,7 @@ Represents a scheduled report covering a reporting period.
 - `highlights`: Ranked list of notable events or no-major-events message
 - `analysis`: Generated interpretation separated from observed facts
 - `sourceEventIds`: Referenced monitored events
-- `audience`: `public`, `premium`, or `operator`
+- `audience`: `public` or `premium`
 - `publicationStatus`: `draft`, `queued`, `published`, `partial_failure`, `failed`
 - `publishedAt`: Publication time
 - `registryTxHash`: Transaction hash of the `publishDigest` registry contract execution
@@ -196,7 +196,7 @@ Represents ChronicleAI's operational funding state at a point in time.
 
 **Relationships**:
 - Summarizes many `PaymentRecord` and `ExecutionLog` entries
-- Can trigger an operator notification
+- Can trigger a public low-balance notification on the Activity page
 
 **Validation rules**:
 - Status is `warning` or `critical` when available balance is below the configured safety buffer
@@ -208,7 +208,7 @@ Represents an auditable action or failure across monitoring, generation, publica
 
 **Fields**:
 - `id`: Stable internal identifier
-- `actionType`: `monitor`, `generate_alert`, `publish_alert`, `generate_digest`, `publish_digest`, `payment`, `treasury_check`, `operator_notification`, `registry_write`, `payout`
+- `actionType`: `monitor`, `generate_alert`, `publish_alert`, `generate_digest`, `publish_digest`, `payment`, `treasury_check`, `notification`, `registry_write`, `payout`
 - `entityType`: Related domain entity type
 - `entityId`: Related domain entity identifier
 - `status`: `started`, `succeeded`, `retrying`, `failed`
@@ -222,8 +222,8 @@ Represents an auditable action or failure across monitoring, generation, publica
 
 **Validation rules**:
 - Failed logs require a diagnostic message
-- Retrying logs require enough detail for operators to understand the next attempt
-- Logs must preserve chronological ordering for dashboard audit views
+- Retrying logs require enough detail for anyone reviewing the public Activity page to understand the next attempt
+- Logs must preserve chronological ordering for public dashboard audit views
 
 ## SponsoredWatch
 

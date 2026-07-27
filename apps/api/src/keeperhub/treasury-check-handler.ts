@@ -7,7 +7,7 @@ import type {
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
 import type { TreasuryStatusService } from "../services/treasury-status-service.ts";
-import type { OperatorNotificationService } from "../services/operator-notification-service.ts";
+import type { NotificationService } from "../services/notification-service.ts";
 
 export interface TreasuryCheckResult {
   accepted: boolean;
@@ -20,13 +20,13 @@ export class TreasuryCheckHandler {
   private readonly treasuryRepo: TreasurySnapshotRepository;
   private readonly execLogRepo: ExecutionLogRepository;
   private readonly treasuryService: TreasuryStatusService;
-  private readonly notificationService: OperatorNotificationService;
+  private readonly notificationService: NotificationService;
 
   constructor(deps: {
     treasuryRepo: TreasurySnapshotRepository;
     execLogRepo: ExecutionLogRepository;
     treasuryService: TreasuryStatusService;
-    notificationService: OperatorNotificationService;
+    notificationService: NotificationService;
   }) {
     this.treasuryRepo = deps.treasuryRepo;
     this.execLogRepo = deps.execLogRepo;
@@ -102,7 +102,7 @@ export class TreasuryCheckHandler {
 
         // Log warning emission
         await this.execLogRepo.append({
-          action_type: "operator_notification",
+          action_type: "notification",
           entity_type: "treasury_snapshot",
           entity_id: snapshot.id,
           status: "succeeded",

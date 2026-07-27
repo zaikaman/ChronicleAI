@@ -1,4 +1,4 @@
-// Public agent activity data (same API surface as former operator audit)
+// Public agent activity data (GET /activity — no auth)
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -77,7 +77,7 @@ export function useAgentActivity(): AgentActivityState {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/operator/audit`, {
+      const response = await fetch(`${API_BASE}/activity`, {
         headers: { "Content-Type": "application/json" },
       });
 

@@ -9,6 +9,16 @@ export const EVENT_THRESHOLDS = {
   contract_deployment: { minMagnitude: 0, unit: "any" },
 } as const;
 
+// ── On-chain monitoring defaults (Block Dispatcher path) ─
+export const BLOCK_MONITORING = {
+  /** Rolling window length for per-chain transaction-count z-scores. */
+  volumeWindowSize: 100,
+  /** Minimum samples before volume anomaly z-score is computed. */
+  volumeMinSamples: 20,
+  /** How many recent receipts to scan for contract creations per block (0 = skip). */
+  deploymentScanLimit: 25,
+} as const;
+
 // ── Deduplication ───────────────────────────────────────
 export const DEDUPE_WINDOW_MS = 86_400_000; // 24 hours in milliseconds
 
