@@ -14,3 +14,4 @@ export * from "./payment-record-repository.ts";
 export * from "./treasury-snapshot-repository.ts";
 export * from "./payout-record-repository.ts";
 export * from "./agent-activity-repository.ts";
+export * from "./email-subscriber-repository.ts";

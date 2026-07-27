@@ -20,7 +20,7 @@ import { createSmtpEmailService } from "../services/smtp-email-service.ts";
 function makeDigestRow(overrides: Partial<DailyDigestRow> = {}): DailyDigestRow {
   return {
     id: "digest-test-001",
-    report_date: "2026-07-27",
+    report_date: "2026-07-07",
     period_start: new Date().toISOString(),
     period_end: new Date().toISOString(),
     title: "Test Digest",
@@ -134,7 +134,7 @@ describe("DigestRunHandler", () => {
         user: undefined,
         pass: undefined,
         fromAddress: undefined,
-        subscriberList: undefined,
+        resolveRecipients: async () => [],
       }),
     ),
   });

@@ -169,6 +169,23 @@ export type LLMEntityType = "public_alert" | "daily_digest";
 
 export const LLM_ENTITY_TYPES: readonly LLMEntityType[] = ["public_alert", "daily_digest"] as const;
 
+// ── Email Subscribers ───────────────────────────────────
+export type EmailSubscriberStatus = "active" | "unsubscribed";
+
+export const EMAIL_SUBSCRIBER_STATUSES: readonly EmailSubscriberStatus[] = [
+  "active",
+  "unsubscribed",
+] as const;
+
+export type EmailSubscriberSource = "web" | "api" | "premium" | "import";
+
+export const EMAIL_SUBSCRIBER_SOURCES: readonly EmailSubscriberSource[] = [
+  "web",
+  "api",
+  "premium",
+  "import",
+] as const;
+
 // ── Branded ID Types ────────────────────────────────────
 declare const brand: unique symbol;
 

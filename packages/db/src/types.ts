@@ -4,6 +4,8 @@ import type {
   AlertDeliveryStatus,
   Confidence,
   DigestPublicationStatus,
+  EmailSubscriberSource,
+  EmailSubscriberStatus,
   EventType,
   ExecutionLogActionType,
   ExecutionLogStatus,
@@ -344,3 +346,40 @@ export interface ExecutionLogInsert {
 }
 
 export type ExecutionLogUpdate = Partial<ExecutionLogInsert>;
+
+// ── Email Subscribers ───────────────────────────────────
+export interface EmailSubscriberRow {
+  id: string;
+  email: string;
+  email_normalized: string;
+  status: EmailSubscriberStatus;
+  receives_digests: boolean;
+  receives_alerts: boolean;
+  source: EmailSubscriberSource;
+  payer_reference: string | null;
+  unsubscribe_token: string;
+  subscribed_at: string;
+  unsubscribed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailSubscriberInsert {
+  email: string;
+  email_normalized: string;
+  status?: EmailSubscriberStatus;
+  receives_digests?: boolean;
+  receives_alerts?: boolean;
+  source?: EmailSubscriberSource;
+  payer_reference?: string | null;
+  unsubscribe_token?: string;
+  subscribed_at?: string;
+  unsubscribed_at?: string | null;
+}
+
+export type EmailSubscriberUpdate = Partial<
+  Omit<EmailSubscriberInsert, "email" | "email_normalized">
+> & {
+  email?: string;
+  email_normalized?: string;
+};

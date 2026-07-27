@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      email_subscribers: {
+        Row: {
+          created_at: string
+          email: string
+          email_normalized: string
+          id: string
+          payer_reference: string | null
+          receives_alerts: boolean
+          receives_digests: boolean
+          source: string
+          status: string
+          subscribed_at: string
+          unsubscribe_token: string
+          unsubscribed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          email_normalized: string
+          id?: string
+          payer_reference?: string | null
+          receives_alerts?: boolean
+          receives_digests?: boolean
+          source?: string
+          status?: string
+          subscribed_at?: string
+          unsubscribe_token?: string
+          unsubscribed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          email_normalized?: string
+          id?: string
+          payer_reference?: string | null
+          receives_alerts?: boolean
+          receives_digests?: boolean
+          source?: string
+          status?: string
+          subscribed_at?: string
+          unsubscribe_token?: string
+          unsubscribed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       daily_digests: {
         Row: {
           analysis: string | null

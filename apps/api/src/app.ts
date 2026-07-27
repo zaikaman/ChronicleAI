@@ -1,6 +1,7 @@
 import { loadServerEnv } from "@chronicleai/config";
 import {
   createDailyDigestRepository,
+  createEmailSubscriberRepository,
   createExecutionLogRepository,
   createLLMGenerationAttemptRepository,
   createMonitoredEventRepository,
@@ -55,6 +56,7 @@ try {
   const execLogRepo = createExecutionLogRepository(supabase);
   const llmAttemptRepo = createLLMGenerationAttemptRepository(supabase);
   const digestRepo = createDailyDigestRepository(supabase);
+  const subscriberRepo = createEmailSubscriberRepository(supabase);
   const premiumRepo = createPremiumIntelligenceRepository(supabase);
   const paymentRecordRepo = createPaymentRecordRepository(supabase);
   const watchRepo = createSponsoredWatchRepository(supabase);
@@ -72,11 +74,12 @@ try {
     llmAttemptRepo,
   });
 
-  // US2: Daily Digests
+  // US2: Daily Digests + email subscribers
   setupUS2Routes(app, env, {
     eventRepo,
     digestRepo,
     execLogRepo,
+    subscriberRepo,
   });
 
   // US3: Premium Access & Sponsored Watch

@@ -3,6 +3,7 @@ import type {
   AlertDeliveryStatus,
   Confidence,
   DigestPublicationStatus,
+  EmailSubscriberSource,
   EventType,
   PaymentRoute,
   PaymentStatus,
@@ -146,6 +147,34 @@ export interface AgentActivityResponse {
   executionLogs: Array<Record<string, unknown>>;
   payouts?: Array<Record<string, unknown>>;
   activeSponsoredWatches?: Array<Record<string, unknown>>;
+}
+
+// ── Email Subscription ──────────────────────────────────
+export interface SubscribeRequest {
+  email: string;
+  receivesDigests?: boolean;
+  receivesAlerts?: boolean;
+  payerReference?: string;
+  source?: EmailSubscriberSource;
+}
+
+export interface UnsubscribeRequest {
+  email?: string;
+  token?: string;
+}
+
+export interface SubscribeResponse {
+  email: string;
+  status: "active";
+  receivesDigests: boolean;
+  receivesAlerts: boolean;
+  /** True when an existing unsubscribed address was re-activated. */
+  reactivated: boolean;
+}
+
+export interface UnsubscribeResponse {
+  email: string;
+  status: "unsubscribed";
 }
 
 // ── Response Wrappers ───────────────────────────────────

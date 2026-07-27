@@ -19,6 +19,7 @@ export { apiRouter };
 import type { ServerEnv } from "@chronicleai/config";
 import type {
   DailyDigestRepository,
+  EmailSubscriberRepository,
   ExecutionLogRepository,
   LLMGenerationAttemptRepository,
   MonitoredEventRepository,
@@ -83,11 +84,13 @@ import { createSmtpEmailService } from "../services/smtp-email-service.ts";
 import { createWeb3Client } from "../services/web3-client-service.ts";
 import { createDigestRoutes } from "./digest-routes.ts";
 import { createKeeperhubDigestRoutes } from "./keeperhub-digest-routes.ts";
+import { createSubscriberRoutes } from "./subscriber-routes.ts";
 
 export interface US2Dependencies {
   eventRepo: MonitoredEventRepository;
   digestRepo: DailyDigestRepository;
   execLogRepo: ExecutionLogRepository;
+  subscriberRepo: EmailSubscriberRepository;
 }
 
 export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependencies): void {
@@ -100,7 +103,13 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
     user: env.smtpUser,
     pass: env.smtpPass,
     fromAddress: env.smtpFromAddress,
-    subscriberList: env.smtpSubscriberList,
+    resolveRecipients: async (channel) => {
+      const result = await deps.subscriberRepo.listActiveEmails(channel);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      return result.value;
+    },
   });
 
   const windowService = createDigestWindowService(deps.digestRepo);
@@ -131,6 +140,9 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
 
   // Latest digest (no auth required)
   apiRouter.use(createDigestRoutes(deps.digestRepo));
+
+  // Email newsletter subscribe / unsubscribe (public)
+  apiRouter.use(createSubscriberRoutes(deps.subscriberRepo));
 }
 
 // ── US3: Premium Access & Sponsored Watch Routes ────────
