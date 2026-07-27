@@ -2,7 +2,7 @@
 import type { Confidence, EventType } from "./domain.ts";
 
 // ── Navigation Route IDs ────────────────────────────────
-export type RouteId = "home" | "alerts" | "digests" | "premium" | "operator";
+export type RouteId = "home" | "publications" | "alerts" | "digests" | "premium" | "operator";
 
 export interface RouteDefinition {
   id: RouteId;

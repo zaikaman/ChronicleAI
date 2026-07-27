@@ -72,7 +72,7 @@ describe("SmtpEmailService", () => {
         analysis: "Analysis text",
         reportDate: "2026-07-27",
         registryTxHash: "0xtxhash",
-        contentUri: "https://webflow.com/item/123",
+        contentUri: "http://localhost:5173/digests/latest",
       });
     }).not.toThrow();
   });

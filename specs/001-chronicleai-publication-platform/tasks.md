@@ -134,7 +134,7 @@
 
 **Goal**: Readers and operators can view a scheduled daily digest that summarizes the reporting period (including no-major-events periods), anchored on-chain with a verifiable proof-of-publication.
 
-**Independent Test**: Seed a 24-hour reporting period, trigger digest generation, verify one digest exists with highlights, Merkle root, and source references, calls the registry contract, updates Webflow, sends email bulletins via SMTP, and displays the registry transaction hash on the frontend.
+**Independent Test**: Seed a 24-hour reporting period, trigger digest generation, verify one digest exists with highlights, Merkle root, and source references, calls the registry contract, updates the self-hosted publication UI, sends email bulletins via SMTP, and displays the registry transaction hash on the frontend.
 
 ### Tests for User Story 2
 
@@ -142,9 +142,8 @@
 - [x] T086 [P] [US2] Write contract tests for `GET /digests/latest` success and not-found responses in `tests/contracts/latest-digest.contract.test.ts`
 - [x] T087 [P] [US2] Write unit tests for reporting window validation and duplicate window detection in `apps/api/src/test/digest-window-service.test.ts`
 - [x] T088 [P] [US2] Write unit tests for digest generation with ranked highlights, no-major-events output, source references, and fact-versus-analysis separation in `apps/api/src/test/digest-generation-service.test.ts`
-- [x] T089 [P] [US2] Write integration tests for scheduled digest trigger, persistence, publication status, Web3 publish transaction, Webflow update, SMTP email dispatch, and execution logs in `apps/api/src/test/digest-run.integration.test.ts`
+- [x] T089 [P] [US2] Write integration tests for scheduled digest trigger, persistence, publication status, Web3 publish transaction, self-hosted content URI, SMTP email dispatch, and execution logs in `apps/api/src/test/digest-run.integration.test.ts`
 - [x] T090a [P] [US2] Write unit tests for Chronicle Registry publishDigest contract call in `apps/api/src/test/registry-digest-service.test.ts`
-- [x] T090b [P] [US2] Write unit tests for Webflow collection publishing in `apps/api/src/test/webflow-publishing-service.test.ts`
 - [x] T090c [P] [US2] Write unit tests for SMTP email subscriber delivery in `apps/api/src/test/smtp-email-service.test.ts`
 
 ### Implementation for User Story 2
@@ -155,12 +154,11 @@
 - [x] T091 [P] [US2] Implement daily digest repository create, find-by-window, latest-public, and publication status methods with new columns in `packages/db/src/daily-digest-repository.ts`
 - [x] T091a [US2] Implement Web3/Ethers helper for contract connection and transaction execution in `apps/api/src/services/web3-client-service.ts`
 - [x] T091b [US2] Implement Chronicle Registry publish service that writes alert and digest metadata on-chain in `apps/api/src/services/chronicle-registry-service.ts`
-- [x] T091c [US2] Implement Webflow collection update plugin in `apps/api/src/services/webflow-publishing-service.ts`
 - [x] T091d [US2] Implement SMTP email subscription dispatch plugin in `apps/api/src/services/smtp-email-service.ts`
 - [x] T092 [US2] Implement reporting window validation and idempotency service in `apps/api/src/services/digest-window-service.ts`
 - [x] T093 [US2] Implement digest event selection service for top monitored events in a reporting period in `apps/api/src/services/digest-event-selection-service.ts`
 - [x] T094 [US2] Implement digest generation service for highlights, no-major-events reports, source references, and analysis separation in `apps/api/src/services/digest-generation-service.ts`
-- [x] T095 [US2] Implement digest publication service sequencing: 1. Chronicle Registry `publishDigest`, 2. Webflow publish, 3. SMTP email broadcast, and record results/execution logs in `apps/api/src/services/digest-publication-service.ts`
+- [x] T095 [US2] Implement digest publication service sequencing: 1. Chronicle Registry `publishDigest`, 2. Self-hosted content URI generation, 3. SMTP email broadcast, and record results/execution logs in `apps/api/src/services/digest-publication-service.ts`
 - [x] T096 [US2] Implement KeeperHub digest trigger handler with signed request validation and duplicate-window handling in `apps/api/src/keeperhub/digest-run-handler.ts`
 - [x] T097 [US2] Implement `POST /keeperhub/digests/run` route in `apps/api/src/routes/keeperhub-digest-routes.ts`
 - [x] T098 [US2] Implement `GET /digests/latest` route in `apps/api/src/routes/digest-routes.ts`
@@ -175,7 +173,7 @@
 - [x] T107 [US2] Add execution logs for digest trigger received, digest generated, no-events digest generated, duplicate skipped, publication failed, and publication completed in `apps/api/src/keeperhub/digest-run-handler.ts`
 - [x] T108 [US2] Run US2 contract, integration, and unit tests and fix failures in `tests/contracts/digest-run.contract.test.ts`, `tests/contracts/latest-digest.contract.test.ts`, and `apps/api/src/test/digest-run.integration.test.ts`
 
-**Checkpoint**: User Story 2 is independently functional, publishes digests to Chronicle Registry on-chain, Webflow, and SMTP.
+**Checkpoint**: User Story 2 is independently functional, publishes digests to Chronicle Registry on-chain and SMTP, with self-hosted publication UI.
 
 ---
 
@@ -295,7 +293,7 @@
 - [ ] T176 Create demo seed verification test proving quickstart scenarios have usable data in `packages/db/src/test/demo-seed.test.ts`
 - [ ] T177 Configure Vercel build and output settings for the Vite frontend in `apps/web/vercel.json`
 - [ ] T178 Configure Heroku start, build, and health-check expectations for Express API in `apps/api/package.json` and `apps/api/Procfile`
-- [ ] T179 Create deployment checklist for required Vercel, Heroku, Supabase, KeeperHub, smart contract compiling, Webflow collections, SMTP credentials, x402, MPP, and Para MPC credentials in `specs/001-chronicleai-publication-platform/deployment-checklist.md`
+- [ ] T179 Create deployment checklist for required Vercel, Heroku, Supabase, KeeperHub, smart contract compiling, SMTP credentials, x402, MPP, and Para MPC credentials in `specs/001-chronicleai-publication-platform/deployment-checklist.md`
 - [ ] T180 Update quickstart commands and expected validation results after implementation in `specs/001-chronicleai-publication-platform/quickstart.md`
 - [ ] T181 Run full unit and integration suite with `pnpm test` and fix failures in `apps/api/src/test/`, `packages/db/src/test/`, and `tests/contracts/`
 - [ ] T183 Run full TypeScript validation with `pnpm type-check` and fix failures in `apps/web/src/`, `apps/api/src/`, and `packages/schemas/src/`

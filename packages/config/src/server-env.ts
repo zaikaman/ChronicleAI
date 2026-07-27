@@ -21,8 +21,6 @@ export interface ServerEnv {
   chronicleRegistryAddress: string | undefined;
   rpcUrl: string | undefined;
   paraWalletPrivateKey: string | undefined;
-  webflowApiToken: string | undefined;
-  webflowCollectionId: string | undefined;
   smtpHost: string | undefined;
   smtpPort: number | undefined;
   smtpUser: string | undefined;
@@ -69,8 +67,6 @@ export function loadServerEnv(): ServerEnv {
     chronicleRegistryAddress: optionalEnv("CHRONICLE_REGISTRY_ADDRESS"),
     rpcUrl: optionalEnv("RPC_URL"),
     paraWalletPrivateKey: optionalEnv("PARA_WALLET_PRIVATE_KEY"),
-    webflowApiToken: optionalEnv("WEBFLOW_API_TOKEN"),
-    webflowCollectionId: optionalEnv("WEBFLOW_COLLECTION_ID"),
     smtpHost: optionalEnv("SMTP_HOST"),
     smtpPort: optionalEnv("SMTP_PORT") ? Number(optionalEnv("SMTP_PORT")) : undefined,
     smtpUser: optionalEnv("SMTP_USER"),

@@ -22,7 +22,7 @@ ChronicleAI is built on top of the KeeperHub execution and reliability layer, ut
 
 ### Content Generation and Delivery (Actions)
 * **LLM Reasoning**: Synthesizes structured event data into clean markdown reports, articles, and newsletters.
-* **Webflow Plugin**: Updates public site collections automatically with new articles.
+* **ChronicleAI Publication UI**: The self-hosted React newspaper site displays all articles, digests, and alerts as browsable content.
 * **Discord and Telegram Plugins**: Broadcasts alert summaries and news bulletins directly to public chat channels.
 * **SMTP Email Service (Nodemailer)**: Sends daily digests to email subscribers using SMTP credentials (e.g. Gmail).
 
@@ -90,7 +90,7 @@ ChronicleAI operates via five decoupled loops managed by KeeperHub's execution s
   2. The LLM writes a comprehensive daily market intelligence report.
   3. The agent creates a digest content hash and source-event Merkle root.
   4. KeeperHub executes a `publishDigest` transaction on the Chronicle Registry contract.
-  5. The agent publishes the report to Webflow with the registry transaction hash.
+  5. The agent publishes the report to the self-hosted ChronicleAI publication UI with the registry transaction hash.
   6. The agent emails the report to premium subscribers using the SMTP email service.
 
 ### Loop 3: The Refunding Loop (Maintenance)

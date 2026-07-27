@@ -21,11 +21,14 @@ function OperatorPage(): React.ReactElement {
   return <OperatorDashboardPage />;
 }
 
+import { PublicationsPage } from "../features/publications/PublicationsPage.tsx";
+
 // ── Route definitions ───────────────────────────────────
 export const routeDefinitions: RouteDefinition[] = [
   { id: "home", path: "/", label: "Home" },
+  { id: "publications", path: "/publications", label: "Publications" },
   { id: "alerts", path: "/alerts", label: "Alerts" },
-  { id: "digests", path: "/digests/latest", label: "Latest Digest" },
+  { id: "digests", path: "/digests/latest", label: "Digest" },
   { id: "premium", path: "/premium", label: "Premium" },
   { id: "operator", path: "/operator", label: "Operator", requiresAuth: true },
 ];
@@ -36,6 +39,7 @@ const routes: RouteObject[] = [
     element: <App />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: "publications", element: <PublicationsPage /> },
       { path: "alerts", element: <AlertsPage /> },
       { path: "digests/latest", element: <DigestPage /> },
       { path: "premium", element: <PremiumPage /> },

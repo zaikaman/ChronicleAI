@@ -113,7 +113,7 @@ export function LatestDigestPage(): ReactElement {
         reportDate={digest.reportDate}
       />
 
-      {/* Content Link */}
+      {/* Self-hosted content permalink */}
       {digest.contentUri && (
         <div
           style={{
@@ -121,26 +121,21 @@ export function LatestDigestPage(): ReactElement {
             textAlign: "center",
           }}
         >
-          <a
-            href={digest.contentUri}
-            target="_blank"
-            rel="noopener noreferrer"
+          <span
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: "0.5rem",
               padding: "0.75rem 1.5rem",
-              background: "var(--accent-primary)",
-              color: "white",
+              background: "var(--bg-glass)",
+              color: "var(--fg-secondary)",
               borderRadius: "8px",
-              fontWeight: 600,
               fontSize: "var(--font-size-sm)",
-              textDecoration: "none",
+              fontFamily: "monospace",
             }}
           >
-            View on Webflow
-            <span aria-hidden="true">&rarr;</span>
-          </a>
+            {digest.contentUri}
+          </span>
         </div>
       )}
     </div>

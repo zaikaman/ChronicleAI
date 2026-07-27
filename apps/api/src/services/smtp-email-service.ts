@@ -62,7 +62,7 @@ export function createSmtpEmailService(config: {
         <ul>${highlightsHtml}</ul>
         ${params.analysis ? `<h2 style="color: #27272a;">Analysis</h2><p>${params.analysis}</p>` : ""}
         ${params.registryTxHash ? `<p style="font-size: 12px; color: #a1a1aa;">On-chain proof: ${params.registryTxHash}</p>` : ""}
-        ${params.contentUri ? `<p><a href="${params.contentUri}" style="color: #6366f1;">View full digest on Webflow</a></p>` : ""}
+        ${params.contentUri ? `<p><a href="${params.contentUri}" style="color: #6366f1;">Read full digest on ChronicleAI</a></p>` : ""}
         <hr style="border: none; border-top: 1px solid #e4e4e7;" />
         <p style="font-size: 12px; color: #a1a1aa;">ChronicleAI — Autonomous On-Chain Intelligence</p>
       </body>

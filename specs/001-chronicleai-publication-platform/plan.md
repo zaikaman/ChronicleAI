@@ -12,7 +12,7 @@ ChronicleAI will be built as a TypeScript monorepo with a Vite React frontend de
 
 **Language/Version**: TypeScript 5.x across frontend, backend, shared packages, and tests; Node.js current LTS for local development, Heroku runtime, and CI
 
-**Primary Dependencies**: React, Vite, Node.js, Express, Supabase client libraries for application data/auth/storage, shadcn/ui and Radix UI for frontend components, Sonner for toasts, KeeperHub workflows and webhook/API integrations, x402 and MPP payment verification adapters, ethers/viem for Web3/Ethers smart contract interactions, Webflow API for public article publishing, SMTP/Nodemailer for premium daily newsletter broadcasts, Gemini API, OpenAI API, Groq API, and native `fetch` for external HTTP integrations
+**Primary Dependencies**: React, Vite, Node.js, Express, Supabase client libraries for application data/auth/storage, shadcn/ui and Radix UI for frontend components, Sonner for toasts, KeeperHub workflows and webhook/API integrations, x402 and MPP payment verification adapters, ethers/viem for Web3/Ethers smart contract interactions, SMTP/Nodemailer for premium daily newsletter broadcasts, Gemini API, OpenAI API, Groq API, and native `fetch` for external HTTP integrations
 
 **Storage**: Supabase Postgres for operational records (including monitored events, alerts, digests, payments, sponsored watch campaigns, payout records, treasury snapshots, and execution logs); Supabase Auth for operator and subscriber identity; smart contract state on Ethereum Sepolia for proofs-of-publication, sponsored watch acceptances, and recorded payouts
  

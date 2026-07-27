@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 
 const NAV_ITEMS = [
   { to: "/", label: "Home" },
+  { to: "/publications", label: "Publications" },
   { to: "/alerts", label: "Alerts" },
   { to: "/digests/latest", label: "Digest" },
   { to: "/premium", label: "Premium" },

@@ -32,12 +32,12 @@ Subscribers and operators can review a daily market intelligence digest that syn
 
 **Why this priority**: The daily digest turns raw monitoring into a repeatable publication product, demonstrates autonomous analysis, and guarantees publication authenticity via on-chain state hashes.
 
-**Independent Test**: Can be tested by providing a 24-hour set of captured events, triggering digest generation, and verifying that ChronicleAI produces a complete digest, executes a `publishDigest` transaction on the Chronicle Registry contract, updates Webflow, sends email bulletins via SMTP (e.g., using Gmail credentials), and displays the registry transaction hash on the report.
+**Independent Test**: Can be tested by providing a 24-hour set of captured events, triggering digest generation, and verifying that ChronicleAI produces a complete digest, executes a `publishDigest` transaction on the Chronicle Registry contract, updates the self-hosted publication UI, sends email bulletins via SMTP (e.g., using Gmail credentials), and displays the registry transaction hash on the report.
 
 **Acceptance Scenarios**:
 
-1. **Given** ChronicleAI has captured monitored events during a reporting period, **When** the daily digest schedule is reached, **Then** ChronicleAI creates a report including top events, trend commentary, links to source events, and a clear date, calls `publishDigest` on the Chronicle Registry via KeeperHub, publishes the content to Webflow, and emails the digest to premium subscribers via SMTP.
-2. **Given** no significant events were captured during a reporting period, **When** the daily digest schedule is reached, **Then** ChronicleAI publishes a concise no-major-events report on-chain, updates Webflow/SMTP email delivery, and displays the registry transaction hash.
+1. **Given** ChronicleAI has captured monitored events during a reporting period, **When** the daily digest schedule is reached, **Then** ChronicleAI creates a report including top events, trend commentary, links to source events, and a clear date, calls `publishDigest` on the Chronicle Registry via KeeperHub, publishes the content to the self-hosted publication UI, and emails the digest to premium subscribers via SMTP.
+2. **Given** no significant events were captured during a reporting period, **When** the daily digest schedule is reached, **Then** ChronicleAI publishes a concise no-major-events report on-chain, updates the self-hosted publication UI and SMTP email delivery, and displays the registry transaction hash.
 3. **Given** the Daily Digest is published, **When** a user views the digest on the frontend, **Then** the UI displays the transaction hash of the on-chain publication receipt as a clickable link to the block explorer.
 
 
@@ -154,7 +154,7 @@ Operators can inspect ChronicleAI's operating health, including generated revenu
 - Public summaries may describe key findings, but detailed analysis, historical feed access, and structured premium data remain gated by payment.
 - Payment access is scoped to pay-per-request and recurring subscription demonstrations; complex invoicing, refunds, and dispute handling are outside the first release.
 - The operator audit view is intended for transparency and demonstration, not full financial accounting.
-- Publication destinations and notification channels may vary by deployment, but the experience must demonstrate both public content publishing (Webflow) and real-time community notification (Discord/Telegram).
+- Publication destinations and notification channels may vary by deployment, but the experience must demonstrate both public content publishing (self-hosted React publication UI) and real-time community notification (Discord/Telegram).
 - Public alert generation uses the provider fallback order Gemini, then OpenAI, then Groq. Provider API keys are backend-only secrets and are never exposed to the frontend.
 - If all LLM providers fail, ChronicleAI records a failed generation state and retryable execution log rather than publishing a fabricated summary.
 - The Chronicle Registry contract is deployed to a supported testnet (such as Ethereum Sepolia) and the agent uses a secure Para MPC wallet for gas funding and token payouts.

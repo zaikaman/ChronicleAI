@@ -146,7 +146,7 @@ export function createCompletedSponsoredWatch(
     create_tx_hash: "0x" + "f".repeat(64),
     report_tx_hash: "0x" + "g".repeat(64),
     report_content_hash: "0x" + "h".repeat(64),
-    content_uri: "https://webflow.com/chronicleai/reports/watch-completed-001",
+    content_uri: "https://chronicleai.app/reports/watch-completed-001",
     status: "completed",
     created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
     updated_at: new Date().toISOString(),

@@ -70,7 +70,6 @@ import { createDigestPublicationService } from "../services/digest-publication-s
 import { createDigestWindowService } from "../services/digest-window-service.ts";
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
 import { createWeb3Client } from "../services/web3-client-service.ts";
-import { createWebflowPublishingService } from "../services/webflow-publishing-service.ts";
 import { createDigestRoutes } from "./digest-routes.ts";
 import { createKeeperhubDigestRoutes } from "./keeperhub-digest-routes.ts";
 
@@ -84,10 +83,6 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
   // Initialize services
   const web3Client = createWeb3Client(env);
   const registryService = createChronicleRegistryService(web3Client);
-  const webflowService = createWebflowPublishingService(
-    env.webflowApiToken,
-    env.webflowCollectionId,
-  );
   const smtpService = createSmtpEmailService({
     host: env.smtpHost,
     port: env.smtpPort,
@@ -103,7 +98,7 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
   const publicationService = createDigestPublicationService(
     deps.digestRepo,
     registryService,
-    webflowService,
+    env.frontendOrigin,
     smtpService,
   );
 

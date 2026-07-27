@@ -16,7 +16,6 @@ import { createDigestGenerationService } from "../services/digest-generation-ser
 import { createDigestPublicationService } from "../services/digest-publication-service.ts";
 import { createDigestWindowService } from "../services/digest-window-service.ts";
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
-import { createWebflowPublishingService } from "../services/webflow-publishing-service.ts";
 
 function makeDigestRow(overrides: Partial<DailyDigestRow> = {}): DailyDigestRow {
   return {
@@ -128,7 +127,7 @@ describe("DigestRunHandler", () => {
     publicationService: createDigestPublicationService(
       mockDigestRepo,
       createChronicleRegistryService(null),
-      createWebflowPublishingService(undefined, undefined),
+      "http://localhost:5173",
       createSmtpEmailService({
         host: undefined,
         port: undefined,

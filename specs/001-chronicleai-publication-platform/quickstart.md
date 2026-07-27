@@ -96,18 +96,18 @@ pnpm --filter @chronicleai/web dev
 1. Seed monitored events for a 24-hour reporting period.
 2. Trigger `POST /keeperhub/digests/run` with the reporting window.
 3. Verify that KeeperHub executes the `publishDigest` registry transaction.
-4. Confirm the digest updates the public Webflow site.
+4. Confirm the digest appears on the self-hosted ChronicleAI publication UI.
 5. Confirm premium subscribers receive the daily newsletter via SMTP.
 6. Open the latest digest on the frontend `/digests/latest` and verify that the registry transaction hash is displayed.
 
-**Expected outcome**: The digest includes a report date, highlights, references, a clickable registry transaction hash linking to the explorer, and is distributed to Webflow and SMTP email recipients.
+**Expected outcome**: The digest includes a report date, highlights, references, a clickable registry transaction hash linking to the explorer, and is distributed to the self-hosted publication UI and SMTP email recipients.
 
 ### Scenario 3: No-major-events digest
 
 1. Trigger digest generation for an empty reporting period.
 2. Open the latest digest route.
 
-**Expected outcome**: ChronicleAI publishes a concise no-major-events digest on-chain, updates Webflow/SMTP email delivery, and displays the registry transaction hash.
+**Expected outcome**: ChronicleAI publishes a concise no-major-events digest on-chain, updates the self-hosted publication UI and SMTP email delivery, and displays the registry transaction hash.
 
 ### Scenario 4: Premium payment gate (x402 & MPP)
 

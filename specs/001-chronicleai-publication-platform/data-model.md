@@ -50,7 +50,7 @@ Represents a public bulletin generated from a qualifying monitored event.
 - `generationAttemptIds`: References to provider attempts made while generating the alert
 - `registryTxHash`: Transaction hash of the `publishAlert` registry contract execution
 - `sourceEventHash`: Hash of the raw event details written on-chain
-- `contentUri`: URI or URL of the public article/alert on Webflow/IPFS
+- `contentUri`: URI or URL of the public article/alert on the self-hosted ChronicleAI publication UI
 
 **Relationships**:
 - Belongs to one `MonitoredEvent`
@@ -110,7 +110,7 @@ Represents a scheduled report covering a reporting period.
 - `publishedAt`: Publication time
 - `registryTxHash`: Transaction hash of the `publishDigest` registry contract execution
 - `sourceEventRoot`: Merkle root of all event hashes included in this digest
-- `contentUri`: URI or URL of the digest on Webflow/email template/IPFS
+- `contentUri`: URI or URL of the digest on the self-hosted publication UI/email template
 
 **Relationships**:
 - References many `MonitoredEvent` records
