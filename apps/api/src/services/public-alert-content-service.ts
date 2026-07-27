@@ -145,10 +145,18 @@ async function callGemini(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      systemInstruction: {
+        parts: [
+          {
+            text:
+              "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
+          },
+        ],
+      },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 500,
+        topP: 1,
       },
     }),
     signal,
@@ -191,8 +199,6 @@ async function callOpenAI(
         },
         { role: "user", content: prompt },
       ],
-      temperature: 0.3,
-      max_tokens: 500,
     }),
     signal,
   });
@@ -234,8 +240,6 @@ async function callGroq(
         },
         { role: "user", content: prompt },
       ],
-      temperature: 0.3,
-      max_tokens: 500,
     }),
     signal,
   });
