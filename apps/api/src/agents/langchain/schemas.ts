@@ -46,7 +46,14 @@ export const premiumNarrativeSchema = z.object({
   confidence: confidenceSchema,
 });
 
+/**
+ * Must stay aligned with DESK_AGENT_SYSTEM_PROMPT JSON schema.
+ * `version` is required: the prompt always asks for it, and providerStrategy
+ * validates with additionalProperties:false — an undeclared `version` field
+ * rejects otherwise-valid Gemini proposals.
+ */
 export const deskProposalSchema = z.object({
+  version: z.literal(1),
   action: z.enum(["propose", "hold", "defer", "defend"]),
   strategy: z.enum(["risk_defend", "yield_rotation", "oracle_amm"]).nullable(),
   notionalUsdc: z.number(),

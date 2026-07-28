@@ -1,11 +1,17 @@
 /**
  * Structured single-shot agents via LangChain `createAgent` + responseFormat.
  * Used for alert/digest/premium generation, desk proposals, classifiers, etc.
+ *
+ * Always uses {@link providerStrategy} (native JSON-schema / responseSchema), not
+ * tool-calling extraction. Tool strategy + `tool_choice: "any"` lets Gemini emit
+ * free-text JSON without setting `structuredResponse`, which surfaces as:
+ * "Structured agent returned no structuredResponse".
  */
 
 import {
   createAgent,
   modelCallLimitMiddleware,
+  providerStrategy,
   type ReactAgent,
 } from "langchain";
 import type { InteropZodObject } from "@langchain/core/utils/types";
@@ -58,6 +64,14 @@ function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 }
 
 /**
+ * Native JSON-schema strategy so providers bind responseSchema / json_schema
+ * instead of inventing a synthetic extract tool the model may ignore.
+ */
+function nativeResponseFormat<TSchema extends InteropZodObject>(schema: TSchema) {
+  return providerStrategy(schema);
+}
+
+/**
  * Invoke a LangChain ReAct agent configured for structured output (no tools).
  * Throws on model/schema failure so callers can try the next provider.
  */
@@ -70,7 +84,7 @@ export async function invokeStructuredAgent<TSchema extends InteropZodObject>(
     model: params.model,
     tools: [],
     systemPrompt: params.systemPrompt,
-    responseFormat: params.responseFormat,
+    responseFormat: nativeResponseFormat(params.responseFormat),
     middleware: [
       modelCallLimitMiddleware({
         runLimit,
@@ -92,7 +106,6 @@ export async function invokeStructuredAgent<TSchema extends InteropZodObject>(
   const structured = (result as { structuredResponse?: Record<string, unknown> })
     .structuredResponse;
   if (!structured || typeof structured !== "object") {
-    // Fallback: some providers return JSON in the final message only.
     const messages = (result as { messages?: Array<{ content?: unknown }> }).messages ?? [];
     const last = messages[messages.length - 1];
     const rawText = messageContentToText(last?.content);
@@ -136,7 +149,7 @@ export function createStructuredAgent<TSchema extends InteropZodObject>(params: 
     model: params.model,
     tools: [],
     systemPrompt: params.systemPrompt,
-    responseFormat: params.responseFormat,
+    responseFormat: nativeResponseFormat(params.responseFormat),
     middleware: [
       modelCallLimitMiddleware({
         runLimit: params.runLimit ?? 1,

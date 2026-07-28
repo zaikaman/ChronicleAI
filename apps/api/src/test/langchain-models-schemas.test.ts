@@ -98,4 +98,47 @@ describe("structured response schemas are OpenAI-strict compatible", () => {
       ]),
     });
   });
+
+  it("deskProposalSchema requires version:1 (prompt emits it; additionalProperties is false)", () => {
+    const json = toJsonSchema(deskProposalSchema) as {
+      properties: { version: Record<string, unknown> };
+      required: string[];
+      additionalProperties: boolean;
+    };
+    expect(json.additionalProperties).toBe(false);
+    expect(json.required).toContain("version");
+    expect(json.properties.version).toMatchObject({
+      const: 1,
+      type: "number",
+    });
+
+    // Mirrors the Heroku failure mode: Gemini followed the prompt and included
+    // version, but the old schema rejected it under providerStrategy validation.
+    const withVersion = deskProposalSchema.safeParse({
+      version: 1,
+      action: "propose",
+      strategy: "yield_rotation",
+      notionalUsdc: 15,
+      priority: 0.8,
+      confidence: 0.9,
+      thesis: "The current freeUsdc of 8.37 is below the inventory floor.",
+      riskNotes: [],
+      legsHint: ["aave_withdraw_link", "link_to_usdc"],
+      declineReasons: [],
+    });
+    expect(withVersion.success).toBe(true);
+
+    const withoutVersion = deskProposalSchema.safeParse({
+      action: "propose",
+      strategy: "yield_rotation",
+      notionalUsdc: 15,
+      priority: 0.8,
+      confidence: 0.9,
+      thesis: "The current freeUsdc of 8.37 is below the inventory floor.",
+      riskNotes: [],
+      legsHint: ["aave_withdraw_link", "link_to_usdc"],
+      declineReasons: [],
+    });
+    expect(withoutVersion.success).toBe(false);
+  });
 });
