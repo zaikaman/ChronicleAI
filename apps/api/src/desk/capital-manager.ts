@@ -13,6 +13,10 @@ import { capitalLog } from "../lib/logger.ts";
 import type { ChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import { softAppendExecutionLog } from "../services/keeperhub-execution-log.ts";
 import type { ParaTreasuryClient } from "../services/para-treasury-client.ts";
+import {
+  isAmountAtOrAbovePrivateTransferThreshold,
+  type TreasuryTransferPath,
+} from "../services/routing-metadata.ts";
 import type { Web3Client } from "../services/web3-client-service.ts";
 import {
   computeUnwindableInventoryUsdc,
@@ -64,18 +68,30 @@ export interface CapitalManagerDeps {
   deskWalletAddress: string;
   treasuryAddress: string;
   capitalMoves: DeskCapitalMoveRepository;
-  /** Preferred for top-up (Para MPC). */
+  /**
+   * Para MPC treasury client (small top-ups when web3 hybrid is absent, or
+   * when amount is below TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC).
+   */
   paraTreasury?: ParaTreasuryClient | null;
-  /** Fallback treasury transfer when Para unavailable. */
+  /**
+   * Preferred treasury transfer surface. Hybrid web3 applies Phase 3 path
+   * selection (large → KH private; small → Para). Use when configured.
+   */
   web3?: Web3Client | null;
-  /** KH bridge for desk → treasury sweep / emergency. */
+  /** KH bridge for desk → treasury sweep / emergency (always private + strict). */
   executionBridge?: ExecutionBridge | null;
   /** Optional on-chain capital move audit. */
   registry?: ChronicleRegistryService | null;
-  /** Phase 3: capital move outcome trail on Activity. */
+  /** Capital move outcome trail on Activity. */
   execLogRepo?: ExecutionLogRepository | null;
   /** Kill-switch arm flag (hydrated from desk_control_state; routes set this). */
   isKillSwitchArmed?: () => boolean;
+  /**
+   * USDC notional at/above which top-ups must not use Para alone when a
+   * KeeperHub-backed web3 transfer path exists.
+   * Env: TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC (default 50).
+   */
+  treasuryPrivateTransferThresholdUsdc?: number;
 }
 
 export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
@@ -861,14 +877,27 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
       let txHash: string | undefined;
       let explorerUrl: string | undefined;
       let keeperHubRunId: string | undefined;
+      let transferPath: TreasuryTransferPath | "web3" | "para" | undefined;
 
-      if (paraTreasury) {
-        const receipt = await paraTreasury.sendTransfer(desk, amountUsdc);
+      const threshold = deps.treasuryPrivateTransferThresholdUsdc ?? 50;
+      // Phase 3: large top-ups must not use Para alone when KH-backed web3 exists.
+      const forcePrivateTopup =
+        isAmountAtOrAbovePrivateTransferThreshold(amountUsdc, threshold) &&
+        Boolean(web3?.isKeeperHubBacked());
+
+      if (web3 && (forcePrivateTopup || !paraTreasury)) {
+        transferPath = forcePrivateTopup
+          ? "keeperhub_private"
+          : web3.isKeeperHubBacked()
+            ? "keeperhub"
+            : "web3";
+        const receipt = await web3.sendTransfer(desk, amountUsdc);
         txHash = receipt.txHash;
         explorerUrl = receipt.explorerUrl;
         keeperHubRunId = receipt.keeperHubRunId;
-      } else if (web3) {
-        const receipt = await web3.sendTransfer(desk, amountUsdc);
+      } else if (paraTreasury) {
+        transferPath = "para";
+        const receipt = await paraTreasury.sendTransfer(desk, amountUsdc);
         txHash = receipt.txHash;
         explorerUrl = receipt.explorerUrl;
         keeperHubRunId = receipt.keeperHubRunId;
@@ -903,6 +932,7 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
           details: {
             reason: "no_tx_hash",
             keeper_hub_run_id: keeperHubRunId ?? null,
+            transfer_path: transferPath ?? null,
           },
         });
         return {
@@ -939,6 +969,8 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
           keeper_hub_run_id: keeperHubRunId ?? null,
           registry_tx_hash: registryTxHash ?? null,
           executedViaKeeperHub: Boolean(keeperHubRunId),
+          transfer_path: transferPath ?? null,
+          private_transfer_threshold_usdc: threshold,
         },
       });
 

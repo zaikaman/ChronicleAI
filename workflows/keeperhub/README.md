@@ -123,9 +123,26 @@ Documented in `apps/api/.env.example`. Defaults for maximum Sepolia surface usag
 |----------|---------|---------|
 | `DESK_USE_PRIVATE_MEMPOOL` | `true` | Prefer private routing for desk KH workflows |
 | `DESK_PRIVATE_MEMPOOL_STRICT` | `true` | Expectation for workflow `strict`; kill-switch always strict |
-| `TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC` | `50` | Above this, force KH private transfer (not Para alone) |
+| `TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC` | `50` | At/above this, force KH private transfer (not Para alone) |
 | `REGISTRY_USE_PRIVATE_MEMPOOL` | `true` | Registry writes request private when workflows carry the flag |
 | `ROUTING_PROVIDER_LABEL` | `flashbots_protect` | Label for UI / execution_logs |
+
+### Phase 3 path selection (treasury spends)
+
+Hybrid production path (`PARA_API_KEY` + KeeperHub):
+
+```
+if amountUsdc >= TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC
+  AND KEEPERHUB_WORKFLOW_TRANSFER configured
+  → KeeperHub sendTransfer (workflow usePrivateMempool; run id + private routing metadata)
+else
+  → Para MPC (small spends) or existing single-path client
+```
+
+- Capital manager top-ups use the same rule (large → KH-backed web3, not Para alone).
+- Desk sweeps and kill-switch residual always go through KH workflows (private + strict); policy cannot disable kill-switch private routing.
+- Do **not** fall back to Para after a forced KH private transfer failure (re-opens the public-broadcast hole).
+- Large KH transfers spend from the KeeperHub execution wallet — fund it with Sepolia USDC when operating above the threshold.
 
 ### Operator checklist (enable end-to-end)
 

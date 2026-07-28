@@ -67,6 +67,83 @@ export type RoutingTransactionClass =
   | "kill_switch";
 
 /**
+ * Treasury spend path after Phase 3 policy selection.
+ * - `keeperhub_private` — amount ≥ threshold and KH transfer workflow configured
+ * - `para` — Para MPC public broadcast (small spends / ops simplicity)
+ * - `keeperhub` — KH transfer without forced private-threshold escalation
+ */
+export type TreasuryTransferPath =
+  | "keeperhub_private"
+  | "para"
+  | "keeperhub";
+
+export interface SelectTreasuryTransferPathInput {
+  amountUsdc: number;
+  /** TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC (default 50). */
+  thresholdUsdc: number;
+  /** True when KEEPERHUB_WORKFLOW_TRANSFER (+ USDC address) is set. */
+  keeperHubTransferConfigured: boolean;
+  /** True when Para MPC treasury client can send USDC. */
+  paraAvailable: boolean;
+}
+
+/**
+ * Whether notional meets/exceeds the private-transfer threshold.
+ * Invalid amounts never force private path.
+ */
+export function isAmountAtOrAbovePrivateTransferThreshold(
+  amountUsdc: number,
+  thresholdUsdc: number,
+): boolean {
+  if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) return false;
+  const threshold =
+    Number.isFinite(thresholdUsdc) && thresholdUsdc > 0 ? thresholdUsdc : 50;
+  return amountUsdc >= threshold;
+}
+
+/**
+ * Path selection for treasury `sendTransfer` (revenue, affiliate, capital top-up).
+ *
+ * Policy (Phase 3 Para hole closure):
+ *   if amountUsdc >= TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC
+ *     AND KeeperHub transfer workflow configured
+ *     → keeperhub_private (workflow already usePrivateMempool)
+ *   else if Para available → para
+ *   else if KH transfer configured → keeperhub
+ *   else throw
+ *
+ * Never invents hashes. Callers must not fall back Para→public after a
+ * keeperhub_private failure (re-opens the hole).
+ */
+export function selectTreasuryTransferPath(
+  input: SelectTreasuryTransferPathInput,
+): TreasuryTransferPath {
+  const forcePrivate =
+    isAmountAtOrAbovePrivateTransferThreshold(
+      input.amountUsdc,
+      input.thresholdUsdc,
+    ) && input.keeperHubTransferConfigured;
+
+  if (forcePrivate) {
+    return "keeperhub_private";
+  }
+  if (input.paraAvailable) {
+    return "para";
+  }
+  if (input.keeperHubTransferConfigured) {
+    return "keeperhub";
+  }
+  throw new Error(
+    "No treasury transfer path configured — set PARA_API_KEY and/or KEEPERHUB_WORKFLOW_TRANSFER",
+  );
+}
+
+/** Whether selected path routes the spend through KeeperHub (not Para alone). */
+export function isKeeperHubTransferPath(path: TreasuryTransferPath): boolean {
+  return path === "keeperhub_private" || path === "keeperhub";
+}
+
+/**
  * Build structured routing fields for execution_logs.details / ticket policy.
  * When policy.enabled is false → public; otherwise private_mempool (requested).
  */

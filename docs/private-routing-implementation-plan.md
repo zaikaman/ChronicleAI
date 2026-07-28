@@ -4,7 +4,7 @@
 **Owner:** ChronicleAI  
 **Scope:** Ethereum Sepolia only (`11155111`)  
 **Depends on:** KeeperHub KEEP-137 (private mempool / Flashbots Protect)  
-**Last updated:** 2026-07-28  
+**Last updated:** 2026-07-16  
 
 ---
 
@@ -290,7 +290,7 @@ When desk trades execute under private routing, optional one-liner in LLM contex
 | `DESK_USE_PRIVATE_MEMPOOL` | `true` | Prefer private routing for desk KH workflows |
 | `DESK_PRIVATE_MEMPOOL_STRICT` | `true` | Documented expectation; workflows set `strict` |
 | `TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC` | e.g. `50` | Above this, force KH private transfer (not Para) |
-| `REGISTRY_USE_PRIVATE_MEMPOOL` | `true` or `false` | Registry full-stack vs sponsorship-friendly |
+| `REGISTRY_USE_PRIVATE_MEMPOOL` | `true` | Registry full-stack vs sponsorship-friendly |
 | `ROUTING_PROVIDER_LABEL` | `flashbots_protect` | For UI / logs |
 
 Wire through server env schema / config loader used by desk and revenue services.

@@ -9,7 +9,7 @@ describe("digest-schedule-service", () => {
   it("computes previous completed UTC day bounds", () => {
     const now = new Date("2026-07-28T08:15:00.000Z");
     const window = computePreviousUtcDayWindow(now);
-    expect(window.periodStart).toBe("2026-07-28T00:00:00.000Z");
+    expect(window.periodStart).toBe("2026-07-27T00:00:00.000Z");
     expect(window.periodEnd).toBe("2026-07-28T00:00:00.000Z");
   });
 

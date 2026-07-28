@@ -322,6 +322,8 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
           registry: registryService,
           execLogRepo: deps.execLogRepo,
           isKillSwitchArmed: () => deskKillSwitchRef?.isArmed() ?? false,
+          treasuryPrivateTransferThresholdUsdc:
+            env.treasuryPrivateTransferThresholdUsdc,
         })
       : null;
 

@@ -16,7 +16,7 @@ export type DigestReportingWindow = {
  * Previous completed UTC calendar day as [start, end) ISO bounds.
  *
  * Example at 2026-07-28T08:00:00.000Z:
- *   periodStart = 2026-07-28T00:00:00.000Z
+ *   periodStart = 2026-07-27T00:00:00.000Z
  *   periodEnd   = 2026-07-28T00:00:00.000Z
  */
 export function computePreviousUtcDayWindow(

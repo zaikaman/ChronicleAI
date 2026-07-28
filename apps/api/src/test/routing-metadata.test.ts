@@ -4,13 +4,17 @@ import {
   buildKillSwitchRoutingDetails,
   buildPrivateRoutingDetails,
   buildRegistryRoutingDetails,
+  buildTransferRoutingDetails,
   executionRoutingForDigest,
   extractRoutingFromDetails,
+  isAmountAtOrAbovePrivateTransferThreshold,
+  isKeeperHubTransferPath,
   PRIVATE_ROUTING_CHAIN_ID,
   publicPrivateRoutingStatus,
   routingBadgeLabel,
   routingExecutionPathCopy,
   routingPolicyForClass,
+  selectTreasuryTransferPath,
 } from "../services/routing-metadata.ts";
 
 describe("routing-metadata", () => {
@@ -126,5 +130,104 @@ describe("routing-metadata", () => {
     expect(status.enabled).toBe(true);
     expect(status.label).toBe("Private routing: ON");
     expect(status.provider).toBe("flashbots_protect");
+  });
+
+  it("transfer class follows DESK_USE_PRIVATE_MEMPOOL", () => {
+    expect(buildTransferRoutingDetails(baseEnv).routing).toBe("private_mempool");
+    expect(
+      buildTransferRoutingDetails({ ...baseEnv, deskUsePrivateMempool: false })
+        .routing,
+    ).toBe("public");
+  });
+
+  describe("Phase 3 treasury transfer path selection (Para hole closure)", () => {
+    const threshold = 50;
+
+    it("forces keeperhub_private at/above threshold when KH transfer configured", () => {
+      expect(
+        selectTreasuryTransferPath({
+          amountUsdc: 50,
+          thresholdUsdc: threshold,
+          keeperHubTransferConfigured: true,
+          paraAvailable: true,
+        }),
+      ).toBe("keeperhub_private");
+      expect(
+        selectTreasuryTransferPath({
+          amountUsdc: 15200,
+          thresholdUsdc: threshold,
+          keeperHubTransferConfigured: true,
+          paraAvailable: true,
+        }),
+      ).toBe("keeperhub_private");
+    });
+
+    it("allows Para below threshold when Para is available", () => {
+      expect(
+        selectTreasuryTransferPath({
+          amountUsdc: 12.5,
+          thresholdUsdc: threshold,
+          keeperHubTransferConfigured: true,
+          paraAvailable: true,
+        }),
+      ).toBe("para");
+      expect(
+        selectTreasuryTransferPath({
+          amountUsdc: 49.99,
+          thresholdUsdc: threshold,
+          keeperHubTransferConfigured: true,
+          paraAvailable: true,
+        }),
+      ).toBe("para");
+    });
+
+    it("falls back to Para above threshold when KH transfer is not configured", () => {
+      expect(
+        selectTreasuryTransferPath({
+          amountUsdc: 100,
+          thresholdUsdc: threshold,
+          keeperHubTransferConfigured: false,
+          paraAvailable: true,
+        }),
+      ).toBe("para");
+    });
+
+    it("uses keeperhub when Para unavailable and KH transfer configured", () => {
+      expect(
+        selectTreasuryTransferPath({
+          amountUsdc: 10,
+          thresholdUsdc: threshold,
+          keeperHubTransferConfigured: true,
+          paraAvailable: false,
+        }),
+      ).toBe("keeperhub");
+    });
+
+    it("throws when no transfer path is available", () => {
+      expect(() =>
+        selectTreasuryTransferPath({
+          amountUsdc: 10,
+          thresholdUsdc: threshold,
+          keeperHubTransferConfigured: false,
+          paraAvailable: false,
+        }),
+      ).toThrow(/No treasury transfer path/);
+    });
+
+    it("threshold helper treats invalid amounts as not forcing private", () => {
+      expect(isAmountAtOrAbovePrivateTransferThreshold(0, 50)).toBe(false);
+      expect(isAmountAtOrAbovePrivateTransferThreshold(-1, 50)).toBe(false);
+      expect(isAmountAtOrAbovePrivateTransferThreshold(Number.NaN, 50)).toBe(
+        false,
+      );
+      expect(isAmountAtOrAbovePrivateTransferThreshold(50, 50)).toBe(true);
+      expect(isAmountAtOrAbovePrivateTransferThreshold(49.9, 50)).toBe(false);
+    });
+
+    it("isKeeperHubTransferPath identifies KH routes", () => {
+      expect(isKeeperHubTransferPath("keeperhub_private")).toBe(true);
+      expect(isKeeperHubTransferPath("keeperhub")).toBe(true);
+      expect(isKeeperHubTransferPath("para")).toBe(false);
+    });
   });
 });

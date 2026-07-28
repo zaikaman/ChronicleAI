@@ -35,6 +35,8 @@ import {
 import {
   PRIVATE_ROUTING_CHAIN_ID,
   type PrivateRoutingPolicy,
+  selectTreasuryTransferPath,
+  type TreasuryTransferPath,
 } from "./routing-metadata.ts";
 import {
   normalizeGasValue,
@@ -226,8 +228,8 @@ function isDirectEthersAllowed(env: ServerEnv): boolean {
 }
 
 /**
- * Hybrid: KeeperHub for registry writes, Para MPC for treasury transfers.
- * This is the preferred production configuration for the hackathon demo.
+ * Hybrid: KeeperHub for registry writes; treasury transfers use Phase 3 path
+ * selection (large notional → KH private transfer; small → Para MPC).
  */
 function keeperHubWorkflowIdsFromEnv(env: ServerEnv) {
   return {
@@ -278,6 +280,35 @@ function routingPoliciesFromEnv(env: ServerEnv): {
       chainId: PRIVATE_ROUTING_CHAIN_ID,
     },
   };
+}
+
+/** True when KH transfer workflow + USDC address are ready for private path. */
+export function isKeeperHubTransferConfigured(env: ServerEnv): boolean {
+  const workflow = env.keeperhubWorkflowTransfer?.trim();
+  const usdc = env.deskUsdcAddress?.trim();
+  return Boolean(
+    workflow &&
+      usdc &&
+      /^0x[0-9a-fA-F]{40}$/.test(usdc) &&
+      isKeeperHubWriteConfigured(env),
+  );
+}
+
+/**
+ * Resolve treasury transfer path for hybrid / capital-manager policy.
+ * Exported for unit tests and capital-manager logging.
+ */
+export function resolveTreasuryTransferPath(
+  env: ServerEnv,
+  amountUsdc: number,
+  options?: { paraAvailable?: boolean },
+): TreasuryTransferPath {
+  return selectTreasuryTransferPath({
+    amountUsdc,
+    thresholdUsdc: env.treasuryPrivateTransferThresholdUsdc,
+    keeperHubTransferConfigured: isKeeperHubTransferConfigured(env),
+    paraAvailable: options?.paraAvailable !== false,
+  });
 }
 
 function createHybridParaKeeperHubWeb3Client(
@@ -338,8 +369,31 @@ function createHybridParaKeeperHubWeb3Client(
     recordCapitalMove: (moveId, from, to, amountUsdc, reasonHash) =>
       kh.recordCapitalMove(moveId, from, to, amountUsdc, reasonHash),
 
-    // Treasury spends: real Para MPC USDC transfer (not KeeperHub org wallet).
-    sendTransfer: (to, amountUsdc) => paraClient.sendTransfer(to, amountUsdc),
+    /**
+     * Phase 3 Para hole closure:
+     * amount ≥ TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC and KH transfer configured
+     * → KeeperHub private transfer (workflow usePrivateMempool).
+     * Below threshold → Para MPC (ops simplicity / sponsorship-friendly).
+     * Never fall back Para after a forced KH private failure.
+     */
+    async sendTransfer(to, amountUsdc) {
+      if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) {
+        throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
+      }
+      const path = resolveTreasuryTransferPath(env, amountUsdc, {
+        paraAvailable: true,
+      });
+      if (path === "keeperhub_private" || path === "keeperhub") {
+        if (path === "keeperhub_private") {
+          console.info(
+            `[web3] Treasury transfer ${amountUsdc} USDC ≥ threshold ` +
+              `${env.treasuryPrivateTransferThresholdUsdc} — KeeperHub private path`,
+          );
+        }
+        return kh.sendTransfer(to, amountUsdc);
+      }
+      return paraClient.sendTransfer(to, amountUsdc);
+    },
   };
 }
 
@@ -816,7 +870,8 @@ export function createWeb3Client(
 
   if (paraClient && keeperHub) {
     console.info(
-      "[web3] Production path: Para MPC treasury + KeeperHub registry writes",
+      "[web3] Production path: Para MPC + KeeperHub hybrid " +
+        `(treasury transfers: ≥${env.treasuryPrivateTransferThresholdUsdc} USDC → KH private when transfer workflow set; else Para)`,
     );
     return createHybridParaKeeperHubWeb3Client(env, paraClient, logOpts);
   }
