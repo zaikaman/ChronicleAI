@@ -100,7 +100,7 @@ describe("SmtpEmailService", () => {
       analysis: "Analysis text",
       reportDate: "2026-07-07",
       registryTxHash: "0xtxhash",
-      contentUri: "http://localhost:5173/digests/latest",
+      contentUri: "http://localhost:5173/digests/digest-001",
     });
 
     expect(channels).toEqual(["digest"]);

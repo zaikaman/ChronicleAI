@@ -12,14 +12,30 @@ export interface RegistryPublishResult {
   txHash?: string;
   keeperHubRunId?: string;
   explorerUrl?: string;
+  /** HTTPS content URI written on-chain (when applicable). */
+  contentUri?: string;
 }
 
 export interface ChronicleRegistryService {
-  /** Publish an alert on-chain. Returns the transaction hash + KeeperHub run metadata. */
-  publishAlert(alertId: string, sourceEventHash: string): Promise<RegistryPublishResult>;
+  /**
+   * Publish an alert on-chain with a resolvable HTTPS content URI.
+   * `contentUri` must be an absolute http(s) URL pointing at the public alert page.
+   */
+  publishAlert(
+    alertId: string,
+    sourceEventHash: string,
+    contentUri: string,
+  ): Promise<RegistryPublishResult>;
 
-  /** Publish a digest on-chain. Returns the transaction hash + KeeperHub run metadata. */
-  publishDigest(digestId: string, sourceEventRoot: string): Promise<RegistryPublishResult>;
+  /**
+   * Publish a digest on-chain with a resolvable HTTPS content URI.
+   * `contentUri` must be an absolute http(s) URL pointing at the public digest page.
+   */
+  publishDigest(
+    digestId: string,
+    sourceEventRoot: string,
+    contentUri: string,
+  ): Promise<RegistryPublishResult>;
 
   /** Record a payout on-chain. Returns the transaction hash + KeeperHub run metadata. */
   recordPayout(
@@ -38,12 +54,30 @@ function notConfigured(): RegistryPublishResult {
   };
 }
 
-function fromReceipt(receipt: OnChainWriteReceipt): RegistryPublishResult {
+function requireHttpsContentUri(contentUri: string, kind: "alert" | "digest"): string {
+  const trimmed = contentUri.trim();
+  if (!trimmed) {
+    throw new Error(`${kind} contentUri is required for on-chain registry publication`);
+  }
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new Error(
+      `${kind} contentUri must be an absolute http(s) URL (got: ${contentUri}). ` +
+        "Use FRONTEND_ORIGIN-based public pages, not custom schemes like chronicleai://.",
+    );
+  }
+  return trimmed;
+}
+
+function fromReceipt(
+  receipt: OnChainWriteReceipt,
+  contentUri?: string,
+): RegistryPublishResult {
   return {
     success: true,
     txHash: receipt.txHash,
     keeperHubRunId: receipt.keeperHubRunId,
     explorerUrl: receipt.explorerUrl,
+    contentUri,
   };
 }
 
@@ -51,15 +85,15 @@ export function createChronicleRegistryService(
   web3Client: Web3Client | null,
 ): ChronicleRegistryService {
   return {
-    async publishAlert(alertId, _sourceEventHash) {
+    async publishAlert(alertId, _sourceEventHash, contentUri) {
       if (!web3Client) {
         return notConfigured();
       }
 
       try {
-        const ipfsUri = `chronicleai://alerts/${alertId}`;
-        const receipt = await web3Client.publishAlert(alertId, ipfsUri);
-        return fromReceipt(receipt);
+        const uri = requireHttpsContentUri(contentUri, "alert");
+        const receipt = await web3Client.publishAlert(alertId, uri);
+        return fromReceipt(receipt, uri);
       } catch (error) {
         return {
           success: false,
@@ -68,15 +102,15 @@ export function createChronicleRegistryService(
       }
     },
 
-    async publishDigest(digestId, sourceEventRoot) {
+    async publishDigest(digestId, sourceEventRoot, contentUri) {
       if (!web3Client) {
         return notConfigured();
       }
 
       try {
-        const ipfsUri = `chronicleai://digests/${digestId}`;
-        const receipt = await web3Client.publishDigest(digestId, sourceEventRoot, ipfsUri);
-        return fromReceipt(receipt);
+        const uri = requireHttpsContentUri(contentUri, "digest");
+        const receipt = await web3Client.publishDigest(digestId, sourceEventRoot, uri);
+        return fromReceipt(receipt, uri);
       } catch (error) {
         return {
           success: false,

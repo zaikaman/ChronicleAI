@@ -46,6 +46,7 @@ describe("SponsoredWatchService", () => {
     watchRepo: mockWatchRepo as never,
     execLogRepo: mockExecLogRepo as never,
     web3Client: mockWeb3Client,
+    frontendOrigin: "https://chronicle.example",
   });
 
   const mockWatchRow = {
@@ -182,15 +183,33 @@ describe("SponsoredWatchService", () => {
       expect(result.status).toBe("completed");
       expect(result.report_content_hash).toBe("0xreporthash");
       expect(result.report_tx_hash).toBe("0x" + "b".repeat(64));
-      expect(mockWeb3Client.publishSponsoredReport).toHaveBeenCalled();
+      expect(mockWeb3Client.publishSponsoredReport).toHaveBeenCalledWith(
+        1,
+        "0xreporthash",
+        "https://chronicle.example/premium/watches/watch-001",
+      );
       expect(mockWatchRepo.updateStatus).toHaveBeenCalledWith(
         "watch-001",
         "completed",
         expect.objectContaining({
           report_content_hash: "0xreporthash",
           report_tx_hash: "0x" + "b".repeat(64),
+          content_uri: "https://chronicle.example/premium/watches/watch-001",
         }),
       );
+    });
+
+    it("should throw when FRONTEND_ORIGIN is missing for report content URI", async () => {
+      const noOrigin = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        web3Client: mockWeb3Client,
+      });
+
+      await expect(noOrigin.completeWatch("watch-001", "0xhash")).rejects.toThrow(
+        "FRONTEND_ORIGIN is required",
+      );
+      expect(mockWeb3Client.publishSponsoredReport).not.toHaveBeenCalled();
     });
 
     it("should throw when on-chain publishSponsoredReport fails", async () => {

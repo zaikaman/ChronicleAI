@@ -46,7 +46,10 @@ describe("createKeeperHubWriteClient", () => {
       pollTimeoutMs: 5_000,
     });
 
-    const receipt = await client.publishAlert("alert-id-1", "chronicleai://alerts/alert-id-1");
+    const receipt = await client.publishAlert(
+      "alert-id-1",
+      "https://chronicle.example/alerts/alert-id-1",
+    );
 
     expect(receipt.keeperHubRunId).toBe("direct_alert_1");
     expect(receipt.txHash).toBe("0x" + "ab".repeat(32));

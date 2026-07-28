@@ -38,6 +38,8 @@ export class EventIngestionHandler {
     llmAttemptRepo: LLMGenerationAttemptRepository;
     providerConfigs: LLMProviderMap;
     registryService?: ChronicleRegistryService | null;
+    /** Public SPA origin (FRONTEND_ORIGIN) for HTTPS alert content URIs. */
+    frontendOrigin?: string;
   }) {
     this.eventRepo = deps.eventRepo;
     this.alertRepo = deps.alertRepo;
@@ -49,6 +51,7 @@ export class EventIngestionHandler {
     this.publicationService = createAlertPublicationService(
       deps.alertRepo,
       deps.registryService ?? null,
+      deps.frontendOrigin,
     );
   }
 

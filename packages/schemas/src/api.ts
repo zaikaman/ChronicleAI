@@ -21,6 +21,8 @@ export interface PublicAlertResponse {
   confidence?: Confidence;
   generationProvider?: string;
   registryTxHash?: string;
+  sourceEventHash?: string;
+  contentUri?: string;
   keeperHubRunId?: string;
   explorerUrl?: string;
 }

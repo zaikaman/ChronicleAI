@@ -59,6 +59,7 @@ export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependenci
       groq: { apiKey: env.groqApiKey, model: env.groqModel, baseUrl: env.groqBaseUrl },
     },
     registryService,
+    frontendOrigin: env.frontendOrigin,
   });
 
   const priceOracle = createPriceOracle(env.rpcUrl);
@@ -223,6 +224,7 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
       receiptService,
       web3Client,
       secureCookies: env.nodeEnv === "production",
+      frontendOrigin: env.frontendOrigin,
     }),
   );
 }

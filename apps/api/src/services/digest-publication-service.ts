@@ -5,6 +5,7 @@ import type {
   ChronicleRegistryService,
   RegistryPublishResult,
 } from "./chronicle-registry-service.ts";
+import { buildDigestContentUri } from "./content-uri.ts";
 import type { SmtpEmailService, SmtpSendResult } from "./smtp-email-service.ts";
 
 export interface DigestPublicationResult {
@@ -48,10 +49,14 @@ export function createDigestPublicationService(
       let keeperHubRunId: string | undefined;
       let explorerUrl: string | undefined;
 
-      // Step 1: Chronicle Registry on-chain publish via KeeperHub
+      // Self-hosted HTTPS content URI — stable per-digest public page (Vercel SPA).
+      const contentUri = buildDigestContentUri(frontendOrigin, digest.id);
+
+      // Step 1: Chronicle Registry on-chain publish with the same resolvable URI
       const registryResult: RegistryPublishResult = await registryService.publishDigest(
         digest.id,
         digest.sourceEventRoot ?? digest.id,
+        contentUri,
       );
       if (registryResult.success && registryResult.txHash) {
         registryTxHash = registryResult.txHash;
@@ -61,17 +66,14 @@ export function createDigestPublicationService(
           registryTxHash,
           keeperHubRunId,
           explorerUrl,
+          contentUri,
         });
       } else {
         failures.push(`Registry: ${registryResult.errorMessage ?? "unknown error"}`);
+        await digestRepo.updateRegistryMetadata(digest.id, { contentUri });
       }
 
-      // Step 2: Self-hosted content URI — points to our own app
-      const origin = frontendOrigin.replace(/\/+$/, "");
-      const contentUri = `${origin}/digests/latest`;
-      await digestRepo.updateRegistryMetadata(digest.id, { contentUri });
-
-      // Step 3: SMTP email broadcast
+      // Step 2: SMTP email broadcast (link readers to the public digest page)
       smtpResult = await smtpService.sendDigestBulletin({
         title: digest.title,
         summary: digest.summary,

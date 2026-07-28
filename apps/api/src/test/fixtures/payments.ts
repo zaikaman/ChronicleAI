@@ -44,6 +44,16 @@ export const MOCK_PREMIUM_SPONSORED_MONITOR: PremiumIntelligenceItemRow = {
   content_type: "sponsored_monitor",
   summary_public: "Sponsor a 7-day monitoring campaign for a specific DEX liquidity pool.",
   content_private: {
+    targetContract: "0x1111111111111111111111111111111111111111",
+    // Real bytes32 watchSpecHash (no fabricated 0xccc… padding).
+    watchSpecHash: "0x" + "ab".repeat(32),
+    watchSpec: {
+      targetContract: "0x1111111111111111111111111111111111111111",
+      eventSignatures: ["Swap(address,uint256,uint256,uint256,uint256,address)"],
+      description:
+        "Real-time monitoring of pool imbalance, large swaps, and impermanent loss alerts",
+      deliverables: ["Daily imbalance reports", "Swap anomaly alerts", "Final campaign summary"],
+    },
     campaign: {
       description:
         "Real-time monitoring of pool imbalance, large swaps, and impermanent loss alerts",

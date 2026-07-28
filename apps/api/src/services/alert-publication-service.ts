@@ -3,6 +3,7 @@
 import type { PublicAlertRepository } from "@chronicleai/db";
 import type { AlertDeliveryStatus } from "@chronicleai/schemas";
 import type { ChronicleRegistryService } from "./chronicle-registry-service.ts";
+import { buildAlertContentUri } from "./content-uri.ts";
 
 export interface PublicationResult {
   success: boolean;
@@ -12,6 +13,7 @@ export interface PublicationResult {
   registryTxHash?: string;
   keeperHubRunId?: string;
   explorerUrl?: string;
+  contentUri?: string;
 }
 
 export interface AlertPublicationService {
@@ -24,6 +26,7 @@ export interface AlertPublicationService {
 export function createAlertPublicationService(
   alertRepo: PublicAlertRepository,
   registryService?: ChronicleRegistryService | null,
+  frontendOrigin?: string,
 ): AlertPublicationService {
   return {
     async publishAlert(alertId, sourceEventHash) {
@@ -32,31 +35,49 @@ export function createAlertPublicationService(
       let registryTxHash: string | undefined;
       let keeperHubRunId: string | undefined;
       let explorerUrl: string | undefined;
+      let contentUri: string | undefined;
+
+      if (frontendOrigin) {
+        contentUri = buildAlertContentUri(frontendOrigin, alertId);
+      }
 
       if (registryService) {
-        const registryResult = await registryService.publishAlert(
-          alertId,
-          sourceEventHash ?? alertId,
-        );
-        if (registryResult.success && registryResult.txHash) {
-          registryTxHash = registryResult.txHash;
-          keeperHubRunId = registryResult.keeperHubRunId;
-          explorerUrl = registryResult.explorerUrl;
+        if (!contentUri) {
+          // Soft-fail registry only: still publish to the public feed.
           await alertRepo.updateRegistryMetadata(alertId, {
-            registryTxHash,
             sourceEventHash: sourceEventHash ?? alertId,
-            contentUri: `chronicleai://alerts/${alertId}`,
-            keeperHubRunId,
-            explorerUrl,
           });
         } else {
-          // Soft-fail local publish still proceeds so readers get the alert;
-          // execution log upstream records the registry failure.
-          await alertRepo.updateRegistryMetadata(alertId, {
-            sourceEventHash: sourceEventHash ?? alertId,
-            contentUri: `chronicleai://alerts/${alertId}`,
-          });
+          const registryResult = await registryService.publishAlert(
+            alertId,
+            sourceEventHash ?? alertId,
+            contentUri,
+          );
+          if (registryResult.success && registryResult.txHash) {
+            registryTxHash = registryResult.txHash;
+            keeperHubRunId = registryResult.keeperHubRunId;
+            explorerUrl = registryResult.explorerUrl;
+            await alertRepo.updateRegistryMetadata(alertId, {
+              registryTxHash,
+              sourceEventHash: sourceEventHash ?? alertId,
+              contentUri,
+              keeperHubRunId,
+              explorerUrl,
+            });
+          } else {
+            // Soft-fail local publish still proceeds so readers get the alert;
+            // execution log upstream records the registry failure.
+            await alertRepo.updateRegistryMetadata(alertId, {
+              sourceEventHash: sourceEventHash ?? alertId,
+              contentUri,
+            });
+          }
         }
+      } else if (contentUri) {
+        await alertRepo.updateRegistryMetadata(alertId, {
+          sourceEventHash: sourceEventHash ?? alertId,
+          contentUri,
+        });
       }
 
       const result = await alertRepo.updateDeliveryStatus(alertId, "published", now);
@@ -80,6 +101,7 @@ export function createAlertPublicationService(
         registryTxHash,
         keeperHubRunId,
         explorerUrl,
+        contentUri,
       };
     },
   };

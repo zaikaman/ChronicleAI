@@ -1,5 +1,5 @@
-// Digest routes: GET /digests/latest
-// Returns the most recently published public digest
+// Digest routes: GET /digests/latest, GET /digests/:id
+// Returns published public digests for feed + HTTPS content URI resolution
 
 import type { DailyDigestRepository, DailyDigestRow } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
@@ -35,6 +35,39 @@ export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterTyp
 
       const response = formatDigestResponse(digest);
       res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /digests/:id
+   *
+   * Fetch a single public digest by id (on-chain content URI target).
+   * Registered after /digests/latest so "latest" is not treated as an id.
+   */
+  router.get("/digests/:id", async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ error: "digest id is required" });
+        return;
+      }
+
+      const result = await digestRepo.findById(id);
+
+      if (!result.ok) {
+        res.status(500).json({ error: result.error.message });
+        return;
+      }
+
+      const digest = result.value;
+      if (!digest || digest.audience !== "public" || !digest.published_at) {
+        next(notFound("Digest not found"));
+        return;
+      }
+
+      res.json(formatDigestResponse(digest));
     } catch (error) {
       next(error);
     }

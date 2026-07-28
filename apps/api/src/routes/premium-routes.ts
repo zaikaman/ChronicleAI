@@ -51,6 +51,51 @@ export function createPremiumRoutes(params: {
   });
 
   /**
+   * GET /premium/watches/:id
+   *
+   * Fetch a single sponsored watch by id (HTTPS content URI resolution target
+   * for on-chain publishSponsoredReport proofs).
+   */
+  router.get("/premium/watches/:id", async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ error: "watch id is required" });
+        return;
+      }
+
+      const result = await params.watchRepo.findById(id);
+      if (!result.ok) {
+        res.status(500).json({ error: result.error.message });
+        return;
+      }
+
+      if (!result.value) {
+        res.status(404).json({ error: "Sponsored watch not found" });
+        return;
+      }
+
+      const watch = result.value;
+      res.json({
+        id: watch.id,
+        targetContract: watch.target_contract,
+        watchSpecHash: watch.watch_spec_hash,
+        startsAt: watch.starts_at,
+        endsAt: watch.ends_at,
+        status: watch.status,
+        createTxHash: watch.create_tx_hash ?? undefined,
+        reportTxHash: watch.report_tx_hash ?? undefined,
+        reportContentHash: watch.report_content_hash ?? undefined,
+        contentUri: watch.content_uri ?? undefined,
+        createExplorerUrl: watch.create_explorer_url ?? undefined,
+        reportExplorerUrl: watch.report_explorer_url ?? undefined,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * GET /premium/items
    *
    * List available premium intelligence item teasers (public-safe fields only).

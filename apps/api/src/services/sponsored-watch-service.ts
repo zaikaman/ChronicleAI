@@ -6,6 +6,7 @@
 
 import type { ExecutionLogRepository, SponsoredWatchRepository } from "@chronicleai/db";
 import type { SponsoredWatchRow } from "@chronicleai/db";
+import { buildSponsoredReportContentUri } from "./content-uri.ts";
 import type { Web3Client } from "./web3-client-service.ts";
 
 export interface SponsoredWatchService {
@@ -27,8 +28,10 @@ export function createSponsoredWatchService(params: {
   watchRepo: SponsoredWatchRepository;
   execLogRepo: ExecutionLogRepository;
   web3Client?: Web3Client | null;
+  /** Public SPA origin (FRONTEND_ORIGIN) for HTTPS report content URIs. */
+  frontendOrigin?: string;
 }): SponsoredWatchService {
-  const { watchRepo, execLogRepo, web3Client } = params;
+  const { watchRepo, execLogRepo, web3Client, frontendOrigin } = params;
 
   function requireWeb3(): Web3Client {
     if (!web3Client) {
@@ -123,9 +126,16 @@ export function createSponsoredWatchService(params: {
       let reportTxHash: string;
       let reportKeeperHubRunId: string | undefined;
       let reportExplorerUrl: string | undefined;
+      if (!frontendOrigin) {
+        throw new Error(
+          "FRONTEND_ORIGIN is required to publish sponsored report content URIs as resolvable HTTPS links",
+        );
+      }
+
+      const reportUri = buildSponsoredReportContentUri(frontendOrigin, watchId);
+
       try {
         const numericId = Number(watchId.replace(/[^0-9]/g, "")) || 0;
-        const reportUri = `chronicleai://sponsored-reports/${watchId}`;
         const receipt = await client.publishSponsoredReport(
           numericId,
           reportContentHash,
@@ -142,7 +152,7 @@ export function createSponsoredWatchService(params: {
           entity_id: watchId,
           status: "failed",
           message: `On-chain publishSponsoredReport failed: ${message}`,
-          details: { reportContentHash },
+          details: { reportContentHash, reportUri },
           started_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
         });
@@ -154,6 +164,7 @@ export function createSponsoredWatchService(params: {
         report_tx_hash: reportTxHash,
         report_keeper_hub_run_id: reportKeeperHubRunId ?? null,
         report_explorer_url: reportExplorerUrl ?? null,
+        content_uri: reportUri,
       });
 
       if (!result.ok) {
@@ -170,6 +181,7 @@ export function createSponsoredWatchService(params: {
           : "Sponsored watch completed with on-chain report publication",
         details: {
           reportContentHash,
+          reportUri,
           reportTxHash,
           reportKeeperHubRunId,
           reportExplorerUrl,

@@ -20,6 +20,11 @@ import {
 import { PaymentChallengeService } from "../services/payment-challenge-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
 import { createSponsoredWatchService } from "../services/sponsored-watch-service.ts";
+import {
+  parseSponsoredMonitorContentPrivate,
+  resolveTargetContract,
+  resolveWatchSpecHash,
+} from "../services/watch-spec-hash.ts";
 import type { Web3Client } from "../services/web3-client-service.ts";
 
 export function createPaymentRoutes(params: {
@@ -32,6 +37,8 @@ export function createPaymentRoutes(params: {
   web3Client?: Web3Client | null;
   /** When true, Set-Cookie includes Secure (production / HTTPS). */
   secureCookies?: boolean;
+  /** Public SPA origin for HTTPS sponsored-report content URIs. */
+  frontendOrigin?: string;
 }): RouterType {
   const router: RouterType = Router();
 
@@ -50,6 +57,7 @@ export function createPaymentRoutes(params: {
     watchRepo: params.watchRepo,
     execLogRepo: params.execLogRepo,
     web3Client: params.web3Client ?? null,
+    frontendOrigin: params.frontendOrigin,
   });
 
   function issueAccessReceipt(args: {
@@ -272,18 +280,23 @@ export function createPaymentRoutes(params: {
           const now = new Date();
           const endsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-          // Extract target contract from premium item's content_private
-          const contentPrivate = premiumItemResult.value.content_private as
-            | { targetContract?: string; watchSpecHash?: string }
-            | undefined;
-          const targetContract = contentPrivate?.targetContract;
-          const watchSpecHash = contentPrivate?.watchSpecHash ?? `0x${"c".repeat(64)}`;
-
-          if (!targetContract) {
+          // Require real targetContract + watchSpecHash (or derive hash from watchSpec).
+          // Never pad with fabricated 0xccc… hashes.
+          let targetContract: string;
+          let watchSpecHash: string;
+          try {
+            const contentPrivate = parseSponsoredMonitorContentPrivate(
+              premiumItemResult.value.content_private,
+            );
+            targetContract = resolveTargetContract(contentPrivate);
+            watchSpecHash = resolveWatchSpecHash(contentPrivate);
+          } catch (specError) {
             res.status(400).json({
               settled: false,
               error:
-                "Sponsored monitor premium item is missing targetContract in content_private",
+                specError instanceof Error
+                  ? specError.message
+                  : "Sponsored monitor premium item has an invalid watch specification",
             });
             return;
           }
