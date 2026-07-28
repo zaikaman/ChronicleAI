@@ -3,17 +3,21 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@10.7.1",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc -b && vite build",
+    "build:vercel": "vite build",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc -b --pretty false",
     "test": "vitest run"
   },
   "dependencies": {
     "@chronicleai/config": "workspace:*",
     "@chronicleai/schemas": "workspace:*",
-    "@chronicleai/ui": "workspace:*",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/outfit": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
     "@rainbow-me/rainbowkit": "^2.2.11",
     "@tailwindcss/vite": "^4.3.2",
     "@tanstack/react-query": "^5.101.2",
@@ -22,6 +26,8 @@
     "motion": "^12.42.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.2",
+    "sonner": "^2.0.5",
     "tailwindcss": "^4.3.2",
     "viem": "2.x",
     "wagmi": "^2.19.5"
@@ -29,13 +35,9 @@
   "devDependencies": {
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@types/react-router-dom": "^5.3.3",
-    "@vitejs/plugin-react": "^4.4.1",
+    "@vitejs/plugin-react-swc": "^4.3.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.1",
     "vitest": "^3.1.1"
-  },
-  "peerDependencies": {
-    "@types/react-router-dom": "^5.3.3"
   }
 }

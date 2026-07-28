@@ -8,8 +8,12 @@ import type {
 import type { DigestRunPayload } from "@chronicleai/schemas";
 import type { DigestWindowService } from "../services/digest-window-service.ts";
 import type { DigestEventSelectionService } from "../services/digest-event-selection-service.ts";
-import type { DigestGenerationService } from "../services/digest-generation-service.ts";
+import {
+  DigestGenerationError,
+  type DigestGenerationService,
+} from "../services/digest-generation-service.ts";
 import type { DigestPublicationService } from "../services/digest-publication-service.ts";
+import type { PremiumProductizerService } from "../services/premium-productizer-service.ts";
 
 export interface DigestRunResult {
   accepted: boolean;
@@ -26,6 +30,7 @@ export class DigestRunHandler {
   private readonly eventSelectionService: DigestEventSelectionService;
   private readonly generationService: DigestGenerationService;
   private readonly publicationService: DigestPublicationService;
+  private readonly premiumProductizer: PremiumProductizerService | null;
 
   constructor(deps: {
     digestRepo: DailyDigestRepository;
@@ -35,6 +40,8 @@ export class DigestRunHandler {
     eventSelectionService: DigestEventSelectionService;
     generationService: DigestGenerationService;
     publicationService: DigestPublicationService;
+    /** Mints period deep dives + structured feeds from real digest events. */
+    premiumProductizer?: PremiumProductizerService | null;
   }) {
     this.digestRepo = deps.digestRepo;
     this.eventRepo = deps.eventRepo;
@@ -43,6 +50,7 @@ export class DigestRunHandler {
     this.eventSelectionService = deps.eventSelectionService;
     this.generationService = deps.generationService;
     this.publicationService = deps.publicationService;
+    this.premiumProductizer = deps.premiumProductizer ?? null;
   }
 
   async runDigest(payload: DigestRunPayload, _source = "keeperhub"): Promise<DigestRunResult> {
@@ -92,15 +100,8 @@ export class DigestRunHandler {
       periodEnd: payload.periodEnd,
     });
 
-    // 4. Generate digest content
+    // 4. Generate digest content (LLM only — no template fallback)
     const reportDate = (new Date(payload.periodEnd).toISOString().split("T")[0]) ?? "unknown-date";
-
-    const digestContent = await this.generationService.generateDigest({
-      reportDate,
-      periodStart: payload.periodStart,
-      periodEnd: payload.periodEnd,
-      events: eventSelection.events,
-    });
 
     await this.execLogRepo.append({
       action_type: "generate_digest",
@@ -116,7 +117,53 @@ export class DigestRunHandler {
       },
     });
 
-    // 5. Persist the digest
+    let digestContent;
+    try {
+      digestContent = await this.generationService.generateDigest({
+        reportDate,
+        periodStart: payload.periodStart,
+        periodEnd: payload.periodEnd,
+        events: eventSelection.events,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DigestGenerationError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Unknown digest generation failure";
+
+      await this.execLogRepo.append({
+        action_type: "generate_digest",
+        entity_type: "monitored_event",
+        entity_id: eventSelection.events.length > 0 ? eventSelection.events[0]!.id : reportDate,
+        status: "failed",
+        message,
+        details: {
+          totalEvents: eventSelection.totalEvents,
+          qualifiedEvents: eventSelection.qualifiedEvents,
+          periodStart: payload.periodStart,
+          periodEnd: payload.periodEnd,
+          attempts:
+            error instanceof DigestGenerationError
+              ? error.attempts.map((a) => ({
+                  provider: a.provider,
+                  reason: a.failureReason ?? null,
+                  latencyMs: a.latencyMs,
+                }))
+              : null,
+        },
+      });
+
+      return {
+        accepted: false,
+        statusCode: 502,
+        digestId: undefined,
+        message,
+      };
+    }
+
+    // 5. Persist the digest (sections stored in market_narrative + flattened analysis)
     const digestInsertData: Record<string, unknown> = {
       report_date: reportDate,
       period_start: payload.periodStart,
@@ -128,6 +175,32 @@ export class DigestRunHandler {
       source_event_ids: digestContent.sourceEventIds,
       audience: "public",
       publication_status: "draft",
+      ...(digestContent.sections
+        ? {
+            market_narrative: {
+              type: "digest_sections",
+              version: 1,
+              sections: digestContent.sections,
+              stats: digestContent.stats
+                ? {
+                    netRiskOnUsd: digestContent.stats.netRiskOnUsd,
+                    netDeRiskUsd: digestContent.stats.netDeRiskUsd,
+                    cexInUsd: digestContent.stats.cexInUsd,
+                    cexOutUsd: digestContent.stats.cexOutUsd,
+                    mintUsd: digestContent.stats.mintUsd,
+                    burnUsd: digestContent.stats.burnUsd,
+                    liquidationUsd: digestContent.stats.liquidationUsd,
+                    liquidationCount: digestContent.stats.liquidationCount,
+                    clusterCount: digestContent.stats.clusterCount,
+                  }
+                : null,
+            },
+            // DB CHECK daily_digests_market_narrative_status_check allows
+            // NULL | 'succeeded' | 'failed' only (not 'ready').
+            market_narrative_status: "succeeded",
+            market_narrative_provider: digestContent.generationProvider ?? null,
+          }
+        : {}),
     };
 
     const digestResult = await this.digestRepo.create(
@@ -207,6 +280,67 @@ export class DigestRunHandler {
         executedViaKeeperHub: viaKh,
       },
     });
+
+    // 8. Premium productizer — public digest stays free; mint paid SKUs from the
+    // same real event set (structured feed + multi-event deep dive).
+    if (this.premiumProductizer && eventSelection.events.length > 0) {
+      try {
+        const fullEvents = await this.eventRepo.listInWindow({
+          periodStart: payload.periodStart,
+          periodEnd: payload.periodEnd,
+          status: "qualified",
+          limit: 2000,
+        });
+        const eventsForPremium = fullEvents.ok
+          ? fullEvents.value
+          : (await Promise.all(
+              eventSelection.events.map(async (e) => {
+                const found = await this.eventRepo.findById(e.id);
+                return found.ok ? found.value : null;
+              }),
+            )).filter((e): e is NonNullable<typeof e> => e != null);
+
+        const productized = await this.premiumProductizer.productizeDigest({
+          digest: {
+            id: digest.id,
+            report_date: reportDate,
+            period_start: payload.periodStart,
+            period_end: payload.periodEnd,
+            title: digestContent.title,
+            summary: digestContent.summary,
+            highlights: digestContent.highlights,
+            analysis: digestContent.analysis ?? null,
+          },
+          events: eventsForPremium,
+        });
+
+        if (productized.created.length > 0 || productized.errors.length > 0) {
+          await this.execLogRepo.append({
+            action_type: "monitor",
+            entity_type: "daily_digest",
+            entity_id: digest.id,
+            status: productized.errors.length > 0 ? "failed" : "succeeded",
+            message:
+              productized.created.length > 0
+                ? `Premium productizer minted ${productized.created.length} item(s) for digest`
+                : `Premium productizer errors: ${productized.errors.join("; ")}`,
+            details: {
+              createdSlugs: productized.created.map((i) => i.slug),
+              skipped: productized.skipped,
+              errors: productized.errors,
+            },
+          });
+        }
+      } catch (error) {
+        await this.execLogRepo.append({
+          action_type: "monitor",
+          entity_type: "daily_digest",
+          entity_id: digest.id,
+          status: "failed",
+          message: `Premium productizer failed: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
 
     return {
       accepted: true,

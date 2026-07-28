@@ -1,47 +1,53 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
-    "name": "ChronicleAI Gas & Volume Block Monitor",
-    "description": "Block Dispatcher fires every block. Chronicle fetches the block via RPC, detects gas spikes, transaction-volume anomalies, and contract deployments, then runs the public alert pipeline."
+    "name": "ChronicleAI Gas & Volume Block Monitor (Telegram bridge)",
+    "description": "NEWSPAPER context (mainnet gas/volume). FREE TIER: Block Dispatcher every 300th mainnet block ≈ ~60 min (~720 runs/mo) → Telegram → Chronicle block ingest. Desk gas regime uses desk-gas-poll on Sepolia instead. Prefer vanity monitor account. Do NOT set blockInterval to 1."
   },
   "nodes": [
     {
       "id": "trigger-block",
       "type": "trigger",
-      "position": { "x": 100, "y": 200 },
+      "position": {
+        "x": 100,
+        "y": 200
+      },
       "data": {
         "type": "trigger",
-        "label": "Every Block",
+        "label": "Every 300th Block (~60 min, free tier)",
         "config": {
           "triggerType": "Block",
           "network": "1",
-          "blockInterval": 1
+          "blockInterval": 300
         }
       }
     },
     {
-      "id": "post-chronicle-blocks",
+      "id": "post-chronicle-telegram",
       "type": "action",
-      "position": { "x": 420, "y": 200 },
+      "position": {
+        "x": 420,
+        "y": 200
+      },
       "data": {
         "type": "action",
-        "label": "POST Chronicle /keeperhub/blocks",
+        "label": "Telegram → Chronicle ingest bridge",
         "config": {
-          "actionType": "webhook/send-webhook",
-          "integrationType": "webhook",
-          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/blocks",
-          "webhookMethod": "POST",
-          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
-          "webhookPayload": "{\"chainId\":1,\"blockNumber\":{{@trigger-block:Trigger.blockNumber}},\"blockHash\":\"{{@trigger-block:Trigger.blockHash}}\",\"timestamp\":{{@trigger-block:Trigger.timestamp}},\"sourceEventId\":\"kh-block-{{@trigger-block:Trigger.blockNumber}}\"}"
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"block\",\"payload\":{\"chainId\":1,\"blockNumber\":\"{{@trigger-block:Trigger.blockNumber}}\",\"blockHash\":\"{{@trigger-block:Trigger.blockHash}}\",\"timestamp\":\"{{@trigger-block:Trigger.timestamp}}\",\"sourceEventId\":\"kh-block-{{@trigger-block:Trigger.blockNumber}}\"}}",
+          "parseMode": "none"
         }
       }
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-block", "target": "post-chronicle-blocks" }
+    {
+      "id": "e1",
+      "source": "trigger-block",
+      "target": "post-chronicle-telegram"
+    }
   ],
-  "integrationBindings": [
-    { "nodeId": "post-chronicle-blocks", "integrationType": "webhook" }
-  ]
+  "integrationBindings": []
 }

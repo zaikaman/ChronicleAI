@@ -1,13 +1,15 @@
 // LLM-backed daily digest generator with Gemini → OpenAI → Groq fallback.
-// Falls back to deterministic template ranking only if every provider fails
-// (so the scheduled digest pipeline remains resilient).
+// Fails hard if every provider fails — no heuristic/template content path.
+// Precomputes DigestStats and forces sectioned JSON output.
 
 import {
+  chainLabel,
   DIGEST_GENERATION_TIMEOUT_MS,
   LLM_FALLBACK_ORDER,
 } from "@chronicleai/config";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
-import type { Confidence, LLMProvider } from "@chronicleai/schemas";
+import type { Confidence, DigestSections, FlowContext, LLMProvider } from "@chronicleai/schemas";
+import { extractFlowContext } from "../monitoring/flow-enrichment.ts";
 import {
   extractJsonObject,
   LLM_PROVIDER_CALLERS,
@@ -26,6 +28,25 @@ export interface DigestEventInput {
   transactionHash: string | null;
   significanceScore: number | null;
   capturedAt: string;
+  rawPayload?: Record<string, unknown> | null;
+}
+
+export interface DigestStats {
+  netRiskOnUsd: number;
+  netDeRiskUsd: number;
+  cexInUsd: number;
+  cexOutUsd: number;
+  protocolInUsd: number;
+  protocolOutUsd: number;
+  mintUsd: number;
+  burnUsd: number;
+  liquidationUsd: number;
+  liquidationCount: number;
+  clusterCount: number;
+  gasSpikes: number;
+  swapCount: number;
+  swapUsd: number;
+  topEvents: DigestEventInput[];
 }
 
 export interface DigestContent {
@@ -33,10 +54,13 @@ export interface DigestContent {
   summary: string;
   highlights: string[];
   analysis?: string;
+  sections?: DigestSections;
   sourceEventIds: string[];
   confidence: Confidence;
-  /** Which path produced the content: LLM provider name or heuristic template. */
-  generationProvider?: LLMProvider | "template";
+  /** LLM provider that produced the final digest content. */
+  generationProvider?: LLMProvider;
+  /** Precomputed stats (for logging / tests). */
+  stats?: DigestStats;
 }
 
 export interface DigestGenerationParams {
@@ -53,13 +77,198 @@ export interface DigestProviderAttemptResult {
   failureReason?: string;
 }
 
+export class DigestGenerationError extends Error {
+  readonly attempts: DigestProviderAttemptResult[];
+
+  constructor(message: string, attempts: DigestProviderAttemptResult[] = []) {
+    super(message);
+    this.name = "DigestGenerationError";
+    this.attempts = attempts;
+  }
+}
+
 export interface DigestGenerationService {
   /** Generate digest content from selected events via multi-provider LLM. */
   generateDigest(params: DigestGenerationParams): Promise<DigestContent>;
 }
 
 const DIGEST_SYSTEM_INSTRUCTION =
-  "You are ChronicleAI, an autonomous on-chain intelligence desk. Write comprehensive public daily market intelligence digests from structured blockchain event data. Be factual, clear, and useful to a general crypto audience. Never invent events that are not in the provided data.";
+  "You are ChronicleAI, an autonomous on-chain capital-flow intelligence desk. Write comprehensive public daily market intelligence digests from structured blockchain event data and precomputed stats. Be factual, clear, and useful. Never invent events, nets, or entity names not in the provided data.";
+
+// ── Stats precompute ────────────────────────────────────
+
+function magnitudeUsd(mag: Record<string, unknown> | null | undefined): number {
+  if (!mag || typeof mag !== "object") return 0;
+  const unit = mag.unit;
+  const value = mag.value;
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  if (unit === "USD" || unit === undefined) return value;
+  return 0;
+}
+
+function flowOf(event: DigestEventInput): FlowContext | null {
+  return extractFlowContext(event.rawPayload ?? null);
+}
+
+/**
+ * Precompute capital-flow aggregates in code — never invent nets in the LLM.
+ */
+export function computeDigestStats(events: DigestEventInput[]): DigestStats {
+  const ranked = rankEvents(events);
+  let netRiskOnUsd = 0;
+  let netDeRiskUsd = 0;
+  let cexInUsd = 0;
+  let cexOutUsd = 0;
+  let protocolInUsd = 0;
+  let protocolOutUsd = 0;
+  let mintUsd = 0;
+  let burnUsd = 0;
+  let liquidationUsd = 0;
+  let liquidationCount = 0;
+  let clusterCount = 0;
+  let gasSpikes = 0;
+  let swapCount = 0;
+  let swapUsd = 0;
+
+  for (const e of events) {
+    const usd = magnitudeUsd(e.magnitude);
+    const flow = flowOf(e);
+
+    switch (e.eventType) {
+      case "cex_inflow":
+        cexInUsd += usd;
+        break;
+      case "cex_outflow":
+        cexOutUsd += usd;
+        break;
+      case "protocol_deposit":
+        protocolInUsd += usd;
+        break;
+      case "protocol_withdraw":
+        protocolOutUsd += usd;
+        break;
+      case "stablecoin_mint":
+        mintUsd += usd;
+        break;
+      case "stablecoin_burn":
+        burnUsd += usd;
+        break;
+      case "liquidation":
+        liquidationUsd += usd;
+        liquidationCount += 1;
+        break;
+      case "liquidation_cluster":
+        clusterCount += 1;
+        liquidationUsd += usd;
+        break;
+      case "gas_spike":
+        gasSpikes += 1;
+        break;
+      case "large_swap":
+        swapCount += 1;
+        swapUsd += usd;
+        break;
+      default:
+        break;
+    }
+
+    if (flow?.direction === "risk_on") netRiskOnUsd += usd;
+    if (flow?.direction === "de_risk") netDeRiskUsd += usd;
+    if (e.eventType === "stablecoin_mint") {
+      // supply_expand already in mintUsd; also count as not risk_on
+    }
+  }
+
+  return {
+    netRiskOnUsd,
+    netDeRiskUsd,
+    cexInUsd,
+    cexOutUsd,
+    protocolInUsd,
+    protocolOutUsd,
+    mintUsd,
+    burnUsd,
+    liquidationUsd,
+    liquidationCount,
+    clusterCount,
+    gasSpikes,
+    swapCount,
+    swapUsd,
+    topEvents: ranked.slice(0, 8),
+  };
+}
+
+export function flattenSectionsToAnalysis(sections: DigestSections): string {
+  const blocks: string[] = [];
+  if (sections.capitalDirection?.trim()) {
+    blocks.push(`## Capital direction\n\n${sections.capitalDirection.trim()}`);
+  }
+  if (sections.exchangeAndProtocolFlows?.trim()) {
+    blocks.push(
+      `## Exchange & protocol flows\n\n${sections.exchangeAndProtocolFlows.trim()}`,
+    );
+  }
+  if (sections.stressBoard?.trim()) {
+    blocks.push(`## Stress board\n\n${sections.stressBoard.trim()}`);
+  }
+  if (sections.storyOfTheDay?.trim()) {
+    blocks.push(`## Story of the day\n\n${sections.storyOfTheDay.trim()}`);
+  }
+  if (sections.coverageNote?.trim()) {
+    blocks.push(`## Coverage note\n\n${sections.coverageNote.trim()}`);
+  }
+  return blocks.join("\n\n");
+}
+
+export function parseSectionsFromAnalysis(analysis: string | null | undefined): DigestSections | null {
+  if (!analysis?.trim()) return null;
+  const headings: Array<{ key: keyof DigestSections; pattern: RegExp }> = [
+    { key: "capitalDirection", pattern: /^##\s*Capital direction\s*$/im },
+    {
+      key: "exchangeAndProtocolFlows",
+      pattern: /^##\s*Exchange\s*(&|and)\s*protocol flows\s*$/im,
+    },
+    { key: "stressBoard", pattern: /^##\s*Stress board\s*$/im },
+    { key: "storyOfTheDay", pattern: /^##\s*Story of the day\s*$/im },
+    { key: "coverageNote", pattern: /^##\s*Coverage note\s*$/im },
+  ];
+
+  const found: Array<{ key: keyof DigestSections; index: number; matchLen: number }> = [];
+  for (const h of headings) {
+    const m = h.pattern.exec(analysis);
+    if (m && m.index !== undefined) {
+      found.push({ key: h.key, index: m.index, matchLen: m[0].length });
+    }
+  }
+  if (found.length < 2) return null;
+  found.sort((a, b) => a.index - b.index);
+
+  const sections: Partial<DigestSections> = {};
+  for (let i = 0; i < found.length; i++) {
+    const cur = found[i]!;
+    const start = cur.index + cur.matchLen;
+    const end = i + 1 < found.length ? found[i + 1]!.index : analysis.length;
+    sections[cur.key] = analysis.slice(start, end).trim();
+  }
+
+  if (
+    !sections.capitalDirection &&
+    !sections.exchangeAndProtocolFlows &&
+    !sections.stressBoard &&
+    !sections.storyOfTheDay
+  ) {
+    return null;
+  }
+
+  return {
+    capitalDirection: sections.capitalDirection ?? "No qualifying directional flow today.",
+    exchangeAndProtocolFlows:
+      sections.exchangeAndProtocolFlows ?? "No qualifying CEX or protocol flow today.",
+    stressBoard: sections.stressBoard ?? "No material stress signals today.",
+    storyOfTheDay: sections.storyOfTheDay ?? "Quiet day — no single multi-event narrative.",
+    coverageNote: sections.coverageNote ?? "",
+  };
+}
 
 // ── Prompt ──────────────────────────────────────────────
 
@@ -68,6 +277,7 @@ function formatEventLine(event: DigestEventInput, index: number): string {
     `${index + 1}. id=${event.id}`,
     `type=${event.eventType}`,
     `chainId=${event.chainId}`,
+    `network=${chainLabel(event.chainId)}`,
   ];
   if (event.protocol) parts.push(`protocol=${event.protocol}`);
   if (event.assetSymbols?.length) parts.push(`assets=${event.assetSymbols.join("/")}`);
@@ -79,6 +289,17 @@ function formatEventLine(event: DigestEventInput, index: number): string {
       parts.push(`magnitude=${JSON.stringify(mag)}`);
     }
   }
+  const flow = flowOf(event);
+  if (flow) {
+    parts.push(`direction=${flow.direction}`);
+    if (flow.fromLabel || flow.fromRole !== "unknown") {
+      parts.push(`from=${flow.fromLabel ?? flow.fromRole}`);
+    }
+    if (flow.toLabel || flow.toRole !== "unknown") {
+      parts.push(`to=${flow.toLabel ?? flow.toRole}`);
+    }
+    if (flow.venue) parts.push(`venue=${flow.venue}`);
+  }
   if (event.transactionHash) parts.push(`tx=${event.transactionHash}`);
   if (event.significanceScore != null) {
     parts.push(`significance=${event.significanceScore.toFixed(2)}`);
@@ -87,7 +308,29 @@ function formatEventLine(event: DigestEventInput, index: number): string {
   return parts.join(" | ");
 }
 
-function buildDigestPrompt(params: DigestGenerationParams): string {
+function rankEvents(events: DigestEventInput[]): DigestEventInput[] {
+  return [...events].sort(
+    (a, b) => (b.significanceScore ?? 0) - (a.significanceScore ?? 0),
+  );
+}
+
+function formatReportDate(reportDate: string): string {
+  return new Date(reportDate).toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatUsd(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return "$0";
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
+  return `$${n.toFixed(0)}`;
+}
+
+function buildDigestPrompt(params: DigestGenerationParams, stats: DigestStats): string {
   const formattedDate = formatReportDate(params.reportDate);
   const periodStartDate = params.periodStart.slice(0, 10);
   const periodEndDate = params.periodEnd.slice(0, 10);
@@ -101,12 +344,33 @@ function buildDigestPrompt(params: DigestGenerationParams): string {
     `Period labels: ${periodStartDate} to ${periodEndDate}`,
     `Qualified event count: ${params.events.length}`,
     "",
+    "DIGEST STATS (precomputed — use these numbers; do not invent nets):",
+    `- netRiskOnUsd: ${stats.netRiskOnUsd} (${formatUsd(stats.netRiskOnUsd)})`,
+    `- netDeRiskUsd: ${stats.netDeRiskUsd} (${formatUsd(stats.netDeRiskUsd)})`,
+    `- cexInUsd: ${stats.cexInUsd} (${formatUsd(stats.cexInUsd)})`,
+    `- cexOutUsd: ${stats.cexOutUsd} (${formatUsd(stats.cexOutUsd)})`,
+    `- protocolInUsd: ${stats.protocolInUsd} (${formatUsd(stats.protocolInUsd)})`,
+    `- protocolOutUsd: ${stats.protocolOutUsd} (${formatUsd(stats.protocolOutUsd)})`,
+    `- mintUsd: ${stats.mintUsd} (${formatUsd(stats.mintUsd)})`,
+    `- burnUsd: ${stats.burnUsd} (${formatUsd(stats.burnUsd)})`,
+    `- liquidationUsd: ${stats.liquidationUsd} (${formatUsd(stats.liquidationUsd)})`,
+    `- liquidationCount: ${stats.liquidationCount}`,
+    `- clusterCount: ${stats.clusterCount}`,
+    `- gasSpikes: ${stats.gasSpikes}`,
+    `- swapCount: ${stats.swapCount}`,
+    `- swapUsd: ${stats.swapUsd} (${formatUsd(stats.swapUsd)})`,
+    "",
   ];
 
   if (params.events.length === 0) {
     lines.push(
       "No qualifying on-chain events were selected for this window.",
-      "Write a calm, professional no-major-events digest: state that monitoring continued, no thresholds were crossed, and markets appear orderly.",
+      "Write a calm, professional quiet-day digest with empty-but-honest sections:",
+      '- capitalDirection: "No qualifying directional flow today."',
+      '- exchangeAndProtocolFlows: "No qualifying CEX or protocol flow today."',
+      '- stressBoard: "No material stress signals today."',
+      '- storyOfTheDay: "Quiet day — monitoring continued; no multi-event narrative."',
+      "- coverageNote: note that thresholds filtered the tape.",
       "",
     );
   } else {
@@ -123,10 +387,18 @@ function buildDigestPrompt(params: DigestGenerationParams): string {
     "- Audience is PUBLIC. No premium-only deep dives, trading advice, or private data.",
     "- summary: 2–4 plain-language sentences covering the period (facts first).",
     "- highlights: 3–7 bullet strings, ranked by importance; each bullet is one concrete takeaway.",
-    "- analysis: longer interpretive section (2–4 short paragraphs) separating interpretation from pure facts.",
+    "- analysis: longer interpretive section — prefer structured markdown with the five section headings below.",
+    "- sections: REQUIRED object with all five keys (use honest empty-day copy when a bucket has no data).",
+    "  - capitalDirection: net risk-on vs de-risk from stats + events",
+    "  - exchangeAndProtocolFlows: CEX in/out + protocol deposit/withdraw",
+    "  - stressBoard: liquidations, clusters, gas/volume",
+    "  - storyOfTheDay: single multi-event narrative or quiet-day note",
+    "  - coverageNote: what was filtered / coverage limits (builds trust)",
     "- title: include 'ChronicleAI Daily Digest' and the human-readable report date when natural.",
-    "- confidence: 'high' when data is clear and multi-sourced, 'medium' when partial, 'low' when sparse/speculative.",
-    "- Base every claim on the provided events or the absence of events. Never fabricate transactions or protocols.",
+    "- confidence: 'high' when data is clear and multi-sourced, 'medium' when partial, 'low' when sparse.",
+    "- Base every claim on DIGEST STATS and provided events. Never fabricate transactions, protocols, or nets.",
+    "- Never invent entity names not present in event labels.",
+    "- When naming a chain, use the provided network= label for that event only.",
     "",
     "Respond ONLY with JSON (no markdown fences) using this shape:",
     JSON.stringify({
@@ -134,6 +406,13 @@ function buildDigestPrompt(params: DigestGenerationParams): string {
       summary: "…",
       highlights: ["…", "…"],
       analysis: "…",
+      sections: {
+        capitalDirection: "…",
+        exchangeAndProtocolFlows: "…",
+        stressBoard: "…",
+        storyOfTheDay: "…",
+        coverageNote: "…",
+      },
       confidence: "high|medium|low",
     }),
   );
@@ -143,9 +422,39 @@ function buildDigestPrompt(params: DigestGenerationParams): string {
 
 // ── Validation ──────────────────────────────────────────
 
+function parseSections(raw: unknown): DigestSections | null {
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as Record<string, unknown>;
+  const keys = [
+    "capitalDirection",
+    "exchangeAndProtocolFlows",
+    "stressBoard",
+    "storyOfTheDay",
+    "coverageNote",
+  ] as const;
+  const out: Partial<DigestSections> = {};
+  for (const k of keys) {
+    if (typeof s[k] === "string" && s[k].trim().length > 0) {
+      out[k] = String(s[k]).trim().slice(0, 4000);
+    }
+  }
+  // Require at least 3 sections to accept
+  const filled = keys.filter((k) => out[k]).length;
+  if (filled < 3) return null;
+  return {
+    capitalDirection: out.capitalDirection ?? "No qualifying directional flow today.",
+    exchangeAndProtocolFlows:
+      out.exchangeAndProtocolFlows ?? "No qualifying CEX or protocol flow today.",
+    stressBoard: out.stressBoard ?? "No material stress signals today.",
+    storyOfTheDay: out.storyOfTheDay ?? "Quiet day — no single multi-event narrative.",
+    coverageNote: out.coverageNote ?? "",
+  };
+}
+
 function validateDigestResponse(
   raw: string,
   params: DigestGenerationParams,
+  stats: DigestStats,
 ): DigestContent | null {
   try {
     const jsonStr = extractJsonObject(raw) ?? raw;
@@ -174,132 +483,39 @@ function validateDigestResponse(
       return null;
     }
 
-    const analysis =
+    let sections = parseSections(parsed.sections);
+    let analysis =
       typeof parsed.analysis === "string" && parsed.analysis.trim().length > 0
         ? parsed.analysis.trim().slice(0, 8000)
         : undefined;
+
+    // Prefer structured sections; flatten into analysis for backward-compatible UI
+    if (sections) {
+      const flattened = flattenSectionsToAnalysis(sections);
+      analysis = analysis && analysis.includes("## Capital direction")
+        ? analysis
+        : flattened;
+    } else if (analysis) {
+      sections = parseSectionsFromAnalysis(analysis);
+    }
 
     return {
       title: String(parsed.title).trim().slice(0, 200),
       summary: String(parsed.summary).trim().slice(0, 2000),
       highlights,
-      analysis,
+      ...(analysis !== undefined ? { analysis } : {}),
+      ...(sections ? { sections } : {}),
       sourceEventIds: params.events.map((e) => e.id),
       confidence: confidence as Confidence,
+      stats,
     };
   } catch {
     return null;
   }
 }
 
-// ── Heuristic template fallback ─────────────────────────
-
-function formatEventSummary(event: DigestEventInput): string {
-  const parts: string[] = [event.eventType.replace(/_/g, " ")];
-  if (event.protocol) parts.push(`on ${event.protocol}`);
-  if (event.assetSymbols?.length) parts.push(`(${event.assetSymbols.join("/")})`);
-  if (event.magnitude) {
-    const mag = event.magnitude;
-    if (typeof mag.value === "number" && typeof mag.unit === "string") {
-      parts.push(`${mag.value.toLocaleString()} ${mag.unit}`);
-    }
-  }
-  return parts.join(" ");
-}
-
-function rankEvents(events: DigestEventInput[]): DigestEventInput[] {
-  return [...events].sort(
-    (a, b) => (b.significanceScore ?? 0) - (a.significanceScore ?? 0),
-  );
-}
-
-function formatReportDate(reportDate: string): string {
-  return new Date(reportDate).toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function generateTemplateDigest(params: DigestGenerationParams): DigestContent {
-  const { events, reportDate } = params;
-  const formattedDate = formatReportDate(reportDate);
-
-  if (events.length === 0) {
-    return {
-      title: `ChronicleAI Daily Digest — ${formattedDate}`,
-      summary: `No significant on-chain events were detected during the reporting period ending ${formattedDate}. Normal monitoring operations continue.`,
-      highlights: ["No major events detected during this reporting period."],
-      analysis:
-        "The absence of significant on-chain activity during this period suggests normal market conditions with no anomalous trade, liquidation, gas, or deployment events crossing configured thresholds.",
-      sourceEventIds: [],
-      confidence: "high",
-      generationProvider: "template",
-    };
-  }
-
-  const ranked = rankEvents(events);
-  const topEvent = ranked[0];
-
-  const highlights = ranked.slice(0, 5).map((event, i) => {
-    const summary = formatEventSummary(event);
-    const score = event.significanceScore
-      ? ` (significance: ${(event.significanceScore * 100).toFixed(0)}%)`
-      : "";
-    return `${i + 1}. ${summary}${score}`;
-  });
-
-  const topEventSummary = topEvent ? formatEventSummary(topEvent) : "no significant events";
-  const summary = `Over the reporting period ending ${formattedDate}, ChronicleAI monitored ${events.length} qualifying on-chain events. The most significant activity involved ${topEventSummary}.`;
-
-  const analysisParts: string[] = [];
-  analysisParts.push(
-    `During this reporting period (${params.periodStart.slice(0, 10)} to ${params.periodEnd.slice(0, 10)}), ChronicleAI detected and qualified ${events.length} noteworthy on-chain events across ${new Set(events.map((e) => e.chainId)).size} chain(s).`,
-  );
-
-  const types = new Set(events.map((e) => e.eventType));
-  if (types.size > 0) {
-    analysisParts.push(
-      `Event type distribution: ${[...types].map((t) => t.replace(/_/g, " ")).join(", ")}.`,
-    );
-  }
-
-  const protocols = events.filter((e) => e.protocol).map((e) => e.protocol);
-  if (protocols.length > 0) {
-    const uniqueProtocols = [...new Set(protocols)];
-    analysisParts.push(`Protocols involved: ${uniqueProtocols.join(", ")}.`);
-  }
-
-  const highestScore = Math.max(...events.map((e) => e.significanceScore ?? 0));
-  if (highestScore > 0.8) {
-    analysisParts.push(
-      "The highest-significance event(s) exceeded 80% confidence, indicating strong signal quality.",
-    );
-  } else if (highestScore > 0.5) {
-    analysisParts.push(
-      "Event significance scores were moderate, suggesting notable but not extreme on-chain activity.",
-    );
-  }
-
-  return {
-    title: `ChronicleAI Daily Digest — ${formattedDate}`,
-    summary,
-    highlights,
-    analysis: analysisParts.join("\n\n"),
-    sourceEventIds: events.map((e) => e.id),
-    confidence: events.length >= 3 ? "high" : "medium",
-    generationProvider: "template",
-  };
-}
-
 // ── LLM attempt logging helpers ─────────────────────────
 
-/**
- * llm_generation_attempts.monitored_event_id is NOT NULL and FKs to monitored_events.
- * Digests span many events: log against the highest-significance source event when available.
- * entity_type is set to daily_digest; entity_id stays null until the digest row exists.
- */
 async function recordDigestAttempt(
   llmAttemptRepo: LLMGenerationAttemptRepository | null,
   params: {
@@ -332,28 +548,24 @@ async function recordDigestAttempt(
 // ── Factory ─────────────────────────────────────────────
 
 export function createDigestGenerationService(
-  providerConfigs?: LLMProviderMap,
+  providerConfigs: LLMProviderMap,
   llmAttemptRepo?: LLMGenerationAttemptRepository | null,
 ): DigestGenerationService {
   const repo = llmAttemptRepo ?? null;
 
   return {
     async generateDigest(params) {
-      // Without provider config (e.g. unit tests), use the deterministic template path.
-      if (!providerConfigs) {
-        return generateTemplateDigest(params);
-      }
-
       const ranked = rankEvents(params.events);
       const logEventId = ranked[0]?.id ?? null;
-      const prompt = buildDigestPrompt(params);
+      const stats = computeDigestStats(params.events);
+      const prompt = buildDigestPrompt(params, stats);
       const attempts: DigestProviderAttemptResult[] = [];
 
       for (const provider of LLM_FALLBACK_ORDER) {
         const config = providerConfigs[provider];
         const attemptOrder = LLM_FALLBACK_ORDER.indexOf(provider) + 1;
 
-        if (!config.apiKey?.trim()) {
+        if (!config?.apiKey?.trim()) {
           attempts.push({
             provider,
             success: false,
@@ -385,7 +597,7 @@ export function createDigestGenerationService(
           const latencyMs = Date.now() - startTime;
           clearTimeout(timeoutId);
 
-          const content = validateDigestResponse(raw, params);
+          const content = validateDigestResponse(raw, params, stats);
 
           if (content) {
             attempts.push({ provider, success: true, latencyMs });
@@ -399,6 +611,14 @@ export function createDigestGenerationService(
                 title: content.title,
                 highlightCount: content.highlights.length,
                 eventCount: params.events.length,
+                hasSections: Boolean(content.sections),
+                stats: {
+                  netRiskOnUsd: stats.netRiskOnUsd,
+                  netDeRiskUsd: stats.netDeRiskUsd,
+                  cexInUsd: stats.cexInUsd,
+                  cexOutUsd: stats.cexOutUsd,
+                  liquidationCount: stats.liquidationCount,
+                },
               },
             });
 
@@ -446,21 +666,32 @@ export function createDigestGenerationService(
         }
       }
 
-      // All providers failed — ship a deterministic digest so the daily pipeline still runs.
-      console.warn(
-        "[digest-generation] All LLM providers failed; using template fallback",
-        {
-          attempts: attempts.map((a) => ({
-            provider: a.provider,
-            reason: a.failureReason,
-            latencyMs: a.latencyMs,
-          })),
-          eventCount: params.events.length,
-          reportDate: params.reportDate,
-        },
-      );
+      const attemptSummary = attempts
+        .map((a) => `${a.provider}: ${a.failureReason ?? "unknown"}`)
+        .join("; ");
 
-      return generateTemplateDigest(params);
+      console.error("[digest-generation] All LLM providers failed", {
+        attempts: attempts.map((a) => ({
+          provider: a.provider,
+          reason: a.failureReason,
+          latencyMs: a.latencyMs,
+        })),
+        eventCount: params.events.length,
+        reportDate: params.reportDate,
+      });
+
+      throw new DigestGenerationError(
+        `Digest generation failed: all LLM providers failed (${attemptSummary})`,
+        attempts,
+      );
     },
   };
+}
+
+/** Exported for unit tests. */
+export function buildDigestPromptForTest(
+  params: DigestGenerationParams,
+  stats?: DigestStats,
+): string {
+  return buildDigestPrompt(params, stats ?? computeDigestStats(params.events));
 }

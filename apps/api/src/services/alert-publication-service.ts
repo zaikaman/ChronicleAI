@@ -1,15 +1,19 @@
 // Alert publication service: local public feed + KeeperHub registry write
-// + community channel fan-out (Discord / Telegram) with registry tx hash.
+// + Telegram community channel fan-out with registry tx hash.
 //
 // IDEA Loop 1: after publishAlert registry write, broadcast alert summaries
-// to Discord and Telegram including the KeeperHub execution transaction hash.
+// to Telegram including the KeeperHub execution transaction hash.
 //
 // FR-026 / IDEA Loop 3: registry writes are treasury-gated — suspended when
 // the agent treasury balance is below the safety buffer; local publish still
 // proceeds and a public low-balance warning is emitted.
 //
 // IDEA demo packaging: content hash, gas used, registry tx, KeeperHub status.
+//
+// Note: monitored source chain (e.g. Ethereum Mainnet) may differ from the
+// KeeperHub registry chain (Ethereum Sepolia). Telegram labels both clearly.
 
+import { chainLabel, txExplorerUrl } from "@chronicleai/config";
 import type { ExecutionLogRepository, PublicAlertRepository } from "@chronicleai/db";
 import type { AlertDeliveryStatus } from "@chronicleai/schemas";
 import type { ChronicleRegistryService } from "./chronicle-registry-service.ts";
@@ -35,14 +39,14 @@ export interface PublicationResult {
   gasUsedWei?: string | undefined;
   /** True when on-chain registry write was skipped due to treasury gate. */
   registrySuspended?: boolean | undefined;
-  /** Community channel delivery outcome (Discord / Telegram / log). */
+  /** Community channel delivery outcome (Telegram / log). */
   communityBroadcast?: ChannelDeliveryResult | undefined;
 }
 
 export interface AlertPublicationService {
   /**
    * Publish an alert: mark public, anchor on-chain via KeeperHub registry write
-   * (when treasury allows), then fan out to Discord/Telegram with the registry
+   * (when treasury allows), then fan out to Telegram with the registry
    * transaction hash.
    */
   publishAlert(alertId: string, sourceEventHash?: string): Promise<PublicationResult>;
@@ -152,6 +156,7 @@ export function createAlertPublicationService(
             contentHash,
           });
         } else {
+          const registryStartedAt = new Date().toISOString();
           const registryResult = await registryService.publishAlert(
             contentHash,
             resolvedSourceEventHash,
@@ -175,14 +180,90 @@ export function createAlertPublicationService(
               ...(keeperHubRunId ? { keeperHubRunId } : {}),
               ...(explorerUrl ? { explorerUrl } : {}),
             });
+            if (execLogRepo) {
+              const completedAt = new Date().toISOString();
+              try {
+                const logResult = await execLogRepo.append({
+                  action_type: "registry_write",
+                  entity_type: "public_alert",
+                  entity_id: alertId,
+                  status: "succeeded",
+                  message: `Alert registry write succeeded${keeperHubRunId ? ` (run ${keeperHubRunId})` : ""}`,
+                  details: {
+                    method: "publishAlert",
+                    reason: "registry_write_ok",
+                    tx_hash: registryTxHash,
+                    keeper_hub_run_id: keeperHubRunId ?? null,
+                    explorer_url: explorerUrl ?? null,
+                    gas_used: gasUsed ?? null,
+                    gas_used_wei: gasUsedWei ?? null,
+                    source_event_hash: resolvedSourceEventHash,
+                    content_hash: contentHash,
+                    content_uri: contentUri,
+                  },
+                  started_at: registryStartedAt,
+                  completed_at: completedAt,
+                });
+                if (!logResult.ok) {
+                  console.error(
+                    "[alert-publication] registry_write success log failed:",
+                    logResult.error.message,
+                  );
+                }
+              } catch (error) {
+                console.error(
+                  "[alert-publication] registry_write success log threw:",
+                  error instanceof Error ? error.message : error,
+                );
+              }
+            }
           } else {
             // Soft-fail local publish still proceeds so readers get the alert;
-            // execution log upstream records the registry failure.
+            // execution log records the registry failure for Activity visibility.
+            const failMessage =
+              registryResult.errorMessage ??
+              (registryResult.success
+                ? "Registry write reported success without txHash"
+                : "Registry write failed");
             await alertRepo.updateRegistryMetadata(alertId, {
               sourceEventHash: resolvedSourceEventHash,
               contentUri,
               contentHash,
             });
+            if (execLogRepo) {
+              const completedAt = new Date().toISOString();
+              try {
+                const logResult = await execLogRepo.append({
+                  action_type: "registry_write",
+                  entity_type: "public_alert",
+                  entity_id: alertId,
+                  status: "failed",
+                  message: failMessage,
+                  details: {
+                    method: "publishAlert",
+                    reason: "registry_write_failed",
+                    error_message: failMessage,
+                    keeper_hub_run_id: registryResult.keeperHubRunId ?? null,
+                    source_event_hash: resolvedSourceEventHash,
+                    content_hash: contentHash,
+                    content_uri: contentUri,
+                  },
+                  started_at: registryStartedAt,
+                  completed_at: completedAt,
+                });
+                if (!logResult.ok) {
+                  console.error(
+                    "[alert-publication] registry_write failure log failed:",
+                    logResult.error.message,
+                  );
+                }
+              } catch (error) {
+                console.error(
+                  "[alert-publication] registry_write failure log threw:",
+                  error instanceof Error ? error.message : error,
+                );
+              }
+            }
           }
         }
       } else {
@@ -207,7 +288,7 @@ export function createAlertPublicationService(
         };
       }
 
-      // IDEA Loop 1 step 5: broadcast to Discord + Telegram with registry tx hash.
+      // IDEA Loop 1 step 5: broadcast to Telegram with registry tx hash.
       // Soft-fail: community channel outages must not undo a successful publish.
       let communityBroadcast: ChannelDeliveryResult | undefined;
       if (notificationService) {
@@ -216,11 +297,22 @@ export function createAlertPublicationService(
         const alert =
           fullAlertResult && fullAlertResult.ok ? fullAlertResult.value : result.value;
         try {
+          const sourceChainId =
+            typeof alert.chain_id === "number" ? alert.chain_id : null;
+          const sourceTxHash =
+            typeof alert.transaction_hash === "string" ? alert.transaction_hash : null;
+          const sourceExplorerUrl =
+            sourceChainId != null && sourceTxHash
+              ? txExplorerUrl(sourceChainId, sourceTxHash)
+              : null;
+
           communityBroadcast = await notificationService.sendAlertBroadcast({
             alertId,
             title: alert.title,
             summary: alert.summary,
             eventType: alert.event_type ?? null,
+            sourceChainLabel: sourceChainId != null ? chainLabel(sourceChainId) : null,
+            sourceExplorerUrl,
             registryTxHash,
             explorerUrl,
             contentUri,
@@ -237,7 +329,7 @@ export function createAlertPublicationService(
 
       const viaKeeperHub = Boolean(keeperHubRunId || registryTxHash);
       const channels = communityBroadcast?.destinations.filter(
-        (d) => d === "discord" || d === "telegram",
+        (d) => d === "telegram",
       );
       const channelSuffix =
         channels && channels.length > 0 ? `; broadcast to ${channels.join(", ")}` : "";

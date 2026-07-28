@@ -7,6 +7,7 @@ import type {
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
 import type { ChronicleRegistryService } from "./chronicle-registry-service.ts";
+import type { RevenueFxService } from "./revenue-fx-service.ts";
 import type { TreasuryStatusService } from "./treasury-status-service.ts";
 import type { Web3Client } from "./web3-client-service.ts";
 
@@ -16,29 +17,62 @@ export interface RevenueRoutingConfig {
   /** Required payout recipient for creator recovery (EIP-55 address). */
   creatorRecoveryWallet: string;
   /**
-   * Max fraction of distributable revenue that may go to affiliates combined (0–1).
-   * Default product policy: 0.2 (20%).
+   * Max fraction of distributable revenue for creator/deployer recovery (0–1).
+   * Default product policy: 0.8 (80%). Env: CREATOR_RECOVERY_SHARE.
+   * Remainder stays in treasury (ops + affiliate withdrawal float).
    */
-  referralRewardShare: number;
+  creatorRecoveryShare: number;
   /**
-   * Absolute currency-unit cap on total affiliate rewards for a routing period.
+   * @deprecated Automatic revenue routing no longer pays affiliates.
+   * Affiliates earn via settlement credits and withdraw through the affiliate agent.
+   * Kept optional so older call sites keep compiling.
    */
-  referralRewardCap: number;
-  maxPayoutShare: number; // 0-1, max fraction of excess balance to distribute
+  referralRewardShare?: number;
+  /**
+   * @deprecated Not used by automatic routing (affiliates withdraw separately).
+   * Kept optional for older call sites.
+   */
+  referralRewardCap?: number;
+  /** 0–1, max fraction of excess balance to distribute. Env: MAX_PAYOUT_SHARE. */
+  maxPayoutShare: number;
+  /**
+   * Minimum ms between routing runs (scheduling / anti-double-run guard).
+   * Env: ROUTING_INTERVAL_MS.
+   */
   routingIntervalMs: number;
   /**
-   * Converts currency-unit payout amounts (e.g. USDC dollars) into native ETH
-   * for `sendTransfer`. Set via REVENUE_ETH_PER_CURRENCY_UNIT.
-   * Example: 1e-6 means 1_000 currency units → 0.001 ETH.
+   * Authoritative safety buffer (TREASURY_SAFETY_BUFFER). When set, overrides
+   * the latest snapshot's safety_buffer for routing eligibility (ETH gas).
    */
-  ethPerCurrencyUnit: number;
+  safetyBuffer?: number;
+  /**
+   * USDC retained as operating reserve before distribution (IDEA Loop 5 step 2).
+   * Default 0 when unset. Lower for demo so micro-payouts fire more often.
+   */
+  usdcOperatingReserve?: number;
+  /**
+   * Minimum net distributable USDC before creating payouts (default 0.01).
+   * Allows sub-dollar micro-payouts for hackathon demo cadence.
+   * Env: REVENUE_MIN_DISTRIBUTABLE_USDC.
+   */
+  minDistributableUsdc?: number;
 }
 
 export interface RevenueRoutingResult {
   routed: boolean;
   totalRevenue: number;
   creatorRecoveryAmount: number;
+  /**
+   * Always 0 — affiliates are not paid by automatic routing.
+   * They withdraw earned balances via the affiliate agent path.
+   */
   referralRewardsAmount: number;
+  /** Estimated generation + transaction costs subtracted before distribution. */
+  estimatedOperatingCosts?: number;
+  /** USDC operating reserve retained. */
+  usdcOperatingReserve?: number;
+  /** Net amount after costs/reserve used as the distribution ceiling. */
+  distributable?: number;
   payoutPeriodHash: string;
   payoutIds: string[];
   registryTxHash?: string;
@@ -47,13 +81,12 @@ export interface RevenueRoutingResult {
 
 export interface RevenueRoutingService {
   /**
-   * Execute autonomous revenue routing.
-   * 1. Aggregate revenue since last routing
-   * 2. Subtract reserve buffer
-   * 3. Attribute capped referral rewards to allowlisted affiliates (intent metadata)
-   * 4. Send remaining distributable to creator recovery
-   * 5. Execute real native transfers from the Para MPC treasury (or KeeperHub / test EOA)
-   * 6. Call recordPayout on the registry (KeeperHub / Para / test EOA) with real hashes only
+   * Execute autonomous revenue routing (IDEA Loop 5).
+   * 1. Aggregate settled x402/MPP revenue
+   * 2. Subtract estimated gas/API costs + USDC operating reserve
+   * 3. Send creator recovery share only (affiliates withdraw separately)
+   * 4. Execute real USDC transfer + record recordPayout (real hashes only)
+   * 5. Skip with a logged reason when the safety buffer / interval is not met
    */
   routeRevenue(periodHash?: string): Promise<RevenueRoutingResult>;
 }
@@ -152,14 +185,26 @@ export function attributeReferralRewards(params: {
 export function createRevenueRoutingService(
   deps: {
     treasuryRepo: TreasurySnapshotRepository;
-    paymentRepo: PaymentRecordRepository;
+    /**
+     * @deprecated Automatic routing no longer attributes affiliate referrals for transfers.
+     * Optional for older call sites.
+     */
+    paymentRepo?: PaymentRecordRepository;
     payoutRepo: PayoutRecordRepository;
     execLogRepo: ExecutionLogRepository;
-    /** Product registry of approved referral partners (website/API). */
-    affiliateRepo: AffiliateRepository;
+    /**
+     * @deprecated Automatic routing no longer loads affiliates for payouts.
+     * Affiliates withdraw via the affiliate agent. Optional for older call sites.
+     */
+    affiliateRepo?: AffiliateRepository;
     treasuryService: TreasuryStatusService;
     registryService: ChronicleRegistryService;
     web3Client?: Web3Client | null;
+    /**
+     * @deprecated Payouts are USDC 1:1 with payment accounting units — FX is unused.
+     * Kept optional so older call sites keep compiling until fully removed.
+     */
+    fxService?: RevenueFxService;
   },
   config: RevenueRoutingConfig,
 ): RevenueRoutingService {
@@ -171,29 +216,31 @@ export function createRevenueRoutingService(
     );
   }
 
-  if (!(cfg.ethPerCurrencyUnit > 0) || !Number.isFinite(cfg.ethPerCurrencyUnit)) {
+  if (
+    !(cfg.creatorRecoveryShare >= 0) ||
+    !(cfg.creatorRecoveryShare <= 1) ||
+    !Number.isFinite(cfg.creatorRecoveryShare)
+  ) {
     throw new Error(
-      "Revenue routing requires ethPerCurrencyUnit > 0 (REVENUE_ETH_PER_CURRENCY_UNIT)",
+      "Revenue routing requires creatorRecoveryShare in [0, 1] (CREATOR_RECOVERY_SHARE)",
     );
   }
 
   if (
-    !(cfg.referralRewardShare >= 0) ||
-    !(cfg.referralRewardShare <= 1) ||
-    !Number.isFinite(cfg.referralRewardShare)
+    !(cfg.maxPayoutShare >= 0) ||
+    !(cfg.maxPayoutShare <= 1) ||
+    !Number.isFinite(cfg.maxPayoutShare)
   ) {
     throw new Error(
-      "Revenue routing requires referralRewardShare in [0, 1] (REFERRAL_REWARD_SHARE)",
+      "Revenue routing requires maxPayoutShare in [0, 1] (MAX_PAYOUT_SHARE)",
     );
   }
 
-  if (!(cfg.referralRewardCap >= 0) || !Number.isFinite(cfg.referralRewardCap)) {
+  if (!(cfg.routingIntervalMs > 0) || !Number.isFinite(cfg.routingIntervalMs)) {
     throw new Error(
-      "Revenue routing requires referralRewardCap >= 0 (REFERRAL_REWARD_CAP)",
+      "Revenue routing requires routingIntervalMs > 0 (ROUTING_INTERVAL_MS)",
     );
   }
-
-  const creatorWalletNormalized = cfg.creatorRecoveryWallet.toLowerCase();
 
   return {
     async routeRevenue(periodHashParam?: string) {
@@ -222,12 +269,28 @@ export function createRevenueRoutingService(
 
       const { totalRevenue } = aggregateResult.value;
 
-      // 2. Check treasury status
+      // 2. Check treasury status + routing interval guard
       const latestSnapshot = await deps.treasuryRepo.findLatest();
       const availableBalance = latestSnapshot.ok
         ? (latestSnapshot.value?.available_balance ?? 0)
         : 0;
-      const safetyBuffer = latestSnapshot.ok ? (latestSnapshot.value?.safety_buffer ?? 1000) : 1000;
+      const safetyBuffer =
+        cfg.safetyBuffer ??
+        (latestSnapshot.ok ? (latestSnapshot.value?.safety_buffer ?? 0.01) : 0.01);
+
+      if (latestSnapshot.ok && latestSnapshot.value?.last_routed_at) {
+        const lastRoutedMs = Date.parse(latestSnapshot.value.last_routed_at);
+        if (!Number.isNaN(lastRoutedMs)) {
+          const elapsed = Date.now() - lastRoutedMs;
+          if (elapsed < cfg.routingIntervalMs) {
+            return ZERO_RESULT(
+              payoutPeriodHash,
+              totalRevenue,
+              `Routing interval not elapsed (${elapsed}ms < ${cfg.routingIntervalMs}ms ROUTING_INTERVAL_MS)`,
+            );
+          }
+        }
+      }
 
       const routeCheck = deps.treasuryService.shouldRouteRevenue(
         availableBalance,
@@ -243,66 +306,54 @@ export function createRevenueRoutingService(
         );
       }
 
-      // 3. Calculate distributable amount
-      const excessBalance = availableBalance - safetyBuffer;
-      const distributable = Math.min(excessBalance * cfg.maxPayoutShare, totalRevenue);
-
-      if (distributable <= 0) {
-        return ZERO_RESULT(
-          payoutPeriodHash,
-          totalRevenue,
-          "No distributable revenue after safety buffer",
-        );
-      }
-
-      // 4. Load approved affiliates from product registry (not env)
-      const approvedResult = await deps.affiliateRepo.listApprovedWallets();
-      if (!approvedResult.ok) {
-        return ZERO_RESULT(
-          payoutPeriodHash,
-          totalRevenue,
-          `Failed to load approved affiliates: ${approvedResult.error.message}`,
-        );
-      }
-      const approvedReferralWallets = normalizeApprovedReferralWallets(approvedResult.value);
-
-      // 5. Affiliate rewards from intent metadata (referral_address), registry-approved only
-      const referralPool = Math.min(
-        Math.floor(distributable * cfg.referralRewardShare),
-        cfg.referralRewardCap,
+      // 3. Subtract estimated gas/API costs + USDC operating reserve (IDEA Loop 5 step 2)
+      const estimatedGenerationCost =
+        latestSnapshot.ok && latestSnapshot.value
+          ? (latestSnapshot.value.estimated_generation_cost ?? 0)
+          : 0;
+      const estimatedTransactionCost =
+        latestSnapshot.ok && latestSnapshot.value
+          ? (latestSnapshot.value.estimated_transaction_cost ?? 0)
+          : 0;
+      const estimatedOperatingCosts = Math.max(
+        0,
+        estimatedGenerationCost + estimatedTransactionCost,
       );
+      const usdcOperatingReserve = Math.max(0, cfg.usdcOperatingReserve ?? 0);
 
-      let affiliateRewards = new Map<string, number>();
-      if (referralPool > 0 && approvedReferralWallets.size > 0) {
-        const referredPaymentsResult =
-          typeof deps.paymentRepo.listSettledWithReferral === "function"
-            ? await deps.paymentRepo.listSettledWithReferral(500)
-            : await deps.paymentRepo.list(500);
+      const revenueAfterCosts = Math.max(0, totalRevenue - estimatedOperatingCosts);
+      const revenueAfterReserve = Math.max(0, revenueAfterCosts - usdcOperatingReserve);
 
-        if (referredPaymentsResult.ok) {
-          const payments = referredPaymentsResult.value.filter(
-            (p) => p.status === "settled" && p.referral_address,
-          );
-          affiliateRewards = attributeReferralRewards({
-            payments,
-            approvedReferralWallets,
-            referralPool,
-          });
-        }
+      // Excess above safety buffer caps period distribution (same unit as snapshot balance).
+      // Net revenue (after costs + USDC reserve) is the other ceiling.
+      const excessBalance = Math.max(0, availableBalance - safetyBuffer);
+      // Round to USDC 6dp (not integer floor) so sub-dollar micro-payouts work for demos.
+      const rawDistributable = Math.min(
+        excessBalance * cfg.maxPayoutShare,
+        revenueAfterReserve,
+      );
+      const distributable = Math.floor(rawDistributable * 1e6) / 1e6;
+      const minDistributable = Math.max(0, cfg.minDistributableUsdc ?? 0.01);
+
+      if (distributable < minDistributable) {
+        return ZERO_RESULT(
+          payoutPeriodHash,
+          totalRevenue,
+          `No distributable revenue after costs/reserve/buffer (revenue=${totalRevenue}, costs=${estimatedOperatingCosts}, usdcReserve=${usdcOperatingReserve}, excessBalance=${excessBalance}, distributable=${distributable}, minDistributable=${minDistributable})`,
+        );
       }
 
-      // Never pay the creator wallet as an "affiliate" — that is recovery, not referral.
-      if (affiliateRewards.has(creatorWalletNormalized)) {
-        affiliateRewards.delete(creatorWalletNormalized);
-      }
+      // 4. Payouts are USDC 1:1 with settled payment currency units (x402).
+      const fxMeta = { source: "usdc_1_1" as const, ethUsdPrice: null as number | null };
 
-      const referralRewardsAmount = [...affiliateRewards.values()].reduce((a, b) => a + b, 0);
-      const creatorRecoveryAmount = Math.max(0, Math.floor(distributable - referralRewardsAmount));
+      // 5. Creator recovery only — affiliates credit on settlement and withdraw via agent.
+      const referralRewardsAmount = 0;
+      const creatorRecoveryAmount =
+        Math.floor(distributable * cfg.creatorRecoveryShare * 1e6) / 1e6;
 
       const payoutIds: string[] = [];
       const payoutAmounts = new Map<string, number>();
 
-      // 5. Creator recovery payout
       if (creatorRecoveryAmount > 0) {
         const creatorResult = await deps.payoutRepo.create({
           payout_period_hash: payoutPeriodHash,
@@ -320,32 +371,17 @@ export function createRevenueRoutingService(
         }
       }
 
-      // Affiliate payouts — approved referral partners only
-      for (const [affiliateWallet, rewardAmount] of affiliateRewards) {
-        if (rewardAmount <= 0) continue;
-        if (!EVM_ADDRESS_RE.test(affiliateWallet)) continue;
-
-        const refResult = await deps.payoutRepo.create({
-          payout_period_hash: payoutPeriodHash,
-          recipient: affiliateWallet,
-          amount: rewardAmount,
-          reason_hash: simpleHash(
-            `referral_reward:${affiliateWallet}:${payoutPeriodHash}:${rewardAmount}`,
-          ),
-          status: "pending",
-        });
-
-        if (refResult.ok) {
-          payoutIds.push(refResult.value.id);
-          payoutAmounts.set(refResult.value.id, rewardAmount);
-        }
-      }
-
       if (payoutIds.length === 0) {
-        return ZERO_RESULT(payoutPeriodHash, totalRevenue, "Failed to create any payout records");
+        return ZERO_RESULT(
+          payoutPeriodHash,
+          totalRevenue,
+          creatorRecoveryAmount <= 0
+            ? "Creator recovery amount is zero after share policy"
+            : "Failed to create any payout records",
+        );
       }
 
-      // 6. Execute real on-chain transfers via KeeperHub — no simulated hashes
+      // 8. Execute real on-chain USDC transfers — no simulated hashes
       const transferHashes = new Map<
         string,
         { txHash: string; keeperHubRunId?: string; explorerUrl?: string }
@@ -360,14 +396,19 @@ export function createRevenueRoutingService(
         }
 
         const recipient = payoutRecord.value.recipient;
-        const ethAmount = amount * cfg.ethPerCurrencyUnit;
+        // amount is already human USDC units from payment aggregation
+        const usdcAmount = amount;
 
         try {
-          const transferReceipt = await web3Client.sendTransfer(recipient, ethAmount);
+          const transferReceipt = await web3Client.sendTransfer(recipient, usdcAmount);
           transferHashes.set(payoutId, {
             txHash: transferReceipt.txHash,
-            keeperHubRunId: transferReceipt.keeperHubRunId,
-            explorerUrl: transferReceipt.explorerUrl,
+            ...(transferReceipt.keeperHubRunId
+              ? { keeperHubRunId: transferReceipt.keeperHubRunId }
+              : {}),
+            ...(transferReceipt.explorerUrl
+              ? { explorerUrl: transferReceipt.explorerUrl }
+              : {}),
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown transfer error";
@@ -381,20 +422,21 @@ export function createRevenueRoutingService(
             details: {
               payout_period_hash: payoutPeriodHash,
               recipient,
-              amount,
-              eth_amount: ethAmount,
+              amount_usdc: usdcAmount,
+              asset: "USDC",
+              fx_source: fxMeta.source,
               executedViaKeeperHub: web3Client.isKeeperHubBacked(),
             },
           });
           return ZERO_RESULT(
             payoutPeriodHash,
             totalRevenue,
-            `On-chain transfer failed: ${message}`,
+            `On-chain USDC transfer failed: ${message}`,
           );
         }
       }
 
-      // 7. Record each payout on the registry with real transfer hashes
+      // 9. Record each payout on the registry with real transfer hashes
       let finalRegistryTxHash: string | undefined;
 
       for (const payoutId of payoutIds) {
@@ -446,10 +488,16 @@ export function createRevenueRoutingService(
         }
 
         await deps.payoutRepo.markTransferred(payoutId, payoutTxHash, registryTxHash, {
-          keeperHubRunId: registryResult.keeperHubRunId,
-          explorerUrl: registryResult.explorerUrl,
-          transferKeeperHubRunId: transferMeta.keeperHubRunId,
-          transferExplorerUrl: transferMeta.explorerUrl,
+          ...(registryResult.keeperHubRunId
+            ? { keeperHubRunId: registryResult.keeperHubRunId }
+            : {}),
+          ...(registryResult.explorerUrl ? { explorerUrl: registryResult.explorerUrl } : {}),
+          ...(transferMeta.keeperHubRunId
+            ? { transferKeeperHubRunId: transferMeta.keeperHubRunId }
+            : {}),
+          ...(transferMeta.explorerUrl
+            ? { transferExplorerUrl: transferMeta.explorerUrl }
+            : {}),
         });
 
         const viaKh =
@@ -472,7 +520,15 @@ export function createRevenueRoutingService(
             explorer_url: registryResult.explorerUrl,
             transfer_keeper_hub_run_id: transferMeta.keeperHubRunId,
             transfer_explorer_url: transferMeta.explorerUrl,
-            amount,
+            amount_usdc: amount,
+            asset: "USDC",
+            fx_source: fxMeta.source,
+            policy: {
+              creatorRecoveryShare: cfg.creatorRecoveryShare,
+              maxPayoutShare: cfg.maxPayoutShare,
+              routingIntervalMs: cfg.routingIntervalMs,
+              affiliatePayouts: "manual_withdraw_only",
+            },
             recipient: payoutRecord.value.recipient,
             executedViaKeeperHub: viaKh,
           },
@@ -494,6 +550,9 @@ export function createRevenueRoutingService(
         totalRevenue,
         creatorRecoveryAmount,
         referralRewardsAmount,
+        estimatedOperatingCosts,
+        usdcOperatingReserve,
+        distributable,
         payoutPeriodHash,
         payoutIds,
         ...(finalRegistryTxHash ? { registryTxHash: finalRegistryTxHash } : {}),

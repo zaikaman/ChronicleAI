@@ -1,21 +1,11 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "./dist",
-    "baseUrl": ".",
-    "allowImportingTsExtensions": true,
-    "jsx": "react-jsx",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "noEmit": true
-  },
-  "include": [
-    "apps/**/src/**/*.ts",
-    "apps/**/src/**/*.tsx",
-    "packages/**/src/**/*.ts",
-    "packages/contracts/scripts/**/*.ts",
-    "packages/contracts/hardhat.config.ts",
-    "tests/**/*.ts",
-    "vitest.config.ts"
-  ],
-  "exclude": ["node_modules", "dist", "coverage"]
+  "files": [],
+  "references": [
+    { "path": "./packages/schemas" },
+    { "path": "./packages/config" },
+    { "path": "./packages/db" },
+    { "path": "./packages/testing" },
+    { "path": "./apps/api" },
+    { "path": "./apps/web" }
+  ]
 }

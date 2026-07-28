@@ -83,7 +83,8 @@ export function createGroqFailureEvent(
 ): EventIngestionPayload {
   return createQualifyingEvent({
     sourceEventId: `test-groq-fail-${Date.now()}`,
-    eventType: "contract_deployment",
+    eventType: "large_swap",
+    magnitude: { value: 3_500_000, unit: "USD" },
     ...overrides,
   });
 }

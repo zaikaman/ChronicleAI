@@ -1,6 +1,10 @@
-// Public agent activity data (GET /activity — no auth)
+// Public agent activity data (GET /activity) — React Query
 
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiGetJson, toErrorMessage } from "../../lib/api.ts";
+import { queryKeys } from "../../lib/query-keys.ts";
+import type { ReferralAttributionData } from "./ReferralAttributionPanel.tsx";
+import type { SubscriptionAnalyticsData } from "./SubscriptionAnalyticsPanel.tsx";
 
 export interface AgentActivityData {
   alerts: Array<{
@@ -48,12 +52,76 @@ export interface AgentActivityData {
     paymentRoute: string;
     status: string;
     settlementReference?: string;
+    amountRequested?: number;
+    amountSettled?: number;
+    currency?: string;
+    referralAddress?: string;
+    requestedAt?: string;
+    settledAt?: string;
   }>;
   treasury: {
     availableBalance: number;
     safetyBuffer: number;
+    /** Unit of availableBalance / safetyBuffer — ETH for gas health. */
+    currency: string;
     status: string;
+    /** Live (or snapshot) gas balance in ETH. */
+    ethBalance?: number;
+    /** Live USDC revenue float when on-chain read succeeds (Sepolia pocket). */
+    usdcBalance?: number;
+    walletAddress?: string;
+    baseUsdcBalance?: number;
+    sepoliaUsdcBalance?: number;
+    baseEthBalance?: number;
+    sepoliaEthBalance?: number;
+    inFlightCctpUsdc?: number;
+    deployableToDeskUsdc?: number;
+    usdcOperatingReserve?: number;
+    cctpEnabled?: boolean;
+    capitalPlaneNote?: string;
+    estimatedGenerationCost?: number | null;
+    estimatedTransactionCost?: number | null;
+    paidRequestCount?: number | null;
+    revenueTotal?: number | null;
+    capturedAt?: string;
   };
+  cctpRebalances?: Array<{
+    id: string;
+    status: string;
+    amountUsdc: number;
+    mode: string;
+    burnTxHash?: string | null;
+    mintTxHash?: string | null;
+    burnExplorerUrl?: string | null;
+    mintExplorerUrl?: string | null;
+    errorMessage?: string | null;
+    burnedAt?: string | null;
+    mintedAt?: string | null;
+    createdAt: string;
+    durationMs?: number | null;
+  }>;
+  activeSponsoredWatches?: Array<{
+    id: string;
+    targetContract: string;
+    watchSpecHash?: string;
+    startsAt: string;
+    endsAt: string;
+    status: string;
+    createTxHash?: string;
+    reportTxHash?: string;
+    createExplorerUrl?: string;
+    reportExplorerUrl?: string;
+    sourceEventRoot?: string;
+    monitoredEventCount?: number;
+    onChainWatchId?: number;
+    auditTrail?: {
+      createTxHash?: string | null;
+      reportTxHash?: string | null;
+      createExplorerUrl?: string | null;
+      reportExplorerUrl?: string | null;
+      sourceEventRoot?: string | null;
+    };
+  }>;
   executionLogs: Array<{
     id: string;
     actionType: string;
@@ -79,6 +147,8 @@ export interface AgentActivityData {
     status: string;
     createdAt: string;
   }>;
+  subscriptionAnalytics?: SubscriptionAnalyticsData;
+  referralAttribution?: ReferralAttributionData;
 }
 
 export interface AgentActivityState {
@@ -88,38 +158,19 @@ export interface AgentActivityState {
   refetch: () => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
-
 export function useAgentActivity(): AgentActivityState {
-  const [data, setData] = useState<AgentActivityData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.activity.summary,
+    queryFn: ({ signal }) => apiGetJson<AgentActivityData>("/activity", { signal }),
+    staleTime: 15_000,
+  });
 
-  const fetchActivity = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`${API_BASE}/activity`, {
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch agent activity: ${response.statusText}`);
-      }
-
-      const activityData = (await response.json()) as AgentActivityData;
-      setData(activityData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load agent activity");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchActivity();
-  }, [fetchActivity]);
-
-  return { data, isLoading, error, refetch: fetchActivity };
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading || (query.isFetching && !query.data),
+    error: query.error ? toErrorMessage(query.error, "Failed to load agent activity") : null,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 }

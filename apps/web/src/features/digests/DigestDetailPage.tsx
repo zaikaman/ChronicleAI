@@ -1,5 +1,11 @@
 import type { ReactElement } from "react";
 import { Link, useParams } from "react-router-dom";
+import { StatusBadge } from "../../components/data-primitives.tsx";
+import {
+  ContentUriFooter,
+  Page,
+  PageHeader,
+} from "../../components/page-chrome.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { DigestAnalysisSections } from "./DigestAnalysisSections.tsx";
 import { DigestHighlights } from "./DigestHighlights.tsx";
@@ -15,76 +21,90 @@ export function DigestDetailPage(): ReactElement {
   const { state, refetch } = useDigest(id);
 
   if (state.status === "loading") {
-    return <LoadingState message="Loading digest..." data-testid="digest-loading" />;
+    return (
+      <Page data-testid="digest-detail">
+        <LoadingState
+          message="Loading digest..."
+          variant="digest"
+          data-testid="digest-loading"
+        />
+      </Page>
+    );
   }
 
   if (state.status === "not-found") {
     return (
-      <div className="max-w-4xl mx-auto">
+      <Page data-testid="digest-detail">
+        <PageHeader
+          title="Daily Digest"
+          description="Latest autonomous intelligence report from on-chain market activity."
+        />
         <EmptyState
           title="No digest available"
           description="This digest has not been published yet, or the content URI is invalid."
           data-testid="digest-not-found"
         />
         <div className="mt-4 text-center">
-          <Link to="/digests/latest" className="text-accent hover:underline text-sm font-medium">
+          <Link
+            to="/digests/latest"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
             View latest digest
           </Link>
         </div>
-      </div>
+      </Page>
     );
   }
 
   if (state.status === "error") {
     return (
-      <div className="max-w-4xl mx-auto">
+      <Page data-testid="digest-detail">
+        <PageHeader
+          title="Daily Digest"
+          description="Latest autonomous intelligence report from on-chain market activity."
+        />
         <RetryState
           title="Failed to load digest"
           message={state.error}
           onRetry={refetch}
           data-testid="digest-error"
         />
-      </div>
+      </Page>
     );
   }
 
   const { data: digest } = state;
 
+  const publishedLabel = digest.publishedAt
+    ? new Date(digest.publishedAt).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : digest.reportDate;
+
+  const statusVariant =
+    digest.publicationStatus === "published"
+      ? "success"
+      : digest.publicationStatus === "partial_failure"
+        ? "warning"
+        : "error";
+
   return (
-    <div data-testid="digest-detail" className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1
-          className="text-3xl font-bold tracking-tight text-foreground mb-3"
-          style={{ fontFamily: "var(--font-space-grotesk)" }}
-        >
-          {digest.title}
-        </h1>
-        <div className="flex gap-4 items-center flex-wrap">
-          <span className="text-muted-foreground text-sm font-medium">
-            {digest.publishedAt
-              ? new Date(digest.publishedAt).toLocaleDateString("en-US", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : digest.reportDate}
-          </span>
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              digest.publicationStatus === "published"
-                ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                : digest.publicationStatus === "partial_failure"
-                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                  : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-            }`}
-          >
-            {digest.publicationStatus.replace(/_/g, " ")}
-          </span>
-        </div>
-      </div>
+    <Page data-testid="digest-detail">
+      <PageHeader
+        title={digest.title}
+        description={publishedLabel}
+        below={
+          <StatusBadge
+            label={digest.publicationStatus.replace(/_/g, " ")}
+            variant={statusVariant}
+          />
+        }
+      />
 
       <DigestHighlights
         highlights={digest.highlights}
@@ -100,16 +120,11 @@ export function DigestDetailPage(): ReactElement {
       <DigestAnalysisSections
         summary={digest.summary}
         analysis={digest.analysis}
+        sections={digest.sections}
         reportDate={digest.reportDate}
       />
 
-      {digest.contentUri && (
-        <div className="mt-8 text-center">
-          <span className="inline-flex items-center gap-2 px-4 py-2.5 bg-muted/30 border border-border text-muted-foreground rounded-xl text-sm font-mono break-all">
-            {digest.contentUri}
-          </span>
-        </div>
-      )}
-    </div>
+      {digest.contentUri ? <ContentUriFooter uri={digest.contentUri} /> : null}
+    </Page>
   );
 }

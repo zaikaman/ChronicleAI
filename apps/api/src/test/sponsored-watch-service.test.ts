@@ -10,7 +10,7 @@ describe("SponsoredWatchService", () => {
     create: vi.fn(),
     findById: vi.fn(),
     list: vi.fn(),
-    listActive: vi.fn(),
+      listActive: vi.fn(),
     listDueForCompletion: vi.fn(),
     listDueForActivation: vi.fn(),
     listInMonitoringWindow: vi.fn(),
@@ -22,6 +22,7 @@ describe("SponsoredWatchService", () => {
     append: vi.fn(),
     listByEntity: vi.fn(),
     listRecent: vi.fn(),
+    listPage: vi.fn(),
   };
 
   const mockEventRepo = {
@@ -30,7 +31,7 @@ describe("SponsoredWatchService", () => {
     findBySourceAndEventId: vi.fn(),
     updateStatus: vi.fn(),
     list: vi.fn(),
-    listInWindow: vi.fn(),
+      listInWindow: vi.fn(),
   };
 
   const mockWeb3Client: Web3Client = {
@@ -45,15 +46,17 @@ describe("SponsoredWatchService", () => {
       watchId: 42,
       txHash: "0x" + "a".repeat(64),
       keeperHubRunId: "exec_watch_create",
-      explorerUrl: "https://sepolia.basescan.org/tx/0x" + "a".repeat(64),
+      explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "a".repeat(64),
     }),
     publishSponsoredReport: vi.fn().mockResolvedValue({
       txHash: "0x" + "b".repeat(64),
       keeperHubRunId: "exec_watch_report",
-      explorerUrl: "https://sepolia.basescan.org/tx/0x" + "b".repeat(64),
+      explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "b".repeat(64),
     }),
     publishPremiumReceipt: vi.fn(),
     recordPayout: vi.fn(),
+    publishTradeTicket: vi.fn(),
+    recordCapitalMove: vi.fn(),
     sendTransfer: vi.fn(),
   };
 
@@ -70,13 +73,13 @@ describe("SponsoredWatchService", () => {
     target_contract: "0x1234567890abcdef1234567890abcdef12345678",
     watch_spec_hash: "0x" + "c".repeat(64),
     starts_at: "2026-07-06T00:00:00.000Z",
-    ends_at: "2026-07-13T00:00:00.000Z",
+    ends_at: "2026-07-28T00:00:00.000Z",
     create_tx_hash: "0x" + "a".repeat(64),
     report_tx_hash: null,
     report_content_hash: null,
     content_uri: null,
     create_keeper_hub_run_id: "exec_watch_create",
-    create_explorer_url: "https://sepolia.basescan.org/tx/0x" + "a".repeat(64),
+    create_explorer_url: "https://sepolia.etherscan.io/tx/0x" + "a".repeat(64),
     report_keeper_hub_run_id: null,
     report_explorer_url: null,
     on_chain_watch_id: 42,
@@ -100,12 +103,12 @@ describe("SponsoredWatchService", () => {
       watchId: 42,
       txHash: "0x" + "a".repeat(64),
       keeperHubRunId: "exec_watch_create",
-      explorerUrl: "https://sepolia.basescan.org/tx/0x" + "a".repeat(64),
+      explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "a".repeat(64),
     });
     (mockWeb3Client.publishSponsoredReport as ReturnType<typeof vi.fn>).mockResolvedValue({
       txHash: "0x" + "b".repeat(64),
       keeperHubRunId: "exec_watch_report",
-      explorerUrl: "https://sepolia.basescan.org/tx/0x" + "b".repeat(64),
+      explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "b".repeat(64),
     });
     mockExecLogRepo.append.mockResolvedValue({ ok: true, value: {} });
     mockEventRepo.listInWindow.mockResolvedValue({ ok: true, value: [] });
@@ -113,6 +116,10 @@ describe("SponsoredWatchService", () => {
 
   describe("createSponsoredWatch", () => {
     it("should create a watch with a real on-chain tx hash and on_chain_watch_id", async () => {
+      // Use a window that always covers "now" so initial status is monitoring.
+      const startsAt = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
+      const endsAt = new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString();
+
       mockWatchRepo.create.mockResolvedValue({
         ok: true,
         value: {
@@ -120,14 +127,16 @@ describe("SponsoredWatchService", () => {
           create_tx_hash: "0x" + "a".repeat(64),
           on_chain_watch_id: 42,
           status: "monitoring",
+          starts_at: startsAt,
+          ends_at: endsAt,
         },
       });
 
       const result = await service.createSponsoredWatch({
         targetContract: "0x1234567890abcdef1234567890abcdef12345678",
         watchSpecHash: "0x" + "c".repeat(64),
-        startsAt: "2026-07-06T00:00:00.000Z",
-        endsAt: "2026-07-13T00:00:00.000Z",
+        startsAt,
+        endsAt,
       });
 
       expect(result.create_tx_hash).toBe("0x" + "a".repeat(64));
@@ -140,6 +149,8 @@ describe("SponsoredWatchService", () => {
           create_tx_hash: "0x" + "a".repeat(64),
           on_chain_watch_id: 42,
           status: "monitoring",
+          starts_at: startsAt,
+          ends_at: endsAt,
         }),
       );
       expect(mockExecLogRepo.append).toHaveBeenCalled();
@@ -157,7 +168,7 @@ describe("SponsoredWatchService", () => {
           targetContract: "0x1234567890abcdef1234567890abcdef12345678",
           watchSpecHash: "0x" + "c".repeat(64),
           startsAt: "2026-07-06T00:00:00.000Z",
-          endsAt: "2026-07-13T00:00:00.000Z",
+          endsAt: "2026-07-28T00:00:00.000Z",
         }),
       ).rejects.toThrow("Web3 client not configured");
     });
@@ -172,7 +183,7 @@ describe("SponsoredWatchService", () => {
           targetContract: "0x1234567890abcdef1234567890abcdef12345678",
           watchSpecHash: "0x" + "c".repeat(64),
           startsAt: "2026-07-06T00:00:00.000Z",
-          endsAt: "2026-07-13T00:00:00.000Z",
+          endsAt: "2026-07-28T00:00:00.000Z",
         }),
       ).rejects.toThrow("On-chain createSponsoredWatch failed");
 
@@ -190,7 +201,7 @@ describe("SponsoredWatchService", () => {
           targetContract: "0x1234567890abcdef1234567890abcdef12345678",
           watchSpecHash: "0x" + "c".repeat(64),
           startsAt: "2026-07-06T00:00:00.000Z",
-          endsAt: "2026-07-13T00:00:00.000Z",
+          endsAt: "2026-07-28T00:00:00.000Z",
         }),
       ).rejects.toThrow("DB error");
     });
@@ -369,7 +380,7 @@ describe("SponsoredWatchService", () => {
         id: "33333333-3333-3333-3333-333333333333",
         status: "accepted",
         starts_at: "2026-07-08T00:00:00.000Z",
-        ends_at: "2026-07-15T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
       };
 
       mockWatchRepo.listDueForActivation.mockResolvedValue({
@@ -406,7 +417,7 @@ describe("SponsoredWatchService", () => {
             source: "keeperhub",
             source_event_id: "src-1",
             event_type: "large_swap",
-            chain_id: 84532,
+            chain_id: 11155111,
             protocol: "uniswap",
             asset_symbols: ["USDC", "WETH"],
             magnitude: { value: 250000, unit: "USD" },
@@ -422,7 +433,7 @@ describe("SponsoredWatchService", () => {
         ],
       });
 
-      const cycle = await service.processCampaignCycle(new Date("2026-07-10T12:00:00.000Z"));
+      const cycle = await service.processCampaignCycle(new Date("2026-07-28T12:00:00.000Z"));
 
       expect(cycle.activated).toBe(1);
       expect(cycle.monitored).toBe(1);

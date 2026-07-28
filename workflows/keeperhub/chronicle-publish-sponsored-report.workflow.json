@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-28T20:00:00.000Z",
+  "exportedAt": "2026-07-09T20:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Publish Sponsored Report (Registry Write)",
     "description": "Material write: publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri) on Chronicle Registry."
@@ -9,7 +9,10 @@
     {
       "id": "trigger-manual",
       "type": "trigger",
-      "position": { "x": 100, "y": 200 },
+      "position": {
+        "x": 100,
+        "y": 200
+      },
       "data": {
         "type": "trigger",
         "label": "Manual / API Trigger",
@@ -21,14 +24,17 @@
     {
       "id": "write-publish-report",
       "type": "action",
-      "position": { "x": 420, "y": 200 },
+      "position": {
+        "x": 420,
+        "y": 200
+      },
       "data": {
         "type": "action",
         "label": "publishSponsoredReport on Chronicle Registry",
         "config": {
           "actionType": "web3/write-contract",
-          "network": "84532",
-          "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
+          "network": "11155111",
+          "contractAddress": "0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F",
           "abiFunction": "publishSponsoredReport",
           "functionArgs": "[\"{{@trigger-manual:Trigger.watchId}}\",\"{{@trigger-manual:Trigger.reportHash}}\",\"{{@trigger-manual:Trigger.sourceEventRoot}}\",\"{{@trigger-manual:Trigger.contentUri}}\"]",
           "abi": "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reportHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventRoot\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishSponsoredReport\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
@@ -37,7 +43,11 @@
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-manual", "target": "write-publish-report" }
+    {
+      "id": "e1",
+      "source": "trigger-manual",
+      "target": "write-publish-report"
+    }
   ],
   "integrationBindings": []
 }

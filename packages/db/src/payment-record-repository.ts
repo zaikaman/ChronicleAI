@@ -4,7 +4,14 @@
 import type { PaymentStatus } from "@chronicleai/schemas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
-import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
+import {
+  buildPaginatedResult,
+  mapPostgrestError,
+  maybeRow,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationParams,
+} from "./repository-utils.ts";
 import type { PaymentRecordInsert, PaymentRecordRow, PaymentRecordUpdate } from "./types.ts";
 
 /** EVM address pattern (case-insensitive). */
@@ -57,12 +64,28 @@ export interface PaymentRecordRepository {
   markExpired(id: string): Promise<Result<PaymentRecordRow>>;
   markFailed(id: string, message?: string): Promise<Result<PaymentRecordRow>>;
   /**
+   * Persist soft-fail publishPremiumReceipt proof fields after settlement.
+   */
+  markRegistryProof(
+    id: string,
+    proof: {
+      registry_tx_hash?: string | null;
+      keeper_hub_run_id?: string | null;
+      explorer_url?: string | null;
+      content_uri?: string | null;
+    },
+  ): Promise<Result<PaymentRecordRow>>;
+  /**
    * Reap open challenges whose `expires_at` is at or before `asOf` (default: now).
    * Returns the number of rows transitioned to `expired`.
    */
   expireOpenChallenges(asOf?: string): Promise<Result<number>>;
-  listByPremiumItem(premiumItemId: string): Promise<Result<PaymentRecordRow[]>>;
+  listByPremiumItem(
+    premiumItemId: string,
+    limitParam?: number,
+  ): Promise<Result<PaymentRecordRow[]>>;
   list(limit?: number): Promise<Result<PaymentRecordRow[]>>;
+  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<PaymentRecordRow>>>;
   /**
    * Settled payments that carry an affiliate referral_address for revenue routing.
    */
@@ -157,6 +180,23 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       return update(id, { status: "failed" as PaymentStatus });
     },
 
+    async markRegistryProof(id, proof) {
+      const updates: PaymentRecordUpdate = {};
+      if (proof.registry_tx_hash !== undefined) {
+        updates.registry_tx_hash = proof.registry_tx_hash;
+      }
+      if (proof.keeper_hub_run_id !== undefined) {
+        updates.keeper_hub_run_id = proof.keeper_hub_run_id;
+      }
+      if (proof.explorer_url !== undefined) {
+        updates.explorer_url = proof.explorer_url;
+      }
+      if (proof.content_uri !== undefined) {
+        updates.content_uri = proof.content_uri;
+      }
+      return update(id, updates);
+    },
+
     async expireOpenChallenges(asOf?) {
       const cutoff = asOf ?? new Date().toISOString();
       const { data, error } = await table()
@@ -170,28 +210,48 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       return success((data ?? []).length);
     },
 
-    async listByPremiumItem(premiumItemId) {
+    async listByPremiumItem(premiumItemId, limitParam = 100) {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(premiumItemId)) {
         return success([]);
       }
+      // P2-1: bound payment history per premium item.
+      const limit = Math.min(500, Math.max(1, limitParam));
       const { data, error } = await table()
         .select("*")
         .eq("premium_item_id", premiumItemId)
-        .order("requested_at", { ascending: false });
+        .order("requested_at", { ascending: false })
+        .limit(limit);
 
       if (error) return failure(mapPostgrestError(error));
       return success(data ?? []);
     },
 
     async list(limit = 25) {
+      const safeLimit = Math.min(100, Math.max(1, limit));
       const { data, error } = await table()
         .select("*")
         .order("requested_at", { ascending: false })
-        .limit(limit);
+        .limit(safeLimit);
 
       if (error) return failure(mapPostgrestError(error));
       return success(data ?? []);
+    },
+
+    async listPage(params) {
+      const { page, limit, offset } = normalizePagination(params, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+
+      const { data, error, count } = await table()
+        .select("*", { count: "exact" })
+        .order("requested_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) return failure(mapPostgrestError(error));
+      const items = (data ?? []) as PaymentRecordRow[];
+      return success(buildPaginatedResult(items, page, limit, count ?? items.length));
     },
 
     async listSettledWithReferral(limit = 500) {

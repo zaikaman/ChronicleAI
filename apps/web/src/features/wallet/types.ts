@@ -10,7 +10,7 @@ export type WalletStatus =
   | "error";
 
 export interface WalletChainConfig {
-  /** Numeric chain id (e.g. 84532 for Base Sepolia). */
+  /** Numeric chain id (e.g. 84532 for Base Sepolia payment rail). */
   chainId: number;
   /** 0x-prefixed hex chain id for wallet_switchEthereumChain. */
   chainIdHex: string;

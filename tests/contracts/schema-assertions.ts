@@ -88,6 +88,34 @@ export function assertAgentActivityShape(activity: Record<string, unknown>): voi
     "treasury",
     "executionLogs",
   ]);
+
+  if (activity.subscriptionAnalytics != null) {
+    const analytics = activity.subscriptionAnalytics as Record<string, unknown>;
+    assertHasRequiredFields(analytics, [
+      "mrr",
+      "mrrCurrency",
+      "activeNewsletterSubscriptions",
+      "settledPayments",
+      "totalPaymentAttempts",
+      "conversionRate",
+      "routeMix",
+      "totalSettledVolume",
+      "referredSettledCount",
+      "referredSettledVolume",
+    ]);
+    expect(Array.isArray(analytics.routeMix)).toBe(true);
+  }
+
+  if (activity.referralAttribution != null) {
+    const referral = activity.referralAttribution as Record<string, unknown>;
+    assertHasRequiredFields(referral, [
+      "partners",
+      "totalReferredVolume",
+      "totalReferredPayments",
+      "currency",
+    ]);
+    expect(Array.isArray(referral.partners)).toBe(true);
+  }
 }
 
 // ── HTTP Status Assertions ─────────────────────────────

@@ -1,19 +1,52 @@
-/** Base Sepolia block explorer helpers for on-chain proof links. */
+/**
+ * Block explorer helpers.
+ *
+ * Dual-rail:
+ * - Registry / desk / trade tickets → Ethereum Sepolia (sepoliaTxUrl)
+ * - x402 payment settlements → Base Sepolia (baseSepoliaTxUrl)
+ * Monitored source events may be on other chains — use txExplorerUrl(chainId, hash).
+ */
 
+// Import chains subpath so the web bundle does not pull server-env.
+import {
+  chainLabel,
+  explorerOrigin,
+  txExplorerUrl as sharedTxExplorerUrl,
+} from "@chronicleai/config/chains";
+
+const SEPOLIA_EXPLORER = "https://sepolia.etherscan.io";
 const BASE_SEPOLIA_EXPLORER = "https://sepolia.basescan.org";
 
+/** Registry / desk proof tx URL (Ethereum Sepolia). */
+export function sepoliaTxUrl(txHash: string): string {
+  return `${SEPOLIA_EXPLORER}/tx/${txHash}`;
+}
+
+/** Registry / desk address URL (Ethereum Sepolia). */
+export function sepoliaAddressUrl(address: string): string {
+  return `${SEPOLIA_EXPLORER}/address/${address}`;
+}
+
+/** x402 payment settlement tx URL (Base Sepolia). */
 export function baseSepoliaTxUrl(txHash: string): string {
   return `${BASE_SEPOLIA_EXPLORER}/tx/${txHash}`;
 }
 
+/** x402 payment settlement address URL (Base Sepolia). */
 export function baseSepoliaAddressUrl(address: string): string {
   return `${BASE_SEPOLIA_EXPLORER}/address/${address}`;
 }
 
-/** @deprecated Use baseSepoliaTxUrl — kept for any residual imports. */
-export const sepoliaTxUrl = baseSepoliaTxUrl;
-/** @deprecated Use baseSepoliaAddressUrl — kept for any residual imports. */
-export const sepoliaAddressUrl = baseSepoliaAddressUrl;
+/** Human-readable chain name for badges (e.g. "Ethereum Mainnet", "Base Sepolia"). */
+export { chainLabel };
+
+/** Explorer origin for a known chain id, or null. */
+export { explorerOrigin };
+
+/** Source-event (or any chain) tx explorer URL; null when chain is unknown. */
+export function txExplorerUrl(chainId: number, txHash: string): string | null {
+  return sharedTxExplorerUrl(chainId, txHash);
+}
 
 export function truncateHash(value: string, head = 10, tail = 6): string {
   if (value.length <= head + tail + 3) return value;

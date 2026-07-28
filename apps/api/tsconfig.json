@@ -1,29 +1,18 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "rootDir": ".",
+    "outDir": "./dist-types",
+    "tsBuildInfoFile": "./dist-types/.tsbuildinfo",
+    "types": ["node"],
     "lib": ["ESNext"],
-    "strict": true,
-    "noImplicitAny": true,
-    "noUncheckedIndexedAccess": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "sourceMap": true,
-    "baseUrl": ".",
-    "paths": {
-      "@chronicleai/schemas": ["../../packages/schemas/src"],
-      "@chronicleai/schemas/*": ["../../packages/schemas/src/*"],
-      "@chronicleai/config": ["../../packages/config/src"],
-      "@chronicleai/config/*": ["../../packages/config/src/*"],
-      "@chronicleai/db": ["../../packages/db/src"],
-      "@chronicleai/db/*": ["../../packages/db/src/*"]
-    }
+    "exactOptionalPropertyTypes": false
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist", "dist-types"],
+  "references": [
+    { "path": "../../packages/schemas" },
+    { "path": "../../packages/config" },
+    { "path": "../../packages/db" }
+  ]
 }

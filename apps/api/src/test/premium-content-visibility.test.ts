@@ -2,11 +2,50 @@
 // Ensures premium-only content never leaks into public responses
 
 import { describe, expect, it } from "vitest";
-import { PremiumContentVisibilityService } from "../services/premium-content-visibility-service.ts";
+import { MONTHLY_NEWSLETTER_SLUG } from "@chronicleai/schemas";
+import type { PremiumIntelligenceItemRow } from "@chronicleai/db";
+import {
+  isCatalogOnlyPremiumItem,
+  PremiumContentVisibilityService,
+} from "../services/premium-content-visibility-service.ts";
 import { MOCK_PREMIUM_DEEP_DIVE, MOCK_PREMIUM_HISTORICAL_FEED } from "./fixtures/payments.ts";
+
+const MOCK_MONTHLY_NEWSLETTER: PremiumIntelligenceItemRow = {
+  ...MOCK_PREMIUM_DEEP_DIVE,
+  id: "premium-newsletter-1",
+  slug: MONTHLY_NEWSLETTER_SLUG,
+  title: "ChronicleAI Monthly Intelligence Newsletter",
+  content_type: "monthly_newsletter",
+  summary_public: "Recurring x402 monthly subscription for premium digests delivered by email.",
+  content_private: {
+    product: "monthly_newsletter",
+    agreementType: "recurring_newsletter",
+  },
+  price_amount: 2,
+  payment_routes: ["x402"],
+};
 
 describe("PremiumContentVisibilityService", () => {
   const service = new PremiumContentVisibilityService();
+
+  describe("isCatalogOnlyPremiumItem", () => {
+    it("flags monthly_newsletter content type and canonical slug", () => {
+      expect(isCatalogOnlyPremiumItem(MOCK_MONTHLY_NEWSLETTER)).toBe(true);
+      expect(
+        isCatalogOnlyPremiumItem({
+          content_type: "monthly_newsletter",
+          slug: "anything",
+        }),
+      ).toBe(true);
+      expect(
+        isCatalogOnlyPremiumItem({
+          content_type: "deep_dive",
+          slug: MONTHLY_NEWSLETTER_SLUG,
+        }),
+      ).toBe(true);
+      expect(isCatalogOnlyPremiumItem(MOCK_PREMIUM_DEEP_DIVE)).toBe(false);
+    });
+  });
 
   describe("toTeaser", () => {
     it("should strip private content from deep dive item", () => {
@@ -89,6 +128,18 @@ describe("PremiumContentVisibilityService", () => {
         );
         expect(hasLeakedPrivate).toBe(false);
       }
+    });
+
+    it("excludes monthly newsletter catalog product from public teasers", () => {
+      const teasers = service.toTeaserList([
+        MOCK_PREMIUM_DEEP_DIVE,
+        MOCK_MONTHLY_NEWSLETTER,
+        MOCK_PREMIUM_HISTORICAL_FEED,
+      ]);
+
+      expect(teasers).toHaveLength(2);
+      expect(teasers.map((t) => t.slug)).not.toContain(MONTHLY_NEWSLETTER_SLUG);
+      expect(teasers.every((t) => t.contentType !== "monthly_newsletter")).toBe(true);
     });
   });
 });

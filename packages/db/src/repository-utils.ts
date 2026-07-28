@@ -17,22 +17,64 @@ export interface PaginationParams {
   limit?: number;
 }
 
+/** Canonical page-based list envelope used by repositories and API responses. */
 export interface PaginatedResult<T> {
   items: T[];
-  total: number | null;
   page: number;
   limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
 }
 
-export function normalizePagination(params?: PaginationParams): {
+export interface NormalizePaginationOptions {
+  /** Default page size when limit is omitted (default 20). */
+  defaultLimit?: number;
+  /** Hard ceiling for limit (default 100). */
+  maxLimit?: number;
+}
+
+/**
+ * Normalize page/limit into safe integers and a zero-based offset.
+ * Defaults: page=1, limit=20, maxLimit=100.
+ */
+export function normalizePagination(
+  params?: PaginationParams,
+  options?: NormalizePaginationOptions,
+): {
   limit: number;
   offset: number;
   page: number;
 } {
-  const page = Math.max(1, params?.page ?? 1);
-  const limit = Math.min(100, Math.max(1, params?.limit ?? 50));
+  const defaultLimit = options?.defaultLimit ?? 20;
+  const maxLimit = options?.maxLimit ?? 100;
+  const page = Math.max(1, Math.floor(params?.page ?? 1));
+  const rawLimit = params?.limit ?? defaultLimit;
+  const limit = Math.min(maxLimit, Math.max(1, Math.floor(rawLimit)));
   const offset = (page - 1) * limit;
   return { limit, offset, page };
+}
+
+/** Build a full paginated envelope from a page of items + total count. */
+export function buildPaginatedResult<T>(
+  items: T[],
+  page: number,
+  limit: number,
+  total: number,
+): PaginatedResult<T> {
+  const safeTotal = Math.max(0, Math.floor(total));
+  const totalPages = safeTotal === 0 ? 0 : Math.ceil(safeTotal / limit);
+  const safePage = Math.max(1, page);
+  return {
+    items,
+    page: safePage,
+    limit,
+    total: safeTotal,
+    totalPages,
+    hasNextPage: totalPages > 0 && safePage < totalPages,
+    hasPreviousPage: safePage > 1 && totalPages > 0,
+  };
 }
 
 // ── Single Row Handling ─────────────────────────────────
@@ -62,8 +104,12 @@ export function mapPostgrestError(error: PostgrestError): PersistenceError {
     return new ValidationError(details || message);
   }
   if (error.code === "23514") {
-    // check constraint violation
-    return new ValidationError(details || message);
+    // check constraint violation — keep constraint name (message) + detail row
+    const combined =
+      details && details !== message
+        ? `${message}: ${details}`
+        : details || message;
+    return new ValidationError(combined);
   }
   if (error.code === "42P01") {
     // undefined table
@@ -74,21 +120,51 @@ export function mapPostgrestError(error: PostgrestError): PersistenceError {
 }
 
 // ── Insert / Update Helpers ─────────────────────────────
+
+/**
+ * Timestamp options for insert payloads.
+ * Set `updated_at: false` for append-only tables that only have `created_at`
+ * (PostgREST rejects unknown columns such as missing `updated_at`).
+ */
+export type InsertTimestampOptions = {
+  created_at?: string;
+  /** ISO timestamp, or `false` to omit `updated_at` entirely. */
+  updated_at?: string | false;
+};
+
+/**
+ * Options for update payloads.
+ * Set `includeUpdatedAt: false` for tables without an `updated_at` column.
+ */
+export type UpdateTimestampOptions = {
+  includeUpdatedAt?: boolean;
+};
+
 export function buildInsertPayload<T extends Record<string, unknown>>(
   data: T,
-  timestamps?: { created_at?: string; updated_at?: string },
+  timestamps?: InsertTimestampOptions,
 ): T & { created_at?: string; updated_at?: string } {
   const now = new Date().toISOString();
-  return {
+  const payload: Record<string, unknown> = {
     ...data,
     created_at: timestamps?.created_at ?? now,
-    updated_at: timestamps?.updated_at ?? now,
   };
+
+  if (timestamps?.updated_at !== false) {
+    payload.updated_at =
+      typeof timestamps?.updated_at === "string" ? timestamps.updated_at : now;
+  }
+
+  return payload as T & { created_at?: string; updated_at?: string };
 }
 
 export function buildUpdatePayload<T extends Record<string, unknown>>(
   data: T,
-): T & { updated_at: string } {
+  options?: UpdateTimestampOptions,
+): T & { updated_at?: string } {
+  if (options?.includeUpdatedAt === false) {
+    return { ...data };
+  }
   return {
     ...data,
     updated_at: new Date().toISOString(),

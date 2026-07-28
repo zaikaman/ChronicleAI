@@ -2,7 +2,14 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
-import { buildInsertPayload, mapPostgrestError } from "./repository-utils.ts";
+import {
+  buildInsertPayload,
+  buildPaginatedResult,
+  mapPostgrestError,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationParams,
+} from "./repository-utils.ts";
 import type { ExecutionLogInsert, ExecutionLogRow } from "./types.ts";
 
 export interface ExecutionLogRepository {
@@ -13,6 +20,7 @@ export interface ExecutionLogRepository {
     limitParam?: number,
   ): Promise<Result<ExecutionLogRow[]>>;
   listRecent(limitParam?: number): Promise<Result<ExecutionLogRow[]>>;
+  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<ExecutionLogRow>>>;
 }
 
 export function createExecutionLogRepository(supabase: SupabaseClient): ExecutionLogRepository {
@@ -20,7 +28,43 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
 
   return {
     async append(data) {
-      const payload = buildInsertPayload(data as unknown as Record<string, unknown>);
+      // execution_logs is append-only (created_at only; no updated_at).
+      // entity_id is UUID in Postgres — strip non-UUID values so PostgREST
+      // does not reject KeeperHub workflow/run ids or free-form keys.
+      const entityId =
+        typeof data.entity_id === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          data.entity_id.trim(),
+        )
+          ? data.entity_id.trim()
+          : null;
+      const details =
+        data.details && typeof data.details === "object" && !Array.isArray(data.details)
+          ? { ...(data.details as Record<string, unknown>) }
+          : data.details;
+      const detailsRecord =
+        details && typeof details === "object" && !Array.isArray(details)
+          ? (details as Record<string, unknown>)
+          : null;
+      if (
+        data.entity_id != null &&
+        entityId == null &&
+        detailsRecord &&
+        detailsRecord.entity_id_raw == null
+      ) {
+        detailsRecord.entity_id_raw = data.entity_id;
+      }
+
+      const payload = buildInsertPayload(
+        {
+          ...(data as unknown as Record<string, unknown>),
+          entity_id: entityId,
+          ...(detailsRecord ? { details: detailsRecord } : {}),
+        },
+        {
+          updated_at: false,
+        },
+      );
       const { data: rows, error } = await table().insert(payload).select().single();
 
       if (error) {
@@ -60,6 +104,25 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
       }
 
       return success(rows as unknown as ExecutionLogRow[]);
+    },
+
+    async listPage(params) {
+      const { page, limit, offset } = normalizePagination(params, {
+        defaultLimit: 25,
+        maxLimit: 100,
+      });
+
+      const { data: rows, error, count } = await table()
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        return failure(mapPostgrestError(error));
+      }
+
+      const items = (rows ?? []) as unknown as ExecutionLogRow[];
+      return success(buildPaginatedResult(items, page, limit, count ?? items.length));
     },
   };
 }

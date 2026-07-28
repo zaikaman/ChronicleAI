@@ -1,10 +1,11 @@
 // Public alerts routes: GET /alerts, GET /alerts/:id
-// Returns newest-first public alerts with limit validation, plus by-id lookup
+// Returns newest-first public alerts with page-based pagination, plus by-id lookup
 // for HTTPS on-chain content URIs.
 
 import type { PublicAlertRepository, PublicAlertRow } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import { notFound } from "../errors.ts";
+import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 
 function formatAlertResponse(alert: PublicAlertRow): Record<string, unknown> {
   return {
@@ -27,6 +28,7 @@ function formatAlertResponse(alert: PublicAlertRow): Record<string, unknown> {
     eventType: alert.event_type ?? undefined,
     chainId: alert.chain_id ?? undefined,
     protocol: alert.protocol ?? undefined,
+    ...(alert.flow_context ? { flowContext: alert.flow_context } : {}),
   };
 }
 
@@ -36,33 +38,37 @@ export function createAlertRoutes(alertRepo: PublicAlertRepository): RouterType 
   /**
    * GET /alerts
    *
-   * List public alerts with newest-first ordering.
+   * List public alerts with newest-first ordering (page-based).
    *
    * Query parameters:
-   *   limit - Number of alerts to return (1-100, default 50)
+   *   page  - Page number (1-based, default 1)
+   *   limit - Page size (1-100, default 20)
    *
    * Responses:
-   *   200 - { items: PublicAlert[] }
+   *   200 - { items: PublicAlert[], pagination: PaginationMeta }
    */
   router.get("/alerts", async (req, res, next) => {
     try {
-      const limitParam = req.query.limit ? Number(req.query.limit) : 50;
-
-      if (!Number.isInteger(limitParam) || limitParam < 1 || limitParam > 100) {
-        res.status(400).json({ error: "limit must be an integer between 1 and 100" });
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
         return;
       }
 
-      const result = await alertRepo.list(limitParam);
+      const result = await alertRepo.listPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
 
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });
         return;
       }
 
-      const items = result.value.map((alert: PublicAlertRow) => formatAlertResponse(alert));
-
-      res.json({ items });
+      res.json(fromDbPage(result.value, formatAlertResponse));
     } catch (error) {
       next(error);
     }

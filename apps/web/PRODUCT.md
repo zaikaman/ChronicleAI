@@ -10,11 +10,11 @@ web
 
 ## Users
 
-Public crypto readers scanning ChronicleAI for timely, verifiable on-chain market intelligence. They open alerts and digests under time pressure—checking large trades, liquidations, gas spikes, and risk signals—and need plain-language summaries they can trust without logging in. Secondary personas include protocol operators who sponsor contract watches and inspect public agent activity, and automated clients that pay for premium structured feeds; design defaults to the human reader first.
+Public crypto readers scanning ChronicleAI for timely, verifiable on-chain market intelligence. They open alerts and digests under time pressure—checking large trades, liquidations, gas spikes, and risk signals—and need plain-language summaries they can trust without logging in. Secondary personas include protocol teams who sponsor contract watches and inspect public agent activity, and automated clients that pay for premium structured feeds; design defaults to the human reader first.
 
 ## Product Purpose
 
-ChronicleAI is an autonomous on-chain newspaper and paid intelligence feed. It monitors blockchain activity through KeeperHub, publishes public alerts and daily digests with proof-of-publication receipts, monetizes deeper analysis via x402/MPP micropayments, and exposes a transparent Activity trail for treasury health and execution outcomes. Success means readers can go from “what happened on-chain?” to a sourced, verifiable summary in seconds—and can confirm the agent actually executed, not only reasoned.
+ChronicleAI is an autonomous on-chain newspaper, paid intelligence feed, and policy-gated market desk. It monitors blockchain activity through KeeperHub, publishes public alerts and daily digests with proof-of-publication receipts, monetizes deeper analysis via x402/MPP micropayments, runs a closed-loop trading book (risk defend, yield rotation, oracle–AMM) where an LLM proposes under hard policy and KeeperHub executes, and exposes a transparent Activity trail for treasury health, desk intents, trade tickets, and execution outcomes. Success means readers can go from “what happened on-chain?” to a sourced, verifiable summary in seconds—and can confirm the agent actually executed, not only reasoned.
 
 ## Brand Personality
 
@@ -33,6 +33,19 @@ ChronicleAI is an autonomous on-chain newspaper and paid intelligence feed. It m
 3. **Calm density** — Surface high signal without shouting. Prefer clear type hierarchy and progressive disclosure over badges, neon, and motion noise.
 4. **Trust through transparency** — Empty, loading, and failure states are honest and recoverable; never fake liveness or hide treasury/execution risk.
 5. **Human first, machine ready** — Optimize scanning and reading for people; keep premium and payment flows unambiguous for wallets and automated clients without compromising the reader experience.
+6. **Honest execution routing** — Desk and material KeeperHub writes on Ethereum Sepolia may use a **private submission path** (Flashbots Protect via KeeperHub private mempool routing). Product copy must say “private route” / “private submission path (Flashbots Protect · Sepolia),” never mainnet-scale sandwich protection, “MEV-proof,” or claims outside Sepolia desk scope. If private routing was only requested (or chain capability is unknown), say so—do not imply applied protection without evidence.
+
+## Private routing (product note)
+
+| Fact | Product implication |
+|------|---------------------|
+| Chain | Ethereum Sepolia (`11155111`) only for desk / registry / ops writes |
+| Mechanism | KeeperHub KEEP-137 + Flashbots Protect Sepolia RPC (configured in KeeperHub, not Chronicle) |
+| What readers see | “Private route” badge / execution path copy when routing was requested (and applied when known) |
+| What we never claim | Mainnet MEV economics, CoW venue protection, or guaranteed sandwich immunity on testnet |
+| Ops trade-off | Private route skips gas sponsorship; desk wallet needs Sepolia ETH |
+
+Operator and workflow setup: `workflows/keeperhub/README.md` (Private routing section) and `docs/private-routing-implementation-plan.md`.
 
 ## Accessibility & Inclusion
 

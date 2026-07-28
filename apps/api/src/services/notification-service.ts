@@ -1,28 +1,29 @@
 // Notification Service
-// Operator notifications (low-balance, revenue routing) plus community channel
-// fan-out (Discord + Telegram) for post-registry alert/digest broadcasts.
+// Public-facing notifications (low-balance, revenue routing) plus Telegram
+// community channel fan-out for post-registry alert/digest broadcasts.
 //
-// IDEA Loop 1 step 5: after registry write, broadcast alert to Discord and
-// Telegram with the KeeperHub execution transaction hash.
+// IDEA Loop 1 step 5: after registry write, broadcast alert to Telegram
+// with the KeeperHub execution transaction hash.
+//
+// Source-event chain (e.g. Ethereum Mainnet) may differ from the registry
+// proof chain (Ethereum Sepolia) — labels must not conflate the two.
 
+import { registryNetworkLabelFromExplorerUrl } from "@chronicleai/config";
 import type { ExecutionLogRepository } from "@chronicleai/db";
 
 export type NotificationDestinationType =
   | "log"
   | "webhook"
   | "email"
-  | "discord"
   | "telegram";
 
 export interface NotificationDestination {
   type: NotificationDestinationType;
-  /** Webhook URL (webhook/discord) or unused for telegram (uses community config). */
+  /** Webhook URL (webhook) or unused for telegram (uses community config). */
   target?: string;
 }
 
 export interface CommunityChannelConfig {
-  /** Discord Incoming Webhook URL (https://discord.com|discordapp.com/api/webhooks/...). */
-  discordWebhookUrl?: string | undefined;
   /** Telegram Bot API token from @BotFather. */
   telegramBotToken?: string | undefined;
   /** Telegram chat or channel ID that receives broadcasts. */
@@ -34,7 +35,12 @@ export interface AlertBroadcastParams {
   title: string;
   summary: string;
   eventType?: string | null | undefined;
+  /** Monitored source chain (e.g. Ethereum Mainnet) — may differ from registry chain. */
+  sourceChainLabel?: string | null | undefined;
+  /** Explorer URL for the source on-chain event (not the registry proof). */
+  sourceExplorerUrl?: string | null | undefined;
   registryTxHash?: string | undefined;
+  /** Explorer URL for the KeeperHub registry / proof-of-publication tx. */
   explorerUrl?: string | undefined;
   contentUri?: string | undefined;
   publishedAt?: string | undefined;
@@ -46,6 +52,7 @@ export interface DigestBroadcastParams {
   summary: string;
   reportDate: string;
   registryTxHash?: string | undefined;
+  /** Explorer URL for the KeeperHub registry / proof-of-publication tx. */
   explorerUrl?: string | undefined;
   contentUri?: string | undefined;
 }
@@ -79,45 +86,18 @@ export interface NotificationService {
   }): Promise<ChannelDeliveryResult>;
 
   /**
-   * Broadcast a published alert to community channels (Discord + Telegram)
-   * including the KeeperHub registry transaction hash when available.
+   * Broadcast a published alert to Telegram including the KeeperHub
+   * registry transaction hash when available.
    */
   sendAlertBroadcast(params: AlertBroadcastParams): Promise<ChannelDeliveryResult>;
 
   /**
-   * Broadcast a published digest bulletin to community channels.
+   * Broadcast a published digest bulletin to Telegram.
    */
   sendDigestBroadcast(params: DigestBroadcastParams): Promise<ChannelDeliveryResult>;
 
-  /** Which community channels are configured and ready. */
-  getConfiguredChannels(): { discord: boolean; telegram: boolean };
-}
-
-const DISCORD_WEBHOOK_HOSTS = new Set(["discord.com", "discordapp.com"]);
-
-/**
- * Validates a Discord webhook URL by hostname over https (not substring).
- * Rejects off-host URLs that carry "discord.com/api/webhooks/" in the path.
- */
-export function isValidDiscordWebhookUrl(rawUrl: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol !== "https:") {
-    return false;
-  }
-  const host = parsed.hostname.toLowerCase();
-  const hostAllowed =
-    DISCORD_WEBHOOK_HOSTS.has(host) ||
-    host.endsWith(".discord.com") ||
-    host.endsWith(".discordapp.com");
-  if (!hostAllowed) {
-    return false;
-  }
-  return parsed.pathname.startsWith("/api/webhooks/");
+  /** Whether Telegram community channel is configured and ready. */
+  getConfiguredChannels(): { telegram: boolean };
 }
 
 export function buildNotificationDestinations(
@@ -125,10 +105,6 @@ export function buildNotificationDestinations(
   extra: NotificationDestination[] = [],
 ): NotificationDestination[] {
   const destinations: NotificationDestination[] = [{ type: "log" }, ...extra];
-
-  if (community?.discordWebhookUrl && isValidDiscordWebhookUrl(community.discordWebhookUrl)) {
-    destinations.push({ type: "discord", target: community.discordWebhookUrl });
-  }
 
   if (community?.telegramBotToken && community?.telegramChatId) {
     destinations.push({ type: "telegram", target: community.telegramChatId });
@@ -151,52 +127,8 @@ export function createNotificationService(
     options.destinations ?? buildNotificationDestinations(community);
   const fetchFn = options.fetchImpl ?? fetch;
 
-  function isDiscordConfigured(): boolean {
-    return Boolean(
-      community.discordWebhookUrl && isValidDiscordWebhookUrl(community.discordWebhookUrl),
-    );
-  }
-
   function isTelegramConfigured(): boolean {
     return Boolean(community.telegramBotToken && community.telegramChatId);
-  }
-
-  async function deliverDiscord(
-    payload: Record<string, unknown>,
-  ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-    const webhookUrl = community.discordWebhookUrl;
-    if (!webhookUrl || !isValidDiscordWebhookUrl(webhookUrl)) {
-      return { ok: false, error: "Discord webhook not configured or invalid" };
-    }
-
-    try {
-      const response = await fetchFn(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // wait=true returns the message object (id) instead of 204
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { message?: string };
-        return {
-          ok: false,
-          error: body.message ?? `HTTP ${response.status}: Discord webhook failed`,
-        };
-      }
-
-      const result =
-        response.status === 204
-          ? null
-          : ((await response.json().catch(() => ({}))) as { id?: string });
-
-      return { ok: true, id: result?.id ?? "sent" };
-    } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : "Discord request failed",
-      };
-    }
   }
 
   async function deliverTelegram(
@@ -292,7 +224,6 @@ export function createNotificationService(
   return {
     getConfiguredChannels() {
       return {
-        discord: isDiscordConfigured(),
         telegram: isTelegramConfigured(),
       };
     },
@@ -337,15 +268,6 @@ export function createNotificationService(
               details: { notification_type: "low_balance_warning", error: result.error },
             });
           }
-        } else if (dest.type === "discord") {
-          const result = await deliverDiscord({
-            content: `⚠️ **ChronicleAI Treasury**\n${plainText}`,
-          });
-          if (result.ok) {
-            delivered.push("discord");
-          } else {
-            failures.push(`discord:${result.error}`);
-          }
         } else if (dest.type === "telegram") {
           const result = await deliverTelegram(
             `⚠️ <b>ChronicleAI Treasury</b>\n${escapeTelegramHtml(plainText)}`,
@@ -366,7 +288,9 @@ export function createNotificationService(
       const failures: string[] = [];
 
       const plainText =
-        `Revenue routed: $${params.creatorRecoveryAmount} creator recovery, $${params.referralRewardsAmount} referral rewards`;
+        params.referralRewardsAmount > 0
+          ? `Revenue routed: $${params.creatorRecoveryAmount} creator recovery, $${params.referralRewardsAmount} referral rewards`
+          : `Revenue routed: $${params.creatorRecoveryAmount} creator recovery (affiliates withdraw separately)`;
 
       for (const dest of destinations) {
         if (dest.type === "log") {
@@ -402,17 +326,6 @@ export function createNotificationService(
               details: { notification_type: "revenue_routing", error: result.error },
             });
           }
-        } else if (dest.type === "discord") {
-          const result = await deliverDiscord({
-            content: `💰 **ChronicleAI Revenue Routing**\n${plainText}${
-              params.registryTxHash ? `\nTx: \`${params.registryTxHash}\`` : ""
-            }`,
-          });
-          if (result.ok) {
-            delivered.push("discord");
-          } else {
-            failures.push(`discord:${result.error}`);
-          }
         } else if (dest.type === "telegram") {
           const result = await deliverTelegram(
             `💰 <b>ChronicleAI Revenue Routing</b>\n${escapeTelegramHtml(plainText)}${
@@ -436,9 +349,7 @@ export function createNotificationService(
       const delivered: string[] = [];
       const failures: string[] = [];
 
-      const hasCommunityChannels = destinations.some(
-        (d) => d.type === "discord" || d.type === "telegram",
-      );
+      const hasCommunityChannels = destinations.some((d) => d.type === "telegram");
 
       // Always log the broadcast attempt for the audit trail.
       for (const dest of destinations) {
@@ -456,7 +367,6 @@ export function createNotificationService(
               content_uri: params.contentUri ?? null,
               explorer_url: params.explorerUrl ?? null,
               channels_configured: {
-                discord: isDiscordConfigured(),
                 telegram: isTelegramConfigured(),
               },
             },
@@ -471,36 +381,6 @@ export function createNotificationService(
             delivered.push(`webhook:${dest.target}`);
           } else {
             failures.push(`webhook:${result.error}`);
-          }
-        } else if (dest.type === "discord") {
-          const result = await deliverDiscord(buildDiscordAlertPayload(params));
-          if (result.ok) {
-            delivered.push("discord");
-            await logNotification({
-              entityType: "public_alert",
-              entityId: params.alertId,
-              status: "succeeded",
-              message: `Alert broadcast to Discord (message ${result.id})`,
-              details: {
-                notification_type: "alert_broadcast",
-                channel: "discord",
-                message_id: result.id,
-                registry_tx_hash: params.registryTxHash ?? null,
-              },
-            });
-          } else {
-            failures.push(`discord:${result.error}`);
-            await logNotification({
-              entityType: "public_alert",
-              entityId: params.alertId,
-              status: "failed",
-              message: `Failed to broadcast alert to Discord: ${result.error}`,
-              details: {
-                notification_type: "alert_broadcast",
-                channel: "discord",
-                error: result.error,
-              },
-            });
           }
         } else if (dest.type === "telegram") {
           const result = await deliverTelegram(buildTelegramAlertText(params));
@@ -536,7 +416,7 @@ export function createNotificationService(
       }
 
       if (!hasCommunityChannels) {
-        // No Discord/Telegram configured — log-only is still a valid soft outcome.
+        // No Telegram configured — log-only is still a valid soft outcome.
         return { delivered: delivered.length > 0, destinations: delivered, failures };
       }
 
@@ -573,24 +453,6 @@ export function createNotificationService(
             delivered.push(`webhook:${dest.target}`);
           } else {
             failures.push(`webhook:${result.error}`);
-          }
-        } else if (dest.type === "discord") {
-          const result = await deliverDiscord(buildDiscordDigestPayload(params));
-          if (result.ok) {
-            delivered.push("discord");
-          } else {
-            failures.push(`discord:${result.error}`);
-            await logNotification({
-              entityType: "daily_digest",
-              entityId: params.digestId,
-              status: "failed",
-              message: `Failed to broadcast digest to Discord: ${result.error}`,
-              details: {
-                notification_type: "digest_broadcast",
-                channel: "discord",
-                error: result.error,
-              },
-            });
           }
         } else if (dest.type === "telegram") {
           const result = await deliverTelegram(buildTelegramDigestText(params));
@@ -632,48 +494,13 @@ function escapeTelegramHtml(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-export function buildDiscordAlertPayload(params: AlertBroadcastParams): Record<string, unknown> {
-  const fields: Array<{ name: string; value: string; inline?: boolean }> = [];
-
-  if (params.eventType) {
-    fields.push({ name: "Event", value: params.eventType, inline: true });
-  }
-  if (params.registryTxHash) {
-    fields.push({
-      name: "Registry Tx (KeeperHub)",
-      value: `\`${params.registryTxHash}\``,
-      inline: false,
-    });
-  }
-  if (params.explorerUrl) {
-    fields.push({
-      name: "Explorer",
-      value: `[View on-chain proof](${params.explorerUrl})`,
-      inline: true,
-    });
-  }
-  if (params.contentUri) {
-    fields.push({
-      name: "Article",
-      value: `[Read on ChronicleAI](${params.contentUri})`,
-      inline: true,
-    });
-  }
-
-  return {
-    username: "ChronicleAI",
-    embeds: [
-      {
-        title: truncate(`🚨 ${params.title}`, 256),
-        description: truncate(params.summary, 2000),
-        color: 0x6366f1,
-        fields,
-        footer: { text: "ChronicleAI — Autonomous On-Chain Intelligence" },
-        timestamp: params.publishedAt ?? new Date().toISOString(),
-        url: params.contentUri,
-      },
-    ],
-  };
+/** Label the registry proof link so it is not mistaken for the source-event explorer. */
+export function formatRegistryProofExplorerLine(explorerUrl: string): string {
+  const network = registryNetworkLabelFromExplorerUrl(explorerUrl);
+  const label = network
+    ? `Registry proof explorer (${network})`
+    : "Registry proof explorer";
+  return `${label}: ${escapeTelegramHtml(explorerUrl)}`;
 }
 
 export function buildTelegramAlertText(params: AlertBroadcastParams): string {
@@ -687,61 +514,28 @@ export function buildTelegramAlertText(params: AlertBroadcastParams): string {
   if (params.eventType) {
     lines.push("", `Event: <code>${escapeTelegramHtml(params.eventType)}</code>`);
   }
-  if (params.registryTxHash) {
+  if (params.sourceChainLabel) {
+    lines.push(`Source network: ${escapeTelegramHtml(params.sourceChainLabel)}`);
+  }
+  if (params.sourceExplorerUrl) {
     lines.push(
-      `On-chain proof (KeeperHub): <code>${escapeTelegramHtml(params.registryTxHash)}</code>`,
+      `Source event explorer: ${escapeTelegramHtml(params.sourceExplorerUrl)}`,
     );
   }
+  // Prefer the explorer link alone — it already embeds the registry tx hash.
+  // Fall back to the bare hash only when no explorer URL is available.
   if (params.explorerUrl) {
-    lines.push(`Explorer: ${escapeTelegramHtml(params.explorerUrl)}`);
+    lines.push(formatRegistryProofExplorerLine(params.explorerUrl));
+  } else if (params.registryTxHash) {
+    lines.push(
+      `On-chain proof (KeeperHub registry): <code>${escapeTelegramHtml(params.registryTxHash)}</code>`,
+    );
   }
   if (params.contentUri) {
     lines.push(`Read more: ${escapeTelegramHtml(params.contentUri)}`);
   }
 
   return lines.join("\n");
-}
-
-export function buildDiscordDigestPayload(params: DigestBroadcastParams): Record<string, unknown> {
-  const fields: Array<{ name: string; value: string; inline?: boolean }> = [
-    { name: "Report Date", value: params.reportDate, inline: true },
-  ];
-
-  if (params.registryTxHash) {
-    fields.push({
-      name: "Registry Tx (KeeperHub)",
-      value: `\`${params.registryTxHash}\``,
-      inline: false,
-    });
-  }
-  if (params.explorerUrl) {
-    fields.push({
-      name: "Explorer",
-      value: `[View on-chain proof](${params.explorerUrl})`,
-      inline: true,
-    });
-  }
-  if (params.contentUri) {
-    fields.push({
-      name: "Digest",
-      value: `[Read full report](${params.contentUri})`,
-      inline: true,
-    });
-  }
-
-  return {
-    username: "ChronicleAI",
-    embeds: [
-      {
-        title: truncate(`📰 ${params.title}`, 256),
-        description: truncate(params.summary, 2000),
-        color: 0x8b5cf6,
-        fields,
-        footer: { text: "ChronicleAI Daily Digest" },
-        url: params.contentUri,
-      },
-    ],
-  };
 }
 
 export function buildTelegramDigestText(params: DigestBroadcastParams): string {
@@ -753,14 +547,14 @@ export function buildTelegramDigestText(params: DigestBroadcastParams): string {
     escapeTelegramHtml(truncate(params.summary, 1500)),
   ];
 
-  if (params.registryTxHash) {
+  // Prefer the explorer link alone — it already embeds the registry tx hash.
+  if (params.explorerUrl) {
+    lines.push("", formatRegistryProofExplorerLine(params.explorerUrl));
+  } else if (params.registryTxHash) {
     lines.push(
       "",
-      `On-chain proof (KeeperHub): <code>${escapeTelegramHtml(params.registryTxHash)}</code>`,
+      `On-chain proof (KeeperHub registry): <code>${escapeTelegramHtml(params.registryTxHash)}</code>`,
     );
-  }
-  if (params.explorerUrl) {
-    lines.push(`Explorer: ${escapeTelegramHtml(params.explorerUrl)}`);
   }
   if (params.contentUri) {
     lines.push(`Read more: ${escapeTelegramHtml(params.contentUri)}`);

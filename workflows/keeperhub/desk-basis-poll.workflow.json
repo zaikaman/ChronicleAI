@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T12:00:00.000Z",
+  "workflow": {
+    "name": "Chronicle Desk — Oracle vs AMM Basis Poll (Telegram bridge)",
+    "description": "FREE TIER (~1.4k runs/mo): Schedule 30m → Chainlink ETH/USD + Uniswap QuoterV2 bidirectional WETH/USDC quotes on Sepolia → geometric mid in Chronicle ingest. Method: quoteExactInputSingle (fee 3000). AFTER IMPORT: set chatId to TELEGRAM_INGEST_CHAT_ID. Monitor org only. NOTE: Sepolia WETH/USDC pools may mark ETH far from Chainlink; ingest refuses absurd basis as data_quality (not a trade)."
+  },
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": { "x": 80, "y": 260 },
+      "data": {
+        "type": "trigger",
+        "label": "Every 30 minutes (free tier)",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *",
+          "scheduleTimezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "read-oracle",
+      "type": "action",
+      "position": { "x": 340, "y": 100 },
+      "data": {
+        "type": "action",
+        "label": "Chainlink ETH/USD Latest Round",
+        "config": {
+          "actionType": "web3/read-contract",
+          "network": "11155111",
+          "contractAddress": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+          "abiFunction": "latestRoundData",
+          "functionArgs": "[]",
+          "abi": "[{\"inputs\":[],\"name\":\"latestRoundData\",\"outputs\":[{\"internalType\":\"uint80\",\"name\":\"roundId\",\"type\":\"uint80\"},{\"internalType\":\"int256\",\"name\":\"answer\",\"type\":\"int256\"},{\"internalType\":\"uint256\",\"name\":\"startedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint80\",\"name\":\"answeredInRound\",\"type\":\"uint80\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]"
+        }
+      }
+    },
+    {
+      "id": "read-quote",
+      "type": "action",
+      "position": { "x": 340, "y": 280 },
+      "data": {
+        "type": "action",
+        "label": "Uniswap Quote 1 WETH to USDC",
+        "config": {
+          "actionType": "web3/read-contract",
+          "network": "11155111",
+          "contractAddress": "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3",
+          "abiFunction": "quoteExactInputSingle",
+          "functionArgs": "[{\"tokenIn\":\"0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14\",\"tokenOut\":\"0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238\",\"amountIn\":\"1000000000000000000\",\"fee\":3000,\"sqrtPriceLimitX96\":0}]",
+          "abi": "[{\"inputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"tokenIn\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"tokenOut\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amountIn\",\"type\":\"uint256\"},{\"internalType\":\"uint24\",\"name\":\"fee\",\"type\":\"uint24\"},{\"internalType\":\"uint160\",\"name\":\"sqrtPriceLimitX96\",\"type\":\"uint160\"}],\"internalType\":\"struct IQuoterV2.QuoteExactInputSingleParams\",\"name\":\"params\",\"type\":\"tuple\"}],\"name\":\"quoteExactInputSingle\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"amountOut\",\"type\":\"uint256\"},{\"internalType\":\"uint160\",\"name\":\"sqrtPriceX96After\",\"type\":\"uint160\"},{\"internalType\":\"uint32\",\"name\":\"initializedTicksCrossed\",\"type\":\"uint32\"},{\"internalType\":\"uint256\",\"name\":\"gasEstimate\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+        }
+      }
+    },
+    {
+      "id": "read-quote-reverse",
+      "type": "action",
+      "position": { "x": 340, "y": 460 },
+      "data": {
+        "type": "action",
+        "label": "Uniswap Quote 1000 USDC to WETH",
+        "config": {
+          "actionType": "web3/read-contract",
+          "network": "11155111",
+          "contractAddress": "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3",
+          "abiFunction": "quoteExactInputSingle",
+          "functionArgs": "[{\"tokenIn\":\"0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238\",\"tokenOut\":\"0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14\",\"amountIn\":\"1000000000\",\"fee\":3000,\"sqrtPriceLimitX96\":0}]",
+          "abi": "[{\"inputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"tokenIn\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"tokenOut\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amountIn\",\"type\":\"uint256\"},{\"internalType\":\"uint24\",\"name\":\"fee\",\"type\":\"uint24\"},{\"internalType\":\"uint160\",\"name\":\"sqrtPriceLimitX96\",\"type\":\"uint160\"}],\"internalType\":\"struct IQuoterV2.QuoteExactInputSingleParams\",\"name\":\"params\",\"type\":\"tuple\"}],\"name\":\"quoteExactInputSingle\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"amountOut\",\"type\":\"uint256\"},{\"internalType\":\"uint160\",\"name\":\"sqrtPriceX96After\",\"type\":\"uint160\"},{\"internalType\":\"uint32\",\"name\":\"initializedTicksCrossed\",\"type\":\"uint32\"},{\"internalType\":\"uint256\",\"name\":\"gasEstimate\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 680, "y": 280 },
+      "data": {
+        "type": "action",
+        "label": "Telegram → Chronicle desk_read",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"desk_read\",\"payload\":{\"signalType\":\"oracle_basis\",\"chainId\":11155111,\"pollKind\":\"desk-basis-poll\",\"features\":{\"oracleAnswer\":\"{{@read-oracle:Chainlink ETH/USD Latest Round.result.answer}}\",\"oracleUpdatedAt\":\"{{@read-oracle:Chainlink ETH/USD Latest Round.result.updatedAt}}\",\"oracleDecimals\":8,\"ammAmountOut\":\"{{@read-quote:Uniswap Quote 1 WETH to USDC.result.amountOut}}\",\"ammAmountIn\":\"1000000000000000000\",\"ammTokenInDecimals\":18,\"ammTokenOutDecimals\":6,\"ammTokenIn\":\"WETH\",\"ammTokenOut\":\"USDC\",\"ammQuoteDirection\":\"weth_to_stable\",\"ammFee\":3000,\"ammQuoteMethod\":\"quoteExactInputSingle\",\"ammReverseAmountIn\":\"1000000000\",\"ammReverseAmountOut\":\"{{@read-quote-reverse:Uniswap Quote 1000 USDC to WETH.result.amountOut}}\",\"ammReverseTokenInDecimals\":6,\"ammReverseTokenOutDecimals\":18,\"ammReverseTokenIn\":\"USDC\",\"ammReverseTokenOut\":\"WETH\",\"pair\":\"ETH/USD\"},\"sources\":{\"pollKind\":\"desk-basis-poll\",\"contracts\":[\"0x694AA1769357215DE4FAC081bf1f309aDC325306\",\"0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3\",\"0x6Ce0896eAE6D4BD668fDe41BB784548fb8F59b50\"],\"readResults\":{\"oracleAnswer\":\"{{@read-oracle:Chainlink ETH/USD Latest Round.result.answer}}\",\"oracleUpdatedAt\":\"{{@read-oracle:Chainlink ETH/USD Latest Round.result.updatedAt}}\",\"ammAmountOut\":\"{{@read-quote:Uniswap Quote 1 WETH to USDC.result.amountOut}}\",\"ammReverseAmountOut\":\"{{@read-quote-reverse:Uniswap Quote 1000 USDC to WETH.result.amountOut}}\",\"ammFee\":3000,\"ammPool\":\"0x6Ce0896eAE6D4BD668fDe41BB784548fb8F59b50\",\"quoteMethod\":\"quoteExactInputSingle_bidirectional_geometric_mid\"}}}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-schedule", "target": "read-oracle" },
+    { "id": "e2", "source": "read-oracle", "target": "read-quote" },
+    { "id": "e3", "source": "read-quote", "target": "read-quote-reverse" },
+    { "id": "e4", "source": "read-quote-reverse", "target": "post-chronicle-telegram" }
+  ],
+  "integrationBindings": []
+}

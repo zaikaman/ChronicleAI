@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI USDC Mint/Burn Monitor (Telegram bridge)",
+    "description": "NEWSPAPER ONLY. FREE TIER: Schedule hourly → Query Circle USDC Mint and Burn on mainnet → size filter (~$1M+) → Telegram CHRONICLE_INGEST. Chronicle classifies as stablecoin_mint / stablecoin_burn. Prefer vanity account."
+  },
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": { "x": 80, "y": 220 },
+      "data": {
+        "type": "trigger",
+        "label": "Every hour (free tier)",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "15 * * * *",
+          "scheduleTimezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "query-mints",
+      "type": "action",
+      "position": { "x": 320, "y": 120 },
+      "data": {
+        "type": "action",
+        "label": "Query USDC Mints",
+        "config": {
+          "actionType": "web3/query-events",
+          "network": "1",
+          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "eventName": "Mint",
+          "blockCount": "320",
+          "abi": "[{\"type\":\"event\",\"name\":\"Mint\",\"inputs\":[{\"indexed\":true,\"name\":\"minter\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount\",\"type\":\"uint256\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "for-each-mint",
+      "type": "action",
+      "position": { "x": 560, "y": 120 },
+      "data": {
+        "type": "action",
+        "label": "For Each Mint",
+        "config": {
+          "actionType": "For Each",
+          "arraySource": "{{@query-mints:Query USDC Mints.events}}",
+          "maxIterations": "50"
+        }
+      }
+    },
+    {
+      "id": "condition-mint-large",
+      "type": "action",
+      "position": { "x": 800, "y": 120 },
+      "data": {
+        "type": "action",
+        "label": "Mint ≥ $1M USDC",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@for-each-mint:For Each Mint.currentItem.args.amount}} >= 1000000000000"
+        }
+      }
+    },
+    {
+      "id": "post-mint-telegram",
+      "type": "action",
+      "position": { "x": 1040, "y": 80 },
+      "data": {
+        "type": "action",
+        "label": "Telegram mint → Chronicle",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "-1004373075093",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Mint\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-mint:For Each Mint.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-mint:For Each Mint.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-mint:For Each Mint.currentItem.logIndex}}\",\"args\":{\"minter\":\"{{@for-each-mint:For Each Mint.currentItem.args.minter}}\",\"to\":\"{{@for-each-mint:For Each Mint.currentItem.args.to}}\",\"amount\":\"{{@for-each-mint:For Each Mint.currentItem.args.amount}}\"},\"protocol\":\"Circle\"}}",
+          "parseMode": "none"
+        }
+      }
+    },
+    {
+      "id": "query-burns",
+      "type": "action",
+      "position": { "x": 320, "y": 360 },
+      "data": {
+        "type": "action",
+        "label": "Query USDC Burns",
+        "config": {
+          "actionType": "web3/query-events",
+          "network": "1",
+          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "eventName": "Burn",
+          "blockCount": "320",
+          "abi": "[{\"type\":\"event\",\"name\":\"Burn\",\"inputs\":[{\"indexed\":true,\"name\":\"burner\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount\",\"type\":\"uint256\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "for-each-burn",
+      "type": "action",
+      "position": { "x": 560, "y": 360 },
+      "data": {
+        "type": "action",
+        "label": "For Each Burn",
+        "config": {
+          "actionType": "For Each",
+          "arraySource": "{{@query-burns:Query USDC Burns.events}}",
+          "maxIterations": "50"
+        }
+      }
+    },
+    {
+      "id": "condition-burn-large",
+      "type": "action",
+      "position": { "x": 800, "y": 360 },
+      "data": {
+        "type": "action",
+        "label": "Burn ≥ $1M USDC",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@for-each-burn:For Each Burn.currentItem.args.amount}} >= 1000000000000"
+        }
+      }
+    },
+    {
+      "id": "post-burn-telegram",
+      "type": "action",
+      "position": { "x": 1040, "y": 320 },
+      "data": {
+        "type": "action",
+        "label": "Telegram burn → Chronicle",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "-1004373075093",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Burn\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-burn:For Each Burn.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-burn:For Each Burn.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-burn:For Each Burn.currentItem.logIndex}}\",\"args\":{\"burner\":\"{{@for-each-burn:For Each Burn.currentItem.args.burner}}\",\"amount\":\"{{@for-each-burn:For Each Burn.currentItem.args.amount}}\"},\"protocol\":\"Circle\"}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-schedule", "target": "query-mints" },
+    { "id": "e2", "source": "query-mints", "target": "for-each-mint" },
+    {
+      "id": "e3",
+      "source": "for-each-mint",
+      "target": "condition-mint-large",
+      "sourceHandle": "loop",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "condition-mint-large",
+      "target": "post-mint-telegram",
+      "sourceHandle": "true",
+      "type": "animated"
+    },
+    { "id": "e5", "source": "trigger-schedule", "target": "query-burns" },
+    { "id": "e6", "source": "query-burns", "target": "for-each-burn" },
+    {
+      "id": "e7",
+      "source": "for-each-burn",
+      "target": "condition-burn-large",
+      "sourceHandle": "loop",
+      "type": "animated"
+    },
+    {
+      "id": "e8",
+      "source": "condition-burn-large",
+      "target": "post-burn-telegram",
+      "sourceHandle": "true",
+      "type": "animated"
+    }
+  ],
+  "integrationBindings": []
+}

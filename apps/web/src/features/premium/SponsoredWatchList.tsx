@@ -2,7 +2,11 @@
 // Displays active sponsored campaigns and their transaction hashes
 
 import type React from "react";
+import { Link } from "react-router-dom";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
+import { EmptyState } from "../../components/state-views.tsx";
+import { Surface } from "../../components/page-chrome.tsx";
+import { SkeletonPanel } from "../../components/ui/skeleton.tsx";
 
 export interface SponsoredWatchModel {
   id: string;
@@ -47,153 +51,95 @@ export function SponsoredWatchList({
 }: SponsoredWatchListProps): React.ReactElement {
   if (isLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "2rem" }}>
-        <p style={{ color: "var(--fg-tertiary)", fontSize: "var(--font-size-sm)" }}>
-          Loading sponsored watches...
-        </p>
-      </div>
+      <SkeletonPanel rows={3} data-testid={`${dataTestId}-loading`} />
     );
   }
 
   if (watches.length === 0) {
     return (
-      <div
-        style={{
-          padding: "1.5rem",
-          textAlign: "center",
-          background: "var(--bg-glass)",
-          borderRadius: "8px",
-          border: "1px solid var(--border-primary)",
-        }}
-      >
-        <p style={{ color: "var(--fg-tertiary)", margin: 0, fontSize: "var(--font-size-sm)" }}>
-          No active sponsored monitoring campaigns.
-        </p>
-      </div>
+      <EmptyState
+        title="No active campaigns"
+        description="No active sponsored monitoring campaigns."
+        data-testid={`${dataTestId}-empty`}
+      />
     );
   }
 
   return (
-    <div data-testid={dataTestId}>
-      <h3
-        style={{
-          fontSize: "var(--font-size-md)",
-          fontWeight: 600,
-          color: "var(--fg-primary)",
-          marginBottom: "1rem",
-        }}
-      >
-        Sponsored Campaigns
-      </h3>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        {watches.map((watch) => (
-          <div
-            key={watch.id}
-            className="card"
-            style={{ padding: "1rem" }}
-            data-testid={`watch-${watch.id}`}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                marginBottom: "0.75rem",
-                gap: "0.75rem",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: "var(--font-size-xs)",
-                    fontFamily: "var(--font-mono)",
-                    color: "var(--fg-secondary)",
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  {watch.targetContract.slice(0, 10)}...{watch.targetContract.slice(-6)}
-                </div>
-              </div>
-              <StatusBadge label={watch.status} variant={getWatchStatusVariant(watch.status)} />
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "1rem",
-                fontSize: "var(--font-size-xs)",
-                color: "var(--fg-tertiary)",
-              }}
-            >
-              <div>
-                <span>Start: </span>
-                <TimestampDisplay timestamp={watch.startsAt} />
-              </div>
-              <div>
-                <span>End: </span>
-                <TimestampDisplay timestamp={watch.endsAt} />
-              </div>
-            </div>
-
-            {(watch.createTxHash || watch.reportTxHash) && (
-              <div
-                style={{
-                  marginTop: "0.5rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.25rem",
-                  fontSize: "var(--font-size-xs)",
-                  color: "var(--fg-tertiary)",
-                  fontFamily: "var(--font-mono)",
-                }}
-                data-testid={`watch-audit-${watch.id}`}
+    <div data-testid={dataTestId} className="flex flex-col gap-3">
+      {watches.map((watch) => (
+        <Surface key={watch.id} className="p-4" data-testid={`watch-${watch.id}`}>
+          <div className="flex justify-between items-start mb-3 gap-3">
+            <div className="min-w-0">
+              <Link
+                to={`/premium/watches/${watch.id}`}
+                className="font-mono text-xs text-foreground hover:text-muted-foreground transition-colors break-all"
               >
-                {watch.createTxHash && (
-                  <div>
-                    Create Tx:{" "}
-                    {watch.createExplorerUrl ? (
-                      <a
-                        href={watch.createExplorerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "var(--accent)" }}
-                      >
-                        {watch.createTxHash.slice(0, 16)}...
-                      </a>
-                    ) : (
-                      `${watch.createTxHash.slice(0, 16)}...`
-                    )}
-                  </div>
-                )}
-                {watch.reportTxHash ? (
-                  <div>
-                    Report Tx:{" "}
-                    {watch.reportExplorerUrl ? (
-                      <a
-                        href={watch.reportExplorerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "var(--accent)" }}
-                      >
-                        {watch.reportTxHash.slice(0, 16)}...
-                      </a>
-                    ) : (
-                      `${watch.reportTxHash.slice(0, 16)}...`
-                    )}
-                  </div>
-                ) : (
-                  <div>Report Tx: pending end of campaign</div>
-                )}
-                {watch.sourceEventRoot && (
-                  <div>Source root: {watch.sourceEventRoot.slice(0, 16)}...</div>
-                )}
-              </div>
-            )}
+                {watch.targetContract.slice(0, 10)}…{watch.targetContract.slice(-6)}
+              </Link>
+            </div>
+            <StatusBadge label={watch.status} variant={getWatchStatusVariant(watch.status)} />
           </div>
-        ))}
-      </div>
+
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mb-2">
+            <div>
+              <span>Start: </span>
+              <TimestampDisplay timestamp={watch.startsAt} />
+            </div>
+            <div>
+              <span>End: </span>
+              <TimestampDisplay timestamp={watch.endsAt} />
+            </div>
+          </div>
+
+          {(watch.createTxHash || watch.reportTxHash) && (
+            <div
+              className="mt-2 flex flex-col gap-1 text-xs font-mono text-muted-foreground"
+              data-testid={`watch-audit-${watch.id}`}
+            >
+              {watch.createTxHash && (
+                <div>
+                  Create Tx:{" "}
+                  {watch.createExplorerUrl ? (
+                    <a
+                      href={watch.createExplorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-foreground transition-colors"
+                    >
+                      {watch.createTxHash.slice(0, 16)}…
+                    </a>
+                  ) : (
+                    `${watch.createTxHash.slice(0, 16)}…`
+                  )}
+                </div>
+              )}
+              {watch.reportTxHash ? (
+                <div>
+                  Report Tx:{" "}
+                  {watch.reportExplorerUrl ? (
+                    <a
+                      href={watch.reportExplorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-foreground transition-colors"
+                    >
+                      {watch.reportTxHash.slice(0, 16)}…
+                    </a>
+                  ) : (
+                    `${watch.reportTxHash.slice(0, 16)}…`
+                  )}
+                </div>
+              ) : (
+                <div>Report Tx: pending end of campaign</div>
+              )}
+              {watch.sourceEventRoot && (
+                <div>Source root: {watch.sourceEventRoot.slice(0, 16)}…</div>
+              )}
+            </div>
+          )}
+        </Surface>
+      ))}
     </div>
   );
 }

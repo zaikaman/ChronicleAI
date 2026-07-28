@@ -18,8 +18,8 @@ export function createKeeperhubTreasuryRoutes(handler: TreasuryCheckHandler): Ro
    * Request body:
    *   capturedAt: ISO string - When the balance was measured
    *   availableBalance: number - Current available operating funds
-   *   currency: string - Treasury currency (e.g., "USDC")
-   *   safetyBuffer: number - Minimum desired balance
+   *   currency: string - Treasury currency (e.g., "ETH", "USDC")
+   *   safetyBuffer?: number - Optional; server uses TREASURY_SAFETY_BUFFER (default 0.01)
    *
    * Responses:
    *   201 - Treasury snapshot recorded
@@ -45,7 +45,11 @@ export function createKeeperhubTreasuryRoutes(handler: TreasuryCheckHandler): Ro
         capturedAt: String(body.capturedAt),
         availableBalance: Number(body.availableBalance),
         currency: String(body.currency),
-        safetyBuffer: Number(body.safetyBuffer),
+        // Handler replaces this with TREASURY_SAFETY_BUFFER when configured.
+        safetyBuffer:
+          body.safetyBuffer === undefined || body.safetyBuffer === null
+            ? 0.01
+            : Number(body.safetyBuffer),
       };
 
       const result = await handler.check(payload);
@@ -86,8 +90,12 @@ function validateTreasuryCheckPayload(payload: Record<string, unknown>): string[
     errors.push("currency is required and must be a string");
   }
 
-  if (payload.safetyBuffer === undefined || typeof payload.safetyBuffer !== "number") {
-    errors.push("safetyBuffer is required and must be a number");
+  if (
+    payload.safetyBuffer !== undefined &&
+    payload.safetyBuffer !== null &&
+    typeof payload.safetyBuffer !== "number"
+  ) {
+    errors.push("safetyBuffer must be a number when provided");
   }
 
   return errors;

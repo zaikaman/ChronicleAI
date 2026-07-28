@@ -1,12 +1,15 @@
 // Contract tests for POST /payments/challenges
 // Validates payment challenge creation for x402 and MPP routes
+// Hits a live API process and can insert payment_records —
+// skipped unless ALLOW_LIVE_API_TESTS=1
 
 import { describe, expect, it } from "vitest";
+import { LIVE_API_BASE, LIVE_API_TESTS_ENABLED } from "./live-api.ts";
 
-const API_BASE = process.env.API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = LIVE_API_BASE;
 const KNOWN_PREMIUM_ITEM_ID = "premium-deep-dive-001";
 
-describe("POST /payments/challenges", () => {
+describe.skipIf(!LIVE_API_TESTS_ENABLED)("POST /payments/challenges", () => {
   it("should return 400 when premiumItemId is missing", async () => {
     const response = await fetch(`${API_BASE}/payments/challenges`, {
       method: "POST",

@@ -1,10 +1,12 @@
 // KeeperHub digest run route: POST /keeperhub/digests/run
 // Accepts signed digest trigger payloads from KeeperHub scheduled workflows
+// (or empty body / { window: "previous_utc_day" } for schedule-friendly triggers).
 
 import type { DigestRunPayload } from "@chronicleai/schemas";
 import { Router, type Router as RouterType } from "express";
 import { badRequest } from "../errors.ts";
 import type { DigestRunHandler } from "../keeperhub/digest-run-handler.ts";
+import { resolveDigestRunWindow } from "../services/digest-schedule-service.ts";
 
 export function createKeeperhubDigestRoutes(handler: DigestRunHandler): RouterType {
   const router: RouterType = Router();
@@ -12,13 +14,13 @@ export function createKeeperhubDigestRoutes(handler: DigestRunHandler): RouterTy
   /**
    * POST /keeperhub/digests/run
    *
-   * Trigger a daily digest generation for a specific reporting window.
+   * Trigger a daily digest generation for a reporting window.
    * The request must include a valid X-ChronicleAI-Signature header.
    * Idempotent: if a digest already exists for the window, returns 202 (duplicate).
    *
-   * Request body:
-   *   periodStart: ISO string - Start of the reporting window
-   *   periodEnd: ISO string - End of the reporting window
+   * Request body (either form):
+   *   { periodStart, periodEnd } — explicit ISO bounds
+   *   { window: "previous_utc_day" } or {} — previous completed UTC day
    *
    * Responses:
    *   201 - Digest generated and published
@@ -28,22 +30,22 @@ export function createKeeperhubDigestRoutes(handler: DigestRunHandler): RouterTy
    */
   router.post("/keeperhub/digests/run", async (req, res, next) => {
     try {
-      const body = req.body as Record<string, unknown>;
+      const body = (req.body ?? {}) as Record<string, unknown>;
 
-      if (!body || typeof body !== "object") {
+      if (typeof body !== "object" || Array.isArray(body)) {
         next(badRequest("Request body must be a JSON object"));
         return;
       }
 
-      const errors = validateDigestRunPayload(body);
-      if (errors.length > 0) {
-        next(badRequest(`Invalid digest run payload: ${errors.join("; ")}`));
+      const resolved = resolveDigestRunWindow(body);
+      if (!resolved.ok) {
+        next(badRequest(`Invalid digest run payload: ${resolved.error}`));
         return;
       }
 
       const payload: DigestRunPayload = {
-        periodStart: String(body.periodStart),
-        periodEnd: String(body.periodEnd),
+        periodStart: resolved.window.periodStart,
+        periodEnd: resolved.window.periodEnd,
       };
 
       const result = await handler.runDigest(payload);
@@ -56,6 +58,8 @@ export function createKeeperhubDigestRoutes(handler: DigestRunHandler): RouterTy
       res.status(result.statusCode).json({
         accepted: result.accepted,
         message: result.message,
+        window: resolved.window,
+        windowSource: resolved.source,
         ...(result.digestId ? { digestId: result.digestId } : {}),
       });
     } catch (error) {
@@ -64,18 +68,4 @@ export function createKeeperhubDigestRoutes(handler: DigestRunHandler): RouterTy
   });
 
   return router;
-}
-
-function validateDigestRunPayload(payload: Record<string, unknown>): string[] {
-  const errors: string[] = [];
-
-  if (!payload.periodStart || typeof payload.periodStart !== "string") {
-    errors.push("periodStart is required and must be an ISO date string");
-  }
-
-  if (!payload.periodEnd || typeof payload.periodEnd !== "string") {
-    errors.push("periodEnd is required and must be an ISO date string");
-  }
-
-  return errors;
 }

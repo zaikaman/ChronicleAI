@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "Chronicle Desk — Oracle–AMM Dislocation",
+    "description": "Single capped Uniswap swap-exact-input that fades Chainlink vs AMM basis on Ethereum Sepolia. No leverage. Max notional from DESK_MAX_TRADE_USDC. Trigger provides tokenIn/tokenOut/amountIn/amountOutMinimum/deskAddress. Signer = KH desk wallet."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": { "triggerType": "Manual" }
+      }
+    },
+    {
+      "id": "approve-token-in",
+      "type": "action",
+      "position": { "x": 380, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "Approve Token In for Uniswap",
+        "config": {
+          "actionType": "web3/approve-token",
+          "network": "11155111",
+          "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"{{@trigger-manual:Trigger.tokenIn}}\",\"symbol\":\"TOKEN_IN\"}}",
+          "spenderAddress": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E",
+          "amount": "max"
+        }
+      }
+    },
+    {
+      "id": "swap-exact-input",
+      "type": "action",
+      "position": { "x": 680, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "Uniswap Swap Exact Input",
+        "config": {
+          "actionType": "uniswap/swap-exact-input",
+          "network": "11155111",
+          "tokenIn": "{{@trigger-manual:Trigger.tokenIn}}",
+          "tokenOut": "{{@trigger-manual:Trigger.tokenOut}}",
+          "fee": "{{@trigger-manual:Trigger.fee}}",
+          "recipient": "{{@trigger-manual:Trigger.deskAddress}}",
+          "amountIn": "{{@trigger-manual:Trigger.amountIn}}",
+          "amountOutMinimum": "{{@trigger-manual:Trigger.amountOutMinimum}}",
+          "sqrtPriceLimitX96": "0"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-manual", "target": "approve-token-in" },
+    { "id": "e2", "source": "approve-token-in", "target": "swap-exact-input" }
+  ],
+  "integrationBindings": []
+}

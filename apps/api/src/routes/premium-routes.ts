@@ -233,11 +233,14 @@ export function createPremiumRoutes(params: {
           const item = error.item;
           const teaser = visibilityService.toTeaser(item);
 
+          // Advertise dual-rail support so agents do not assume x402-only.
           res.status(402).json({
             error: "Payment required",
             item: teaser,
             paymentRoute: error.paymentRoute,
+            supportedPaymentRoutes: item.payment_routes,
             premiumItemId: item.id,
+            agentPaymentsDiscovery: "/payments",
           });
           return;
         }

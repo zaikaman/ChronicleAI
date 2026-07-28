@@ -1,7 +1,14 @@
 import { loadServerEnv } from "@chronicleai/config";
-import { ParaRestClient, ParaRestError, createParaRestEthersSigner } from "@getpara/rest-sdk";
-import { createParaRestEthersSigner as createSigner } from "@getpara/rest-sdk/ethers";
-import { ethers } from "ethers";
+import { ParaRestClient, ParaRestError } from "@getpara/rest-sdk";
+import { createParaRestViemAccount } from "@getpara/rest-sdk/viem";
+import {
+  type Address,
+  createPublicClient,
+  createWalletClient,
+  http,
+  parseEther,
+} from "viem";
+import { baseSepolia } from "viem/chains";
 
 async function main(): Promise<void> {
   const env = loadServerEnv();
@@ -14,9 +21,13 @@ async function main(): Promise<void> {
     env: env.paraEnvironment,
   });
   const walletId = env.paraWalletId;
-  const address = "0xf7aede9453bfb56edbf14b2d05543676d3fcaf11";
+  const address = "0xf7aede9453bfb56edbf14b2d05543676d3fcaf11" as Address;
   const chainId = 84_532;
-  const provider = new ethers.JsonRpcProvider(env.rpcUrl);
+  const chain = baseSepolia;
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(env.rpcUrl),
+  });
 
   // 1. signMessage (proves MPC signing works at all)
   try {
@@ -34,7 +45,7 @@ async function main(): Promise<void> {
   try {
     const fee = await client.estimateFee(walletId, {
       to: address,
-      value: ethers.parseEther("0.000001").toString(),
+      value: parseEther("0.000001").toString(),
       chainId,
     });
     console.log("estimateFee OK", JSON.stringify(fee));
@@ -47,12 +58,10 @@ async function main(): Promise<void> {
   }
 
   // 3. signTransaction via REST with full tx fields from provider
-  const nonce = await provider.getTransactionCount(address);
-  const feeData = await provider.getFeeData();
-  const network = await provider.getNetwork();
-  console.log("rpc network chainId=", network.chainId.toString(), "nonce=", nonce);
+  const nonce = await publicClient.getTransactionCount({ address });
+  const feeData = await publicClient.estimateFeesPerGas();
+  console.log("rpc network chainId=", chain.id, "nonce=", nonce);
   console.log("feeData", {
-    gasPrice: feeData.gasPrice?.toString(),
     maxFeePerGas: feeData.maxFeePerGas?.toString(),
     maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
   });
@@ -61,7 +70,7 @@ async function main(): Promise<void> {
     to: address,
     chainId,
     type: 2 as const,
-    value: ethers.parseEther("0.000001").toString(),
+    value: parseEther("0.000001").toString(),
     data: "0x",
     nonce,
     gasLimit: "21000",
@@ -99,27 +108,33 @@ async function main(): Promise<void> {
     }
   }
 
-  // 4. ethers adapter sendTransaction
+  // 4. viem account sendTransaction
   try {
-    const signer = createSigner({
+    const account = createParaRestViemAccount({
       client,
       walletId,
       address,
-      provider,
     });
-    console.log("ethers signer address", await signer.getAddress());
-    const tx = await signer.sendTransaction({
+    const walletClient = createWalletClient({
+      account,
+      chain,
+      transport: http(env.rpcUrl),
+    });
+    console.log("viem account address", account.address);
+    const hash = await walletClient.sendTransaction({
       to: address,
-      value: ethers.parseEther("0.000001"),
+      value: parseEther("0.000001"),
+      account,
+      chain,
     });
-    console.log("ethers sendTransaction OK hash=", tx.hash);
-    const receipt = await tx.wait();
-    console.log("ethers mined status=", receipt?.status, "hash=", receipt?.hash);
+    console.log("viem sendTransaction OK hash=", hash);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    console.log("viem mined status=", receipt.status, "hash=", receipt.transactionHash);
   } catch (error) {
     if (error instanceof ParaRestError) {
-      console.log("ethers send ERR", error.status, JSON.stringify(error.body));
+      console.log("viem send ERR", error.status, JSON.stringify(error.body));
     } else {
-      console.log("ethers send ERR", error instanceof Error ? error.message : error);
+      console.log("viem send ERR", error instanceof Error ? error.message : error);
       if (error instanceof Error && error.stack) console.log(error.stack.split("\n").slice(0, 8).join("\n"));
     }
   }

@@ -46,12 +46,16 @@ export interface SubscribeResult {
   created: boolean;
 }
 
+/** Hard cap for digest/alert fan-out lists (P2-1). */
+export const EMAIL_LIST_CAP = 5_000;
+
 export interface EmailSubscriberRepository {
   subscribe(input: SubscribeInput): Promise<Result<SubscribeResult>>;
   unsubscribeByEmail(email: string): Promise<Result<EmailSubscriberRow | null>>;
   unsubscribeByToken(token: string): Promise<Result<EmailSubscriberRow | null>>;
   findByEmail(email: string): Promise<Result<EmailSubscriberRow | null>>;
-  listActiveEmails(channel: EmailChannel): Promise<Result<string[]>>;
+  /** Active recipient emails for a channel (bounded). */
+  listActiveEmails(channel: EmailChannel, limitParam?: number): Promise<Result<string[]>>;
 }
 
 export function createEmailSubscriberRepository(
@@ -231,15 +235,18 @@ export function createEmailSubscriberRepository(
 
     findByEmail,
 
-    async listActiveEmails(channel) {
+    async listActiveEmails(channel, limitParam = EMAIL_LIST_CAP) {
       const preferenceColumn =
         channel === "digest" ? "receives_digests" : "receives_alerts";
+      // P2-1: bound list — digest/alert fan-out must not pull unbounded rows.
+      const limit = Math.min(EMAIL_LIST_CAP, Math.max(1, limitParam));
 
       const { data, error } = await table()
         .select("email")
         .eq("status", "active")
         .eq(preferenceColumn, true)
-        .order("subscribed_at", { ascending: true });
+        .order("subscribed_at", { ascending: true })
+        .limit(limit);
 
       if (error) return failure(mapPostgrestError(error));
 

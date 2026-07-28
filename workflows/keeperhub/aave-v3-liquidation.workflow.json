@@ -1,49 +1,55 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
-    "name": "ChronicleAI Aave V3 Liquidation Monitor",
-    "description": "Event Tracker listens to LiquidationCall on Aave V3 Pool (mainnet). Chronicle normalizes debtToCover into USD and qualifies liquidations."
+    "name": "ChronicleAI Aave V3 Liquidation Monitor — Sepolia (Telegram bridge)",
+    "description": "Desk-grade: Event Tracker on Ethereum Sepolia Aave V3 Pool LiquidationCall → Telegram → Chronicle ingest. Re-homed from mainnet; same-chain as desk execution. FREE TIER Telegram bridge. Replace YOUR_TELEGRAM_INGEST_CHAT_ID."
   },
   "nodes": [
     {
       "id": "trigger-liq",
       "type": "trigger",
-      "position": { "x": 100, "y": 200 },
+      "position": {
+        "x": 100,
+        "y": 200
+      },
       "data": {
         "type": "trigger",
-        "label": "Aave V3 LiquidationCall",
+        "label": "Aave V3 LiquidationCall (Sepolia)",
         "config": {
           "triggerType": "Event",
-          "network": "1",
-          "contractAddress": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
+          "network": "11155111",
+          "contractAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
           "eventName": "LiquidationCall",
           "contractABI": "[{\"type\":\"event\",\"name\":\"LiquidationCall\",\"inputs\":[{\"indexed\":true,\"name\":\"collateralAsset\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"debtAsset\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"user\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"debtToCover\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"liquidatedCollateralAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"liquidator\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"receiveAToken\",\"type\":\"bool\"}]}]"
         }
       }
     },
     {
-      "id": "post-chronicle-events",
+      "id": "post-chronicle-telegram",
       "type": "action",
-      "position": { "x": 420, "y": 200 },
+      "position": {
+        "x": 420,
+        "y": 200
+      },
       "data": {
         "type": "action",
-        "label": "POST Chronicle /keeperhub/events",
+        "label": "Telegram → Chronicle ingest bridge",
         "config": {
-          "actionType": "webhook/send-webhook",
-          "integrationType": "webhook",
-          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/events",
-          "webhookMethod": "POST",
-          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
-          "webhookPayload": "{\"chainId\":1,\"eventName\":\"LiquidationCall\",\"address\":\"0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2\",\"transactionHash\":\"{{@trigger-liq:Trigger.transactionHash}}\",\"blockNumber\":{{@trigger-liq:Trigger.blockNumber}},\"logIndex\":{{@trigger-liq:Trigger.logIndex}},\"args\":{\"collateralAsset\":\"{{@trigger-liq:Trigger.collateralAsset}}\",\"debtAsset\":\"{{@trigger-liq:Trigger.debtAsset}}\",\"user\":\"{{@trigger-liq:Trigger.user}}\",\"debtToCover\":\"{{@trigger-liq:Trigger.debtToCover}}\",\"liquidatedCollateralAmount\":\"{{@trigger-liq:Trigger.liquidatedCollateralAmount}}\",\"liquidator\":\"{{@trigger-liq:Trigger.liquidator}}\"},\"protocol\":\"Aave V3\"}"
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"LiquidationCall\",\"address\":\"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951\",\"transactionHash\":\"{{@trigger-liq:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-liq:Trigger.blockNumber}}\",\"args\":{\"collateralAsset\":\"{{@trigger-liq:Trigger.args.collateralAsset}}\",\"debtAsset\":\"{{@trigger-liq:Trigger.args.debtAsset}}\",\"user\":\"{{@trigger-liq:Trigger.args.user}}\",\"debtToCover\":\"{{@trigger-liq:Trigger.args.debtToCover}}\",\"liquidatedCollateralAmount\":\"{{@trigger-liq:Trigger.args.liquidatedCollateralAmount}}\",\"liquidator\":\"{{@trigger-liq:Trigger.args.liquidator}}\"},\"protocol\":\"Aave V3\"}}",
+          "parseMode": "none"
         }
       }
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-liq", "target": "post-chronicle-events" }
+    {
+      "id": "e1",
+      "source": "trigger-liq",
+      "target": "post-chronicle-telegram"
+    }
   ],
-  "integrationBindings": [
-    { "nodeId": "post-chronicle-events", "integrationType": "webhook" }
-  ]
+  "integrationBindings": []
 }

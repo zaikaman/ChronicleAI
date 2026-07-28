@@ -48,11 +48,15 @@ export interface NewsletterSubscriptionRepository {
   /**
    * Active paid entitlement: status active|past_due within period+grace,
    * or active with cancel_at_period_end still inside current period.
+   * Bounded (P2-1).
    */
-  listEntitledEmails(asOf?: string): Promise<Result<string[]>>;
+  listEntitledEmails(asOf?: string, limitParam?: number): Promise<Result<string[]>>;
   /** Subscriptions whose billing period needs past_due / expire transitions. */
   listDueForBillingSweep(asOf?: string): Promise<Result<NewsletterSubscriptionRow[]>>;
 }
+
+/** Hard cap for entitled email fan-out (P2-1). */
+export const NEWSLETTER_ENTITLED_EMAIL_CAP = 5_000;
 
 export function createNewsletterSubscriptionRepository(
   supabase: SupabaseClient,
@@ -162,14 +166,17 @@ export function createNewsletterSubscriptionRepository(
       return success(data as unknown as NewsletterSubscriptionRow);
     },
 
-    async listEntitledEmails(asOf?) {
+    async listEntitledEmails(asOf?, limitParam = NEWSLETTER_ENTITLED_EMAIL_CAP) {
       const nowIso = asOf ?? new Date().toISOString();
       // Entitled while active/past_due and still within grace after period end.
       // We pull candidate rows and filter grace in app for clarity with grace_period_days.
+      // P2-1: bound candidate set.
+      const limit = Math.min(NEWSLETTER_ENTITLED_EMAIL_CAP, Math.max(1, limitParam));
       const { data, error } = await table()
         .select("email, status, current_period_end, grace_period_days, cancel_at_period_end")
         .in("status", ["active", "past_due"] satisfies NewsletterSubscriptionStatus[])
-        .order("email_normalized", { ascending: true });
+        .order("email_normalized", { ascending: true })
+        .limit(limit);
 
       if (error) return failure(mapPostgrestError(error));
 

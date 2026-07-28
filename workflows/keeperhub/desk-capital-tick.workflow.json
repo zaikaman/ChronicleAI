@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "Chronicle Desk — Capital Manager Tick (Telegram bridge)",
+    "description": "FREE TIER: Schedule hourly (~720 runs/mo) → CHRONICLE_INGEST kind:desk_read (signalType capital_tick) on Ethereum Sepolia. Put on gas/events monitor account (not desk-write). Replace 0x0000000000000000000000000000000000000001 and YOUR_TELEGRAM_INGEST_CHAT_ID. Downstream: capital manager (top-up / sweep eligibility)."
+  },
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Every hour (free tier)",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 * * * *",
+          "scheduleTimezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "Telegram → Chronicle desk_read",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"desk_read\",\"payload\":{\"signalType\":\"capital_tick\",\"chainId\":11155111,\"pollKind\":\"desk-capital-tick\",\"deskAddress\":\"0x0000000000000000000000000000000000000001\",\"features\":{\"tick\":true},\"sources\":{\"pollKind\":\"desk-capital-tick\",\"contracts\":[],\"readResults\":{\"scheduled\":true}}}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-schedule", "target": "post-chronicle-telegram" }
+  ],
+  "integrationBindings": []
+}

@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T12:00:00.000Z",
+  "workflow": {
+    "name": "Chronicle Desk — Yield Rates Poll (Telegram bridge)",
+    "description": "FREE TIER (~1.4k runs/mo): Schedule 30m → web3/read-contract getUserReserveData (LINK) on Aave V3 Sepolia → Telegram CHRONICLE_INGEST kind:desk_read (apy_delta). AFTER IMPORT: replace desk user 0x0000…0001 with DESK_WALLET_ADDRESS and chatId with TELEGRAM_INGEST_CHAT_ID. Monitor org only."
+  },
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": { "x": 80, "y": 220 },
+      "data": {
+        "type": "trigger",
+        "label": "Every 30 minutes (free tier)",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *",
+          "scheduleTimezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "read-link-reserve",
+      "type": "action",
+      "position": { "x": 360, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Read Aave LINK Reserve Data",
+        "config": {
+          "actionType": "web3/read-contract",
+          "network": "11155111",
+          "contractAddress": "0x3e9708d80f7B3e43118013075F7e95CE3AB31F31",
+          "abiFunction": "getUserReserveData",
+          "functionArgs": "[\"0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5\",\"0x0000000000000000000000000000000000000001\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"asset\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"}],\"name\":\"getUserReserveData\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"currentATokenBalance\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"currentStableDebt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"currentVariableDebt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"principalStableDebt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"scaledVariableDebt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"stableBorrowRate\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"liquidityRate\",\"type\":\"uint256\"},{\"internalType\":\"uint40\",\"name\":\"stableRateLastUpdated\",\"type\":\"uint40\"},{\"internalType\":\"bool\",\"name\":\"usageAsCollateralEnabled\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 680, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Telegram → Chronicle desk_read",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"desk_read\",\"payload\":{\"signalType\":\"apy_delta\",\"chainId\":11155111,\"pollKind\":\"desk-rates-poll\",\"deskAddress\":\"0x0000000000000000000000000000000000000001\",\"features\":{\"liquidityRateRay\":\"{{@read-link-reserve:Read Aave LINK Reserve Data.result.liquidityRate}}\",\"idleUsdcApyBps\":0,\"aaveLinkBalance\":\"{{@read-link-reserve:Read Aave LINK Reserve Data.result.currentATokenBalance}}\"},\"sources\":{\"pollKind\":\"desk-rates-poll\",\"contracts\":[\"0x3e9708d80f7B3e43118013075F7e95CE3AB31F31\",\"0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5\"],\"readResults\":{\"asset\":\"0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5\",\"liquidityRate\":\"{{@read-link-reserve:Read Aave LINK Reserve Data.result.liquidityRate}}\",\"currentATokenBalance\":\"{{@read-link-reserve:Read Aave LINK Reserve Data.result.currentATokenBalance}}\"}}}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-schedule", "target": "read-link-reserve" },
+    { "id": "e2", "source": "read-link-reserve", "target": "post-chronicle-telegram" }
+  ],
+  "integrationBindings": []
+}

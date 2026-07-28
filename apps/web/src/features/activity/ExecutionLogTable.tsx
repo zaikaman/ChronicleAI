@@ -3,7 +3,7 @@
 
 import type React from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
-import { baseSepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
+import { sepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
 
 interface ExecutionLogEntry {
   id: string;
@@ -34,9 +34,17 @@ function getActionTypeLabel(actionType: string): string {
     publish_digest: "Publish Digest",
     payment: "Payment",
     treasury_check: "Treasury Check",
+    treasury_audit: "Utility Audit",
     notification: "Notification",
     registry_write: "Registry Write",
     payout: "Payout",
+    cctp_rebalance: "CCTP Rebalance",
+    desk_agent: "Desk Agent",
+    desk_intent: "Desk Intent",
+    desk_workflow: "Desk Workflow",
+    sponsored_watch: "Sponsored Watch",
+    premium_receipt: "Premium Receipt",
+    desk_event_microtrade: "Event Microtrade",
   };
   return labels[actionType] ?? actionType;
 }
@@ -65,6 +73,14 @@ function getEntityTypeLabel(entityType: string | null): string {
     treasury_snapshot: "Treasury",
     payout_record: "Payout",
     sponsored_watch: "Watch",
+    cctp_rebalance_transfer: "CCTP",
+    desk: "Desk",
+    desk_agent_run: "Agent Run",
+    desk_intent: "Intent",
+    desk_workflow: "Workflow",
+    desk_capital_move: "Capital Move",
+    desk_event_microtrade: "Event Microtrade",
+    keeperhub_workflow: "KH Workflow",
   };
   return entityType ? (labels[entityType] ?? entityType) : "-";
 }
@@ -82,10 +98,24 @@ export function ExecutionLogTable({
 }: ExecutionLogTableProps): React.ReactElement {
   if (isLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "2rem" }}>
-        <p style={{ color: "var(--fg-tertiary)", fontSize: "var(--font-size-sm)" }}>
-          Loading execution logs...
-        </p>
+      <div
+        data-testid={dataTestId}
+        role="status"
+        aria-busy="true"
+        aria-label="Loading execution logs"
+        className="rounded-2xl border border-border bg-frame overflow-hidden"
+      >
+        {Array.from({ length: 4 }, (_, i) => (
+          <div
+            key={i}
+            className="px-4 py-3.5 border-b border-border/50 last:border-0 flex items-center gap-4"
+          >
+            <div className="skeleton-bone h-3.5 w-24" />
+            <div className="skeleton-bone h-3.5 flex-1 max-w-[40%]" />
+            <div className="skeleton-bone skeleton-bone--pill h-5 w-16" />
+            <div className="skeleton-bone h-3 w-20 hidden sm:block" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -219,7 +249,7 @@ export function ExecutionLogTable({
                       ) : null}
                       {log.txHash ? (
                         <a
-                          href={log.explorerUrl ?? baseSepoliaTxUrl(log.txHash)}
+                          href={log.explorerUrl ?? sepoliaTxUrl(log.txHash)}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{

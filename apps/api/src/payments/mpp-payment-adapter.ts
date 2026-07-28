@@ -1,7 +1,7 @@
 // MPP (Machine-to-Machine Micro-Payment) Payment Adapter
 // Uses HMAC challenge verification for deterministic machine-to-machine billing.
 
-import { createHmac, randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type {
   ChallengeResult,
   PaymentAdapter,
@@ -9,6 +9,20 @@ import type {
 } from "./payment-adapter.ts";
 
 const CHALLENGE_EXPIRY_MS = 300_000; // 5 minutes for machine payments
+
+/** Max allowed skew when comparing settlement expiresAt to challenge expires_at (ms). */
+const EXPIRY_MATCH_SKEW_MS = 2_000;
+
+function hmacEqual(a: string, b: string): boolean {
+  try {
+    const ba = Buffer.from(a, "utf8");
+    const bb = Buffer.from(b, "utf8");
+    if (ba.length !== bb.length) return false;
+    return timingSafeEqual(ba, bb);
+  } catch {
+    return false;
+  }
+}
 
 /** EVM address used as a real payout / referral identity. */
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -153,6 +167,11 @@ export class MppPaymentAdapter implements PaymentAdapter {
     paymentRoute: string;
     /** Challenge-time payer (from payment_records) for real payout identity mapping. */
     challengePayerReference?: string | null | undefined;
+    /**
+     * Canonical challenge expiry from payment_records.expires_at.
+     * When provided, settlement expiresAt must match (within small skew).
+     */
+    challengeExpiresAt?: string | null | undefined;
   }): Promise<SettlementVerificationResult> {
     if (params.paymentRoute !== "mpp") {
       return {
@@ -211,6 +230,39 @@ export class MppPaymentAdapter implements PaymentAdapter {
       };
     }
 
+    // Bind settlement material to the persisted challenge expiry (x402-style rail hygiene).
+    if (params.challengeExpiresAt) {
+      const challengeMs = Date.parse(params.challengeExpiresAt);
+      if (Number.isNaN(challengeMs)) {
+        return {
+          verified: false,
+          amountSettled: 0,
+          currency: params.currency,
+          settlementReference: params.settlementReference,
+          errorMessage: "Invalid challenge expires_at on payment record",
+        };
+      }
+      if (Math.abs(challengeMs - expiresMs) > EXPIRY_MATCH_SKEW_MS) {
+        return {
+          verified: false,
+          amountSettled: 0,
+          currency: params.currency,
+          settlementReference: params.settlementReference,
+          errorMessage:
+            "Settlement expiresAt does not match challenge expires_at (replay/mismatch)",
+        };
+      }
+      if (challengeMs < Date.now()) {
+        return {
+          verified: false,
+          amountSettled: 0,
+          currency: params.currency,
+          settlementReference: params.settlementReference,
+          errorMessage: "Challenge has expired (payment_records.expires_at)",
+        };
+      }
+    }
+
     const secret = this.resolveSecret();
     if (!secret) {
       return {
@@ -225,7 +277,7 @@ export class MppPaymentAdapter implements PaymentAdapter {
     const hmacPayload = `${params.challengeReference}|${params.amountRequested}|${params.currency}|${expiresAt}`;
     const expectedHmac = createHmac("sha256", secret).update(hmacPayload).digest("hex");
 
-    const isMatch = providedHmac === expectedHmac;
+    const isMatch = hmacEqual(providedHmac, expectedHmac);
 
     if (!isMatch) {
       // Explicit opt-in test bypass only (mirrors x402 allowTestMode)

@@ -2,29 +2,60 @@ import { ArrowRight, Mail } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
-import { useSubscribe } from "../features/subscribers/use-subscribe";
+import {
+  DEFAULT_NEWSLETTER_PRICE_USDC,
+  useSubscribe,
+} from "../features/subscribers/use-subscribe";
+import { shortenAddress, useWallet } from "../features/wallet";
 
 const footerLinks = {
   menu: [
     { label: "Daily Digest", href: "/digests/latest" },
     { label: "Market Alerts", href: "/alerts" },
     { label: "Publications Archive", href: "/publications" },
+    { label: "Chronicle Desk", href: "/desk" },
     { label: "Premium Intelligence", href: "/premium" },
+    { label: "Affiliates", href: "/affiliates" },
     { label: "Agent Activity", href: "/activity" },
   ],
   company: [
     { label: "KeeperHub", href: "https://keeperhub.com" },
-    { label: "Base Sepolia Explorer", href: "https://sepolia.basescan.org" },
+    { label: "Sepolia Explorer", href: "https://sepolia.etherscan.io" },
+    {
+      label: "Chronicle Registry",
+      href: "https://sepolia.etherscan.io/address/0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F",
+    },
   ],
   social: [
     { label: "Twitter / X", href: "https://twitter.com/chronicle_ai" },
-    { label: "GitHub Workspace", href: "https://github.com" },
+    { label: "GitHub", href: "https://github.com/zaikaman/ChronicleAI" },
   ],
 };
 
+function ctaButtonLabel(params: {
+  isBusy: boolean;
+  step: string;
+  priceAmount: number;
+  priceCurrency: string;
+  isConnected: boolean;
+}): string {
+  const { isBusy, step, priceAmount, priceCurrency, isConnected } = params;
+  // Keep labels short — long copy overflows the pill (whitespace-nowrap + overflow-hidden parent).
+  if (step === "connecting") return "Connecting…";
+  if (step === "challenging") return "Preparing…";
+  if (step === "signing") return "Sign in wallet…";
+  if (step === "settling") return "Settling…";
+  if (isBusy) return "Working…";
+  if (!isConnected) {
+    return `Pay ${priceAmount} ${priceCurrency}`;
+  }
+  return `Subscribe · ${priceAmount} ${priceCurrency}`;
+}
+
 export function Footer(): ReactNode {
   const [email, setEmail] = useState("");
-  const { status, message, subscribe } = useSubscribe();
+  const { step, message, priceAmount, priceCurrency, isBusy, subscribe } = useSubscribe();
+  const wallet = useWallet();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -34,8 +65,13 @@ export function Footer(): ReactNode {
     }
   }
 
-  const isLoading = status === "loading";
-  const isSuccess = status === "success";
+  const isSuccess = step === "success";
+  const isError = step === "error";
+  const displayPrice =
+    Number.isFinite(priceAmount) && priceAmount > 0
+      ? priceAmount
+      : DEFAULT_NEWSLETTER_PRICE_USDC;
+  const displayCurrency = priceCurrency || "USDC";
 
   return (
     <footer className="relative pt-38 mt-24 mx-2.5 max-[850px]:mx-0">
@@ -43,52 +79,138 @@ export function Footer(): ReactNode {
         <div className="relative w-full rounded-3xl overflow-hidden shadow-2xl/15">
           <div
             className="absolute inset-0 bg-center bg-no-repeat brightness-150 blur scale-125"
-            style={{ backgroundImage: "url(/BG.jpg)", backgroundSize: "150%" }}
+            style={{
+              backgroundImage:
+                "image-set(url(/BG.avif) type('image/avif'), url(/BG.webp) type('image/webp'), url(/BG.jpg) type('image/jpeg'))",
+              backgroundSize: "150%",
+            }}
             aria-hidden="true"
           />
 
           <div className="relative z-10 flex flex-col items-center text-center px-12 py-24 max-[850px]:px-6 max-[850px]:py-6 max-[850px]:pt-12">
-            <h2 className="text-5xl max-[850px]:text-3xl text-black font-medium tracking-tight max-w-2xl mb-14 max-[850px]:mb-8 leading-tight">
+            <h2 className="text-5xl max-[850px]:text-3xl text-black font-medium tracking-tight max-w-2xl mb-4 max-[850px]:mb-3 leading-tight">
               Funded by intelligence, driven by code.
             </h2>
+            <p className="text-sm text-black/70 max-w-md mb-10 max-[850px]:mb-6 leading-relaxed">
+              Monthly market digests by email —{" "}
+              <span className="font-semibold text-black">
+                {displayPrice} {displayCurrency}/month
+              </span>{" "}
+              via x402 on {wallet.targetChain.name}. Connect your wallet, authorize USDC, and
+              unlock paid delivery.
+            </p>
 
             <form
               onSubmit={handleSubmit}
-              className="flex items-center w-full max-w-md bg-background rounded-xl p-1.5 shadow-lg max-[850px]:flex-col max-[850px]:p-3 max-[850px]:gap-3 max-[850px]:max-w-none"
+              className="flex flex-col w-full max-w-sm gap-3"
+              data-testid="newsletter-subscribe-form"
+              aria-busy={isBusy}
             >
-              <div className="flex items-center flex-1 w-full">
-                <Mail
-                  className="w-5 h-5 text-muted-foreground ml-3 flex-none max-[850px]:ml-1"
-                  aria-hidden="true"
-                />
-                <input
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  required
-                  disabled={isLoading}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  aria-label="Email address"
-                  className="flex-1 px-3 py-2.5 text-sm bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
-                />
+              {/* Stacked controls: long paid-CTA labels no longer overflow a side-by-side pill. */}
+              <div className="flex flex-col gap-2 w-full min-w-0 bg-background rounded-xl p-2 shadow-lg">
+                <div className="flex items-center w-full min-w-0 rounded-lg border border-border/60 bg-background">
+                  <Mail
+                    className="w-5 h-5 text-muted-foreground ml-3 flex-none"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    required
+                    disabled={isBusy}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@protocol.xyz"
+                    aria-label="Email for paid monthly digests"
+                    className="min-w-0 flex-1 px-3 py-2.5 text-sm bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isBusy}
+                  data-testid="newsletter-subscribe-submit"
+                  className="flex w-full min-w-0 items-center justify-center gap-2 px-4 py-2.5 bg-foreground hover:bg-foreground/90 text-background rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <span className="truncate">
+                    {ctaButtonLabel({
+                      isBusy,
+                      step,
+                      priceAmount: displayPrice,
+                      priceCurrency: displayCurrency,
+                      isConnected: wallet.isConnected,
+                    })}
+                  </span>
+                  {!isBusy ? (
+                    <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  ) : null}
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-foreground hover:bg-foreground/90 text-background rounded-lg text-sm font-medium transition-colors whitespace-nowrap max-[850px]:w-full max-[850px]:py-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+
+              <div
+                className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-black/5 text-left text-xs text-black/70"
+                data-testid="newsletter-wallet-strip"
               >
-                {isLoading ? "Subscribing…" : "Get updates"}
-                {!isLoading ? <ArrowRight className="w-4 h-4" aria-hidden="true" /> : null}
-              </button>
+                <span className="min-w-0 truncate">
+                  {wallet.isConnected && wallet.address ? (
+                    <>
+                      Paying as{" "}
+                      <span className="font-mono font-medium text-black">
+                        {shortenAddress(wallet.address)}
+                      </span>
+                      {!wallet.isCorrectChain ? (
+                        <span className="text-red-800">
+                          {" "}
+                          · switch to {wallet.targetChain.name}
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>Wallet required · USDC on {wallet.targetChain.name}</>
+                  )}
+                </span>
+                {!wallet.isConnected ? (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => {
+                      void wallet.connect().catch(() => {
+                        // User dismissed modal — form submit will retry
+                      });
+                    }}
+                    className="shrink-0 font-medium text-black underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    Connect
+                  </button>
+                ) : !wallet.isCorrectChain ? (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => {
+                      void wallet.ensureChain().catch(() => {
+                        // ensureChain surfaces rejection; next submit retries
+                      });
+                    }}
+                    className="shrink-0 font-medium text-black underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    Switch network
+                  </button>
+                ) : (
+                  <span className="shrink-0 font-medium text-black/50">Ready</span>
+                )}
+              </div>
             </form>
 
             {message ? (
               <p
                 role="status"
+                data-testid="newsletter-subscribe-status"
                 className={`mt-4 text-sm max-w-md ${
-                  isSuccess ? "text-neutral-900/80" : "text-red-700"
+                  isSuccess
+                    ? "text-neutral-900/80"
+                    : isError
+                      ? "text-red-800"
+                      : "text-neutral-900/70"
                 }`}
               >
                 {message}
@@ -176,7 +298,7 @@ export function Footer(): ReactNode {
 
           <div className="mt-16 pt-6">
             <p className="text-sm text-neutral-900/50 text-center">
-              © {new Date().getFullYear()} ChronicleAI. Autonomous On-Chain newspaper powered by
+              © {new Date().getFullYear()} ChronicleAI. Autonomous newspaper + market desk powered by
               KeeperHub.
             </p>
           </div>

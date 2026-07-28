@@ -51,9 +51,10 @@ describe("PaymentSettlementService", () => {
       markUnderpaid: vi.fn().mockResolvedValue({ ok: true as const, value: record }),
       markExpired: vi.fn().mockResolvedValue({ ok: true as const, value: { ...record, status: "expired" as const } }),
       markFailed: vi.fn().mockResolvedValue({ ok: true as const, value: record }),
+      markRegistryProof: vi.fn().mockResolvedValue({ ok: true as const, value: settledRow }),
       expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
       listByPremiumItem: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
       findSettledByPayer: vi.fn(),
     };
@@ -61,7 +62,7 @@ describe("PaymentSettlementService", () => {
     const execLogRepo: ExecutionLogRepository = {
       append: vi.fn().mockResolvedValue({ ok: true as const, value: { id: "log-1" } }),
       listByEntity: vi.fn(),
-      listRecent: vi.fn(),
+      listRecent: vi.fn(), listPage: vi.fn()
     };
 
     const adapter: PaymentAdapter = {
@@ -70,13 +71,31 @@ describe("PaymentSettlementService", () => {
       verifySettlement: vi.fn().mockResolvedValue(verification),
     };
 
+    const earningsService = {
+      resolveAffiliateForPayer: vi.fn(),
+      creditFromSettledPayment: vi.fn().mockResolvedValue({
+        credited: true,
+        rewardAmount: 1,
+        earningId: "earn-1",
+      }),
+    };
+
     const service = new PaymentSettlementService({
       paymentRecordRepo,
       execLogRepo,
       adapters: new Map([["x402", adapter]]),
+      earningsService,
     });
 
-    return { service, paymentRecordRepo, execLogRepo, adapter, verification, settledRow };
+    return {
+      service,
+      paymentRecordRepo,
+      execLogRepo,
+      adapter,
+      verification,
+      settledRow,
+      earningsService,
+    };
   }
 
   it("threads verification.payerReference into markSettled so payer_reference is stored", async () => {
@@ -150,6 +169,24 @@ describe("PaymentSettlementService", () => {
         }),
       }),
     );
+  });
+
+  it("credits affiliate earnings after a successful settlement", async () => {
+    const { service, earningsService, settledRow, verification } = createMocks();
+
+    const result = await service.settle({
+      challengeReference: challengeRecord.challenge_reference!,
+      settlementReference: verification.settlementReference,
+      paymentRoute: "x402",
+    });
+
+    expect(result.settled).toBe(true);
+    expect(earningsService.creditFromSettledPayment).toHaveBeenCalledTimes(1);
+    expect(earningsService.creditFromSettledPayment).toHaveBeenCalledWith(settledRow);
+    expect(result.affiliateReward).toEqual({
+      credited: true,
+      rewardAmount: 1,
+    });
   });
 
   it("does not call markSettled when verification fails", async () => {

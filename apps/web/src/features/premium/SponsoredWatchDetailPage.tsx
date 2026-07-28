@@ -1,10 +1,18 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
+import {
+  ContentUriFooter,
+  Page,
+  PageBackLink,
+  PageHeader,
+  PageSection,
+  Surface,
+} from "../../components/page-chrome.tsx";
+import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+import { API_BASE } from "../../lib/api.ts";
 
 interface WatchAuditTrail {
   createTxHash: string | null;
@@ -60,7 +68,7 @@ function TxLink({
   if (!hash) {
     return (
       <div>
-        <dt className="text-muted-foreground font-medium mb-1">{label}</dt>
+        <dt className="text-xs text-muted-foreground font-medium mb-1">{label}</dt>
         <dd className="text-muted-foreground text-sm">Pending</dd>
       </div>
     );
@@ -68,19 +76,19 @@ function TxLink({
 
   return (
     <div>
-      <dt className="text-muted-foreground font-medium mb-1">{label}</dt>
-      <dd className="font-mono break-all">
+      <dt className="text-xs text-muted-foreground font-medium mb-1">{label}</dt>
+      <dd className="font-mono break-all text-sm">
         {explorerUrl ? (
           <a
             href={explorerUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-accent hover:underline"
+            className="text-foreground hover:text-muted-foreground transition-colors"
           >
             {hash}
           </a>
         ) : (
-          hash
+          <span className="text-foreground">{hash}</span>
         )}
       </dd>
     </div>
@@ -130,36 +138,49 @@ export function SponsoredWatchDetailPage(): ReactElement {
   }, [fetchWatch]);
 
   if (state.status === "loading") {
-    return <LoadingState message="Loading sponsored watch..." data-testid="watch-detail-loading" />;
+    return (
+      <Page data-testid="watch-detail">
+        <LoadingState
+          message="Loading sponsored watch..."
+          variant="detail"
+          data-testid="watch-detail-loading"
+        />
+      </Page>
+    );
   }
 
   if (state.status === "not-found") {
     return (
-      <div className="max-w-4xl mx-auto">
+      <Page data-testid="watch-detail">
+        <PageBackLink to="/premium">Premium</PageBackLink>
         <EmptyState
           title="Sponsored watch not found"
           description="This monitoring campaign is not available or the content URI is invalid."
           data-testid="watch-detail-not-found"
         />
         <div className="mt-4 text-center">
-          <Link to="/premium" className="text-accent hover:underline text-sm font-medium">
+          <Link
+            to="/premium"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
             Back to premium
           </Link>
         </div>
-      </div>
+      </Page>
     );
   }
 
   if (state.status === "error") {
     return (
-      <div className="max-w-4xl mx-auto">
+      <Page data-testid="watch-detail">
+        <PageBackLink to="/premium">Premium</PageBackLink>
         <RetryState
           title="Failed to load sponsored watch"
           message={state.error}
           onRetry={fetchWatch}
           data-testid="watch-detail-error"
         />
-      </div>
+      </Page>
     );
   }
 
@@ -173,142 +194,147 @@ export function SponsoredWatchDetailPage(): ReactElement {
   const dualTrailComplete = Boolean(createTx && reportTx);
 
   return (
-    <div data-testid="watch-detail" className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <Link to="/premium" className="text-accent hover:underline text-sm font-medium">
-          ← Premium
-        </Link>
-        <h1
-          className="text-3xl font-bold tracking-tight text-foreground mt-3 mb-2"
-          style={{ fontFamily: "var(--font-space-grotesk)" }}
-        >
-          {watch.reportTitle ?? "Sponsored Watch Report"}
-        </h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge label={watch.status} variant="info" />
-          {dualTrailComplete ? (
-            <StatusBadge label="Dual audit trail" variant="success" />
-          ) : (
-            <StatusBadge label="Campaign in progress" variant="warning" />
-          )}
-        </div>
-      </div>
+    <Page data-testid="watch-detail">
+      <PageBackLink to="/premium">Premium</PageBackLink>
+      <PageHeader
+        title={watch.reportTitle ?? "Sponsored Watch Report"}
+        below={
+          <>
+            <StatusBadge label={watch.status} variant="info" />
+            {dualTrailComplete ? (
+              <StatusBadge label="Dual audit trail" variant="success" />
+            ) : (
+              <StatusBadge label="Campaign in progress" variant="warning" />
+            )}
+          </>
+        }
+      />
 
-      <dl className="grid gap-4 sm:grid-cols-2 rounded-xl border border-border bg-muted/20 p-5 text-sm">
-        <div>
-          <dt className="text-muted-foreground font-medium mb-1">Target contract</dt>
-          <dd className="font-mono break-all text-foreground">{watch.targetContract}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground font-medium mb-1">Watch spec hash</dt>
-          <dd className="font-mono break-all text-foreground">{watch.watchSpecHash}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground font-medium mb-1">Starts</dt>
-          <dd>
-            <TimestampDisplay timestamp={watch.startsAt} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground font-medium mb-1">Ends</dt>
-          <dd>
-            <TimestampDisplay timestamp={watch.endsAt} />
-          </dd>
-        </div>
-        {watch.onChainWatchId != null && (
+      <Surface className="p-5 mb-8">
+        <dl className="grid gap-4 sm:grid-cols-2 text-sm">
           <div>
-            <dt className="text-muted-foreground font-medium mb-1">On-chain watch id</dt>
-            <dd className="font-mono text-foreground">{watch.onChainWatchId}</dd>
+            <dt className="text-xs text-muted-foreground font-medium mb-1">Target contract</dt>
+            <dd className="font-mono break-all text-foreground">{watch.targetContract}</dd>
           </div>
-        )}
-        <div>
-          <dt className="text-muted-foreground font-medium mb-1">Events matched</dt>
-          <dd className="text-foreground">{watch.monitoredEventCount ?? 0}</dd>
-        </div>
-      </dl>
+          <div>
+            <dt className="text-xs text-muted-foreground font-medium mb-1">Watch spec hash</dt>
+            <dd className="font-mono break-all text-foreground">{watch.watchSpecHash}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground font-medium mb-1">Starts</dt>
+            <dd>
+              <TimestampDisplay timestamp={watch.startsAt} />
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground font-medium mb-1">Ends</dt>
+            <dd>
+              <TimestampDisplay timestamp={watch.endsAt} />
+            </dd>
+          </div>
+          {watch.onChainWatchId != null ? (
+            <div>
+              <dt className="text-xs text-muted-foreground font-medium mb-1">On-chain watch id</dt>
+              <dd className="font-mono text-foreground">{watch.onChainWatchId}</dd>
+            </div>
+          ) : null}
+          <div>
+            <dt className="text-xs text-muted-foreground font-medium mb-1">Events matched</dt>
+            <dd className="text-foreground">{watch.monitoredEventCount ?? 0}</dd>
+          </div>
+        </dl>
+      </Surface>
 
-      <section
-        className="rounded-xl border border-border bg-muted/10 p-5 space-y-4"
+      <PageSection
+        title="On-chain audit trail"
+        description="Paid campaigns record both acceptance (createSponsoredWatch) and final report publication (publishSponsoredReport with source-event root)."
         data-testid="watch-audit-trail"
       >
-        <h2
-          className="text-lg font-semibold text-foreground"
-          style={{ fontFamily: "var(--font-space-grotesk)" }}
-        >
-          On-chain audit trail
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Paid campaigns record both acceptance (`createSponsoredWatch`) and final report
-          publication (`publishSponsoredReport` with source-event root).
-        </p>
-        <dl className="grid gap-4 sm:grid-cols-2 text-sm">
-          <TxLink hash={createTx} explorerUrl={createExplorer} label="Create tx (createSponsoredWatch)" />
-          <TxLink hash={reportTx} explorerUrl={reportExplorer} label="Report tx (publishSponsoredReport)" />
-          {reportContentHash && (
-            <div className="sm:col-span-2">
-              <dt className="text-muted-foreground font-medium mb-1">Report content hash</dt>
-              <dd className="font-mono break-all text-foreground">{reportContentHash}</dd>
-            </div>
-          )}
-          {sourceEventRoot && (
-            <div className="sm:col-span-2">
-              <dt className="text-muted-foreground font-medium mb-1">Source event root</dt>
-              <dd className="font-mono break-all text-foreground" data-testid="watch-source-event-root">
-                {sourceEventRoot}
-              </dd>
-            </div>
-          )}
-          {watch.createKeeperHubRunId && (
-            <div>
-              <dt className="text-muted-foreground font-medium mb-1">Create KeeperHub run</dt>
-              <dd className="font-mono break-all text-foreground">{watch.createKeeperHubRunId}</dd>
-            </div>
-          )}
-          {watch.reportKeeperHubRunId && (
-            <div>
-              <dt className="text-muted-foreground font-medium mb-1">Report KeeperHub run</dt>
-              <dd className="font-mono break-all text-foreground">{watch.reportKeeperHubRunId}</dd>
-            </div>
-          )}
-        </dl>
-      </section>
+        <Surface className="p-5">
+          <dl className="grid gap-4 sm:grid-cols-2 text-sm">
+            <TxLink
+              {...(createTx !== undefined ? { hash: createTx } : {})}
+              {...(createExplorer !== undefined
+                ? { explorerUrl: createExplorer }
+                : {})}
+              label="Create tx (createSponsoredWatch)"
+            />
+            <TxLink
+              {...(reportTx !== undefined ? { hash: reportTx } : {})}
+              {...(reportExplorer !== undefined
+                ? { explorerUrl: reportExplorer }
+                : {})}
+              label="Report tx (publishSponsoredReport)"
+            />
+            {reportContentHash ? (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-muted-foreground font-medium mb-1">
+                  Report content hash
+                </dt>
+                <dd className="font-mono break-all text-foreground">{reportContentHash}</dd>
+              </div>
+            ) : null}
+            {sourceEventRoot ? (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-muted-foreground font-medium mb-1">
+                  Source event root
+                </dt>
+                <dd
+                  className="font-mono break-all text-foreground"
+                  data-testid="watch-source-event-root"
+                >
+                  {sourceEventRoot}
+                </dd>
+              </div>
+            ) : null}
+            {watch.createKeeperHubRunId ? (
+              <div>
+                <dt className="text-xs text-muted-foreground font-medium mb-1">
+                  Create KeeperHub run
+                </dt>
+                <dd className="font-mono break-all text-foreground">
+                  {watch.createKeeperHubRunId}
+                </dd>
+              </div>
+            ) : null}
+            {watch.reportKeeperHubRunId ? (
+              <div>
+                <dt className="text-xs text-muted-foreground font-medium mb-1">
+                  Report KeeperHub run
+                </dt>
+                <dd className="font-mono break-all text-foreground">
+                  {watch.reportKeeperHubRunId}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </Surface>
+      </PageSection>
 
-      {(watch.reportSummary || (watch.reportHighlights && watch.reportHighlights.length > 0)) && (
-        <section
-          className="rounded-xl border border-border bg-muted/10 p-5 space-y-4"
-          data-testid="watch-report-body"
-        >
-          <h2
-            className="text-lg font-semibold text-foreground"
-            style={{ fontFamily: "var(--font-space-grotesk)" }}
-          >
-            Campaign report
-          </h2>
-          {watch.reportSummary && (
-            <p className="text-sm text-foreground leading-relaxed">{watch.reportSummary}</p>
-          )}
-          {watch.reportHighlights && watch.reportHighlights.length > 0 && (
-            <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
-              {watch.reportHighlights.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          )}
-          {watch.reportAnalysis && (
-            <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-              {watch.reportAnalysis}
-            </div>
-          )}
-        </section>
+      {(watch.reportSummary ||
+        (watch.reportHighlights && watch.reportHighlights.length > 0)) && (
+        <PageSection title="Campaign report" data-testid="watch-report-body">
+          <Surface className="p-5 space-y-4">
+            {watch.reportSummary ? (
+              <p className="text-sm text-foreground leading-relaxed">{watch.reportSummary}</p>
+            ) : null}
+            {watch.reportHighlights && watch.reportHighlights.length > 0 ? (
+              <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
+                {watch.reportHighlights.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
+            {watch.reportAnalysis ? (
+              <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                {watch.reportAnalysis}
+              </div>
+            ) : null}
+          </Surface>
+        </PageSection>
       )}
 
-      {watch.contentUri && (
-        <div className="text-center">
-          <span className="inline-flex items-center gap-2 px-4 py-2.5 bg-muted/30 border border-border text-muted-foreground rounded-xl text-sm font-mono break-all">
-            {watch.contentUri}
-          </span>
-        </div>
-      )}
-    </div>
+      {watch.contentUri ? <ContentUriFooter uri={watch.contentUri} /> : null}
+    </Page>
   );
 }

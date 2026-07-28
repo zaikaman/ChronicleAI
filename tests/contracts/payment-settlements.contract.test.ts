@@ -1,11 +1,13 @@
 // Contract tests for POST /payments/settlements
 // Validates settlement processing for various paths
+// Hits a live API process — skipped unless ALLOW_LIVE_API_TESTS=1
 
 import { describe, expect, it } from "vitest";
+import { LIVE_API_BASE, LIVE_API_TESTS_ENABLED } from "./live-api.ts";
 
-const API_BASE = process.env.API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = LIVE_API_BASE;
 
-describe("POST /payments/settlements", () => {
+describe.skipIf(!LIVE_API_TESTS_ENABLED)("POST /payments/settlements", () => {
   it("should return 400 when challengeReference is missing", async () => {
     const response = await fetch(`${API_BASE}/payments/settlements`, {
       method: "POST",

@@ -1,7 +1,7 @@
 /** IDEA proof-of-publication panel: registry tx, content hash, source hash, gas, KeeperHub status. */
 
 import type { ReactElement, ReactNode } from "react";
-import { baseSepoliaTxUrl, formatGasUsed, truncateHash } from "../lib/explorer.ts";
+import { formatGasUsed, sepoliaTxUrl, truncateHash } from "../lib/explorer.ts";
 
 export interface PublicationProofProps {
   registryTxHash?: string | null | undefined;
@@ -92,8 +92,9 @@ export function PublicationProof({
 
   if (!hasAny) return null;
 
+  // Registry proofs land on Ethereum Sepolia (ops rail), not Base payment rail.
   const txHref =
-    explorerUrl ?? (registryTxHash ? baseSepoliaTxUrl(registryTxHash) : undefined);
+    explorerUrl ?? (registryTxHash ? sepoliaTxUrl(registryTxHash) : undefined);
 
   if (compact) {
     return (
@@ -108,7 +109,14 @@ export function PublicationProof({
           >
             {keeperHubRunId ? "Executed via KeeperHub" : "On-chain proof"}
           </span>
-        ) : null}
+        ) : (
+          <span
+            className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground"
+            data-testid="local-publish-status"
+          >
+            Local publish
+          </span>
+        )}
         {registryTxHash ? (
           <span className="inline-flex items-center gap-1 text-muted-foreground">
             <span>tx</span>
@@ -123,6 +131,12 @@ export function PublicationProof({
           <span className="inline-flex items-center gap-1 text-muted-foreground">
             <span>content</span>
             <MonoValue value={contentHash} title={contentHash} />
+          </span>
+        ) : null}
+        {sourceHash ? (
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <span>{sourceEventRoot ? "root" : "source"}</span>
+            <MonoValue value={sourceHash} title={sourceHash} />
           </span>
         ) : null}
         {gasLabel ? (
@@ -170,10 +184,14 @@ export function PublicationProof({
       </div>
 
       {registryTxHash ? (
-        <ProofRow label="Registry tx">
+        <ProofRow label="Registry proof">
           <MonoValue
             value={registryTxHash}
-            title={registryTxHash}
+            title={
+              explorerUrl
+                ? `${registryTxHash} (KeeperHub registry — may differ from the source event chain)`
+                : registryTxHash
+            }
             {...(txHref ? { href: txHref } : {})}
           />
         </ProofRow>

@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI CEX USDC Transfer Monitor (Telegram bridge)",
+    "description": "NEWSPAPER ONLY. FREE TIER: Schedule hourly → Query USDC Transfer events on mainnet → size filter (~$500k+) → Telegram CHRONICLE_INGEST. Chronicle normalizer classifies CEX-labeled from/to as cex_inflow / cex_outflow using the entity label book. Prefer vanity account or leave disabled."
+  },
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": { "x": 80, "y": 220 },
+      "data": {
+        "type": "trigger",
+        "label": "Every hour (free tier)",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 * * * *",
+          "scheduleTimezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "query-transfers",
+      "type": "action",
+      "position": { "x": 320, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Query USDC Transfers",
+        "config": {
+          "actionType": "web3/query-events",
+          "network": "1",
+          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "eventName": "Transfer",
+          "blockCount": "320",
+          "abi": "[{\"type\":\"event\",\"name\":\"Transfer\",\"inputs\":[{\"indexed\":true,\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"value\",\"type\":\"uint256\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "for-each-transfer",
+      "type": "action",
+      "position": { "x": 560, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "For Each Transfer",
+        "config": {
+          "actionType": "For Each",
+          "arraySource": "{{@query-transfers:Query USDC Transfers.events}}",
+          "maxIterations": "150"
+        }
+      }
+    },
+    {
+      "id": "condition-large",
+      "type": "action",
+      "position": { "x": 800, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Significant size (~$500k+ USDC)",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@for-each-transfer:For Each Transfer.currentItem.args.value}} >= 500000000000"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 1040, "y": 160 },
+      "data": {
+        "type": "action",
+        "label": "Telegram → Chronicle ingest bridge",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "-1004373075093",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Transfer\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer.currentItem.logIndex}}\",\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.value}}\"},\"protocol\":\"Circle\"}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-schedule", "target": "query-transfers" },
+    { "id": "e2", "source": "query-transfers", "target": "for-each-transfer" },
+    {
+      "id": "e3",
+      "source": "for-each-transfer",
+      "target": "condition-large",
+      "sourceHandle": "loop",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "condition-large",
+      "target": "post-chronicle-telegram",
+      "sourceHandle": "true",
+      "type": "animated"
+    }
+  ],
+  "integrationBindings": []
+}

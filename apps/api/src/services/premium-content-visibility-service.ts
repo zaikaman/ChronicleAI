@@ -1,7 +1,11 @@
 // Premium Content Visibility Service
 // Ensures premium-only content never leaks through public API responses.
 
-import type { PremiumIntelligenceItemRow } from "@chronicleai/db";
+import type {
+  PremiumIntelligenceItemRow,
+  PremiumIntelligenceTeaserRow,
+} from "@chronicleai/db";
+import { MONTHLY_NEWSLETTER_SLUG } from "@chronicleai/schemas";
 
 /**
  * Teaser response (public-safe fields only).
@@ -19,6 +23,41 @@ export interface PremiumItemTeaser {
   createdAt: string;
 }
 
+/** Public columns needed to build a teaser (no content_private). */
+export type PremiumTeaserSource = Pick<
+  PremiumIntelligenceTeaserRow,
+  | "id"
+  | "slug"
+  | "title"
+  | "summary_public"
+  | "content_type"
+  | "price_amount"
+  | "price_currency"
+  | "payment_routes"
+  | "status"
+  | "created_at"
+>;
+
+/**
+ * Recurring newsletter is a catalog FK + footer subscribe product, not a
+ * one-shot /premium teaser. Keep the row for payment_records; hide from lists.
+ */
+export function isCatalogOnlyPremiumItem(
+  row: Pick<PremiumIntelligenceItemRow, "content_type" | "slug">,
+): boolean {
+  return (
+    row.content_type === "monthly_newsletter" ||
+    row.slug === MONTHLY_NEWSLETTER_SLUG
+  );
+}
+
+/** Items safe to list on GET /premium/items and similar public teaser surfaces. */
+export function isPublicPremiumTeaser(
+  row: Pick<PremiumIntelligenceItemRow, "content_type" | "slug">,
+): boolean {
+  return !isCatalogOnlyPremiumItem(row);
+}
+
 /**
  * Full premium item response (includes private content, only after payment).
  */
@@ -34,8 +73,9 @@ export interface PremiumItemFull extends PremiumItemTeaser {
 export class PremiumContentVisibilityService {
   /**
    * Convert a database row to a public teaser (no private content).
+   * Accepts teaser projections that omit content_private (P2-1).
    */
-  toTeaser(row: PremiumIntelligenceItemRow): PremiumItemTeaser {
+  toTeaser(row: PremiumTeaserSource): PremiumItemTeaser {
     return {
       id: row.id,
       slug: row.slug,
@@ -73,8 +113,9 @@ export class PremiumContentVisibilityService {
 
   /**
    * Convert a list of database rows to public teasers.
+   * Excludes catalog-only products (e.g. monthly newsletter — sold via footer).
    */
-  toTeaserList(rows: PremiumIntelligenceItemRow[]): PremiumItemTeaser[] {
-    return rows.map((row) => this.toTeaser(row));
+  toTeaserList(rows: PremiumTeaserSource[]): PremiumItemTeaser[] {
+    return rows.filter(isPublicPremiumTeaser).map((row) => this.toTeaser(row));
   }
 }

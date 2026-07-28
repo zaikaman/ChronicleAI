@@ -1,72 +1,59 @@
-// Fetch a single public digest by id (HTTPS content URI page)
+// Single digest by id — React Query
 
-import { useCallback, useEffect, useState } from "react";
-import type { DigestState, LatestDigestData } from "./use-latest-digest.ts";
+import { useQuery } from "@tanstack/react-query";
+import { apiGetJson, isNotFoundError, toErrorMessage } from "../../lib/api.ts";
+import { queryKeys } from "../../lib/query-keys.ts";
+import { mapDigestResponse, type DigestState } from "./use-latest-digest.ts";
 
 export function useDigest(digestId: string | undefined): {
   state: DigestState;
   refetch: () => void;
 } {
-  const [state, setState] = useState<DigestState>({ status: "loading" });
+  const isLatest = digestId === "latest";
+  const queryKey = isLatest
+    ? queryKeys.digests.latest
+    : queryKeys.digests.detail(digestId ?? "");
 
-  const fetchDigest = useCallback(async () => {
-    if (!digestId) {
-      setState({ status: "not-found" });
-      return;
-    }
-
-    setState({ status: "loading" });
-
-    try {
-      const origin = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+  const query = useQuery({
+    queryKey,
+    enabled: Boolean(digestId),
+    queryFn: async ({ signal }) => {
       const path =
         digestId === "latest"
-          ? `${origin}/digests/latest`
-          : `${origin}/digests/${encodeURIComponent(digestId)}`;
-      const response = await fetch(path);
+          ? "/digests/latest"
+          : `/digests/${encodeURIComponent(digestId!)}`;
+      const raw = await apiGetJson<Record<string, unknown>>(path, { signal });
+      return mapDigestResponse(raw);
+    },
+    retry: (failureCount, error) => {
+      if (isNotFoundError(error)) return false;
+      return failureCount < 1;
+    },
+    staleTime: 30_000,
+  });
 
-      if (response.status === 404) {
-        setState({ status: "not-found" });
-        return;
-      }
+  let state: DigestState;
+  if (!digestId) {
+    state = { status: "not-found" };
+  } else if (query.isLoading || query.isPending) {
+    state = { status: "loading" };
+  } else if (query.error) {
+    state = isNotFoundError(query.error)
+      ? { status: "not-found" }
+      : {
+          status: "error",
+          error: toErrorMessage(query.error, "Unknown error fetching digest"),
+        };
+  } else if (query.data) {
+    state = { status: "success", data: query.data };
+  } else {
+    state = { status: "loading" };
+  }
 
-      if (!response.ok) {
-        setState({ status: "error", error: `Failed to fetch digest (${response.status})` });
-        return;
-      }
-
-      const raw = (await response.json()) as Record<string, unknown>;
-      const data: LatestDigestData = {
-        id: String(raw.id),
-        reportDate: String(raw.reportDate),
-        title: String(raw.title),
-        summary: String(raw.summary),
-        highlights: Array.isArray(raw.highlights) ? (raw.highlights as string[]) : [],
-        analysis: raw.analysis ? String(raw.analysis) : undefined,
-        publicationStatus: String(raw.publicationStatus),
-        publishedAt: raw.publishedAt ? String(raw.publishedAt) : undefined,
-        registryTxHash: raw.registryTxHash ? String(raw.registryTxHash) : undefined,
-        contentHash: raw.contentHash ? String(raw.contentHash) : undefined,
-        contentUri: raw.contentUri ? String(raw.contentUri) : undefined,
-        gasUsed: raw.gasUsed ? String(raw.gasUsed) : undefined,
-        gasUsedWei: raw.gasUsedWei ? String(raw.gasUsedWei) : undefined,
-        keeperHubRunId: raw.keeperHubRunId ? String(raw.keeperHubRunId) : undefined,
-        explorerUrl: raw.explorerUrl ? String(raw.explorerUrl) : undefined,
-        sourceEventRoot: raw.sourceEventRoot ? String(raw.sourceEventRoot) : undefined,
-      };
-
-      setState({ status: "success", data });
-    } catch (error) {
-      setState({
-        status: "error",
-        error: error instanceof Error ? error.message : "Unknown error fetching digest",
-      });
-    }
-  }, [digestId]);
-
-  useEffect(() => {
-    void fetchDigest();
-  }, [fetchDigest]);
-
-  return { state, refetch: fetchDigest };
+  return {
+    state,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 }

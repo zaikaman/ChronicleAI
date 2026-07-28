@@ -1,49 +1,102 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
-    "name": "ChronicleAI Uniswap V3 USDC/WETH Swap Monitor",
-    "description": "Event Tracker listens to Swap on the mainnet USDC/WETH 0.05% pool. Raw event is posted to Chronicle for USD magnitude normalization and large_swap qualification."
+    "name": "ChronicleAI Uniswap V3 USDC/WETH Large Swap Monitor (Telegram bridge)",
+    "description": "NEWSPAPER ONLY (not a desk execution input). FREE TIER: Schedule hourly (~720 schedule fires/mo; For Each can add more) → Query Swap events → size filter (~$500k+) → Telegram CHRONICLE_INGEST. Prefer a separate vanity account or leave disabled. Desk strategies use Sepolia desk-*-poll workflows instead. Set chatId to TELEGRAM_INGEST_CHAT_ID."
   },
   "nodes": [
     {
-      "id": "trigger-swap",
+      "id": "trigger-schedule",
       "type": "trigger",
-      "position": { "x": 100, "y": 200 },
+      "position": { "x": 80, "y": 220 },
       "data": {
         "type": "trigger",
-        "label": "Uniswap V3 Swap",
+        "label": "Every hour (free tier)",
         "config": {
-          "triggerType": "Event",
-          "network": "1",
-          "contractAddress": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
-          "eventName": "Swap",
-          "contractABI": "[{\"type\":\"event\",\"name\":\"Swap\",\"inputs\":[{\"indexed\":true,\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"recipient\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount0\",\"type\":\"int256\"},{\"indexed\":false,\"name\":\"amount1\",\"type\":\"int256\"},{\"indexed\":false,\"name\":\"sqrtPriceX96\",\"type\":\"uint160\"},{\"indexed\":false,\"name\":\"liquidity\",\"type\":\"uint128\"},{\"indexed\":false,\"name\":\"tick\",\"type\":\"int24\"}]}]"
+          "triggerType": "Schedule",
+          "scheduleCron": "0 * * * *",
+          "scheduleTimezone": "UTC"
         }
       }
     },
     {
-      "id": "post-chronicle-events",
+      "id": "query-swaps",
       "type": "action",
-      "position": { "x": 420, "y": 200 },
+      "position": { "x": 320, "y": 220 },
       "data": {
         "type": "action",
-        "label": "POST Chronicle /keeperhub/events",
+        "label": "Query USDC/WETH Swaps",
         "config": {
-          "actionType": "webhook/send-webhook",
-          "integrationType": "webhook",
-          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/events",
-          "webhookMethod": "POST",
-          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
-          "webhookPayload": "{\"chainId\":1,\"eventName\":\"Swap\",\"address\":\"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640\",\"transactionHash\":\"{{@trigger-swap:Trigger.transactionHash}}\",\"blockNumber\":{{@trigger-swap:Trigger.blockNumber}},\"logIndex\":{{@trigger-swap:Trigger.logIndex}},\"args\":{\"amount0\":\"{{@trigger-swap:Trigger.amount0}}\",\"amount1\":\"{{@trigger-swap:Trigger.amount1}}\",\"sender\":\"{{@trigger-swap:Trigger.sender}}\",\"recipient\":\"{{@trigger-swap:Trigger.recipient}}\"},\"protocol\":\"Uniswap V3\"}"
+          "actionType": "web3/query-events",
+          "network": "1",
+          "contractAddress": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+          "eventName": "Swap",
+          "blockCount": "320",
+          "abi": "[{\"type\":\"event\",\"name\":\"Swap\",\"inputs\":[{\"indexed\":true,\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"recipient\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount0\",\"type\":\"int256\"},{\"indexed\":false,\"name\":\"amount1\",\"type\":\"int256\"},{\"indexed\":false,\"name\":\"sqrtPriceX96\",\"type\":\"uint160\"},{\"indexed\":false,\"name\":\"liquidity\",\"type\":\"uint128\"},{\"indexed\":false,\"name\":\"tick\",\"type\":\"int24\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "for-each-swap",
+      "type": "action",
+      "position": { "x": 560, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "For Each Swap",
+        "config": {
+          "actionType": "For Each",
+          "arraySource": "{{@query-swaps:Query USDC/WETH Swaps.events}}",
+          "maxIterations": "150"
+        }
+      }
+    },
+    {
+      "id": "condition-large",
+      "type": "action",
+      "position": { "x": 800, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Significant size (~$500k+)",
+        "config": {
+          "actionType": "Condition",
+          "condition": "({{@for-each-swap:For Each Swap.currentItem.args.amount0}} >= 500000000000 || {{@for-each-swap:For Each Swap.currentItem.args.amount0}} <= -500000000000) || ({{@for-each-swap:For Each Swap.currentItem.args.amount1}} >= 200000000000000000000 || {{@for-each-swap:For Each Swap.currentItem.args.amount1}} <= -200000000000000000000)"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 1040, "y": 160 },
+      "data": {
+        "type": "action",
+        "label": "Telegram → Chronicle ingest bridge",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Swap\",\"address\":\"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640\",\"transactionHash\":\"{{@for-each-swap:For Each Swap.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-swap:For Each Swap.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-swap:For Each Swap.currentItem.logIndex}}\",\"args\":{\"amount0\":\"{{@for-each-swap:For Each Swap.currentItem.args.amount0}}\",\"amount1\":\"{{@for-each-swap:For Each Swap.currentItem.args.amount1}}\",\"sender\":\"{{@for-each-swap:For Each Swap.currentItem.args.sender}}\",\"recipient\":\"{{@for-each-swap:For Each Swap.currentItem.args.recipient}}\"},\"protocol\":\"Uniswap V3\"}}",
+          "parseMode": "none"
         }
       }
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-swap", "target": "post-chronicle-events" }
+    { "id": "e1", "source": "trigger-schedule", "target": "query-swaps" },
+    { "id": "e2", "source": "query-swaps", "target": "for-each-swap" },
+    {
+      "id": "e3",
+      "source": "for-each-swap",
+      "target": "condition-large",
+      "sourceHandle": "loop",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "condition-large",
+      "target": "post-chronicle-telegram",
+      "sourceHandle": "true",
+      "type": "animated"
+    }
   ],
-  "integrationBindings": [
-    { "nodeId": "post-chronicle-events", "integrationType": "webhook" }
-  ]
+  "integrationBindings": []
 }

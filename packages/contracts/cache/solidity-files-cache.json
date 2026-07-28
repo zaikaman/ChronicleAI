@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "D:\\KeeperHubHackathon\\packages\\contracts\\contracts\\ChronicleRegistry.sol": {
-      "lastModificationDate": 1783614219309,
-      "contentHash": "c99ac692a656f846ed7de7571a2541a0",
+      "lastModificationDate": 1783928823190,
+      "contentHash": "0476ff53f61fcec1fdd8c509f5013c6d",
       "sourceName": "contracts/ChronicleRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",

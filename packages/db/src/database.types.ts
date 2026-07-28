@@ -12,8 +12,123 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      affiliate_earnings: {
+        Row: {
+          affiliate_wallet: string
+          created_at: string
+          currency: string
+          id: string
+          payment_amount: number
+          payment_record_id: string
+          referred_wallet: string
+          reward_amount: number
+          reward_share: number
+        }
+        Insert: {
+          affiliate_wallet: string
+          created_at?: string
+          currency?: string
+          id?: string
+          payment_amount: number
+          payment_record_id: string
+          referred_wallet: string
+          reward_amount: number
+          reward_share: number
+        }
+        Update: {
+          affiliate_wallet?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          payment_amount?: number
+          payment_record_id?: string
+          referred_wallet?: string
+          reward_amount?: number
+          reward_share?: number
+        }
+        Relationships: []
+      }
+      affiliate_withdrawals: {
+        Row: {
+          affiliate_wallet: string
+          agent_message: string | null
+          amount: number
+          completed_at: string | null
+          created_at: string
+          currency: string
+          error_message: string | null
+          explorer_url: string | null
+          id: string
+          keeper_hub_run_id: string | null
+          payout_record_id: string | null
+          payout_tx_hash: string | null
+          registry_tx_hash: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          affiliate_wallet: string
+          agent_message?: string | null
+          amount: number
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          error_message?: string | null
+          explorer_url?: string | null
+          id?: string
+          keeper_hub_run_id?: string | null
+          payout_record_id?: string | null
+          payout_tx_hash?: string | null
+          registry_tx_hash?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          affiliate_wallet?: string
+          agent_message?: string | null
+          amount?: number
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          error_message?: string | null
+          explorer_url?: string | null
+          id?: string
+          keeper_hub_run_id?: string | null
+          payout_record_id?: string | null
+          payout_tx_hash?: string | null
+          registry_tx_hash?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       affiliates: {
         Row: {
           approved_at: string | null
@@ -50,6 +165,102 @@ export type Database = {
         }
         Relationships: []
       }
+      cctp_rebalance_transfers: {
+        Row: {
+          amount_atomic: string
+          amount_usdc: number
+          approve_tx_hash: string | null
+          attempt_count: number
+          attestation: string | null
+          attested_at: string | null
+          burn_tx_hash: string | null
+          burned_at: string | null
+          created_at: string
+          destination_chain_id: number
+          destination_domain: number
+          direction: string
+          error_message: string | null
+          id: string
+          iris_status: string | null
+          max_fee_atomic: string | null
+          message_bytes: string | null
+          message_hash: string | null
+          metadata: Json
+          min_finality_threshold: number | null
+          mint_recipient: string
+          mint_tx_hash: string | null
+          minted_at: string | null
+          mode: string
+          source_chain_id: number
+          source_domain: number
+          status: string
+          treasury_address: string
+          updated_at: string
+        }
+        Insert: {
+          amount_atomic: string
+          amount_usdc: number
+          approve_tx_hash?: string | null
+          attempt_count?: number
+          attestation?: string | null
+          attested_at?: string | null
+          burn_tx_hash?: string | null
+          burned_at?: string | null
+          created_at?: string
+          destination_chain_id?: number
+          destination_domain?: number
+          direction?: string
+          error_message?: string | null
+          id?: string
+          iris_status?: string | null
+          max_fee_atomic?: string | null
+          message_bytes?: string | null
+          message_hash?: string | null
+          metadata?: Json
+          min_finality_threshold?: number | null
+          mint_recipient: string
+          mint_tx_hash?: string | null
+          minted_at?: string | null
+          mode: string
+          source_chain_id?: number
+          source_domain?: number
+          status?: string
+          treasury_address: string
+          updated_at?: string
+        }
+        Update: {
+          amount_atomic?: string
+          amount_usdc?: number
+          approve_tx_hash?: string | null
+          attempt_count?: number
+          attestation?: string | null
+          attested_at?: string | null
+          burn_tx_hash?: string | null
+          burned_at?: string | null
+          created_at?: string
+          destination_chain_id?: number
+          destination_domain?: number
+          direction?: string
+          error_message?: string | null
+          id?: string
+          iris_status?: string | null
+          max_fee_atomic?: string | null
+          message_bytes?: string | null
+          message_hash?: string | null
+          metadata?: Json
+          min_finality_threshold?: number | null
+          mint_recipient?: string
+          mint_tx_hash?: string | null
+          minted_at?: string | null
+          mode?: string
+          source_chain_id?: number
+          source_domain?: number
+          status?: string
+          treasury_address?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       daily_digests: {
         Row: {
           analysis: string | null
@@ -62,7 +273,14 @@ export type Database = {
           gas_used_wei: string | null
           highlights: Json
           id: string
+          image_prompt: string | null
+          image_provider: string | null
+          image_status: string | null
+          image_url: string | null
           keeper_hub_run_id: string | null
+          market_narrative: Json | null
+          market_narrative_provider: string | null
+          market_narrative_status: string | null
           period_end: string
           period_start: string
           publication_status: string
@@ -86,7 +304,14 @@ export type Database = {
           gas_used_wei?: string | null
           highlights?: Json
           id?: string
+          image_prompt?: string | null
+          image_provider?: string | null
+          image_status?: string | null
+          image_url?: string | null
           keeper_hub_run_id?: string | null
+          market_narrative?: Json | null
+          market_narrative_provider?: string | null
+          market_narrative_status?: string | null
           period_end: string
           period_start: string
           publication_status?: string
@@ -110,7 +335,14 @@ export type Database = {
           gas_used_wei?: string | null
           highlights?: Json
           id?: string
+          image_prompt?: string | null
+          image_provider?: string | null
+          image_status?: string | null
+          image_url?: string | null
           keeper_hub_run_id?: string | null
+          market_narrative?: Json | null
+          market_narrative_provider?: string | null
+          market_narrative_status?: string | null
           period_end?: string
           period_start?: string
           publication_status?: string
@@ -124,6 +356,348 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      desk_agent_runs: {
+        Row: {
+          context_digest: Json
+          created_at: string
+          error_message: string | null
+          id: string
+          intent_id: string | null
+          latency_ms: number | null
+          model: string | null
+          proposal: Json
+        }
+        Insert: {
+          context_digest?: Json
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          intent_id?: string | null
+          latency_ms?: number | null
+          model?: string | null
+          proposal?: Json
+        }
+        Update: {
+          context_digest?: Json
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          intent_id?: string | null
+          latency_ms?: number | null
+          model?: string | null
+          proposal?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "desk_agent_runs_intent_id_fkey"
+            columns: ["intent_id"]
+            isOneToOne: false
+            referencedRelation: "desk_intents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      desk_capital_moves: {
+        Row: {
+          amount_usdc: number
+          created_at: string
+          desk_equity_after: number | null
+          direction: string
+          explorer_url: string | null
+          from_address: string
+          id: string
+          keeper_hub_run_id: string | null
+          reason: string | null
+          registry_explorer_url: string | null
+          registry_tx_hash: string | null
+          to_address: string
+          treasury_usdc_after: number | null
+          tx_hash: string | null
+        }
+        Insert: {
+          amount_usdc: number
+          created_at?: string
+          desk_equity_after?: number | null
+          direction: string
+          explorer_url?: string | null
+          from_address: string
+          id?: string
+          keeper_hub_run_id?: string | null
+          reason?: string | null
+          registry_explorer_url?: string | null
+          registry_tx_hash?: string | null
+          to_address: string
+          treasury_usdc_after?: number | null
+          tx_hash?: string | null
+        }
+        Update: {
+          amount_usdc?: number
+          created_at?: string
+          desk_equity_after?: number | null
+          direction?: string
+          explorer_url?: string | null
+          from_address?: string
+          id?: string
+          keeper_hub_run_id?: string | null
+          reason?: string | null
+          registry_explorer_url?: string | null
+          registry_tx_hash?: string | null
+          to_address?: string
+          treasury_usdc_after?: number | null
+          tx_hash?: string | null
+        }
+        Relationships: []
+      }
+      desk_control_state: {
+        Row: {
+          desk_paused: boolean
+          id: string
+          kill_armed: boolean
+          kill_armed_at: string | null
+          kill_armed_reason: string | null
+          last_event_microtrade_at: string | null
+          last_keeper_hub_run_id: string | null
+          last_maintenance_at: string | null
+          last_trip_at: string | null
+          last_trip_reason: string | null
+          last_tx_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          desk_paused?: boolean
+          id?: string
+          kill_armed?: boolean
+          kill_armed_at?: string | null
+          kill_armed_reason?: string | null
+          last_event_microtrade_at?: string | null
+          last_keeper_hub_run_id?: string | null
+          last_maintenance_at?: string | null
+          last_trip_at?: string | null
+          last_trip_reason?: string | null
+          last_tx_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          desk_paused?: boolean
+          id?: string
+          kill_armed?: boolean
+          kill_armed_at?: string | null
+          kill_armed_reason?: string | null
+          last_event_microtrade_at?: string | null
+          last_keeper_hub_run_id?: string | null
+          last_maintenance_at?: string | null
+          last_trip_at?: string | null
+          last_trip_reason?: string | null
+          last_tx_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      desk_heartbeats: {
+        Row: {
+          created_at: string
+          id: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          source: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          source?: string
+        }
+        Relationships: []
+      }
+      desk_intents: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          keeper_hub_run_id: string | null
+          legs: Json
+          notional_usdc: number
+          policy_snapshot: Json
+          reason_codes: string[]
+          signal_id: string | null
+          status: string
+          strategy: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          keeper_hub_run_id?: string | null
+          legs?: Json
+          notional_usdc?: number
+          policy_snapshot?: Json
+          reason_codes?: string[]
+          signal_id?: string | null
+          status?: string
+          strategy: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          keeper_hub_run_id?: string | null
+          legs?: Json
+          notional_usdc?: number
+          policy_snapshot?: Json
+          reason_codes?: string[]
+          signal_id?: string | null
+          status?: string
+          strategy?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "desk_intents_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "desk_signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      desk_positions: {
+        Row: {
+          aave: Json
+          as_of: string
+          created_at: string
+          desk_address: string
+          equity_usdc: number
+          id: string
+          lido: Json | null
+          link: number
+          morpho: Json | null
+          raw: Json
+          usdc: number
+          weth: number
+        }
+        Insert: {
+          aave?: Json
+          as_of: string
+          created_at?: string
+          desk_address: string
+          equity_usdc?: number
+          id?: string
+          lido?: Json | null
+          link?: number
+          morpho?: Json | null
+          raw?: Json
+          usdc?: number
+          weth?: number
+        }
+        Update: {
+          aave?: Json
+          as_of?: string
+          created_at?: string
+          desk_address?: string
+          equity_usdc?: number
+          id?: string
+          lido?: Json | null
+          link?: number
+          morpho?: Json | null
+          raw?: Json
+          usdc?: number
+          weth?: number
+        }
+        Relationships: []
+      }
+      desk_signals: {
+        Row: {
+          chain_id: number
+          created_at: string
+          dedupe_key: string
+          features: Json
+          id: string
+          policy_verdict: string
+          severity: number
+          signal_type: string
+          sources: Json
+        }
+        Insert: {
+          chain_id?: number
+          created_at?: string
+          dedupe_key: string
+          features?: Json
+          id?: string
+          policy_verdict?: string
+          severity?: number
+          signal_type: string
+          sources?: Json
+        }
+        Update: {
+          chain_id?: number
+          created_at?: string
+          dedupe_key?: string
+          features?: Json
+          id?: string
+          policy_verdict?: string
+          severity?: number
+          signal_type?: string
+          sources?: Json
+        }
+        Relationships: []
+      }
+      desk_tickets: {
+        Row: {
+          content_uri: string | null
+          created_at: string
+          explorer_url: string | null
+          id: string
+          intent_hash: string | null
+          intent_id: string
+          keeper_hub_run_id: string | null
+          payload: Json
+          signal_hash: string | null
+          summary: string | null
+          ticket_hash: string
+          tx_hash: string | null
+        }
+        Insert: {
+          content_uri?: string | null
+          created_at?: string
+          explorer_url?: string | null
+          id?: string
+          intent_hash?: string | null
+          intent_id: string
+          keeper_hub_run_id?: string | null
+          payload?: Json
+          signal_hash?: string | null
+          summary?: string | null
+          ticket_hash: string
+          tx_hash?: string | null
+        }
+        Update: {
+          content_uri?: string | null
+          created_at?: string
+          explorer_url?: string | null
+          id?: string
+          intent_hash?: string | null
+          intent_id?: string
+          keeper_hub_run_id?: string | null
+          payload?: Json
+          signal_hash?: string | null
+          summary?: string | null
+          ticket_hash?: string
+          tx_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "desk_tickets_intent_id_fkey"
+            columns: ["intent_id"]
+            isOneToOne: false
+            referencedRelation: "desk_intents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_subscribers: {
         Row: {
@@ -221,7 +795,7 @@ export type Database = {
           failure_reason: string | null
           id: string
           latency_ms: number
-          monitored_event_id: string
+          monitored_event_id: string | null
           provider: string
           response_metadata: Json | null
           status: string
@@ -234,7 +808,7 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           latency_ms?: number
-          monitored_event_id: string
+          monitored_event_id?: string | null
           provider: string
           response_metadata?: Json | null
           status: string
@@ -247,19 +821,12 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           latency_ms?: number
-          monitored_event_id?: string
+          monitored_event_id?: string | null
           provider?: string
           response_metadata?: Json | null
           status?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "llm_generation_attempts_entity_id_fkey"
-            columns: ["entity_id"]
-            isOneToOne: false
-            referencedRelation: "public_alerts"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "llm_generation_attempts_monitored_event_id_fkey"
             columns: ["monitored_event_id"]
@@ -331,14 +898,18 @@ export type Database = {
           amount_requested: number | null
           amount_settled: number | null
           challenge_reference: string | null
+          content_uri: string | null
           created_at: string
           currency: string | null
           expires_at: string | null
+          explorer_url: string | null
           id: string
+          keeper_hub_run_id: string | null
           payer_reference: string | null
           payment_route: string
           premium_item_id: string
           referral_address: string | null
+          registry_tx_hash: string | null
           requested_at: string
           settled_at: string | null
           settlement_reference: string | null
@@ -349,14 +920,18 @@ export type Database = {
           amount_requested?: number | null
           amount_settled?: number | null
           challenge_reference?: string | null
+          content_uri?: string | null
           created_at?: string
           currency?: string | null
           expires_at?: string | null
+          explorer_url?: string | null
           id?: string
+          keeper_hub_run_id?: string | null
           payer_reference?: string | null
           payment_route: string
           premium_item_id: string
           referral_address?: string | null
+          registry_tx_hash?: string | null
           requested_at?: string
           settled_at?: string | null
           settlement_reference?: string | null
@@ -367,14 +942,18 @@ export type Database = {
           amount_requested?: number | null
           amount_settled?: number | null
           challenge_reference?: string | null
+          content_uri?: string | null
           created_at?: string
           currency?: string | null
           expires_at?: string | null
+          explorer_url?: string | null
           id?: string
+          keeper_hub_run_id?: string | null
           payer_reference?: string | null
           payment_route?: string
           premium_item_id?: string
           referral_address?: string | null
+          registry_tx_hash?: string | null
           requested_at?: string
           settled_at?: string | null
           settlement_reference?: string | null
@@ -507,6 +1086,9 @@ export type Database = {
           generation_provider: string | null
           id: string
           keeper_hub_run_id: string | null
+          market_chatter: Json | null
+          market_chatter_provider: string | null
+          market_chatter_status: string | null
           monitored_event_id: string | null
           published_at: string | null
           registry_tx_hash: string | null
@@ -532,6 +1114,9 @@ export type Database = {
           generation_provider?: string | null
           id?: string
           keeper_hub_run_id?: string | null
+          market_chatter?: Json | null
+          market_chatter_provider?: string | null
+          market_chatter_status?: string | null
           monitored_event_id?: string | null
           published_at?: string | null
           registry_tx_hash?: string | null
@@ -557,6 +1142,9 @@ export type Database = {
           generation_provider?: string | null
           id?: string
           keeper_hub_run_id?: string | null
+          market_chatter?: Json | null
+          market_chatter_provider?: string | null
+          market_chatter_status?: string | null
           monitored_event_id?: string | null
           published_at?: string | null
           registry_tx_hash?: string | null
@@ -575,6 +1163,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      referral_attributions: {
+        Row: {
+          affiliate_wallet: string
+          attributed_at: string
+          created_at: string
+          id: string
+          referral_code: string | null
+          referred_wallet: string
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          affiliate_wallet: string
+          attributed_at?: string
+          created_at?: string
+          id?: string
+          referral_code?: string | null
+          referred_wallet: string
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          affiliate_wallet?: string
+          attributed_at?: string
+          created_at?: string
+          id?: string
+          referral_code?: string | null
+          referred_wallet?: string
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       sponsored_watches: {
         Row: {
@@ -829,7 +1450,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      activity_referral_attribution: { Args: never; Returns: Json }
+      activity_subscription_analytics: { Args: never; Returns: Json }
+      prune_desk_heartbeats: { Args: { keep_count?: number }; Returns: number }
+      prune_desk_positions: { Args: { keep_count?: number }; Returns: number }
+      sum_affiliate_earned: {
+        Args: { p_affiliate_wallet: string }
+        Returns: number
+      }
+      sum_affiliate_withdrawals: {
+        Args: { p_affiliate_wallet: string; p_statuses: string[] }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
@@ -958,6 +1590,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

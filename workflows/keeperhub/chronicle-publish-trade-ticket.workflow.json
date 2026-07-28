@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Publish Trade Ticket (Registry Write)",
+    "description": "Material write: publishTradeTicket(ticketHash, signalHash, intentHash, contentUri) on Chronicle Registry. Anchors desk execution proofs; contentUri points at /desk/tickets/:id."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": {
+        "x": 100,
+        "y": 200
+      },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": {
+          "triggerType": "Manual"
+        }
+      }
+    },
+    {
+      "id": "write-publish-trade-ticket",
+      "type": "action",
+      "position": {
+        "x": 420,
+        "y": 200
+      },
+      "data": {
+        "type": "action",
+        "label": "publishTradeTicket on Chronicle Registry",
+        "config": {
+          "actionType": "web3/write-contract",
+          "network": "11155111",
+          "contractAddress": "0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F",
+          "abiFunction": "publishTradeTicket",
+          "functionArgs": "[\"{{@trigger-manual:Trigger.ticketHash}}\",\"{{@trigger-manual:Trigger.signalHash}}\",\"{{@trigger-manual:Trigger.intentHash}}\",\"{{@trigger-manual:Trigger.contentUri}}\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"ticketHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"signalHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishTradeTicket\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-manual",
+      "target": "write-publish-trade-ticket"
+    }
+  ],
+  "integrationBindings": []
+}

@@ -25,14 +25,14 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
       return {
         txHash: "0xalert-tx-hash",
         keeperHubRunId: "exec_alert_1",
-        explorerUrl: "https://sepolia.basescan.org/tx/0xalert-tx-hash",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xalert-tx-hash",
       };
     },
     async publishDigest(_contentHash: string, _sourceEventRoot: string, _contentUri: string) {
       return {
         txHash: "0xdigest-tx-hash",
         keeperHubRunId: "exec_digest_1",
-        explorerUrl: "https://sepolia.basescan.org/tx/0xdigest-tx-hash",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xdigest-tx-hash",
       };
     },
     async createSponsoredWatch() {
@@ -52,6 +52,31 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
     ) {
       return { txHash: "0xpayout-tx-hash", keeperHubRunId: "exec_payout_1" };
     },
+    async publishTradeTicket(
+      _ticketHash: string,
+      _signalHash: string,
+      _intentHash: string,
+      _contentUri: string,
+    ) {
+      return {
+        txHash: "0xticket-tx-hash",
+        keeperHubRunId: "exec_ticket_1",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xticket-tx-hash",
+      };
+    },
+    async recordCapitalMove(
+      _moveId: string,
+      _from: string,
+      _to: string,
+      _amountUsdc: number,
+      _reasonHash: string,
+    ) {
+      return {
+        txHash: "0xcapital-tx-hash",
+        keeperHubRunId: "exec_capital_1",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xcapital-tx-hash",
+      };
+    },
     async sendTransfer() {
       return { txHash: "0xtransfer-tx-hash", keeperHubRunId: "exec_transfer_1" };
     },
@@ -61,6 +86,7 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
 
 const DIGEST_URI = "https://chronicle.example/digests/digest-123";
 const ALERT_URI = "https://chronicle.example/alerts/alert-123";
+const TICKET_URI = "https://chronicle.example/desk/tickets/ticket-123";
 
 describe("ChronicleRegistryService (digest)", () => {
   it("publishes a digest with HTTPS content URI and returns KeeperHub metadata", async () => {
@@ -71,7 +97,7 @@ describe("ChronicleRegistryService (digest)", () => {
         return {
           txHash: "0xdigest-tx-hash",
           keeperHubRunId: "exec_digest_1",
-          explorerUrl: "https://sepolia.basescan.org/tx/0xdigest-tx-hash",
+          explorerUrl: "https://sepolia.etherscan.io/tx/0xdigest-tx-hash",
         };
       },
     });
@@ -97,7 +123,7 @@ describe("ChronicleRegistryService (digest)", () => {
         return {
           txHash: "0xalert-tx-hash",
           keeperHubRunId: "exec_alert_1",
-          explorerUrl: "https://sepolia.basescan.org/tx/0xalert-tx-hash",
+          explorerUrl: "https://sepolia.etherscan.io/tx/0xalert-tx-hash",
         };
       },
     });
@@ -135,6 +161,51 @@ describe("ChronicleRegistryService (digest)", () => {
     expect(result.success).toBe(false);
     expect(result.errorMessage).toContain("not configured");
     expect(result.txHash).toBeUndefined();
+  });
+
+  it("publishes a trade ticket with HTTPS desk ticket URI", async () => {
+    let capturedUri: string | undefined;
+    const web3Client = createMockWeb3Client({
+      async publishTradeTicket(_ticketHash, _signalHash, _intentHash, contentUri) {
+        capturedUri = contentUri;
+        return {
+          txHash: "0xticket-tx-hash",
+          keeperHubRunId: "exec_ticket_1",
+          explorerUrl: "https://sepolia.etherscan.io/tx/0xticket-tx-hash",
+        };
+      },
+    });
+    const service = createChronicleRegistryService(web3Client);
+
+    const result = await service.publishTradeTicket(
+      "ticket-123",
+      "signal-123",
+      "intent-123",
+      TICKET_URI,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.txHash).toBe("0xticket-tx-hash");
+    expect(result.keeperHubRunId).toBe("exec_ticket_1");
+    expect(result.contentUri).toBe(TICKET_URI);
+    expect(capturedUri).toBe(TICKET_URI);
+  });
+
+  it("records a capital move and returns KeeperHub metadata", async () => {
+    const web3Client = createMockWeb3Client();
+    const service = createChronicleRegistryService(web3Client);
+
+    const result = await service.recordCapitalMove(
+      "move-123",
+      "0x" + "11".repeat(20),
+      "0x" + "22".repeat(20),
+      10,
+      "desk_fund",
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.txHash).toBe("0xcapital-tx-hash");
+    expect(result.keeperHubRunId).toBe("exec_capital_1");
   });
 
   it("handles publish failure gracefully", async () => {

@@ -1,6 +1,6 @@
 ---
 name: ChronicleAI
-description: Autonomous on-chain newspaper and paid intelligence feed — verified, editorial, calm.
+description: Autonomous on-chain newspaper, paid intelligence feed, and policy-gated market desk — verified, editorial, calm.
 colors:
   chartreuse: "#a8d946"
   chartreuse-mist: "#e8f5c8"

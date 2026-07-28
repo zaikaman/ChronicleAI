@@ -5,7 +5,7 @@
  * bytes32 hash; otherwise derive one deterministically from the watchSpec object.
  */
 
-import { ethers } from "ethers";
+import { getAddress, isAddress, keccak256, stringToBytes } from "viem";
 
 const BYTES32_HEX = /^0x[0-9a-fA-F]{64}$/;
 
@@ -14,6 +14,81 @@ export interface SponsoredMonitorContentPrivate {
   watchSpecHash?: string;
   /** Monitoring specification used to derive watchSpecHash when hash is omitted. */
   watchSpec?: Record<string, unknown>;
+  /** Optional ISO campaign start (Loop 4 buyer-chosen window). */
+  startsAt?: string;
+  /** Optional ISO campaign end (Loop 4 buyer-chosen window). */
+  endsAt?: string;
+  /** Optional duration in days when endsAt is not set at product creation. */
+  durationDays?: number;
+  /** Optional short-demo duration in hours (takes precedence over durationDays). */
+  durationHours?: number;
+}
+
+/**
+ * Resolve campaign window from content_private.
+ * Prefer explicit startsAt/endsAt; else durationDays from now; else defaultDays.
+ */
+export function resolveCampaignWindowFromContent(
+  content: SponsoredMonitorContentPrivate,
+  options: { defaultDurationDays: number; now?: Date },
+): { startsAt: string; endsAt: string } {
+  const now = options.now ?? new Date();
+  const startsAt = content.startsAt
+    ? new Date(content.startsAt)
+    : content.watchSpec && typeof content.watchSpec.startsAt === "string"
+      ? new Date(content.watchSpec.startsAt)
+      : now;
+
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new Error("Sponsored monitor startsAt is not a valid ISO timestamp");
+  }
+
+  const endsRaw =
+    content.endsAt ??
+    (content.watchSpec && typeof content.watchSpec.endsAt === "string"
+      ? content.watchSpec.endsAt
+      : undefined);
+
+  if (endsRaw) {
+    const endsAt = new Date(endsRaw);
+    if (Number.isNaN(endsAt.getTime())) {
+      throw new Error("Sponsored monitor endsAt is not a valid ISO timestamp");
+    }
+    if (endsAt.getTime() <= startsAt.getTime()) {
+      throw new Error("Sponsored monitor requires startsAt < endsAt");
+    }
+    return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+  }
+
+  // Prefer hour-level short demo windows when present.
+  const durationHoursRaw =
+    typeof content.durationHours === "number" && Number.isFinite(content.durationHours)
+      ? Math.floor(content.durationHours)
+      : typeof content.watchSpec?.durationHours === "number"
+        ? Math.floor(content.watchSpec.durationHours as number)
+        : null;
+
+  if (durationHoursRaw != null) {
+    if (durationHoursRaw < 1) {
+      throw new Error("Sponsored monitor durationHours must be at least 1");
+    }
+    const endsAt = new Date(startsAt.getTime() + durationHoursRaw * 60 * 60 * 1000);
+    return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+  }
+
+  const durationDays =
+    typeof content.durationDays === "number" && Number.isFinite(content.durationDays)
+      ? Math.floor(content.durationDays)
+      : typeof content.watchSpec?.durationDays === "number"
+        ? Math.floor(content.watchSpec.durationDays as number)
+        : options.defaultDurationDays;
+
+  if (durationDays < 1) {
+    throw new Error("Sponsored monitor durationDays must be at least 1");
+  }
+
+  const endsAt = new Date(startsAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
+  return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
 }
 
 export function parseSponsoredMonitorContentPrivate(
@@ -44,13 +119,13 @@ export function resolveTargetContract(content: SponsoredMonitorContentPrivate): 
     );
   }
 
-  if (!ethers.isAddress(candidate)) {
+  if (!isAddress(candidate, { strict: false })) {
     throw new Error(
       `Sponsored monitor targetContract is not a valid Ethereum address: ${candidate}`,
     );
   }
 
-  return ethers.getAddress(candidate);
+  return getAddress(candidate);
 }
 
 /**
@@ -81,7 +156,7 @@ export function resolveWatchSpecHash(content: SponsoredMonitorContentPrivate): s
 /** Deterministic keccak256 of canonical JSON for a watch specification. */
 export function deriveWatchSpecHash(watchSpec: unknown): string {
   const canonical = canonicalizeJson(watchSpec);
-  return ethers.keccak256(ethers.toUtf8Bytes(canonical));
+  return keccak256(stringToBytes(canonical));
 }
 
 function canonicalizeJson(value: unknown): string {

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-28T18:00:00.000Z",
+  "exportedAt": "2026-07-09T18:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Record Payout (Registry Write)",
     "description": "Material write: recordPayout on Chronicle Registry after a KeeperHub transfer. Triggered with payoutPeriodHash, recipient, amount, reasonHash."
@@ -9,7 +9,10 @@
     {
       "id": "trigger-manual",
       "type": "trigger",
-      "position": { "x": 100, "y": 200 },
+      "position": {
+        "x": 100,
+        "y": 200
+      },
       "data": {
         "type": "trigger",
         "label": "Manual / API Trigger",
@@ -21,14 +24,17 @@
     {
       "id": "write-record-payout",
       "type": "action",
-      "position": { "x": 420, "y": 200 },
+      "position": {
+        "x": 420,
+        "y": 200
+      },
       "data": {
         "type": "action",
         "label": "recordPayout on Chronicle Registry",
         "config": {
           "actionType": "web3/write-contract",
-          "network": "84532",
-          "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
+          "network": "11155111",
+          "contractAddress": "0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F",
           "abiFunction": "recordPayout",
           "functionArgs": "[\"{{@trigger-manual:Trigger.payoutPeriodHash}}\",\"{{@trigger-manual:Trigger.recipient}}\",\"{{@trigger-manual:Trigger.amount}}\",\"{{@trigger-manual:Trigger.reasonHash}}\"]",
           "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"payoutPeriodHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordPayout\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
@@ -37,7 +43,11 @@
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-manual", "target": "write-record-payout" }
+    {
+      "id": "e1",
+      "source": "trigger-manual",
+      "target": "write-record-payout"
+    }
   ],
   "integrationBindings": []
 }

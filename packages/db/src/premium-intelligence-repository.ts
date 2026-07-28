@@ -10,8 +10,25 @@ import type {
   PremiumIntelligenceItemUpdate,
 } from "./types.ts";
 
+/** Public teaser columns only — never includes content_private (P2-1). */
+export const PREMIUM_TEASER_COLUMNS =
+  "id, slug, title, content_type, summary_public, source_event_ids, price_amount, price_currency, payment_routes, status, created_at, updated_at" as const;
+
+/** Cap for public teaser lists. */
+export const PREMIUM_TEASER_LIST_LIMIT = 50;
+
+/**
+ * Row shape returned by listTeasers — public columns only.
+ * content_private is intentionally omitted at the DB projection layer.
+ */
+export type PremiumIntelligenceTeaserRow = Omit<
+  PremiumIntelligenceItemRow,
+  "content_private"
+>;
+
 export interface PremiumIntelligenceRepository {
-  listTeasers(): Promise<Result<PremiumIntelligenceItemRow[]>>;
+  /** Public catalog teasers (bounded, no content_private). */
+  listTeasers(limitParam?: number): Promise<Result<PremiumIntelligenceTeaserRow[]>>;
   findBySlug(slug: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
   findById(id: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
   findPrivateContent(id: string): Promise<Result<unknown | null>>;
@@ -20,6 +37,11 @@ export interface PremiumIntelligenceRepository {
     id: string,
     update: PremiumIntelligenceItemUpdate,
   ): Promise<Result<PremiumIntelligenceItemRow>>;
+  /**
+   * Archive auto-productized deep dives / historical feeds that were never
+   * LLM-authored (boot backfill / deterministic fallback leftovers).
+   */
+  archiveNonLlmAutoProducts(): Promise<Result<number>>;
 }
 
 export function createPremiumIntelligenceRepository(
@@ -28,14 +50,21 @@ export function createPremiumIntelligenceRepository(
   const table = () => supabase.from("premium_intelligence_items");
 
   return {
-    async listTeasers() {
+    async listTeasers(limitParam = PREMIUM_TEASER_LIST_LIMIT) {
+      // Exclude catalog-only products (newsletter + desk feed payment FKs).
+      // Still findable via findById/findBySlug for settlements and access gates.
+      // P2-1: project public columns only — never select content_private for teasers.
+      const limit = Math.min(PREMIUM_TEASER_LIST_LIMIT, Math.max(1, limitParam));
       const { data, error } = await table()
-        .select("*")
+        .select(PREMIUM_TEASER_COLUMNS)
         .eq("status", "available")
-        .order("created_at", { ascending: false });
+        .neq("content_type", "monthly_newsletter")
+        .neq("slug", "chronicle-desk-feed")
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
       if (error) return failure(mapPostgrestError(error));
-      return success(data ?? []);
+      return success((data ?? []) as unknown as PremiumIntelligenceTeaserRow[]);
     },
 
     async findBySlug(slug) {
@@ -84,6 +113,40 @@ export function createPremiumIntelligenceRepository(
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as PremiumIntelligenceItemRow);
+    },
+
+    async archiveNonLlmAutoProducts() {
+      const { data: rows, error } = await table()
+        .select("id, slug, content_type, content_private, status")
+        .eq("status", "available")
+        .in("content_type", ["deep_dive", "historical_feed"]);
+
+      if (error) return failure(mapPostgrestError(error));
+
+      const toArchive = (rows ?? []).filter((row) => {
+        const slug = typeof row.slug === "string" ? row.slug : "";
+        const isAuto =
+          slug.startsWith("deep-dive-cluster-") ||
+          slug.startsWith("deep-dive-cascade-") ||
+          slug.startsWith("deep-dive-digest-") ||
+          slug.startsWith("historical-feed-");
+        if (!isAuto) return false;
+
+        const privateContent = row.content_private;
+        if (!privateContent || typeof privateContent !== "object") return true;
+        const usedLlm = (privateContent as { usedLlm?: unknown }).usedLlm;
+        return usedLlm !== true;
+      });
+
+      if (toArchive.length === 0) return success(0);
+
+      const ids = toArchive.map((r) => r.id as string);
+      const { error: updateError } = await table()
+        .update({ status: "archived" })
+        .in("id", ids);
+
+      if (updateError) return failure(mapPostgrestError(updateError));
+      return success(ids.length);
     },
   };
 }

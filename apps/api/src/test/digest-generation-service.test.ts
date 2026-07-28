@@ -1,7 +1,14 @@
-// Unit tests for digest generation service (LLM multi-provider + template fallback)
+// Unit tests for digest generation service (LLM multi-provider, no template fallback)
 
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { createDigestGenerationService } from "../services/digest-generation-service.ts";
+import {
+  buildDigestPromptForTest,
+  computeDigestStats,
+  createDigestGenerationService,
+  DigestGenerationError,
+  flattenSectionsToAnalysis,
+  parseSectionsFromAnalysis,
+} from "../services/digest-generation-service.ts";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
 
 const sampleEvents: Array<{
@@ -91,116 +98,16 @@ const configuredProviders = {
   groq: { apiKey: "groq-test-key", model: "llama-3.3-70b-versatile" },
 };
 
-/** Template path (no provider configs) — used for deterministic ranking tests. */
-const templateService = createDigestGenerationService();
+const baseParams = {
+  reportDate: "2026-07-07",
+  periodStart: new Date(Date.now() - 86400000).toISOString(),
+  periodEnd: new Date().toISOString(),
+};
 
 describe("DigestGenerationService", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
-  });
-
-  it("generates a digest with ranked highlights from events (template path)", async () => {
-    const result = await templateService.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events: sampleEvents,
-    });
-
-    expect(result.title).toContain("ChronicleAI Daily Digest");
-    expect(result.summary).toBeTruthy();
-    expect(result.highlights.length).toBeGreaterThanOrEqual(3);
-    expect(result.sourceEventIds).toContain("evt-001");
-    expect(result.confidence).toBe("high");
-    expect(result.generationProvider).toBe("template");
-  });
-
-  it("generates a no-major-events digest when no events exist", async () => {
-    const result = await templateService.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events: [],
-    });
-
-    expect(result.title).toContain("ChronicleAI Daily Digest");
-    expect(result.highlights[0]).toContain("No major events");
-    expect(result.sourceEventIds).toEqual([]);
-    expect(result.analysis).toBeTruthy();
-  });
-
-  it("includes source references in the digest", async () => {
-    const result = await templateService.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events: sampleEvents,
-    });
-
-    expect(result.sourceEventIds.length).toBe(3);
-  });
-
-  it("separates analysis from facts", async () => {
-    const result = await templateService.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events: sampleEvents,
-    });
-
-    expect(result.summary).toBeTruthy();
-    expect(typeof result.analysis).toBe("string");
-    expect(result.analysis!.length).toBeGreaterThan(50);
-  });
-
-  it("produces consistent output for the same input (template path)", async () => {
-    const result1 = await templateService.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events: sampleEvents,
-    });
-
-    const result2 = await templateService.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events: sampleEvents,
-    });
-
-    expect(result1.title).toBe(result2.title);
-    expect(result1.sourceEventIds).toEqual(result2.sourceEventIds);
-  });
-
-  it("ranks events by significance score descending (template path)", async () => {
-    const highScoreEvent = {
-      ...sampleEvents[0]!,
-      id: "high",
-      significanceScore: 0.9,
-    };
-    const mediumScoreEvent = {
-      ...sampleEvents[0]!,
-      id: "medium",
-      significanceScore: 0.5,
-    };
-    const lowScoreEvent = {
-      ...sampleEvents[0]!,
-      id: "low",
-      significanceScore: 0.1,
-    };
-
-    const events = [lowScoreEvent, highScoreEvent, mediumScoreEvent];
-
-    const result = await templateService.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events,
-    });
-
-    expect(result.highlights.length).toBe(3);
-    expect(result.highlights[0]).toContain("significance: 90%");
   });
 
   it("uses Gemini LLM response when provider succeeds", async () => {
@@ -239,7 +146,7 @@ describe("DigestGenerationService", () => {
     const llmAttemptRepo: LLMGenerationAttemptRepository = {
       async create(data) {
         attempts.push({
-          entity_type: data.entity_type,
+          ...(data.entity_type !== undefined ? { entity_type: data.entity_type } : {}),
           monitored_event_id: data.monitored_event_id,
           provider: data.provider,
           status: data.status,
@@ -271,9 +178,7 @@ describe("DigestGenerationService", () => {
 
     const service = createDigestGenerationService(configuredProviders, llmAttemptRepo);
     const result = await service.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
+      ...baseParams,
       events: sampleEvents,
     });
 
@@ -292,7 +197,45 @@ describe("DigestGenerationService", () => {
     expect(attempts[0]?.status).toBe("succeeded");
   });
 
-  it("falls back to template when all LLM providers fail", async () => {
+  it("generates a no-major-events digest when LLM returns empty-window content", async () => {
+    const llmBody = {
+      title: "ChronicleAI Daily Digest — Quiet Markets",
+      summary:
+        "No significant on-chain events were detected during the reporting period. Monitoring continued normally.",
+      highlights: [
+        "No major events crossed configured thresholds",
+        "Gas and volume stayed within expected bands",
+        "Operations remain nominal",
+      ],
+      analysis: "The absence of threshold breaches suggests orderly market conditions.",
+      confidence: "high",
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(llmBody) }] } }],
+        }),
+      })),
+    );
+
+    const service = createDigestGenerationService(configuredProviders, createMockLlmAttemptRepo());
+    const result = await service.generateDigest({
+      ...baseParams,
+      events: [],
+    });
+
+    expect(result.generationProvider).toBe("gemini");
+    expect(result.title).toContain("ChronicleAI Daily Digest");
+    expect(result.sourceEventIds).toEqual([]);
+    expect(result.highlights.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("throws DigestGenerationError when all LLM providers fail", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -311,37 +254,45 @@ describe("DigestGenerationService", () => {
       createMockLlmAttemptRepo(),
     );
 
-    const result = await service.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events: sampleEvents,
-    });
+    await expect(
+      service.generateDigest({
+        ...baseParams,
+        events: sampleEvents,
+      }),
+    ).rejects.toBeInstanceOf(DigestGenerationError);
 
-    expect(result.generationProvider).toBe("template");
-    expect(result.title).toContain("ChronicleAI Daily Digest");
-    expect(result.highlights.length).toBeGreaterThanOrEqual(3);
-    expect(result.sourceEventIds).toContain("evt-001");
+    try {
+      await service.generateDigest({
+        ...baseParams,
+        events: sampleEvents,
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(DigestGenerationError);
+      const genError = error as DigestGenerationError;
+      expect(genError.message).toContain("all LLM providers failed");
+      expect(genError.attempts.length).toBe(3);
+      expect(genError.attempts.every((a) => !a.success)).toBe(true);
+    }
   });
 
-  it("skips providers with empty API keys and falls back to template", async () => {
+  it("throws when all API keys are empty", async () => {
     const service = createDigestGenerationService(
       emptyProviderConfigs,
       createMockLlmAttemptRepo(),
     );
 
-    const result = await service.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      events: sampleEvents,
+    await expect(
+      service.generateDigest({
+        ...baseParams,
+        events: sampleEvents,
+      }),
+    ).rejects.toMatchObject({
+      name: "DigestGenerationError",
+      message: expect.stringContaining("all LLM providers failed"),
     });
-
-    expect(result.generationProvider).toBe("template");
-    expect(result.summary).toBeTruthy();
   });
 
-  it("falls through invalid Gemini JSON and lands on template when later keys are empty", async () => {
+  it("falls through invalid Gemini JSON and throws when later keys are empty", async () => {
     let callCount = 0;
 
     vi.stubGlobal(
@@ -368,16 +319,190 @@ describe("DigestGenerationService", () => {
       createMockLlmAttemptRepo(),
     );
 
+    await expect(
+      service.generateDigest({
+        ...baseParams,
+        events: sampleEvents,
+      }),
+    ).rejects.toBeInstanceOf(DigestGenerationError);
+
+    expect(callCount).toBe(1);
+  });
+
+  it("includes source event ids from input when LLM succeeds", async () => {
+    const llmBody = {
+      title: "ChronicleAI Daily Digest — Sources",
+      summary: "Multiple venues printed large flow during the session.",
+      highlights: ["Swap", "Liquidation", "Gas"],
+      analysis: "Cross-venue risk signals concentrated around ETH collateral.",
+      confidence: "medium",
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(llmBody) }] } }],
+        }),
+      })),
+    );
+
+    const service = createDigestGenerationService(configuredProviders, createMockLlmAttemptRepo());
     const result = await service.generateDigest({
-      reportDate: "2026-07-07",
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
+      ...baseParams,
       events: sampleEvents,
     });
 
-    expect(callCount).toBe(1);
-    expect(result.generationProvider).toBe("template");
-    expect(result.highlights.length).toBeGreaterThanOrEqual(3);
+    expect(result.sourceEventIds.length).toBe(3);
+    expect(result.sourceEventIds).toEqual(["evt-001", "evt-002", "evt-003"]);
+  });
+
+  it("precomputes DigestStats from mixed event types", () => {
+    const stats = computeDigestStats([
+      {
+        id: "1",
+        eventType: "cex_inflow",
+        chainId: 1,
+        protocol: "Binance",
+        assetSymbols: ["USDC"],
+        magnitude: { value: 2_000_000, unit: "USD" },
+        transactionHash: null,
+        significanceScore: 0.9,
+        capturedAt: new Date().toISOString(),
+        rawPayload: {
+          flowContext: {
+            fromRole: "unknown",
+            toRole: "exchange",
+            toLabel: "Binance",
+            direction: "unknown",
+          },
+        },
+      },
+      {
+        id: "2",
+        eventType: "stablecoin_mint",
+        chainId: 1,
+        protocol: "Circle",
+        assetSymbols: ["USDC"],
+        magnitude: { value: 10_000_000, unit: "USD" },
+        transactionHash: null,
+        significanceScore: 0.8,
+        capturedAt: new Date().toISOString(),
+        rawPayload: {
+          flowContext: {
+            fromRole: "treasury",
+            toRole: "unknown",
+            direction: "supply_expand",
+          },
+        },
+      },
+      {
+        id: "3",
+        eventType: "large_swap",
+        chainId: 1,
+        protocol: "Uniswap V3",
+        assetSymbols: ["ETH", "USDC"],
+        magnitude: { value: 1_000_000, unit: "USD" },
+        transactionHash: null,
+        significanceScore: 0.7,
+        capturedAt: new Date().toISOString(),
+        rawPayload: {
+          flowContext: {
+            fromRole: "unknown",
+            toRole: "unknown",
+            direction: "de_risk",
+          },
+        },
+      },
+      {
+        id: "4",
+        eventType: "liquidation",
+        chainId: 1,
+        protocol: "Aave V3",
+        assetSymbols: ["ETH"],
+        magnitude: { value: 100_000, unit: "USD" },
+        transactionHash: null,
+        significanceScore: 0.6,
+        capturedAt: new Date().toISOString(),
+      },
+    ]);
+
+    expect(stats.cexInUsd).toBe(2_000_000);
+    expect(stats.mintUsd).toBe(10_000_000);
+    expect(stats.swapUsd).toBe(1_000_000);
+    expect(stats.liquidationUsd).toBe(100_000);
+    expect(stats.liquidationCount).toBe(1);
+    expect(stats.netDeRiskUsd).toBe(1_000_000);
+  });
+
+  it("embeds DIGEST STATS and section keys in the prompt", () => {
+    const prompt = buildDigestPromptForTest({
+      ...baseParams,
+      events: sampleEvents,
+    });
+    expect(prompt).toContain("DIGEST STATS");
+    expect(prompt).toContain("capitalDirection");
+    expect(prompt).toContain("exchangeAndProtocolFlows");
+    expect(prompt).toContain("stressBoard");
+    expect(prompt).toContain("storyOfTheDay");
+    expect(prompt).toContain("coverageNote");
+  });
+
+  it("flattens and re-parses digest sections", () => {
+    const sections = {
+      capitalDirection: "Net de-risk into stables.",
+      exchangeAndProtocolFlows: "No qualifying CEX flow today.",
+      stressBoard: "Two liquidations, no cluster.",
+      storyOfTheDay: "Quiet rotation day.",
+      coverageNote: "Swaps under $500k filtered.",
+    };
+    const analysis = flattenSectionsToAnalysis(sections);
+    expect(analysis).toContain("## Capital direction");
+    expect(analysis).toContain("## Stress board");
+    const parsed = parseSectionsFromAnalysis(analysis);
+    expect(parsed?.capitalDirection).toContain("de-risk");
+    expect(parsed?.coverageNote).toContain("filtered");
+  });
+
+  it("parses sectioned LLM response and flattens into analysis", async () => {
+    const llmBody = {
+      title: "ChronicleAI Daily Digest — Flow Desk",
+      summary: "Mixed capital flows with a CEX print and elevated liquidations.",
+      highlights: ["CEX inflow", "Liq cluster", "Quiet mints"],
+      analysis: "See sections.",
+      sections: {
+        capitalDirection: "De-risk bias on the day.",
+        exchangeAndProtocolFlows: "Binance saw $2M USDC in.",
+        stressBoard: "One liquidation cluster printed.",
+        storyOfTheDay: "Stress followed CEX inflow.",
+        coverageNote: "Small swaps filtered.",
+      },
+      confidence: "high",
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(llmBody) }] } }],
+        }),
+      })),
+    );
+
+    const service = createDigestGenerationService(configuredProviders, createMockLlmAttemptRepo());
+    const result = await service.generateDigest({
+      ...baseParams,
+      events: sampleEvents,
+    });
+
+    expect(result.sections?.capitalDirection).toContain("De-risk");
+    expect(result.analysis).toContain("## Capital direction");
+    expect(result.analysis).toContain("## Story of the day");
   });
 });
-

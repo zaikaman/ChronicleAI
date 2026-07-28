@@ -1,8 +1,15 @@
 // LLM-backed public alert content generator with Gemini -> OpenAI -> Groq fallback
 
-import { ALERT_GENERATION_TIMEOUT_MS, LLM_FALLBACK_ORDER } from "@chronicleai/config";
+import {
+  ALERT_GENERATION_TIMEOUT_MS,
+  chainLabel,
+  LLM_FALLBACK_ORDER,
+} from "@chronicleai/config";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
-import type { Confidence, EventType, LLMProvider } from "@chronicleai/schemas";
+import type { Confidence, EventType, FlowContext, LLMProvider } from "@chronicleai/schemas";
+import {
+  directionPlainLanguage,
+} from "../monitoring/flow-enrichment.ts";
 import {
   extractJsonObject,
   LLM_PROVIDER_CALLERS,
@@ -26,6 +33,10 @@ export interface AlertGenerationInput {
   source: string;
   sourceEventId?: string | null;
   capturedAt: string;
+  /** Deterministic capital-flow roles / direction when known. */
+  flowContext?: FlowContext | null;
+  /** liquidation_cluster member count when applicable. */
+  clusterCount?: number | null;
 }
 
 export interface GeneratedAlertContent {
@@ -57,32 +68,75 @@ export interface PublicAlertContentService {
 }
 
 const ALERT_SYSTEM_INSTRUCTION =
-  "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.";
+  "You are ChronicleAI, an on-chain capital-flow intelligence desk. Generate concise public alerts. Lead with what moved where. Never invent entity names not provided in the structured data.";
 
 // ── Prompt Template ────────────────────────────────────
 
+function formatMagnitude(magnitude: { value: number; unit: string } | null | undefined): string {
+  if (!magnitude) return "unknown";
+  if (magnitude.unit === "USD") {
+    const v = magnitude.value;
+    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+    if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+    return `$${v.toFixed(2)}`;
+  }
+  return `${magnitude.value} ${magnitude.unit}`;
+}
+
 function buildPrompt(input: AlertGenerationInput): string {
+  const networkName = chainLabel(input.chainId);
   const parts = [
-    "You are ChronicleAI, an on-chain intelligence monitor. Generate a public alert for a significant blockchain event.",
+    "You are ChronicleAI, an on-chain capital-flow intelligence desk. Generate a public alert for a significant blockchain event.",
     "",
     `Event Type: ${input.eventType}`,
     `Chain ID: ${input.chainId}`,
+    `Network: ${networkName}`,
   ];
 
-  if (input.protocol) parts.push(`Protocol: ${input.protocol}`);
+  if (input.protocol) parts.push(`Protocol / Venue: ${input.protocol}`);
   if (input.assetSymbols?.length) parts.push(`Assets: ${input.assetSymbols.join(", ")}`);
-  if (input.magnitude) parts.push(`Magnitude: ${input.magnitude.value} ${input.magnitude.unit}`);
+  if (input.magnitude) {
+    parts.push(`Magnitude: ${input.magnitude.value} ${input.magnitude.unit}`);
+    parts.push(`Magnitude (display): ${formatMagnitude(input.magnitude)}`);
+  }
   if (input.transactionHash) parts.push(`Transaction: ${input.transactionHash}`);
-  if (input.significanceScore)
+  if (input.significanceScore) {
     parts.push(`Significance Score: ${input.significanceScore.toFixed(2)}`);
+  }
+  if (input.clusterCount != null) {
+    parts.push(`Cluster count: ${input.clusterCount}`);
+  }
+
+  if (input.flowContext) {
+    const fc = input.flowContext;
+    parts.push("", "FLOW CONTEXT (deterministic — do not invent beyond this):");
+    parts.push(`From role: ${fc.fromRole}${fc.fromLabel ? ` (${fc.fromLabel})` : ""}`);
+    parts.push(`To role: ${fc.toRole}${fc.toLabel ? ` (${fc.toLabel})` : ""}`);
+    parts.push(`Direction: ${fc.direction} (${directionPlainLanguage(fc.direction)})`);
+    if (fc.venue) parts.push(`Venue: ${fc.venue}`);
+    if (fc.subjectAddress) parts.push(`Subject address: ${fc.subjectAddress}`);
+    if (fc.counterpartyAddress) parts.push(`Counterparty address: ${fc.counterpartyAddress}`);
+  }
 
   parts.push(
     "",
     "IMPORTANT RULES:",
     "- The alert is for the PUBLIC. Do NOT include premium-only analysis or deep financial advice.",
+    "- Lead with WHAT moved WHERE (roles/labels when known), not only USD size.",
+    "- Name direction in plain language when known (e.g. de-risking into stables, USDC supply expanded).",
+    "- One frame only: liquidity / directional risk / supply / venue stress / no strong read.",
     "- Keep the summary concise (2-4 sentences) and plain-language.",
-    "- Focus on WHAT happened, WHERE it happened, and WHY it matters to a general audience.",
-    "- Provide a confidence level: 'high' for clear deterministic data, 'medium' for reasonable interpretation, 'low' for speculative signals.",
+    `- The event occurred on ${networkName} (chain ID ${input.chainId}). Name that network only — never invent a different chain.`,
+    "- Never invent entity names (exchanges, protocols, treasuries). Use only labels provided in FLOW CONTEXT or Protocol/Venue.",
+    "- If roles are unknown, say so plainly; do not guess celebrity wallets.",
+    "- Confidence: 'high' for clear size+labels, 'medium' when roles unknown but size clear, 'low' when sparse.",
+    "",
+    "Title style examples (do not copy numbers — invent from THIS event only):",
+    "- $12.4M USDC transferred to Binance (CEX inflow)",
+    "- $2.1M ETH→USDC on Uniswap — de-risking flow",
+    "- Aave: $800k USDC withdrawn",
+    "- $50M USDC minted at treasury",
+    "- Liquidation cluster: 5 Aave positions, $1.2M notional in 30m",
     "",
     "Respond in JSON format with these fields:",
     '{ "title": "Short alert headline", "summary": "Plain language explanation", "confidence": "high|medium|low" }',
@@ -226,4 +280,9 @@ export function createPublicAlertContentService(
       };
     },
   };
+}
+
+/** Exported for unit tests — builds the LLM prompt without calling providers. */
+export function buildAlertPromptForTest(input: AlertGenerationInput): string {
+  return buildPrompt(input);
 }

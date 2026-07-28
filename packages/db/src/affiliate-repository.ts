@@ -57,7 +57,7 @@ export interface AffiliateRepository {
   /**
    * Register or re-activate an affiliate for the product website.
    * New partners default to `approved` (open affiliate program).
-   * Suspended partners cannot re-register without an operator update.
+   * Suspended partners cannot re-register until status is cleared in the registry.
    */
   register(input: {
     wallet_address: string;

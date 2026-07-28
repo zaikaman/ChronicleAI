@@ -2,7 +2,8 @@
 // Usage: pnpm exec tsx --env-file=.env scripts/verify-para-treasury.ts
 
 import { loadServerEnv } from "@chronicleai/config";
-import { ethers } from "ethers";
+import { type Address, createPublicClient, formatEther, http } from "viem";
+import { sepolia } from "viem/chains";
 import { createParaTreasuryClientFromEnv } from "../src/services/para-treasury-client.ts";
 import {
   resolveTreasuryWallet,
@@ -73,9 +74,12 @@ async function main(): Promise<void> {
   // RPC truth (what the chain actually has)
   if (env.rpcUrl && address) {
     try {
-      const provider = new ethers.JsonRpcProvider(env.rpcUrl);
-      const wei = await provider.getBalance(address);
-      const eth = Number(ethers.formatEther(wei));
+      const client = createPublicClient({
+        chain: sepolia,
+        transport: http(env.rpcUrl),
+      });
+      const wei = await client.getBalance({ address: address as Address });
+      const eth = Number(formatEther(wei));
       info(`RPC balance ETH=${eth}`);
       if (eth > 0) ok("RPC confirms treasury is funded");
       else fail("RPC balance is 0 — wrong network or tx not confirmed");

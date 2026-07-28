@@ -4,9 +4,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
 import {
   buildInsertPayload,
+  buildPaginatedResult,
   buildUpdatePayload,
   expectRow,
   mapPostgrestError,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationParams,
 } from "./repository-utils.ts";
 import type { EventType } from "@chronicleai/schemas";
 import type { PublicAlertInsert, PublicAlertRow, PublicAlertUpdate } from "./types.ts";
@@ -17,7 +21,9 @@ const ALERT_WITH_EVENT_SELECT = `
   monitored_events (
     event_type,
     chain_id,
-    protocol
+    protocol,
+    transaction_hash,
+    raw_payload
   )
 `;
 
@@ -25,6 +31,17 @@ interface MonitoredEventJoin {
   event_type?: string | null;
   chain_id?: number | null;
   protocol?: string | null;
+  transaction_hash?: string | null;
+  raw_payload?: Record<string, unknown> | null;
+}
+
+function extractFlowContext(
+  raw: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const fc = raw.flowContext;
+  if (!fc || typeof fc !== "object") return null;
+  return fc as Record<string, unknown>;
 }
 
 function mapAlertWithEvent(row: Record<string, unknown>): PublicAlertRow {
@@ -38,6 +55,9 @@ function mapAlertWithEvent(row: Record<string, unknown>): PublicAlertRow {
     event_type: (event?.event_type as EventType | null | undefined) ?? null,
     chain_id: typeof event?.chain_id === "number" ? event.chain_id : null,
     protocol: event?.protocol ?? null,
+    transaction_hash:
+      typeof event?.transaction_hash === "string" ? event.transaction_hash : null,
+    flow_context: extractFlowContext(event?.raw_payload ?? null),
   };
 }
 
@@ -45,7 +65,10 @@ export interface PublicAlertRepository {
   create(data: PublicAlertInsert): Promise<Result<PublicAlertRow>>;
   findById(id: string): Promise<Result<PublicAlertRow>>;
   findByDedupeKey(dedupeKey: string): Promise<PublicAlertRow | null>;
+  /** Newest-first; limit-only convenience for internal consumers. */
   list(limitParam?: number): Promise<Result<PublicAlertRow[]>>;
+  /** Page-based list with exact total for public feeds. */
+  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<PublicAlertRow>>>;
   updateDeliveryStatus(
     id: string,
     status: string,
@@ -126,6 +149,27 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       return success(
         (rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>)),
       );
+    },
+
+    async listPage(params) {
+      const { page, limit, offset } = normalizePagination(params, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+
+      const { data: rows, error, count } = await table()
+        .select(ALERT_WITH_EVENT_SELECT, { count: "exact" })
+        .order("published_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        return failure(mapPostgrestError(error));
+      }
+
+      const items = (rows ?? []).map((r) =>
+        mapAlertWithEvent(r as Record<string, unknown>),
+      );
+      return success(buildPaginatedResult(items, page, limit, count ?? items.length));
     },
 
     async updateDeliveryStatus(id, status, publishedAt?) {

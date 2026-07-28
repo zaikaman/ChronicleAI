@@ -1,21 +1,33 @@
-// Public activity routes: GET /activity
-// Returns agent activity data aggregated from multiple tables (no auth)
+// Public activity routes:
+// GET /activity — aggregated dashboard snapshot
+// GET /activity/execution-logs|payments|payouts — page-based list endpoints
 
+import type {
+  ExecutionLogRepository,
+  PaymentRecordRepository,
+  PayoutRecordRepository,
+} from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import type { AgentActivityService } from "../services/agent-activity-service.ts";
+import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 
-export function createActivityRoutes(activityService: AgentActivityService): RouterType {
+export interface ActivityRouteDeps {
+  activityService: AgentActivityService;
+  execLogRepo: ExecutionLogRepository;
+  paymentRecordRepo: PaymentRecordRepository;
+  payoutRepo: PayoutRecordRepository;
+}
+
+export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   const router: RouterType = Router();
+  const { activityService, execLogRepo, paymentRecordRepo, payoutRepo } = deps;
 
   /**
    * GET /activity
    *
    * Public endpoint. Returns aggregated agent activity including recent alerts,
    * digests, payments, treasury status, active sponsored watches,
-   * payout records, and execution logs.
-   *
-   * Responses:
-   *   200 - { alerts, digests, payments, treasury, executionLogs }
+   * payout records, and execution logs (snapshot — use list endpoints for pages).
    */
   router.get("/activity", async (_req, res, next) => {
     try {
@@ -27,6 +39,155 @@ export function createActivityRoutes(activityService: AgentActivityService): Rou
       }
 
       res.json(result.data);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /activity/execution-logs
+   * Page-based KeeperHub execution audit trail.
+   */
+  router.get("/activity/execution-logs", async (req, res, next) => {
+    try {
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 25,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+
+      const result = await execLogRepo.listPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
+      if (!result.ok) {
+        res.status(500).json({ error: result.error.message });
+        return;
+      }
+
+      res.json(
+        fromDbPage(result.value, (l) => ({
+          id: l.id,
+          actionType: l.action_type,
+          entityType: l.entity_type,
+          entityId: l.entity_id,
+          status: l.status,
+          message: l.message,
+          details: l.details,
+          createdAt: l.created_at,
+        })),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /activity/payments
+   * Page-based premium payment settlements.
+   */
+  router.get("/activity/payments", async (req, res, next) => {
+    try {
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+
+      const result = await paymentRecordRepo.listPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
+      if (!result.ok) {
+        res.status(500).json({ error: result.error.message });
+        return;
+      }
+
+      res.json(
+        fromDbPage(result.value, (p) => {
+          const payment: Record<string, unknown> = {
+            id: p.id,
+            premiumItemId: p.premium_item_id,
+            paymentRoute: p.payment_route,
+            status: p.status,
+          };
+          if (p.settlement_reference) payment.settlementReference = p.settlement_reference;
+          if (typeof p.amount_requested === "number") {
+            payment.amountRequested = p.amount_requested;
+          }
+          if (typeof p.amount_settled === "number") {
+            payment.amountSettled = p.amount_settled;
+          }
+          if (p.currency) payment.currency = p.currency;
+          if (p.referral_address) payment.referralAddress = p.referral_address;
+          if (p.requested_at) payment.requestedAt = p.requested_at;
+          if (p.settled_at) payment.settledAt = p.settled_at;
+          if (p.registry_tx_hash) payment.registryTxHash = p.registry_tx_hash;
+          if (p.keeper_hub_run_id) payment.keeperHubRunId = p.keeper_hub_run_id;
+          if (p.explorer_url) payment.explorerUrl = p.explorer_url;
+          if (p.content_uri) payment.contentUri = p.content_uri;
+          return payment;
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /activity/payouts
+   * Page-based revenue routing payout records.
+   */
+  router.get("/activity/payouts", async (req, res, next) => {
+    try {
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 15,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+
+      const result = await payoutRepo.listPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
+      if (!result.ok) {
+        res.status(500).json({ error: result.error.message });
+        return;
+      }
+
+      res.json(
+        fromDbPage(result.value, (p) => {
+          const payout: Record<string, unknown> = {
+            id: p.id,
+            payoutPeriodHash: p.payout_period_hash,
+            recipient: p.recipient,
+            amount: p.amount,
+            reasonHash: p.reason_hash,
+            status: p.status,
+            createdAt: p.created_at,
+          };
+          if (p.payout_tx_hash) payout.payoutTxHash = p.payout_tx_hash;
+          if (p.registry_tx_hash) payout.registryTxHash = p.registry_tx_hash;
+          if (p.keeper_hub_run_id) payout.keeperHubRunId = p.keeper_hub_run_id;
+          if (p.explorer_url) payout.explorerUrl = p.explorer_url;
+          if (p.transfer_keeper_hub_run_id) {
+            payout.transferKeeperHubRunId = p.transfer_keeper_hub_run_id;
+          }
+          if (p.transfer_explorer_url) {
+            payout.transferExplorerUrl = p.transfer_explorer_url;
+          }
+          return payout;
+        }),
+      );
     } catch (error) {
       next(error);
     }

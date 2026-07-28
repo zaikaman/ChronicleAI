@@ -1,18 +1,29 @@
 // Public chain config for x402 payments (browser-safe; no secrets).
-// Defaults match server x402 defaults (Base Sepolia) so local demos work out of the box.
+// Defaults match server x402 defaults (Base Sepolia payment rail).
+// Registry / desk explorers remain on Ethereum Sepolia via lib/explorer.ts.
 
 import type { WalletChainConfig } from "./types.ts";
 
-/** Base Sepolia — default hackathon / demo target for x402. */
+/** Base Sepolia — default x402 payment rail (CDP facilitator). */
 export const BASE_SEPOLIA_CHAIN_ID = 84_532;
 
+/** Ethereum Sepolia — desk / registry / capital ops (not the default payment chain). */
+export const SEPOLIA_CHAIN_ID = 11_155_111;
+
 const KNOWN_CHAINS: Record<number, Omit<WalletChainConfig, "chainId" | "chainIdHex">> = {
-  // Base Sepolia
+  // Base Sepolia — human premium payments (x402)
   84_532: {
     name: "Base Sepolia",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    rpcUrls: ["https://sepolia.base.org"],
+    rpcUrls: ["https://sepolia.base.org", "https://base-sepolia-rpc.publicnode.com"],
     blockExplorerUrls: ["https://sepolia.basescan.org"],
+  },
+  // Ethereum Sepolia — desk / registry (not payment default)
+  11_155_111: {
+    name: "Ethereum Sepolia",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://ethereum-sepolia-rpc.publicnode.com", "https://rpc.sepolia.org"],
+    blockExplorerUrls: ["https://sepolia.etherscan.io"],
   },
   // Base mainnet
   8453: {
@@ -36,7 +47,7 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 
 /**
  * Resolve the payment/target chain for the web app from public Vite env.
- * Defaults to Base Sepolia to match server X402 defaults.
+ * Defaults to Base Sepolia to match server X402 defaults (CDP payment rail).
  */
 export function resolveTargetChain(): WalletChainConfig {
   let chainId = BASE_SEPOLIA_CHAIN_ID;
@@ -70,6 +81,17 @@ export function resolveTargetChain(): WalletChainConfig {
     nativeCurrency: base.nativeCurrency,
     rpcUrls,
     blockExplorerUrls: base.blockExplorerUrls,
+  };
+}
+
+/** Lookup known chain metadata for challenge-domain switches. */
+export function knownChainConfig(chainId: number): WalletChainConfig | null {
+  const known = KNOWN_CHAINS[chainId];
+  if (!known) return null;
+  return {
+    chainId,
+    chainIdHex: toHexChainId(chainId),
+    ...known,
   };
 }
 

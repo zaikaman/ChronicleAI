@@ -15,7 +15,7 @@ function event(partial: Partial<MonitoredEventRow> & { id: string }): MonitoredE
     source: "keeperhub",
     source_event_id: partial.id,
     event_type: "large_swap",
-    chain_id: 84532,
+    chain_id: 11155111,
     protocol: "uniswap",
     asset_symbols: ["USDC"],
     magnitude: { value: 100000, unit: "USD" },
@@ -58,8 +58,8 @@ describe("sponsored-watch-report-service", () => {
     expect(eventMatchesTargetContract(miss, TARGET)).toBe(false);
   });
 
-  it("generates a report with sourceEventRoot and reportContentHash", () => {
-    const report = service.generateReport({
+  it("generates a report with sourceEventRoot and reportContentHash", async () => {
+    const report = await service.generateReport({
       watchId: "watch-1",
       targetContract: TARGET,
       watchSpecHash: "0x" + "c".repeat(64),
@@ -74,10 +74,11 @@ describe("sponsored-watch-report-service", () => {
     expect(report.highlights.length).toBeGreaterThan(0);
     expect(report.title).toContain("Sponsored Watch Report");
     expect(report.summary).toContain("2 on-chain event");
+    expect(report.generationSource).toBe("template");
   });
 
-  it("generates an empty-window report when no events match", () => {
-    const report = service.generateReport({
+  it("generates an empty-window report when no events match", async () => {
+    const report = await service.generateReport({
       watchId: "watch-empty",
       targetContract: TARGET,
       watchSpecHash: "0x" + "d".repeat(64),

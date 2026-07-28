@@ -2,7 +2,7 @@
 // Reads VITE_* prefixed variables only - never access server-only process.env
 // This file is only imported by Vite-bundled code (the web app)
 
-/** Default matches server X402_CHAIN_ID default (Base Sepolia). */
+/** Default matches server X402_CHAIN_ID default (Base Sepolia payment rail). */
 const DEFAULT_X402_CHAIN_ID = 84_532;
 
 export interface ClientEnv {
@@ -11,11 +11,12 @@ export interface ClientEnv {
   supabaseAnonKey: string | undefined;
   /**
    * Public EVM chain id for x402 wallet payments (must match server X402_CHAIN_ID).
+   * Default Base Sepolia (84532). Desk / registry explorers stay on Ethereum Sepolia.
    * Safe to expose — no secrets.
    */
   x402ChainId: number;
   /**
-   * Optional public RPC URL used when adding the chain to a browser wallet.
+   * Optional public RPC URL used when adding the payment chain to a browser wallet.
    */
   x402RpcUrl: string | undefined;
   /**

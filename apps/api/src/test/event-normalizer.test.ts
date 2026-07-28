@@ -6,6 +6,9 @@ import type { PriceOracle } from "../monitoring/price-oracle-service.ts";
 
 function stubOracle(ethUsd: number | null = 3000): PriceOracle {
   return {
+    async getLinkUsdPrice() {
+      return 15;
+    },
     async getEthUsdPrice() {
       return ethUsd;
     },
@@ -19,7 +22,7 @@ describe("event-normalizer", () => {
       sourceEventId: "classified-1",
       eventType: "large_swap",
       chainId: 1,
-      capturedAt: "2026-07-27T00:00:00Z",
+      capturedAt: "2026-07-09T00:00:00Z",
       magnitude: { value: 2_000_000, unit: "USD" },
       rawPayload: { ok: true },
     });
@@ -140,5 +143,183 @@ describe("event-normalizer", () => {
     const normalizer = createEventNormalizer(stubOracle());
     const result = await normalizer.normalize(null as unknown as Record<string, unknown>);
     expect(result.ok).toBe(false);
+  });
+
+  it("attaches flowContext to swap events", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const amount0 = String(2_500_000n * 1_000_000n);
+    const amount1 = String(-(1n * 10n ** 18n));
+    const result = await normalizer.normalize({
+      chainId: 1,
+      eventName: "Swap",
+      address: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+      transactionHash: "0xswap-flow",
+      logIndex: 0,
+      args: {
+        amount0: { value: amount0, type: "int256" },
+        amount1: { value: amount1, type: "int256" },
+        sender: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.flowContext).toBeDefined();
+    expect(result.payload.rawPayload.flowContext).toBeDefined();
+  });
+
+  it("normalizes Transfer to Binance as cex_inflow", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const binance = "0x28C6c06298d514Db089934071355E5743bf21d60";
+    const whale = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+    const value = String(800_000n * 1_000_000n); // 800k USDC
+
+    const result = await normalizer.normalize({
+      chainId: 1,
+      eventName: "Transfer",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      transactionHash: "0xcex-in-1",
+      logIndex: 0,
+      args: {
+        from: whale,
+        to: binance,
+        value: { value, type: "uint256" },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.eventType).toBe("cex_inflow");
+    expect(result.payload.magnitude?.value).toBeCloseTo(800_000, 0);
+    expect(result.payload.flowContext?.toLabel).toBe("Binance");
+    expect(result.payload.protocol).toBe("Binance");
+  });
+
+  it("normalizes Transfer from Binance as cex_outflow", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const binance = "0x28C6c06298d514Db089934071355E5743bf21d60";
+    const value = String(600_000n * 1_000_000n);
+
+    const result = await normalizer.normalize({
+      chainId: 1,
+      eventName: "Transfer",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      transactionHash: "0xcex-out-1",
+      args: {
+        from: binance,
+        to: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        value: { value, type: "uint256" },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.eventType).toBe("cex_outflow");
+    expect(result.payload.flowContext?.fromLabel).toBe("Binance");
+  });
+
+  it("rejects unknown Transfer without CEX labels", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const result = await normalizer.normalize({
+      chainId: 1,
+      eventName: "Transfer",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      args: {
+        from: "0x1111111111111111111111111111111111111111",
+        to: "0x2222222222222222222222222222222222222222",
+        value: { value: String(800_000n * 1_000_000n), type: "uint256" },
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("normalizes USDC Mint as stablecoin_mint", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const amount = String(50_000_000n * 1_000_000n); // $50M
+
+    const result = await normalizer.normalize({
+      chainId: 1,
+      eventName: "Mint",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      transactionHash: "0xmint1",
+      args: {
+        minter: "0x1111111111111111111111111111111111111111",
+        to: "0x2222222222222222222222222222222222222222",
+        amount: { value: amount, type: "uint256" },
+      },
+      protocol: "Circle",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.eventType).toBe("stablecoin_mint");
+    expect(result.payload.magnitude?.value).toBeCloseTo(50_000_000, 0);
+    expect(result.payload.flowContext?.direction).toBe("supply_expand");
+  });
+
+  it("normalizes USDC Burn as stablecoin_burn", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const amount = String(2_000_000n * 1_000_000n);
+
+    const result = await normalizer.normalize({
+      chainId: 1,
+      eventName: "Burn",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      args: {
+        burner: "0x1111111111111111111111111111111111111111",
+        amount: { value: amount, type: "uint256" },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.eventType).toBe("stablecoin_burn");
+    expect(result.payload.flowContext?.direction).toBe("supply_contract");
+  });
+
+  it("normalizes Aave Supply as protocol_deposit", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const amount = String(750_000n * 1_000_000n);
+
+    const result = await normalizer.normalize({
+      chainId: 11_155_111,
+      eventName: "Supply",
+      address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+      transactionHash: "0xsupply1",
+      args: {
+        reserve: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        user: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        onBehalfOf: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        amount: { value: amount, type: "uint256" },
+      },
+      protocol: "Aave V3",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.eventType).toBe("protocol_deposit");
+    expect(result.payload.magnitude?.value).toBeCloseTo(750_000, 0);
+    expect(result.payload.flowContext?.direction).toBe("rebalance");
+  });
+
+  it("normalizes Aave Withdraw as protocol_withdraw", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const amount = String(600_000n * 1_000_000n);
+
+    const result = await normalizer.normalize({
+      chainId: 11_155_111,
+      eventName: "Withdraw",
+      address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+      args: {
+        reserve: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        user: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        to: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        amount: { value: amount, type: "uint256" },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.eventType).toBe("protocol_withdraw");
+    expect(result.payload.flowContext?.direction).toBe("de_risk");
   });
 });

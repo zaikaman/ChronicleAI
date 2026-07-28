@@ -33,16 +33,16 @@ export function AlertFilters({
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="event-type-filter"
-          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+          className="text-xs font-medium text-muted-foreground"
         >
-          Event Type
+          Event type
         </label>
         <select
           id="event-type-filter"
           data-testid="event-type-filter"
           value={filters.eventType}
           onChange={(e) => onChange({ ...filters, eventType: e.target.value })}
-          className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-accent"
+          className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="" className="bg-frame text-foreground">
             All Events
@@ -58,7 +58,7 @@ export function AlertFilters({
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="chain-filter"
-          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+          className="text-xs font-medium text-muted-foreground"
         >
           Chain
         </label>
@@ -67,7 +67,7 @@ export function AlertFilters({
           data-testid="chain-filter"
           value={filters.chainId}
           onChange={(e) => onChange({ ...filters, chainId: e.target.value })}
-          className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-accent"
+          className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="" className="bg-frame text-foreground">
             All Chains

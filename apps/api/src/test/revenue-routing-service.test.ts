@@ -1,10 +1,8 @@
 // Unit tests: Revenue Routing Service
-// Tests autonomous revenue routing, creator recovery, affiliate registry attribution, and registry payout logging
+// Tests autonomous revenue routing — creator recovery only (affiliates withdraw separately)
 
 import type {
-  AffiliateRepository,
   ExecutionLogRepository,
-  PaymentRecordRepository,
   PayoutRecordRepository,
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
@@ -13,6 +11,7 @@ import type {
   ChronicleRegistryService,
   RegistryPublishResult,
 } from "../services/chronicle-registry-service.ts";
+import { createStaticRevenueFxService } from "../services/revenue-fx-service.ts";
 import {
   attributeReferralRewards,
   createRevenueRoutingService,
@@ -26,7 +25,7 @@ const AFFILIATE_A = "0x1111111111111111111111111111111111111111";
 const AFFILIATE_B = "0x2222222222222222222222222222222222222222";
 const PAYER = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-describe("attributeReferralRewards", () => {
+describe("attributeReferralRewards (legacy helper)", () => {
   it("attributes pro-rata pool only to allowlisted referral_address (never payer)", () => {
     const approved = normalizeApprovedReferralWallets([AFFILIATE_A, AFFILIATE_B]);
     const rewards = attributeReferralRewards({
@@ -41,13 +40,11 @@ describe("attributeReferralRewards", () => {
           amount_settled: 300,
           referral_address: AFFILIATE_B,
         },
-        // Payer without referral — ignored
         {
           status: "settled",
           amount_settled: 999,
           referral_address: null,
         },
-        // Non-allowlisted referral — ignored
         {
           status: "settled",
           amount_settled: 500,
@@ -58,7 +55,6 @@ describe("attributeReferralRewards", () => {
       referralPool: 1000,
     });
 
-    // 100:300 volume → 250 : 750 of pool
     expect(rewards.get(AFFILIATE_A.toLowerCase())).toBe(250);
     expect(rewards.get(AFFILIATE_B.toLowerCase())).toBe(750);
     expect(rewards.has(PAYER)).toBe(false);
@@ -91,10 +87,7 @@ describe("attributeReferralRewards", () => {
 describe("RevenueRoutingService", () => {
   const treasuryService = createTreasuryStatusService();
 
-  function createMockRepos(options?: {
-    settledWithReferral?: Array<Record<string, unknown>>;
-    approvedWallets?: string[];
-  }) {
+  function createMockRepos() {
     const payouts: Array<Record<string, unknown>> = [];
     let payoutIdCounter = 0;
 
@@ -125,7 +118,7 @@ describe("RevenueRoutingService", () => {
         return { ok: true as const, value: payout };
       }),
       findByPeriod: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       update: vi.fn(),
       markTransferred: vi.fn().mockImplementation(async (id, payoutTxHash, registryTxHash) => {
         const payout = payouts.find((p) => p.id === id);
@@ -144,42 +137,6 @@ describe("RevenueRoutingService", () => {
         }
         return { ok: true as const, value: payout };
       }),
-    };
-
-    const settledWithReferral = options?.settledWithReferral ?? [];
-    const approvedWallets = options?.approvedWallets ?? [];
-
-    const mockPaymentRepo: PaymentRecordRepository = {
-      createChallenge: vi.fn(),
-      findById: vi.fn(),
-      findByChallengeReference: vi.fn(),
-      markSettled: vi.fn(),
-      markUnderpaid: vi.fn(),
-      markExpired: vi.fn(),
-      markFailed: vi.fn(),
-      expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
-      listByPremiumItem: vi.fn(),
-      list: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
-      listSettledWithReferral: vi.fn().mockResolvedValue({
-        ok: true as const,
-        value: settledWithReferral,
-      }),
-      findSettledByPayer: vi.fn(),
-    };
-
-    const mockAffiliateRepo: AffiliateRepository = {
-      findById: vi.fn(),
-      findByWallet: vi.fn(),
-      findByReferralCode: vi.fn(),
-      findApprovedByWalletOrCode: vi.fn(),
-      listApprovedWallets: vi.fn().mockResolvedValue({
-        ok: true as const,
-        value: approvedWallets.map((w) => w.toLowerCase()),
-      }),
-      listApproved: vi.fn(),
-      register: vi.fn(),
-      update: vi.fn(),
-      setStatus: vi.fn(),
     };
 
     const mockTreasuryRepo: TreasurySnapshotRepository = {
@@ -221,7 +178,7 @@ describe("RevenueRoutingService", () => {
     const mockExecLogRepo: ExecutionLogRepository = {
       append: vi.fn().mockResolvedValue({ ok: true as const, value: {} }),
       listByEntity: vi.fn(),
-      listRecent: vi.fn(),
+      listRecent: vi.fn(), listPage: vi.fn()
     };
 
     const mockRegistryService: ChronicleRegistryService = {
@@ -238,9 +195,12 @@ describe("RevenueRoutingService", () => {
             success: true,
             txHash: "0x" + "d".repeat(64),
             keeperHubRunId: "exec_record_payout",
-            explorerUrl: "https://sepolia.basescan.org/tx/0x" + "d".repeat(64),
+            explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "d".repeat(64),
           }) as RegistryPublishResult,
       ),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
     };
 
     const mockWeb3Client: Web3Client = {
@@ -255,17 +215,17 @@ describe("RevenueRoutingService", () => {
       publishSponsoredReport: vi.fn(),
       publishPremiumReceipt: vi.fn(),
       recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
       sendTransfer: vi.fn().mockResolvedValue({
         txHash: "0x" + "c".repeat(64),
         keeperHubRunId: "exec_transfer",
-        explorerUrl: "https://sepolia.basescan.org/tx/0x" + "c".repeat(64),
+        explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "c".repeat(64),
       }),
     };
 
     return {
       payoutRepo: mockPayoutRepo,
-      paymentRepo: mockPaymentRepo,
-      affiliateRepo: mockAffiliateRepo,
       treasuryRepo: mockTreasuryRepo,
       execLogRepo: mockExecLogRepo,
       registryService: mockRegistryService,
@@ -276,12 +236,12 @@ describe("RevenueRoutingService", () => {
 
   const baseConfig = {
     creatorRecoveryWallet: CREATOR_WALLET,
-    referralRewardShare: 0.2,
-    referralRewardCap: 1000,
+    creatorRecoveryShare: 0.8,
     maxPayoutShare: 0.5,
-    routingIntervalMs: 99999999,
-    ethPerCurrencyUnit: 0.000001,
+    routingIntervalMs: 1, // allow immediate re-route in unit tests
   };
+
+  const fxService = createStaticRevenueFxService(0.000001);
 
   it("should route revenue with real transfer and registry hashes when conditions are met", async () => {
     const repos = createMockRepos();
@@ -290,6 +250,7 @@ describe("RevenueRoutingService", () => {
       {
         ...repos,
         treasuryService,
+        fxService,
       },
       baseConfig,
     );
@@ -321,6 +282,7 @@ describe("RevenueRoutingService", () => {
       {
         ...repos,
         treasuryService,
+        fxService,
         web3Client: null,
       },
       baseConfig,
@@ -343,6 +305,7 @@ describe("RevenueRoutingService", () => {
       {
         ...repos,
         treasuryService,
+        fxService,
       },
       baseConfig,
     );
@@ -350,7 +313,7 @@ describe("RevenueRoutingService", () => {
     const result = await service.routeRevenue(`test-period-failtx-${Date.now()}`);
 
     expect(result.routed).toBe(false);
-    expect(result.errorMessage).toContain("On-chain transfer failed");
+    expect(result.errorMessage).toMatch(/On-chain (USDC )?transfer failed/i);
     expect(repos.payoutRepo.markTransferred).not.toHaveBeenCalled();
   });
 
@@ -362,6 +325,7 @@ describe("RevenueRoutingService", () => {
         {
           ...repos,
           treasuryService,
+          fxService,
         },
         { ...baseConfig, creatorRecoveryWallet: "not-an-address" },
       ),
@@ -405,6 +369,7 @@ describe("RevenueRoutingService", () => {
       {
         ...repos,
         treasuryService,
+        fxService,
       },
       baseConfig,
     );
@@ -416,60 +381,46 @@ describe("RevenueRoutingService", () => {
     expect(result.errorMessage).toBeDefined();
   });
 
-  it("should give full distributable to creator when no approved affiliates in registry", async () => {
-    const repos = createMockRepos({ approvedWallets: [] });
+  it("should cap creator recovery by CREATOR_RECOVERY_SHARE only", async () => {
+    const repos = createMockRepos();
 
     const service = createRevenueRoutingService(
       {
         ...repos,
         treasuryService,
+        fxService,
       },
       baseConfig,
     );
 
     const result = await service.routeRevenue(`test-period-calc-${Date.now()}`);
 
-    // Available balance = 50000, safety buffer = 10000, excess = 40000
-    // Max payout share = 50% = 20000
-    // No affiliate registry → creator gets full distributable
+    // Snapshot costs: gen 5000 + tx 1000 = 6000
+    // totalRevenue 25000 - costs 6000 = 19000 net
+    // excess balance 40000 * maxPayoutShare 0.5 = 20000
+    // distributable = min(20000, 19000) = 19000
+    // Creator share 80% → 15200
     expect(result.routed).toBe(true);
-    expect(result.creatorRecoveryAmount).toBe(20000);
+    expect(result.creatorRecoveryAmount).toBe(15200);
     expect(result.referralRewardsAmount).toBe(0);
+    expect(result.estimatedOperatingCosts).toBe(6000);
     expect(repos.payoutRepo.create).toHaveBeenCalledTimes(1);
     expect(repos.payoutRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         recipient: CREATOR_WALLET,
-        amount: 20000,
+        amount: 15200,
       }),
     );
-    expect(repos.affiliateRepo.listApprovedWallets).toHaveBeenCalled();
   });
 
-  it("should pay registry-approved affiliates from referral_address, not the payer", async () => {
-    const repos = createMockRepos({
-      approvedWallets: [AFFILIATE_A],
-      settledWithReferral: [
-        {
-          id: "pay-1",
-          status: "settled",
-          amount_settled: 5000,
-          payer_reference: PAYER,
-          referral_address: AFFILIATE_A.toLowerCase(),
-        },
-        {
-          id: "pay-2",
-          status: "settled",
-          amount_settled: 5000,
-          payer_reference: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          referral_address: AFFILIATE_A.toLowerCase(),
-        },
-      ],
-    });
+  it("never auto-pays affiliates even when deprecated referral config is provided", async () => {
+    const repos = createMockRepos();
 
     const service = createRevenueRoutingService(
       {
         ...repos,
         treasuryService,
+        fxService,
       },
       {
         ...baseConfig,
@@ -478,56 +429,105 @@ describe("RevenueRoutingService", () => {
       },
     );
 
-    const result = await service.routeRevenue(`test-period-affiliate-${Date.now()}`);
+    const result = await service.routeRevenue(`test-period-no-affiliate-payout-${Date.now()}`);
 
-    // distributable = 20000; pool = min(4000, 1000) = 1000
+    // distributable 19000; creator 80% = 15200; affiliates not paid by routing
     expect(result.routed).toBe(true);
-    expect(result.referralRewardsAmount).toBe(1000);
-    expect(result.creatorRecoveryAmount).toBe(19000);
+    expect(result.referralRewardsAmount).toBe(0);
+    expect(result.creatorRecoveryAmount).toBe(15200);
 
     const createCalls = (repos.payoutRepo.create as ReturnType<typeof vi.fn>).mock.calls.map(
       (c) => c[0] as { recipient: string; amount: number },
     );
-    expect(createCalls).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ recipient: CREATOR_WALLET, amount: 19000 }),
-        expect.objectContaining({
-          recipient: AFFILIATE_A.toLowerCase(),
-          amount: 1000,
-        }),
-      ]),
+    expect(createCalls).toHaveLength(1);
+    expect(createCalls[0]).toEqual(
+      expect.objectContaining({ recipient: CREATOR_WALLET, amount: 15200 }),
     );
-    // Must never pay the payer as a "referral"
-    expect(createCalls.some((c) => c.recipient.toLowerCase() === PAYER)).toBe(false);
+    expect(createCalls.some((c) => c.recipient.toLowerCase() === AFFILIATE_A.toLowerCase())).toBe(
+      false,
+    );
   });
 
-  it("should ignore settled payments whose referral is not in the affiliates registry", async () => {
-    const repos = createMockRepos({
-      approvedWallets: [AFFILIATE_A],
-      settledWithReferral: [
-        {
-          id: "pay-rogue",
-          status: "settled",
-          amount_settled: 10_000,
-          referral_address: "0x3333333333333333333333333333333333333333",
-          payer_reference: PAYER,
-        },
-      ],
+  it("routes only creator recovery (affiliates withdraw via agent)", async () => {
+    const repos = createMockRepos();
+
+    const service = createRevenueRoutingService(
+      {
+        ...repos,
+        treasuryService,
+        fxService,
+      },
+      baseConfig,
+    );
+
+    const result = await service.routeRevenue(`test-period-creator-only-${Date.now()}`);
+
+    expect(result.routed).toBe(true);
+    expect(result.referralRewardsAmount).toBe(0);
+    // costs 6000 → net 19000 → creator 80% = 15200
+    expect(result.creatorRecoveryAmount).toBe(15200);
+    expect(repos.payoutRepo.create).toHaveBeenCalledTimes(1);
+    expect(repos.web3Client.sendTransfer).toHaveBeenCalledTimes(1);
+    expect(repos.web3Client.sendTransfer).toHaveBeenCalledWith(CREATOR_WALLET, 15200);
+  });
+
+  it("sends USDC amounts 1:1 without ETH FX conversion", async () => {
+    const repos = createMockRepos();
+    // Even a broken FX service must not block routing (payouts are USDC).
+    const brokenFx = {
+      getEthPerCurrencyUnit: async () => {
+        throw new Error("Chainlink ETH/USD unavailable");
+      },
+    };
+
+    const service = createRevenueRoutingService(
+      {
+        ...repos,
+        treasuryService,
+        fxService: brokenFx,
+      },
+      baseConfig,
+    );
+
+    const result = await service.routeRevenue(`test-period-usdc-${Date.now()}`);
+    expect(result.routed).toBe(true);
+    // costs 6000 → net 19000 → creator 80% = 15200 USDC (no FX)
+    expect(repos.web3Client.sendTransfer).toHaveBeenCalledWith(CREATOR_WALLET, 15200);
+  });
+
+  it("should respect routingIntervalMs since last_routed_at", async () => {
+    const repos = createMockRepos();
+    (repos.treasuryRepo.findLatest as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true as const,
+      value: {
+        id: "treasury-001",
+        available_balance: 50000,
+        currency: "USDC",
+        safety_buffer: 10000,
+        revenue_total: 25000,
+        estimated_generation_cost: 5000,
+        estimated_transaction_cost: 1000,
+        paid_request_count: 150,
+        status: "healthy",
+        last_routed_at: new Date().toISOString(),
+        last_payout_period_hash: "prior",
+        total_routed_amount: 100,
+        captured_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      },
     });
 
     const service = createRevenueRoutingService(
       {
         ...repos,
         treasuryService,
+        fxService,
       },
-      baseConfig,
+      { ...baseConfig, routingIntervalMs: 7 * 24 * 60 * 60 * 1000 },
     );
 
-    const result = await service.routeRevenue(`test-period-noallow-${Date.now()}`);
-
-    expect(result.routed).toBe(true);
-    expect(result.referralRewardsAmount).toBe(0);
-    expect(result.creatorRecoveryAmount).toBe(20000);
-    expect(repos.payoutRepo.create).toHaveBeenCalledTimes(1);
+    const result = await service.routeRevenue(`test-period-interval-${Date.now()}`);
+    expect(result.routed).toBe(false);
+    expect(result.errorMessage).toMatch(/Routing interval/i);
   });
 });

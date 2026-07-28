@@ -3,7 +3,7 @@
 
 import type React from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
-import { baseSepoliaAddressUrl, baseSepoliaTxUrl } from "../../lib/explorer.ts";
+import { sepoliaAddressUrl, sepoliaTxUrl } from "../../lib/explorer.ts";
 
 interface PayoutEntry {
   id: string;
@@ -64,10 +64,23 @@ export function PayoutLogsTable({
 }: PayoutLogsTableProps): React.ReactElement {
   if (isLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "2rem" }}>
-        <p style={{ color: "var(--fg-tertiary)", fontSize: "var(--font-size-sm)" }}>
-          Loading payout logs...
-        </p>
+      <div
+        data-testid={dataTestId}
+        role="status"
+        aria-busy="true"
+        aria-label="Loading payout logs"
+        className="rounded-2xl border border-border bg-frame overflow-hidden"
+      >
+        {Array.from({ length: 3 }, (_, i) => (
+          <div
+            key={i}
+            className="px-4 py-3.5 border-b border-border/50 last:border-0 flex items-center gap-4"
+          >
+            <div className="skeleton-bone h-3.5 w-28" />
+            <div className="skeleton-bone h-3.5 flex-1 max-w-[35%]" />
+            <div className="skeleton-bone skeleton-bone--pill h-5 w-16" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -179,7 +192,7 @@ export function PayoutLogsTable({
                 </td>
                 <td style={tableCellStyle}>
                   <a
-                    href={baseSepoliaAddressUrl(payout.recipient)}
+                    href={sepoliaAddressUrl(payout.recipient)}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -245,7 +258,7 @@ export function PayoutLogsTable({
                 >
                   {payout.payoutTxHash ? (
                     <a
-                      href={payout.explorerUrl ?? baseSepoliaTxUrl(payout.payoutTxHash)}
+                      href={payout.explorerUrl ?? sepoliaTxUrl(payout.payoutTxHash)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: "var(--accent-success)", textDecoration: "none" }}
@@ -266,7 +279,7 @@ export function PayoutLogsTable({
                 >
                   {payout.registryTxHash ? (
                     <a
-                      href={payout.explorerUrl ?? baseSepoliaTxUrl(payout.registryTxHash)}
+                      href={payout.explorerUrl ?? sepoliaTxUrl(payout.registryTxHash)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: "var(--accent-primary)", textDecoration: "none" }}

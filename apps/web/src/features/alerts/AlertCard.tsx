@@ -7,6 +7,7 @@ import {
   TimestampDisplay,
 } from "../../components/data-primitives.tsx";
 import { PublicationProof } from "../../components/publication-proof.tsx";
+import { chainLabel } from "../../lib/explorer.ts";
 
 interface AlertCardProps {
   alert: PublicAlertResponse;
@@ -14,13 +15,6 @@ interface AlertCardProps {
   linkable?: boolean;
   "data-testid"?: string;
 }
-
-const CHAIN_LABELS: Record<number, string> = {
-  1: "Ethereum",
-  8453: "Base",
-  84532: "Base Sepolia",
-  11155111: "Sepolia",
-};
 
 function getConfidenceVariant(
   confidence?: string,
@@ -60,16 +54,26 @@ function formatEventType(eventType?: string): string | null {
     .join(" ");
 }
 
+function formatDirection(direction?: string): string | null {
+  if (!direction || direction === "unknown") return null;
+  return direction
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function chipClassName(): string {
+  return "text-[11px] font-medium px-2 py-0.5 rounded-lg bg-muted border border-border/40 text-muted-foreground";
+}
+
 export function AlertCard({
   alert,
   linkable = true,
   "data-testid": dataTestId = "alert-card",
 }: AlertCardProps): React.ReactElement {
   const eventLabel = formatEventType(alert.eventType);
-  const chainLabel =
-    typeof alert.chainId === "number"
-      ? (CHAIN_LABELS[alert.chainId] ?? `Chain ${alert.chainId}`)
-      : null;
+  const networkLabel =
+    typeof alert.chainId === "number" ? chainLabel(alert.chainId) : null;
 
   const content = (
     <>
@@ -95,21 +99,29 @@ export function AlertCard({
         {alert.summary}
       </p>
 
-      {(eventLabel || chainLabel || alert.protocol) && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {eventLabel ? (
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-muted border border-border/40 text-muted-foreground">
-              {eventLabel}
+      {(eventLabel ||
+        networkLabel ||
+        alert.protocol ||
+        alert.flowContext?.direction ||
+        alert.flowContext?.fromLabel ||
+        alert.flowContext?.toLabel) && (
+        <div className="flex flex-wrap gap-2 mb-4" data-testid="alert-flow-chips">
+          {eventLabel ? <span className={chipClassName()}>{eventLabel}</span> : null}
+          {networkLabel ? <span className={chipClassName()}>{networkLabel}</span> : null}
+          {alert.protocol ? <span className={chipClassName()}>{alert.protocol}</span> : null}
+          {formatDirection(alert.flowContext?.direction) ? (
+            <span className={chipClassName()} data-testid="alert-direction-chip">
+              {formatDirection(alert.flowContext?.direction)}
             </span>
           ) : null}
-          {chainLabel ? (
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-muted border border-border/40 text-muted-foreground">
-              {chainLabel}
+          {alert.flowContext?.fromLabel ? (
+            <span className={chipClassName()} data-testid="alert-from-label-chip">
+              From: {alert.flowContext.fromLabel}
             </span>
           ) : null}
-          {alert.protocol ? (
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-muted border border-border/40 text-muted-foreground">
-              {alert.protocol}
+          {alert.flowContext?.toLabel ? (
+            <span className={chipClassName()} data-testid="alert-to-label-chip">
+              To: {alert.flowContext.toLabel}
             </span>
           ) : null}
         </div>

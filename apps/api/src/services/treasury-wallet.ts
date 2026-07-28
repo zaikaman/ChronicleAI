@@ -10,7 +10,8 @@
 // asynchronously via resolveTreasuryWalletAsync / ParaTreasuryClient.ensureWallet.
 
 import type { ServerEnv } from "@chronicleai/config";
-import { ethers } from "ethers";
+import type { Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import {
   createParaTreasuryClientFromEnv,
   isParaTreasuryConfigured,
@@ -26,7 +27,7 @@ const PRIVATE_KEY_RE = /^(0x)?[a-fA-F0-9]{64}$/;
 export type TreasurySpendMode = "para" | "keeperhub" | "eoa" | "none";
 
 /**
- * Operator-facing provider label.
+ * Human-readable provider label for logs and public activity surfaces.
  */
 export type TreasuryProvider = "para-mpc" | "keeperhub" | "eoa" | "unconfigured";
 
@@ -40,7 +41,7 @@ export interface ResolvedTreasuryWallet {
   privateKey: string | undefined;
   /** How outbound spends should be authorized. */
   spendMode: TreasurySpendMode;
-  /** Honest provider label for logs / operator tooling. */
+  /** Honest provider label for logs and public activity surfaces. */
   provider: TreasuryProvider;
   /** Para wallet id when provider is para-mpc and already resolved. */
   paraWalletId?: string;
@@ -58,7 +59,7 @@ export function deriveAddressFromPrivateKey(privateKey: string): string {
     );
   }
   try {
-    return new ethers.Wallet(normalized).address;
+    return privateKeyToAccount(normalized as Hex).address;
   } catch (error) {
     const message = error instanceof Error ? error.message : "invalid key";
     throw new Error(`TREASURY_WALLET_PRIVATE_KEY is invalid: ${message}`);

@@ -1,10 +1,17 @@
-// Alert data fetching hook
+// Alert list hook — React Query (dedupe, cache, abort)
 
-import type { PublicAlertResponse } from "@chronicleai/schemas";
-import { useCallback, useEffect, useState } from "react";
+import type { PaginationMeta, PublicAlertResponse } from "@chronicleai/schemas";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
+import { apiGetJson, toErrorMessage } from "../../lib/api.ts";
+import { EMPTY_PAGINATION, normalizePaginationMeta } from "../../lib/pagination.ts";
+import { queryKeys } from "../../lib/query-keys.ts";
 
 export interface AlertsState {
   alerts: PublicAlertResponse[];
+  pagination: PaginationMeta;
+  page: number;
+  setPage: (page: number) => void;
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
@@ -45,35 +52,56 @@ function mapAlert(raw: Record<string, unknown>): PublicAlertResponse {
   return alert;
 }
 
-export function useAlerts(limit = 50): AlertsState {
-  const [alerts, setAlerts] = useState<PublicAlertResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const DEFAULT_LIMIT = 20;
 
-  const fetchAlerts = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+interface AlertsPageResult {
+  alerts: PublicAlertResponse[];
+  pagination: PaginationMeta;
+}
 
-    try {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
-      const response = await fetch(`${baseUrl}/alerts?limit=${limit}`);
+async function fetchAlertsPage(
+  page: number,
+  limit: number,
+  signal?: AbortSignal,
+): Promise<AlertsPageResult> {
+  const data = await apiGetJson<{
+    items: Array<Record<string, unknown>>;
+    pagination?: unknown;
+  }>("/alerts", { signal, params: { page, limit } });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch alerts: ${response.statusText}`);
-      }
+  const items = (data.items ?? []).map(mapAlert);
+  return {
+    alerts: items,
+    pagination: normalizePaginationMeta(data.pagination, {
+      page,
+      limit,
+      itemCount: items.length,
+    }),
+  };
+}
 
-      const data = (await response.json()) as { items: Array<Record<string, unknown>> };
-      setAlerts((data.items ?? []).map(mapAlert));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load alerts");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [limit]);
+export function useAlerts(limit = DEFAULT_LIMIT): AlertsState {
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    fetchAlerts();
-  }, [fetchAlerts]);
+  const query = useQuery({
+    queryKey: queryKeys.alerts.list(page, limit),
+    queryFn: ({ signal }) => fetchAlertsPage(page, limit, signal),
+    placeholderData: (previous) => previous,
+  });
 
-  return { alerts, isLoading, error, refetch: fetchAlerts };
+  const handleSetPage = useCallback((next: number) => {
+    setPage(Math.max(1, next));
+  }, []);
+
+  return {
+    alerts: query.data?.alerts ?? [],
+    pagination: query.data?.pagination ?? { ...EMPTY_PAGINATION, limit },
+    page,
+    setPage: handleSetPage,
+    isLoading: query.isLoading || (query.isFetching && !query.data),
+    error: query.error ? toErrorMessage(query.error, "Failed to load alerts") : null,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 }

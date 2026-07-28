@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Aave V3 Supply Monitor — Sepolia (Telegram bridge)",
+    "description": "Desk-chain protocol flow: Event Tracker on Ethereum Sepolia Aave V3 Pool Supply → Telegram → Chronicle. Classified as protocol_deposit. FREE TIER. Sparse Event trigger (not hot-path). One Event trigger per workflow (event-tracker registers nodes[0] only)."
+  },
+  "nodes": [
+    {
+      "id": "trigger-supply",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Aave V3 Supply (Sepolia)",
+        "config": {
+          "triggerType": "Event",
+          "network": "11155111",
+          "contractAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+          "eventName": "Supply",
+          "contractABI": "[{\"type\":\"event\",\"name\":\"Supply\",\"inputs\":[{\"indexed\":true,\"name\":\"reserve\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"user\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"onBehalfOf\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":true,\"name\":\"referralCode\",\"type\":\"uint16\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "post-supply-telegram",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "Telegram Supply → Chronicle",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "-1004373075093",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Supply\",\"address\":\"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951\",\"transactionHash\":\"{{@trigger-supply:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-supply:Trigger.blockNumber}}\",\"args\":{\"reserve\":\"{{@trigger-supply:Trigger.args.reserve}}\",\"user\":\"{{@trigger-supply:Trigger.args.user}}\",\"onBehalfOf\":\"{{@trigger-supply:Trigger.args.onBehalfOf}}\",\"amount\":\"{{@trigger-supply:Trigger.args.amount}}\"},\"protocol\":\"Aave V3\"}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-supply", "target": "post-supply-telegram" }
+  ],
+  "integrationBindings": []
+}

@@ -7,15 +7,16 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc -b --pretty false",
     "test": "vitest run"
   },
   "dependencies": {
     "@chronicleai/schemas": "workspace:*",
-    "@supabase/supabase-js": "^2.49.1"
+    "@supabase/supabase-js": "^2.49.1",
+    "viem": "^2.55.0"
   },
   "devDependencies": {
+    "@types/node": "^22.14.1",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"
   }

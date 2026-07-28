@@ -74,5 +74,10 @@ export interface PaymentAdapter {
      * Used by routes (e.g. MPP) that cannot recover a payer from the settlement proof alone.
      */
     challengePayerReference?: string | null | undefined;
+    /**
+     * Canonical challenge expiry from payment_records.expires_at.
+     * MPP binds settlement expiresAt to this value; x402 may ignore.
+     */
+    challengeExpiresAt?: string | null | undefined;
   }): Promise<SettlementVerificationResult>;
 }

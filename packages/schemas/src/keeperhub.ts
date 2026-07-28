@@ -1,5 +1,5 @@
 // KeeperHub webhook payload schemas
-import type { EventType } from "./domain.ts";
+import type { EventType, FlowContext } from "./domain.ts";
 
 // ── Webhook Auth Metadata ───────────────────────────────
 export interface WebhookAuthMetadata {
@@ -22,6 +22,8 @@ export interface EventIngestionPayload {
   };
   capturedAt: string;
   rawPayload: Record<string, unknown>;
+  /** Deterministic flow enrichment; also mirrored into rawPayload.flowContext. */
+  flowContext?: FlowContext;
 }
 
 /**

@@ -1,49 +1,55 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
-    "name": "ChronicleAI Uniswap V3 PoolCreated Monitor",
-    "description": "Event Tracker listens to PoolCreated on Uniswap V3 Factory (mainnet). Chronicle records each new pool as contract_deployment."
+    "name": "ChronicleAI Uniswap V3 PoolCreated Monitor — Sepolia (Telegram bridge)",
+    "description": "Desk-chain newspaper: Event Tracker on Ethereum Sepolia Uniswap V3 Factory PoolCreated → Telegram → Chronicle ingest. Re-homed from mainnet. Not an execution input for desk strategies. FREE TIER Telegram bridge. Replace YOUR_TELEGRAM_INGEST_CHAT_ID."
   },
   "nodes": [
     {
       "id": "trigger-pool",
       "type": "trigger",
-      "position": { "x": 100, "y": 200 },
+      "position": {
+        "x": 100,
+        "y": 200
+      },
       "data": {
         "type": "trigger",
-        "label": "Uniswap V3 PoolCreated",
+        "label": "Uniswap V3 PoolCreated (Sepolia)",
         "config": {
           "triggerType": "Event",
-          "network": "1",
-          "contractAddress": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+          "network": "11155111",
+          "contractAddress": "0x0227628f3F023bb0B980b67D528571c95c6DaC1c",
           "eventName": "PoolCreated",
           "contractABI": "[{\"type\":\"event\",\"name\":\"PoolCreated\",\"inputs\":[{\"indexed\":true,\"name\":\"token0\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"token1\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"fee\",\"type\":\"uint24\"},{\"indexed\":false,\"name\":\"tickSpacing\",\"type\":\"int24\"},{\"indexed\":false,\"name\":\"pool\",\"type\":\"address\"}]}]"
         }
       }
     },
     {
-      "id": "post-chronicle-events",
+      "id": "post-chronicle-telegram",
       "type": "action",
-      "position": { "x": 420, "y": 200 },
+      "position": {
+        "x": 420,
+        "y": 200
+      },
       "data": {
         "type": "action",
-        "label": "POST Chronicle /keeperhub/events",
+        "label": "Telegram → Chronicle ingest bridge",
         "config": {
-          "actionType": "webhook/send-webhook",
-          "integrationType": "webhook",
-          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/events",
-          "webhookMethod": "POST",
-          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
-          "webhookPayload": "{\"chainId\":1,\"eventName\":\"PoolCreated\",\"address\":\"0x1F98431c8aD98523631AE4a59f267346ea31F984\",\"transactionHash\":\"{{@trigger-pool:Trigger.transactionHash}}\",\"blockNumber\":{{@trigger-pool:Trigger.blockNumber}},\"logIndex\":{{@trigger-pool:Trigger.logIndex}},\"args\":{\"token0\":\"{{@trigger-pool:Trigger.token0}}\",\"token1\":\"{{@trigger-pool:Trigger.token1}}\",\"fee\":\"{{@trigger-pool:Trigger.fee}}\",\"pool\":\"{{@trigger-pool:Trigger.pool}}\"},\"protocol\":\"Uniswap V3\"}"
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"PoolCreated\",\"address\":\"0x0227628f3F023bb0B980b67D528571c95c6DaC1c\",\"transactionHash\":\"{{@trigger-pool:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-pool:Trigger.blockNumber}}\",\"args\":{\"token0\":\"{{@trigger-pool:Trigger.args.token0}}\",\"token1\":\"{{@trigger-pool:Trigger.args.token1}}\",\"fee\":\"{{@trigger-pool:Trigger.args.fee}}\",\"pool\":\"{{@trigger-pool:Trigger.args.pool}}\"},\"protocol\":\"Uniswap V3\"}}",
+          "parseMode": "none"
         }
       }
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-pool", "target": "post-chronicle-events" }
+    {
+      "id": "e1",
+      "source": "trigger-pool",
+      "target": "post-chronicle-telegram"
+    }
   ],
-  "integrationBindings": [
-    { "nodeId": "post-chronicle-events", "integrationType": "webhook" }
-  ]
+  "integrationBindings": []
 }

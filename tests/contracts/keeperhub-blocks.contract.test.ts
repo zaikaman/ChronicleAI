@@ -19,8 +19,9 @@ describe("POST /keeperhub/blocks", () => {
   let server: TestServer;
 
   beforeAll(async () => {
+    // Force test env (never inherit real Supabase credentials from the shell/.env)
     for (const [key, value] of Object.entries(ENV)) {
-      process.env[key] = process.env[key] || value;
+      process.env[key] = value;
     }
     // Ensure RPC is unset for this suite
     delete process.env.RPC_URL;

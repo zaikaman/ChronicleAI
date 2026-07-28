@@ -1,13 +1,11 @@
-// Unit tests: Discord + Telegram community channel fan-out
+// Unit tests: Telegram community channel fan-out
 
 import type { ExecutionLogRepository } from "@chronicleai/db";
 import { describe, expect, it, vi } from "vitest";
 import {
-  buildDiscordAlertPayload,
   buildNotificationDestinations,
   buildTelegramAlertText,
   createNotificationService,
-  isValidDiscordWebhookUrl,
 } from "../services/notification-service.ts";
 
 function mockExecLog(): ExecutionLogRepository {
@@ -15,46 +13,21 @@ function mockExecLog(): ExecutionLogRepository {
     append: vi.fn().mockResolvedValue({ ok: true as const, value: {} }),
     listByEntity: vi.fn(),
     listRecent: vi.fn(),
+    listPage: vi.fn(),
   };
 }
 
-describe("isValidDiscordWebhookUrl", () => {
-  it("accepts official Discord webhook hosts over https", () => {
-    expect(
-      isValidDiscordWebhookUrl("https://discord.com/api/webhooks/123/abc"),
-    ).toBe(true);
-    expect(
-      isValidDiscordWebhookUrl("https://discordapp.com/api/webhooks/123/abc"),
-    ).toBe(true);
-  });
-
-  it("rejects non-https, off-host, and non-webhook paths", () => {
-    expect(isValidDiscordWebhookUrl("http://discord.com/api/webhooks/1/a")).toBe(
-      false,
-    );
-    expect(
-      isValidDiscordWebhookUrl("https://evil.com/discord.com/api/webhooks/1/a"),
-    ).toBe(false);
-    expect(isValidDiscordWebhookUrl("https://discord.com/api/channels/1")).toBe(
-      false,
-    );
-    expect(isValidDiscordWebhookUrl("not-a-url")).toBe(false);
-  });
-});
-
 describe("buildNotificationDestinations", () => {
-  it("always includes log and adds configured community channels", () => {
+  it("always includes log and adds Telegram when configured", () => {
     const dests = buildNotificationDestinations({
-      discordWebhookUrl: "https://discord.com/api/webhooks/1/token",
       telegramBotToken: "bot-token",
       telegramChatId: "-100123",
     });
-    expect(dests.map((d) => d.type)).toEqual(["log", "discord", "telegram"]);
+    expect(dests.map((d) => d.type)).toEqual(["log", "telegram"]);
   });
 
-  it("skips invalid discord URLs and incomplete telegram config", () => {
+  it("skips incomplete telegram config", () => {
     const dests = buildNotificationDestinations({
-      discordWebhookUrl: "https://evil.example/hook",
       telegramBotToken: "bot-token",
       // missing chat id
     });
@@ -63,26 +36,7 @@ describe("buildNotificationDestinations", () => {
 });
 
 describe("message formatters", () => {
-  it("includes registry tx hash in Discord embed fields", () => {
-    const payload = buildDiscordAlertPayload({
-      alertId: "a1",
-      title: "Large Swap Detected",
-      summary: "Whale moved 250k USDC",
-      eventType: "swap",
-      registryTxHash: "0xabc123",
-      explorerUrl: "https://sepolia.basescan.org/tx/0xabc123",
-      contentUri: "https://app.example/alerts/a1",
-    });
-
-    const embeds = payload.embeds as Array<Record<string, unknown>>;
-    const embed = embeds[0]!;
-    expect(embed.title).toContain("Large Swap Detected");
-    const fields = embed.fields as Array<{ name: string; value: string }>;
-    expect(fields.some((f) => f.value.includes("0xabc123"))).toBe(true);
-    expect(fields.some((f) => f.name === "Registry Tx (KeeperHub)")).toBe(true);
-  });
-
-  it("includes registry tx hash in Telegram HTML body", () => {
+  it("includes bare registry tx hash only when explorer URL is missing", () => {
     const text = buildTelegramAlertText({
       alertId: "a1",
       title: "Alert <script>",
@@ -92,23 +46,35 @@ describe("message formatters", () => {
     expect(text).toContain("<code>0xdeadbeef</code>");
     expect(text).toContain("Alert &lt;script&gt;");
     expect(text).toContain("Summary &amp; more");
-    expect(text).toContain("On-chain proof (KeeperHub)");
+    expect(text).toContain("On-chain proof (KeeperHub registry)");
+  });
+
+  it("omits bare registry hash when explorer URL is present", () => {
+    const text = buildTelegramAlertText({
+      alertId: "a1",
+      title: "New Uniswap V3 Contract Deployed on Ethereum",
+      summary: "A deployment on Ethereum mainnet.",
+      eventType: "contract_deployment",
+      sourceChainLabel: "Ethereum Mainnet",
+      sourceExplorerUrl: "https://etherscan.io/tx/0xsource",
+      registryTxHash: "0xreg",
+      explorerUrl: "https://sepolia.etherscan.io/tx/0xreg",
+    });
+
+    expect(text).toContain("Source network: Ethereum Mainnet");
+    expect(text).toContain("Source event explorer: https://etherscan.io/tx/0xsource");
+    expect(text).toContain("Registry proof explorer (Ethereum Sepolia): https://sepolia.etherscan.io/tx/0xreg");
+    expect(text).not.toContain("On-chain proof (KeeperHub registry)");
+    expect(text).not.toContain("<code>0xreg</code>");
+    expect(text).not.toMatch(/^Explorer:/m);
   });
 });
 
 describe("createNotificationService alert broadcast", () => {
-  it("delivers to Discord and Telegram when configured", async () => {
+  it("delivers to Telegram when configured", async () => {
     const execLog = mockExecLog();
     const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes("discord.com")) {
-        expect(init?.method).toBe("POST");
-        const body = JSON.parse(String(init?.body));
-        expect(body.embeds[0].fields.some((f: { value: string }) => f.value.includes("0xreg"))).toBe(
-          true,
-        );
-        return new Response(JSON.stringify({ id: "msg-1" }), { status: 200 });
-      }
       if (url.includes("api.telegram.org")) {
         expect(url).toContain("botTEST_TOKEN");
         expect(String(init?.body)).toContain("chat_id=-1001");
@@ -123,7 +89,6 @@ describe("createNotificationService alert broadcast", () => {
 
     const service = createNotificationService(execLog, {
       community: {
-        discordWebhookUrl: "https://discord.com/api/webhooks/99/secret",
         telegramBotToken: "TEST_TOKEN",
         telegramChatId: "-1001",
       },
@@ -131,7 +96,6 @@ describe("createNotificationService alert broadcast", () => {
     });
 
     expect(service.getConfiguredChannels()).toEqual({
-      discord: true,
       telegram: true,
     });
 
@@ -141,16 +105,15 @@ describe("createNotificationService alert broadcast", () => {
       summary: "Large Aave liquidation on Base",
       eventType: "liquidation",
       registryTxHash: "0xreg",
-      explorerUrl: "https://sepolia.basescan.org/tx/0xreg",
+      explorerUrl: "https://sepolia.etherscan.io/tx/0xreg",
       contentUri: "https://app.example/alerts/alert-1",
     });
 
     expect(result.delivered).toBe(true);
     expect(result.destinations).toContain("log");
-    expect(result.destinations).toContain("discord");
     expect(result.destinations).toContain("telegram");
     expect(result.failures).toEqual([]);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(execLog.append).toHaveBeenCalled();
   });
 
@@ -171,29 +134,21 @@ describe("createNotificationService alert broadcast", () => {
     expect(result.destinations).toEqual(["log"]);
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(service.getConfiguredChannels()).toEqual({
-      discord: false,
       telegram: false,
     });
   });
 
-  it("soft-fails a channel without aborting others", async () => {
+  it("soft-fails Telegram without aborting log destination", async () => {
     const execLog = mockExecLog();
-    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url.includes("discord.com")) {
-        return new Response(JSON.stringify({ message: "rate limited" }), {
-          status: 429,
-        });
-      }
+    const fetchImpl = vi.fn(async () => {
       return new Response(
-        JSON.stringify({ ok: true, result: { message_id: 7 } }),
-        { status: 200 },
+        JSON.stringify({ ok: false, description: "rate limited" }),
+        { status: 429 },
       );
     });
 
     const service = createNotificationService(execLog, {
       community: {
-        discordWebhookUrl: "https://discord.com/api/webhooks/1/t",
         telegramBotToken: "tok",
         telegramChatId: "1",
       },
@@ -207,21 +162,25 @@ describe("createNotificationService alert broadcast", () => {
       registryTxHash: "0xhash",
     });
 
-    expect(result.destinations).toContain("telegram");
     expect(result.destinations).toContain("log");
-    expect(result.destinations).not.toContain("discord");
-    expect(result.failures.some((f) => f.startsWith("discord:"))).toBe(true);
+    expect(result.destinations).not.toContain("telegram");
+    expect(result.failures.some((f) => f.startsWith("telegram:"))).toBe(true);
   });
 
   it("broadcasts digests with registry tx hash", async () => {
     const execLog = mockExecLog();
-    const fetchImpl = vi.fn(async () => {
-      return new Response(JSON.stringify({ id: "d1" }), { status: 200 });
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(String(init?.body)).toContain("0xdigest");
+      return new Response(
+        JSON.stringify({ ok: true, result: { message_id: 99 } }),
+        { status: 200 },
+      );
     });
 
     const service = createNotificationService(execLog, {
       community: {
-        discordWebhookUrl: "https://discord.com/api/webhooks/1/t",
+        telegramBotToken: "tok",
+        telegramChatId: "1",
       },
       fetchImpl: fetchImpl as typeof fetch,
     });
@@ -230,15 +189,12 @@ describe("createNotificationService alert broadcast", () => {
       digestId: "d1",
       title: "Daily Digest",
       summary: "Markets moved",
-      reportDate: "2026-07-28",
+      reportDate: "2026-07-09",
       registryTxHash: "0xdigest",
     });
 
-    expect(result.destinations).toContain("discord");
-    const firstCall = fetchImpl.mock.calls[0] as [string, RequestInit] | undefined;
-    const body = JSON.parse(String(firstCall?.[1]?.body));
-    expect(
-      body.embeds[0].fields.some((f: { value: string }) => f.value.includes("0xdigest")),
-    ).toBe(true);
+    expect(result.destinations).toContain("telegram");
+    expect(result.destinations).toContain("log");
+    expect(result.failures).toEqual([]);
   });
 });

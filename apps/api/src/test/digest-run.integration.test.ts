@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import { DigestRunHandler } from "../keeperhub/digest-run-handler.ts";
 import { createChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import { createDigestEventSelectionService } from "../services/digest-event-selection-service.ts";
-import { createDigestGenerationService } from "../services/digest-generation-service.ts";
+import type { DigestGenerationService } from "../services/digest-generation-service.ts";
 import { createDigestPublicationService } from "../services/digest-publication-service.ts";
 import { createDigestWindowService } from "../services/digest-window-service.ts";
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
@@ -46,9 +46,15 @@ function makeDigestRow(overrides: Partial<DailyDigestRow> = {}): DailyDigestRow 
 }
 
 describe("DigestRunHandler", () => {
+  // Capture create payloads for status/CHECK assertions (loose bag avoids CFA traps).
+  const createCapture: { payload: Record<string, unknown> | null } = {
+    payload: null,
+  };
+
   // Create mock repositories for testing
   const mockDigestRepo: DailyDigestRepository = {
-    async create(_data: DailyDigestInsert) {
+    async create(data: DailyDigestInsert) {
+      createCapture.payload = data as unknown as Record<string, unknown>;
       return { ok: true, value: makeDigestRow() };
     },
     async findById() {
@@ -94,6 +100,9 @@ describe("DigestRunHandler", () => {
     async list() {
       return { ok: true, value: [] };
     },
+    async listInWindow() {
+      return { ok: true, value: [] };
+    },
   };
 
   const mockExecLogRepo: ExecutionLogRepository = {
@@ -120,6 +129,39 @@ describe("DigestRunHandler", () => {
     async listRecent() {
       return { ok: true, value: [] };
     },
+    async listPage() {
+      return { ok: true, value: { items: [], page: 1, limit: 20, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false } };
+    },
+  };
+
+  // Integration tests inject a deterministic LLM-shaped generation service
+  // (template fallback has been removed from production generation).
+  const mockGenerationService: DigestGenerationService = {
+    async generateDigest(params) {
+      const noEvents = params.events.length === 0;
+      return {
+        title: `ChronicleAI Daily Digest — ${params.reportDate}`,
+        summary: noEvents
+          ? "No significant on-chain events were detected during the reporting period."
+          : `Monitored ${params.events.length} qualifying on-chain events.`,
+        highlights: noEvents
+          ? ["No major events detected during this reporting period."]
+          : params.events.slice(0, 5).map((e) => `${e.eventType} (${e.id})`),
+        analysis: noEvents
+          ? "Monitoring continued with no threshold breaches."
+          : "Activity concentrated across monitored venues during the window.",
+        sections: {
+          capitalDirection: "Net flows balanced.",
+          exchangeAndProtocolFlows: "CEX net flat.",
+          stressBoard: "No material stress.",
+          storyOfTheDay: "Quiet window.",
+          coverageNote: "",
+        },
+        sourceEventIds: params.events.map((e) => e.id),
+        confidence: noEvents ? "high" : "medium",
+        generationProvider: "gemini",
+      };
+    },
   };
 
   const handler = new DigestRunHandler({
@@ -128,7 +170,7 @@ describe("DigestRunHandler", () => {
     execLogRepo: mockExecLogRepo,
     windowService: createDigestWindowService(mockDigestRepo),
     eventSelectionService: createDigestEventSelectionService(mockEventRepo),
-    generationService: createDigestGenerationService(),
+    generationService: mockGenerationService,
     publicationService: createDigestPublicationService(
       mockDigestRepo,
       createChronicleRegistryService(null),
@@ -145,6 +187,7 @@ describe("DigestRunHandler", () => {
   });
 
   it("handles valid digest run request", async () => {
+    createCapture.payload = null;
     const now = Date.now();
     const result = await handler.runDigest({
       periodStart: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
@@ -154,9 +197,19 @@ describe("DigestRunHandler", () => {
     expect(result.accepted).toBe(true);
     expect(result.statusCode).toBe(201);
     expect(result.digestId).toBeTruthy();
+    // DB CHECK allows only null | succeeded | failed (not 'ready').
+    const inserted = createCapture.payload;
+    expect(inserted).not.toBeNull();
+    expect(inserted!["market_narrative_status"]).toBe("succeeded");
+    expect(inserted!["market_narrative_provider"]).toBe("gemini");
+    expect(inserted!["market_narrative"]).toMatchObject({
+      type: "digest_sections",
+      version: 1,
+    });
   });
 
   it("handles no-events digest generation", async () => {
+    createCapture.payload = null;
     const now = Date.now();
     const result = await handler.runDigest({
       periodStart: new Date(now - 48 * 60 * 60 * 1000).toISOString(),
@@ -166,6 +219,9 @@ describe("DigestRunHandler", () => {
     expect(result.accepted).toBe(true);
     expect(result.statusCode).toBe(201);
     expect(result.message).toContain("Digest generated");
+    const inserted = createCapture.payload;
+    expect(inserted).not.toBeNull();
+    expect(inserted!["market_narrative_status"]).toBe("succeeded");
   });
 
   it("rejects reversed window", async () => {

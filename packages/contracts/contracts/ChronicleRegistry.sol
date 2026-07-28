@@ -11,22 +11,28 @@ pragma solidity ^0.8.20;
  *   - `createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt)` — uint64 window
  *   - `publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri)`
  *   - `recordPayout(payoutPeriodHash, recipient, amount, reasonHash)`
- *   - `reportType` — Alert / Digest / SponsoredReport / PremiumReceipt per content hash
+ *   - `publishTradeTicket(ticketHash, signalHash, intentHash, contentUri)` — desk execution proof
+ *   - `recordCapitalMove(moveId, from, to, amount, reasonHash)` — desk capital audit
+ *   - `reportType` — Alert / Digest / SponsoredReport / PremiumReceipt / TradeTicket per content hash
  *
  * Loop 4 (sponsored watch): `publishSponsoredReport` anchors the final report
  * hash together with a Merkle-style `sourceEventRoot` of monitored events.
+ *
+ * Desk (Chronicle Desk): trade tickets and capital moves are published by the
+ * owner or an operator (KeeperHub desk wallet granted via `setOperator`).
  */
 contract ChronicleRegistry {
     // ── Types ──────────────────────────────────────────────
     /**
      * @notice Classification of a published content hash (IDEA reportType).
-     * Alert = 0, Digest = 1, SponsoredReport = 2, PremiumReceipt = 3.
+     * Alert = 0, Digest = 1, SponsoredReport = 2, PremiumReceipt = 3, TradeTicket = 4.
      */
     enum ReportType {
         Alert,
         Digest,
         SponsoredReport,
-        PremiumReceipt
+        PremiumReceipt,
+        TradeTicket
     }
 
     struct WatchCampaign {
@@ -42,6 +48,10 @@ contract ChronicleRegistry {
 
     // ── State ──────────────────────────────────────────────
     address public owner;
+
+    /// @notice KeeperHub desk wallet (and other operators) allowed to publish.
+    /// Deploy owner can grant operators so the deploy EOA is not on the hot path.
+    mapping(address => bool) public operators;
 
     // contentHash => timestamp
     mapping(bytes32 => uint256) public alerts;
@@ -69,6 +79,16 @@ contract ChronicleRegistry {
 
     // payoutBatchHash => timestamp
     mapping(bytes32 => uint256) public payouts;
+
+    // ticketHash => timestamp (desk execution tickets)
+    mapping(bytes32 => uint256) public tradeTickets;
+    // ticketHash => signal commitment
+    mapping(bytes32 => bytes32) public tradeTicketSignalHashes;
+    // ticketHash => intent commitment
+    mapping(bytes32 => bytes32) public tradeTicketIntentHashes;
+
+    // moveId => timestamp (desk capital audit: fund / sweep / emergency return)
+    mapping(bytes32 => uint256) public capitalMoves;
 
     // ── Events ─────────────────────────────────────────────
     event AlertPublished(
@@ -112,10 +132,35 @@ contract ChronicleRegistry {
         uint256 amount,
         bytes32 reasonHash
     );
+    event TradeTicketPublished(
+        bytes32 indexed ticketHash,
+        bytes32 signalHash,
+        bytes32 intentHash,
+        string contentUri,
+        ReportType reportType,
+        uint256 timestamp
+    );
+    event CapitalMoveRecorded(
+        bytes32 indexed moveId,
+        address indexed from,
+        address indexed to,
+        uint256 amount,
+        bytes32 reasonHash,
+        uint256 timestamp
+    );
+    event OperatorUpdated(address indexed account, bool allowed);
 
     // ── Modifiers ──────────────────────────────────────────
     modifier onlyOwner() {
         require(msg.sender == owner, "ChronicleRegistry: caller is not the owner");
+        _;
+    }
+
+    modifier onlyOwnerOrOperator() {
+        require(
+            msg.sender == owner || operators[msg.sender],
+            "ChronicleRegistry: caller is not owner or operator"
+        );
         _;
     }
 
@@ -130,6 +175,13 @@ contract ChronicleRegistry {
         owner = newOwner;
     }
 
+    /// @notice Grant or revoke operator rights (KeeperHub desk wallet after deploy).
+    function setOperator(address account, bool allowed) external onlyOwner {
+        require(account != address(0), "ChronicleRegistry: operator is the zero address");
+        operators[account] = allowed;
+        emit OperatorUpdated(account, allowed);
+    }
+
     // ── Publish Alert ──────────────────────────────────────
     /**
      * @notice Stores a public alert proof-of-publication (IDEA Loop 1).
@@ -141,7 +193,7 @@ contract ChronicleRegistry {
         bytes32 contentHash,
         bytes32 sourceEventHash,
         string calldata contentUri
-    ) external onlyOwner {
+    ) external onlyOwnerOrOperator {
         require(alerts[contentHash] == 0, "ChronicleRegistry: alert already published");
         require(contentHash != bytes32(0), "ChronicleRegistry: content hash required");
         require(bytes(contentUri).length > 0, "ChronicleRegistry: content URI required");
@@ -170,7 +222,7 @@ contract ChronicleRegistry {
         bytes32 contentHash,
         bytes32 sourceEventRoot,
         string calldata contentUri
-    ) external onlyOwner {
+    ) external onlyOwnerOrOperator {
         require(digests[contentHash] == 0, "ChronicleRegistry: digest already published");
         require(contentHash != bytes32(0), "ChronicleRegistry: content hash required");
         require(bytes(contentUri).length > 0, "ChronicleRegistry: content URI required");
@@ -201,7 +253,7 @@ contract ChronicleRegistry {
         bytes32 watchSpecHash,
         uint64 startsAt,
         uint64 endsAt
-    ) external onlyOwner returns (uint256 watchId) {
+    ) external onlyOwnerOrOperator returns (uint256 watchId) {
         require(targetContract != address(0), "ChronicleRegistry: target required");
         require(startsAt < endsAt, "ChronicleRegistry: watch must start before it ends");
 
@@ -234,7 +286,7 @@ contract ChronicleRegistry {
         bytes32 reportHash,
         bytes32 sourceEventRoot,
         string calldata contentUri
-    ) external onlyOwner {
+    ) external onlyOwnerOrOperator {
         require(watchId < nextWatchId, "ChronicleRegistry: watch does not exist");
         WatchCampaign storage campaign = sponsoredWatches[watchId];
         require(campaign.targetContract != address(0), "ChronicleRegistry: watch does not exist");
@@ -267,7 +319,7 @@ contract ChronicleRegistry {
         bytes32 contentHash,
         bytes32 sourceEventHash,
         string calldata contentUri
-    ) external onlyOwner {
+    ) external onlyOwnerOrOperator {
         require(premiumReceipts[contentHash] == 0, "ChronicleRegistry: premium receipt already published");
         require(contentHash != bytes32(0), "ChronicleRegistry: content hash required");
         require(bytes(contentUri).length > 0, "ChronicleRegistry: content URI required");
@@ -291,10 +343,70 @@ contract ChronicleRegistry {
         address recipient,
         uint256 amount,
         bytes32 reasonHash
-    ) external onlyOwner {
+    ) external onlyOwnerOrOperator {
         require(payouts[payoutPeriodHash] == 0, "ChronicleRegistry: payout for this period already recorded");
         payouts[payoutPeriodHash] = block.timestamp;
         emit PayoutRecorded(payoutPeriodHash, recipient, amount, reasonHash);
+    }
+
+    // ── Publish Trade Ticket ───────────────────────────────
+    /**
+     * @notice Anchor a desk execution ticket (Chronicle Desk proof-of-trade).
+     * @param ticketHash keccak of canonical ticket JSON (signal, intent, legs, policy)
+     * @param signalHash commitment to source signal bundle
+     * @param intentHash commitment to TradeIntent
+     * @param contentUri public ticket URL on Chronicle web (`/desk/tickets/:id`)
+     */
+    function publishTradeTicket(
+        bytes32 ticketHash,
+        bytes32 signalHash,
+        bytes32 intentHash,
+        string calldata contentUri
+    ) external onlyOwnerOrOperator {
+        require(tradeTickets[ticketHash] == 0, "ChronicleRegistry: trade ticket already published");
+        require(ticketHash != bytes32(0), "ChronicleRegistry: ticket hash required");
+        require(bytes(contentUri).length > 0, "ChronicleRegistry: content URI required");
+
+        tradeTickets[ticketHash] = block.timestamp;
+        tradeTicketSignalHashes[ticketHash] = signalHash;
+        tradeTicketIntentHashes[ticketHash] = intentHash;
+        _setReportType(ticketHash, ReportType.TradeTicket);
+
+        emit TradeTicketPublished(
+            ticketHash,
+            signalHash,
+            intentHash,
+            contentUri,
+            ReportType.TradeTicket,
+            block.timestamp
+        );
+    }
+
+    // ── Record Capital Move ────────────────────────────────
+    /**
+     * @notice Record a desk capital transfer for on-chain audit (top-up / sweep / emergency).
+     * @param moveId Unique move id commitment (e.g. keccak of desk_capital_moves row)
+     * @param from Source address (treasury or desk)
+     * @param to Destination address (desk or treasury)
+     * @param amount USDC base units (6 decimals)
+     * @param reasonHash Commitment to reason (desk_fund | desk_sweep | desk_emergency_return)
+     */
+    function recordCapitalMove(
+        bytes32 moveId,
+        address from,
+        address to,
+        uint256 amount,
+        bytes32 reasonHash
+    ) external onlyOwnerOrOperator {
+        require(capitalMoves[moveId] == 0, "ChronicleRegistry: capital move already recorded");
+        require(moveId != bytes32(0), "ChronicleRegistry: move id required");
+        require(from != address(0), "ChronicleRegistry: from required");
+        require(to != address(0), "ChronicleRegistry: to required");
+        require(amount > 0, "ChronicleRegistry: amount required");
+
+        capitalMoves[moveId] = block.timestamp;
+
+        emit CapitalMoveRecorded(moveId, from, to, amount, reasonHash, block.timestamp);
     }
 
     // ── View helpers ───────────────────────────────────────
@@ -330,6 +442,22 @@ contract ChronicleRegistry {
 
     function getPremiumReceiptTimestamp(bytes32 contentHash) external view returns (uint256) {
         return premiumReceipts[contentHash];
+    }
+
+    function getTradeTicketTimestamp(bytes32 ticketHash) external view returns (uint256) {
+        return tradeTickets[ticketHash];
+    }
+
+    function getTradeTicketSignalHash(bytes32 ticketHash) external view returns (bytes32) {
+        return tradeTicketSignalHashes[ticketHash];
+    }
+
+    function getTradeTicketIntentHash(bytes32 ticketHash) external view returns (bytes32) {
+        return tradeTicketIntentHashes[ticketHash];
+    }
+
+    function getCapitalMoveTimestamp(bytes32 moveId) external view returns (uint256) {
+        return capitalMoves[moveId];
     }
 
     // ── Internals ──────────────────────────────────────────

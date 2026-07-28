@@ -49,4 +49,41 @@ describe("AlertDedupeService", () => {
 
     expect(key1).toBe(key2);
   });
+
+  it("rate-limits large_swap by clusterKey hour bucket", () => {
+    const key1 = service.generateDedupeKey({
+      sourceEventId: "swap-1",
+      source: "keeperhub",
+      eventType: "large_swap",
+      clusterKey: "large_swap|0xabc|USDC/WETH",
+      capturedAt: "2026-07-28T12:15:00.000Z",
+    });
+    const key2 = service.generateDedupeKey({
+      sourceEventId: "swap-2",
+      source: "keeperhub",
+      eventType: "large_swap",
+      clusterKey: "large_swap|0xabc|USDC/WETH",
+      capturedAt: "2026-07-28T12:45:00.000Z",
+    });
+    expect(key1).toBe(key2);
+    expect(key1).toContain("-cluster-");
+  });
+
+  it("uses different hour buckets for cluster keys", () => {
+    const key1 = service.generateDedupeKey({
+      sourceEventId: "cex-1",
+      source: "keeperhub",
+      eventType: "cex_inflow",
+      clusterKey: "cex_inflow|0xabc|USDC",
+      capturedAt: "2026-07-28T12:15:00.000Z",
+    });
+    const key2 = service.generateDedupeKey({
+      sourceEventId: "cex-2",
+      source: "keeperhub",
+      eventType: "cex_inflow",
+      clusterKey: "cex_inflow|0xabc|USDC",
+      capturedAt: "2026-07-28T14:15:00.000Z",
+    });
+    expect(key1).not.toBe(key2);
+  });
 });

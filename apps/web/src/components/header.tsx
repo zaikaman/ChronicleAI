@@ -3,11 +3,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { Link, useLocation } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { ConnectWalletButton } from "@/features/wallet";
+import { prefetchRoute } from "@/lib/route-prefetch.ts";
 
 const navLinks = [
   { label: "Alerts", href: "/alerts", description: "Live public market bulletins" },
   { label: "Digest", href: "/digests/latest", description: "Latest daily intelligence report" },
   { label: "Archive", href: "/publications", description: "All publications in one feed" },
+  { label: "Desk", href: "/desk", description: "Capital book, intents & trade tickets" },
   { label: "Premium", href: "/premium", description: "Paid deep analysis & sponsorships" },
   { label: "Activity", href: "/activity", description: "Public on-chain agent trail" },
 ];
@@ -39,6 +41,12 @@ const CornerSVG = ({ className }: { className: string }) => (
 
 function isActivePath(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
+  if (href === "/digests/latest") {
+    return pathname === "/digests/latest" || pathname.startsWith("/digests/");
+  }
+  if (href === "/desk") {
+    return pathname === "/desk" || pathname.startsWith("/desk/");
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -74,6 +82,8 @@ export function Header(): ReactNode {
                 key={link.href}
                 to={link.href}
                 title={link.description}
+                onMouseEnter={() => prefetchRoute(link.href)}
+                onFocus={() => prefetchRoute(link.href)}
                 className={`px-3 py-2 max-[1200px]:px-2.5 text-sm font-medium transition-colors rounded-full hover:bg-foreground/5 ${
                   active ? "text-foreground bg-foreground/5" : "text-foreground/80 hover:text-foreground"
                 }`}
@@ -132,6 +142,8 @@ export function Header(): ReactNode {
                     to={link.href}
                     className="flex flex-col py-4 text-base font-medium text-foreground border-b border-foreground/10"
                     onClick={closeMobile}
+                    onMouseEnter={() => prefetchRoute(link.href)}
+                    onFocus={() => prefetchRoute(link.href)}
                   >
                     <span>{link.label}</span>
                     <span className="text-xs text-muted-foreground font-normal mt-0.5">

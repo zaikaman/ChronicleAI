@@ -1,47 +1,46 @@
-// Accessible state view components for loading, empty, error, and retry states
+// Accessible state view components for loading, empty, error, and retry states.
+// Page loading: prefer PageSkeleton from ./ui/skeleton.tsx.
+// Inline / small waits: prefer Spinner from ./ui/spinner.tsx.
 
 import type React from "react";
+import { PageSkeleton, type PageSkeletonVariant } from "./ui/skeleton.tsx";
+import { SpinnerBlock } from "./ui/spinner.tsx";
 
 // ── Loading State ─────────────────────────────────────
 interface LoadingStateProps {
   message?: string;
+  /**
+   * `skeleton` (default) — page-shaped placeholder.
+   * `spinner` — compact centered spinner for small regions only.
+   */
+  mode?: "skeleton" | "spinner";
+  /** Skeleton layout when mode is skeleton. */
+  variant?: PageSkeletonVariant;
+  count?: number;
   "data-testid"?: string;
 }
 
+/**
+ * @deprecated Prefer `PageSkeleton` for pages and `Spinner` / `SpinnerBlock` for inline.
+ * Kept for call-site convenience with a polished skeleton default.
+ */
 export function LoadingState({
   message = "Loading...",
+  mode = "skeleton",
+  variant = "cards",
+  count,
   "data-testid": dataTestId = "loading-state",
 }: LoadingStateProps): React.ReactElement {
+  if (mode === "spinner") {
+    return <SpinnerBlock message={message} data-testid={dataTestId} />;
+  }
   return (
-    <div
-      role="status"
-      aria-live="polite"
+    <PageSkeleton
+      variant={variant}
+      count={count}
+      label={message}
       data-testid={dataTestId}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "1rem",
-        padding: "3rem",
-        textAlign: "center",
-      }}
-    >
-      <div
-        style={{
-          width: "24px",
-          height: "24px",
-          border: "2px solid var(--border-primary)",
-          borderTopColor: "var(--accent-primary)",
-          borderRadius: "50%",
-          animation: "spin 0.8s linear infinite",
-        }}
-        aria-hidden="true"
-      />
-      <span className="text-secondary" style={{ fontSize: "var(--font-size-sm)" }}>
-        {message}
-      </span>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+    />
   );
 }
 
@@ -61,23 +60,11 @@ export function EmptyState({
     <div
       role="status"
       data-testid={dataTestId}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "0.5rem",
-        padding: "3rem",
-        textAlign: "center",
-      }}
+      className="flex flex-col items-center gap-2 py-12 px-6 text-center rounded-2xl border border-border bg-frame"
     >
-      <h3 style={{ fontSize: "var(--font-size-lg)", color: "var(--fg-primary)" }}>{title}</h3>
+      <h3 className="text-base font-semibold text-foreground">{title}</h3>
       {description ? (
-        <p
-          className="text-secondary"
-          style={{ fontSize: "var(--font-size-sm)", maxWidth: "400px" }}
-        >
-          {description}
-        </p>
+        <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">{description}</p>
       ) : null}
     </div>
   );
@@ -99,22 +86,10 @@ export function ErrorState({
     <div
       role="alert"
       data-testid={dataTestId}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "0.5rem",
-        padding: "2rem",
-        textAlign: "center",
-        background: "var(--bg-glass)",
-        border: "1px solid rgba(239, 68, 68, 0.2)",
-        borderRadius: "12px",
-      }}
+      className="flex flex-col items-center gap-2 py-8 px-6 text-center rounded-2xl border border-rose-500/20 bg-frame"
     >
-      <h3 style={{ fontSize: "var(--font-size-lg)", color: "var(--accent-error)" }}>{title}</h3>
-      <p className="text-secondary" style={{ fontSize: "var(--font-size-sm)" }}>
-        {message}
-      </p>
+      <h3 className="text-base font-semibold text-rose-500">{title}</h3>
+      <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">{message}</p>
     </div>
   );
 }
@@ -137,43 +112,17 @@ export function RetryState({
     <div
       role="alert"
       data-testid={dataTestId}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "1rem",
-        padding: "2rem",
-        textAlign: "center",
-        background: "var(--bg-glass)",
-        border: "1px solid rgba(239, 68, 68, 0.2)",
-        borderRadius: "12px",
-      }}
+      className="flex flex-col items-center gap-4 py-8 px-6 text-center rounded-2xl border border-rose-500/20 bg-frame"
     >
-      <h3 style={{ fontSize: "var(--font-size-lg)", color: "var(--accent-error)" }}>{title}</h3>
-      <p className="text-secondary" style={{ fontSize: "var(--font-size-sm)" }}>
-        {message}
-      </p>
+      <div>
+        <h3 className="text-base font-semibold text-rose-500">{title}</h3>
+        <p className="mt-1 text-sm text-muted-foreground max-w-sm leading-relaxed">{message}</p>
+      </div>
       <button
         type="button"
         onClick={onRetry}
         data-testid="retry-button"
-        style={{
-          padding: "0.5rem 1.25rem",
-          background: "var(--accent-primary)",
-          color: "white",
-          border: "none",
-          borderRadius: "8px",
-          cursor: "pointer",
-          fontSize: "var(--font-size-sm)",
-          fontWeight: 500,
-          transition: "background 0.15s ease",
-        }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.background = "var(--accent-primary-hover)";
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.background = "var(--accent-primary)";
-        }}
+        className="px-4 py-2 rounded-xl bg-accent text-black text-sm font-semibold hover:opacity-90 transition-opacity cursor-pointer"
       >
         Retry
       </button>

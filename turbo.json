@@ -1,0 +1,29 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "type-check": {
+      "dependsOn": ["^type-check"],
+      "outputs": ["dist/**/*.d.ts", "dist/**/*.d.ts.map", "dist/.tsbuildinfo", "dist-types/**"]
+    },
+    "build": {
+      "dependsOn": ["type-check", "^type-check"],
+      "outputs": ["dist/**"]
+    },
+    "build:vercel": {
+      "dependsOn": ["type-check", "^type-check"],
+      "outputs": ["dist/**"]
+    },
+    "build:heroku": {
+      "dependsOn": ["^type-check"],
+      "outputs": ["dist/**"]
+    },
+    "test": {
+      "dependsOn": ["^type-check"],
+      "outputs": []
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

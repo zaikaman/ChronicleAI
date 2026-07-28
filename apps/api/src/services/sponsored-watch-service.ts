@@ -171,7 +171,7 @@ export function createSponsoredWatchService(params: {
 
   async function completeEndedWatch(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
     const matching = await collectMatchingEvents(watch);
-    const report = reportService.generateReport({
+    const report = await reportService.generateReport({
       watchId: watch.id,
       targetContract: watch.target_contract,
       watchSpecHash: watch.watch_spec_hash,
@@ -237,9 +237,17 @@ export function createSponsoredWatchService(params: {
     }
 
     const onChainWatchId = watch.on_chain_watch_id;
-    if (onChainWatchId == null || !Number.isFinite(onChainWatchId)) {
+    // Require a finite non-negative integer decoded at create time — never re-parse
+    // string UUIDs or strip digits (that historically mapped garbage → 0 / wrong id).
+    if (
+      onChainWatchId == null ||
+      typeof onChainWatchId !== "number" ||
+      !Number.isFinite(onChainWatchId) ||
+      !Number.isInteger(onChainWatchId) ||
+      onChainWatchId < 0
+    ) {
       throw new Error(
-        `Sponsored watch ${watchId} is missing on_chain_watch_id — cannot publishSponsoredReport`,
+        `Sponsored watch ${watchId} has invalid on_chain_watch_id (${String(onChainWatchId)}) — cannot publishSponsoredReport; recreate the campaign so createSponsoredWatch returns a decoded watch id`,
       );
     }
 
@@ -272,17 +280,19 @@ export function createSponsoredWatchService(params: {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown on-chain error";
       await execLogRepo.append({
-        action_type: "registry_write",
+        action_type: "sponsored_watch",
         entity_type: "sponsored_watch",
         entity_id: watchId,
         status: "failed",
         message: `On-chain publishSponsoredReport failed: ${message}`,
         details: {
+          method: "publishSponsoredReport",
           reportContentHash,
           sourceEventRoot,
           reportUri,
           onChainWatchId,
           createTxHash: watch.create_tx_hash,
+          error_message: message,
         },
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),
@@ -311,7 +321,7 @@ export function createSponsoredWatchService(params: {
     }
 
     await execLogRepo.append({
-      action_type: "registry_write",
+      action_type: "sponsored_watch",
       entity_type: "sponsored_watch",
       entity_id: watchId,
       status: "succeeded",
@@ -319,6 +329,7 @@ export function createSponsoredWatchService(params: {
         ? `Executed via KeeperHub (run ${reportKeeperHubRunId}): sponsored report published`
         : "Sponsored watch completed with on-chain report publication",
       details: {
+        method: "publishSponsoredReport",
         reportContentHash,
         sourceEventRoot,
         reportUri,
@@ -332,6 +343,9 @@ export function createSponsoredWatchService(params: {
           createTxHash: watch.create_tx_hash,
           reportTxHash,
         },
+        keeper_hub_run_id: reportKeeperHubRunId ?? null,
+        tx_hash: reportTxHash,
+        explorer_url: reportExplorerUrl ?? null,
         executedViaKeeperHub: Boolean(reportKeeperHubRunId || client.isKeeperHubBacked()),
       },
       started_at: new Date().toISOString(),
@@ -369,12 +383,19 @@ export function createSponsoredWatchService(params: {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown on-chain error";
         await execLogRepo.append({
-          action_type: "registry_write",
+          action_type: "sponsored_watch",
           entity_type: "sponsored_watch",
           entity_id: null,
           status: "failed",
           message: `On-chain createSponsoredWatch failed: ${message}`,
-          details: { targetContract, watchSpecHash, startsAt, endsAt },
+          details: {
+            method: "createSponsoredWatch",
+            targetContract,
+            watchSpecHash,
+            startsAt,
+            endsAt,
+            error_message: message,
+          },
           started_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
         });
@@ -410,7 +431,7 @@ export function createSponsoredWatchService(params: {
       }
 
       await execLogRepo.append({
-        action_type: "registry_write",
+        action_type: "sponsored_watch",
         entity_type: "sponsored_watch",
         entity_id: result.value.id,
         status: "succeeded",
@@ -418,6 +439,7 @@ export function createSponsoredWatchService(params: {
           ? `Executed via KeeperHub (run ${createKeeperHubRunId}): sponsored watch created for ${targetContract}`
           : `Sponsored watch created for contract ${targetContract}`,
         details: {
+          method: "createSponsoredWatch",
           targetContract,
           watchSpecHash,
           startsAt,
@@ -427,6 +449,9 @@ export function createSponsoredWatchService(params: {
           createExplorerUrl,
           onChainWatchId,
           status: initialStatus,
+          keeper_hub_run_id: createKeeperHubRunId ?? null,
+          tx_hash: createTxHash,
+          explorer_url: createExplorerUrl ?? null,
           executedViaKeeperHub: Boolean(createKeeperHubRunId || client.isKeeperHubBacked()),
         },
         started_at: new Date().toISOString(),
@@ -448,12 +473,12 @@ export function createSponsoredWatchService(params: {
       }
 
       await execLogRepo.append({
-        action_type: "registry_write",
+        action_type: "sponsored_watch",
         entity_type: "sponsored_watch",
         entity_id: watchId,
         status: "failed",
         message: `Sponsored watch failed: ${reason}`,
-        details: { reason },
+        details: { reason, method: "failWatch" },
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),
       });
@@ -529,15 +554,18 @@ export function createSponsoredWatchService(params: {
             // Do not mark failed permanently on transient registry/LLM errors —
             // next cycle retries. Permanent product failures use failWatch explicitly.
             await execLogRepo.append({
-              action_type: "registry_write",
+              action_type: "sponsored_watch",
               entity_type: "sponsored_watch",
               entity_id: watch.id,
               status: "failed",
               message: `End-of-campaign completion attempt failed (will retry): ${message}`,
               details: {
+                method: "publishSponsoredReport",
+                reason: "completion_retryable",
                 createTxHash: watch.create_tx_hash,
                 onChainWatchId: watch.on_chain_watch_id,
                 endsAt: watch.ends_at,
+                error_message: message,
               },
               started_at: nowIso,
               completed_at: new Date().toISOString(),

@@ -5,30 +5,80 @@
 // Signature verification alone never unlocks premium.
 //
 // Chain ID and USDC verifyingContract are configurable (env-driven in production
-// wiring). Defaults target Base Sepolia for the hackathon demo.
+// wiring). Defaults target Base Sepolia (CDP facilitator payment rail).
+// Desk / registry remain on Ethereum Sepolia with a separate DESK_USDC_ADDRESS.
 
 import { randomUUID } from "node:crypto";
-import { ethers } from "ethers";
+import {
+  type Address,
+  type Hash,
+  type Hex,
+  createPublicClient,
+  createWalletClient,
+  decodeEventLog,
+  getAddress,
+  getContract,
+  http,
+  keccak256,
+  parseAbi,
+  parseSignature,
+  recoverTypedDataAddress,
+  stringToBytes,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { chainFromId } from "../lib/viem-chain.ts";
+import { x402Log } from "../lib/logger.ts";
+import {
+  buildFacilitatorAuthHeaders,
+  isCdpFacilitatorUrl,
+  type CdpCredentials,
+} from "./cdp-auth.ts";
 import type {
   ChallengeResult,
   PaymentAdapter,
   SettlementVerificationResult,
 } from "./payment-adapter.ts";
 
-/** Defaults: Base Sepolia + Circle official USDC (EIP-3009). */
+/** Defaults: Base Sepolia + Circle official USDC (EIP-3009) for x402 / CDP. */
 export const DEFAULT_X402_CHAIN_ID = 84_532;
 export const DEFAULT_X402_USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
-/** EIP-712 domain name/version for Circle USDC transferWithAuthorization. */
-const USDC_EIP712_NAME = "USD Coin";
-const USDC_EIP712_VERSION = "2";
+/**
+ * EIP-712 domain name/version for Circle USDC `transferWithAuthorization`.
+ * CRITICAL: must match the on-chain token's EIP-712 domain (usually `name()` / `version()`).
+ * Circle Base Sepolia and Ethereum Sepolia USDC use name **"USDC"** (not "USD Coin").
+ * Base mainnet Circle USDC uses **"USD Coin"**.
+ * Wrong name → local verify still passes (same wrong domain) but on-chain settle reverts
+ * ("unable to estimate gas" / invalid_payload from CDP facilitator).
+ */
+export const DEFAULT_X402_USDC_EIP712_VERSION = "2";
+
+/** Resolve default EIP-712 domain name for a chain's canonical Circle USDC. */
+export function defaultUsdcEip712Name(chainId: number): string {
+  if (chainId === 84_532) return "USDC"; // Base Sepolia Circle USDC (payment rail)
+  if (chainId === 11_155_111) return "USDC"; // Ethereum Sepolia Circle USDC (desk rail)
+  if (chainId === 8_453) return "USD Coin"; // Base mainnet
+  // Sensible default for other Circle FiatToken deployments
+  return "USD Coin";
+}
 
 const CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes
 
-const USDC_EIP3009_ABI = [
+const USDC_EIP3009_ABI = parseAbi([
   "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)",
   "function authorizationState(address authorizer, bytes32 nonce) view returns (bool)",
   "event Transfer(address indexed from, address indexed to, uint256 value)",
-] as const;
+]);
+
+const TRANSFER_WITH_AUTH_TYPES = {
+  TransferWithAuthorization: [
+    { name: "from", type: "address" },
+    { name: "to", type: "address" },
+    { name: "value", type: "uint256" },
+    { name: "validAfter", type: "uint256" },
+    { name: "validBefore", type: "uint256" },
+    { name: "nonce", type: "bytes32" },
+  ],
+} as const;
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
@@ -74,6 +124,8 @@ export class X402PaymentAdapter implements PaymentAdapter {
   readonly route = "x402" as const;
 
   private readonly facilitatorUrl: string | undefined;
+  /** CDP Secret API Key credentials for authenticated facilitator settle (Bearer JWT). */
+  private readonly cdpCredentials: CdpCredentials | undefined;
   /**
    * Static address or live resolver (production Para MPC warm-up updates the
    * address after ensureWallet completes).
@@ -89,6 +141,10 @@ export class X402PaymentAdapter implements PaymentAdapter {
   private readonly chainId: number;
   /** USDC contract address for EIP-712 verifyingContract (env: X402_USDC_ADDRESS). */
   private readonly usdcAddress: string;
+  /** EIP-712 domain name (must match on-chain USDC; env: X402_USDC_EIP712_NAME). */
+  private readonly usdcEip712Name: string;
+  /** EIP-712 domain version (env: X402_USDC_EIP712_VERSION). */
+  private readonly usdcEip712Version: string;
   private readonly networkCaip2: string;
   private readonly settleAuthorization:
     | ((auth: X402AuthorizationPayload, expectedAmountAtomic: bigint) => Promise<X402SettlementRailResult>)
@@ -111,6 +167,12 @@ export class X402PaymentAdapter implements PaymentAdapter {
 
   constructor(options?: {
     facilitatorUrl?: string | undefined;
+    /**
+     * Coinbase CDP Secret API Key credentials. Required when facilitatorUrl
+     * points at api.cdp.coinbase.com (Bearer JWT on /settle).
+     */
+    cdpApiKeyId?: string | undefined;
+    cdpApiKeySecret?: string | undefined;
     /**
      * Treasury receive address for x402 `to`. Accepts a static string or a
      * getter so production can point at a Para MPC wallet once enrolled.
@@ -140,6 +202,16 @@ export class X402PaymentAdapter implements PaymentAdapter {
      */
     usdcAddress?: string | undefined;
     /**
+     * EIP-712 domain `name` for USDC TransferWithAuthorization.
+     * Defaults per chain (Base/Eth Sepolia → "USDC", Base mainnet → "USD Coin").
+     * Must match the on-chain token domain or facilitator settle reverts.
+     */
+    usdcEip712Name?: string | undefined;
+    /**
+     * EIP-712 domain `version` for USDC TransferWithAuthorization. Default "2".
+     */
+    usdcEip712Version?: string | undefined;
+    /**
      * Injectable settlement rail for unit tests. When omitted, the adapter uses
      * the facilitator (if configured) or direct on-chain submission.
      */
@@ -158,6 +230,15 @@ export class X402PaymentAdapter implements PaymentAdapter {
       | undefined;
   }) {
     this.facilitatorUrl = options?.facilitatorUrl?.replace(/\/$/, "") || undefined;
+    const cdpId = options?.cdpApiKeyId?.trim();
+    const cdpSecret = options?.cdpApiKeySecret?.trim();
+    this.cdpCredentials =
+      cdpId && cdpSecret ? { apiKeyId: cdpId, apiKeySecret: cdpSecret } : undefined;
+    if (isCdpFacilitatorUrl(this.facilitatorUrl) && !this.cdpCredentials) {
+      console.warn(
+        "[x402] X402_FACILITATOR_URL points at Coinbase CDP but CDP_API_KEY_ID / CDP_API_KEY_SECRET are unset — settle will return 401",
+      );
+    }
     this.treasuryWalletAddressResolver = options?.treasuryWalletAddress;
     this.allowTestMode = options?.allowTestMode ?? false;
     this.rpcUrl = options?.rpcUrl;
@@ -178,6 +259,14 @@ export class X402PaymentAdapter implements PaymentAdapter {
       );
     }
     this.usdcAddress = usdcAddress;
+    const eip712Name = (options?.usdcEip712Name ?? defaultUsdcEip712Name(this.chainId)).trim();
+    if (!eip712Name) {
+      throw new Error("Invalid x402 USDC EIP-712 name: expected a non-empty string");
+    }
+    this.usdcEip712Name = eip712Name;
+    this.usdcEip712Version = (
+      options?.usdcEip712Version ?? DEFAULT_X402_USDC_EIP712_VERSION
+    ).trim() || DEFAULT_X402_USDC_EIP712_VERSION;
     this.networkCaip2 = `eip155:${this.chainId}`;
   }
 
@@ -189,8 +278,8 @@ export class X402PaymentAdapter implements PaymentAdapter {
     verifyingContract: string;
   } {
     return {
-      name: USDC_EIP712_NAME,
-      version: USDC_EIP712_VERSION,
+      name: this.usdcEip712Name,
+      version: this.usdcEip712Version,
       chainId: this.chainId,
       verifyingContract: this.usdcAddress,
     };
@@ -222,20 +311,11 @@ export class X402PaymentAdapter implements PaymentAdapter {
     const expiresAt = new Date(now.getTime() + CHALLENGE_EXPIRY_MS).toISOString();
 
     const challengeReference = `x402_${randomUUID()}`;
-    const nonce = ethers.keccak256(ethers.toUtf8Bytes(challengeReference));
+    const nonce = keccak256(stringToBytes(challengeReference));
 
     const domain = this.eip712Domain();
 
-    const types = {
-      TransferWithAuthorization: [
-        { name: "from", type: "address" },
-        { name: "to", type: "address" },
-        { name: "value", type: "uint256" },
-        { name: "validAfter", type: "uint256" },
-        { name: "validBefore", type: "uint256" },
-        { name: "nonce", type: "bytes32" },
-      ],
-    };
+    const types = TRANSFER_WITH_AUTH_TYPES;
 
     if (
       !this.treasuryWalletAddress ||
@@ -278,6 +358,17 @@ export class X402PaymentAdapter implements PaymentAdapter {
       ? referralFromIntent.trim().toLowerCase()
       : null;
 
+    // Persist numeric fields as decimal strings so JSON transport + viem
+    // agree on uint256 encoding (no float / scientific notation).
+    const messageForClient = {
+      from: message.from,
+      to: message.to,
+      value: String(message.value),
+      validAfter: String(message.validAfter),
+      validBefore: String(message.validBefore),
+      nonce: message.nonce,
+    };
+
     const challengeData: Record<string, unknown> = {
       route: "x402",
       premiumItemId: params.premiumItemId,
@@ -290,8 +381,17 @@ export class X402PaymentAdapter implements PaymentAdapter {
       asset: this.usdcAddress,
       domain,
       types,
-      message,
+      message: messageForClient,
     };
+
+    // P2-10: one info line per settlement id; challenge details at debug.
+    x402Log.debug("challenge created", {
+      challengeReference,
+      network: this.networkCaip2,
+      asset: this.usdcAddress,
+      chainId: domain.chainId,
+      value: messageForClient.value,
+    });
 
     if (params.agreement) {
       challengeData.agreementType = params.agreement.type;
@@ -470,59 +570,132 @@ export class X402PaymentAdapter implements PaymentAdapter {
       };
     }
 
-    const domain = this.eip712Domain();
-
-    const types = {
-      TransferWithAuthorization: [
-        { name: "from", type: "address" },
-        { name: "to", type: "address" },
-        { name: "value", type: "uint256" },
-        { name: "validAfter", type: "uint256" },
-        { name: "validBefore", type: "uint256" },
-        { name: "nonce", type: "bytes32" },
-      ],
-    };
-
     const valueAtomic = BigInt(value);
     const validAfterNum = Number(validAfter);
     const validBeforeNum = Number(validBefore);
 
-    const message = {
-      from,
-      to,
-      value: valueAtomic.toString(),
-      validAfter: validAfterNum,
-      validBefore: validBeforeNum,
-      nonce,
-    };
-
-    // Recover signer using ethers
-    let recoveredAddress: string;
+    // Normalize addresses + use bigint for uint fields (matches viem signTypedData).
+    let fromChecksum: string;
+    let toChecksum: string;
     try {
-      recoveredAddress = ethers.verifyTypedData(domain, types, message, signature);
-    } catch (err) {
+      fromChecksum = getAddress(from);
+      toChecksum = getAddress(to);
+    } catch {
       return {
         verified: false,
         amountSettled: 0,
         currency: params.currency,
         settlementReference: params.settlementReference,
-        errorMessage: `Cryptographic signature verification failed: ${err instanceof Error ? err.message : "invalid signature"}`,
+        errorMessage: "Invalid from/to address in authorization",
       };
     }
 
-    if (recoveredAddress.toLowerCase() !== from.toLowerCase()) {
+    const message = {
+      from: fromChecksum as Address,
+      to: toChecksum as Address,
+      value: valueAtomic,
+      validAfter: BigInt(validAfterNum),
+      validBefore: BigInt(validBeforeNum),
+      nonce: nonce as Hex,
+    };
+
+    // Verify against the configured on-chain domain only. Try the common Circle
+    // alternate name purely for diagnostics (stale client challenges signed as "USD Coin").
+    const primaryDomain = this.eip712Domain();
+    let recoveredAddress: string | null = null;
+    let recoveredPrimary: string | null = null;
+    let matchedStaleAlternate: string | null = null;
+
+    try {
+      recoveredPrimary = await recoverTypedDataAddress({
+        domain: {
+          name: primaryDomain.name,
+          version: primaryDomain.version,
+          chainId: primaryDomain.chainId,
+          verifyingContract: primaryDomain.verifyingContract as Address,
+        },
+        types: TRANSFER_WITH_AUTH_TYPES,
+        primaryType: "TransferWithAuthorization",
+        message,
+        signature: signature as Hex,
+      });
+      if (recoveredPrimary.toLowerCase() === fromChecksum.toLowerCase()) {
+        recoveredAddress = recoveredPrimary;
+      }
+    } catch (err) {
+      console.warn("[x402] EIP-712 primary domain recover threw", {
+        domain: primaryDomain,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    if (!recoveredAddress) {
+      for (const altName of ["USDC", "USD Coin"] as const) {
+        if (altName === primaryDomain.name) continue;
+        try {
+          const altRecovered = await recoverTypedDataAddress({
+            domain: {
+              name: altName,
+              version: primaryDomain.version,
+              chainId: primaryDomain.chainId,
+              verifyingContract: primaryDomain.verifyingContract as Address,
+            },
+            types: TRANSFER_WITH_AUTH_TYPES,
+            primaryType: "TransferWithAuthorization",
+            message,
+            signature: signature as Hex,
+          });
+          if (altRecovered.toLowerCase() === fromChecksum.toLowerCase()) {
+            matchedStaleAlternate = altName;
+            break;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      console.warn("[x402] EIP-712 recover mismatch", {
+        from: fromChecksum,
+        to: toChecksum,
+        value: valueAtomic.toString(),
+        validAfter: validAfterNum,
+        validBefore: validBeforeNum,
+        nonce,
+        expectedDomain: primaryDomain,
+        recoveredPrimary,
+        matchedStaleAlternate,
+      });
+
+      if (matchedStaleAlternate) {
+        return {
+          verified: false,
+          amountSettled: 0,
+          currency: params.currency,
+          settlementReference: params.settlementReference,
+          errorMessage:
+            `Signature was created with EIP-712 domain name ${JSON.stringify(matchedStaleAlternate)}, ` +
+            `but this server expects ${JSON.stringify(primaryDomain.name)} (on-chain USDC domain). ` +
+            "Close the payment panel and start a new challenge so the wallet re-signs with the correct domain.",
+        };
+      }
+
       return {
         verified: false,
         amountSettled: 0,
         currency: params.currency,
         settlementReference: params.settlementReference,
         errorMessage:
-          "Cryptographic signature verification failed: recovered address does not match from address",
+          "Cryptographic signature verification failed: recovered address does not match from address. " +
+          "Create a fresh payment challenge and sign again " +
+          `(expected EIP-712 name=${JSON.stringify(this.usdcEip712Name)} version=${JSON.stringify(this.usdcEip712Version)} chainId=${this.chainId}).` +
+          (recoveredPrimary
+            ? ` Recovered ${recoveredPrimary} for claimed from ${fromChecksum}.`
+            : ""),
       };
     }
 
     // Verify nonce matches expected challenge reference hash
-    const expectedNonce = ethers.keccak256(ethers.toUtf8Bytes(params.challengeReference));
+    const expectedNonce = keccak256(stringToBytes(params.challengeReference));
     if (nonce.toLowerCase() !== expectedNonce.toLowerCase()) {
       return {
         verified: false,
@@ -726,6 +899,8 @@ export class X402PaymentAdapter implements PaymentAdapter {
     }
 
     const valueStr = BigInt(auth.value).toString();
+    // CDP OpenAPI: top-level x402Version + paymentPayload + paymentRequirements.
+    // v2 paymentPayload puts scheme/network on nested `accepted` (not top-level).
     const paymentRequirements = {
       scheme: "exact",
       network: this.networkCaip2,
@@ -735,15 +910,13 @@ export class X402PaymentAdapter implements PaymentAdapter {
       payTo: this.treasuryWalletAddress,
       maxTimeoutSeconds: 120,
       extra: {
-        name: USDC_EIP712_NAME,
-        version: USDC_EIP712_VERSION,
+        name: this.usdcEip712Name,
+        version: this.usdcEip712Version,
       },
     };
 
     const paymentPayload = {
-      x402Version: 2,
-      scheme: "exact",
-      network: this.networkCaip2,
+      x402Version: 2 as const,
       accepted: {
         scheme: "exact",
         network: this.networkCaip2,
@@ -751,6 +924,10 @@ export class X402PaymentAdapter implements PaymentAdapter {
         asset: this.usdcAddress,
         payTo: this.treasuryWalletAddress,
         maxTimeoutSeconds: 120,
+        extra: {
+          name: this.usdcEip712Name,
+          version: this.usdcEip712Version,
+        },
       },
       payload: {
         signature: auth.signature,
@@ -765,77 +942,233 @@ export class X402PaymentAdapter implements PaymentAdapter {
       },
     };
 
+    const settleBody = {
+      x402Version: 2 as const,
+      paymentPayload,
+      paymentRequirements,
+    };
+
     const settleUrls = this.buildFacilitatorSettleUrls(this.facilitatorUrl);
-    let lastError = "Facilitator settle failed";
+    x402Log.debug("facilitator settle start", {
+      network: this.networkCaip2,
+      asset: this.usdcAddress,
+      amountAtomic: expectedAmountAtomic.toString(),
+      from: auth.from,
+      hasCdpCredentials: Boolean(this.cdpCredentials),
+      candidateCount: settleUrls.length,
+    });
+
+    /** Prefer actionable API errors over path-not-found noise from alternate URLs. */
+    let bestError = "Facilitator settle failed";
+    let bestErrorRank = -1;
 
     for (const url of settleUrls) {
       try {
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ paymentPayload, paymentRequirements }),
+        const headers = await buildFacilitatorAuthHeaders(url, this.cdpCredentials, "POST");
+        const hasAuth = Boolean(headers.Authorization);
+        x402Log.debug("facilitator settle attempt", {
+          url,
+          hasAuthorizationHeader: hasAuth,
         });
 
-        const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        const response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(settleBody),
+        });
+
+        const rawText = await response.text();
+        let body: Record<string, unknown> = {};
+        if (rawText) {
+          try {
+            body = JSON.parse(rawText) as Record<string, unknown>;
+          } catch {
+            body = { raw: rawText.slice(0, 500) };
+          }
+        }
+
+        x402Log.debug("facilitator settle response", {
+          url,
+          status: response.status,
+          bodyPreview: rawText.slice(0, 200),
+        });
 
         if (!response.ok) {
-          lastError =
-            typeof body.error === "string"
-              ? body.error
-              : typeof body.errorReason === "string"
-                ? body.errorReason
-                : `Facilitator HTTP ${response.status}`;
-          // Try alternate path shapes before giving up
+          const detail = this.formatFacilitatorError(response.status, body, url);
+          const rank = this.rankFacilitatorError(response.status);
+          if (rank >= bestErrorRank) {
+            bestErrorRank = rank;
+            bestError = detail;
+          }
+          // Auth failures on the primary URL are definitive — do not hide behind 404s.
+          if (response.status === 401 || response.status === 403) {
+            break;
+          }
           continue;
         }
 
-        const success = body.success === true || body.isValid === true;
+        const success =
+          body.success === true ||
+          body.isValid === true ||
+          body.success === "true" ||
+          // Some facilitators return a tx hash without an explicit success flag
+          (typeof body.transaction === "string" && TX_HASH_RE.test(body.transaction));
+
         const transactionHash =
           (typeof body.transaction === "string" && body.transaction) ||
           (typeof body.txHash === "string" && body.txHash) ||
           (typeof body.transactionHash === "string" && body.transactionHash) ||
+          (typeof (body as { settlement?: { transaction?: string } }).settlement?.transaction ===
+            "string" &&
+            (body as { settlement: { transaction: string } }).settlement.transaction) ||
           undefined;
 
         if (!success) {
-          lastError =
+          bestError =
             typeof body.errorReason === "string"
               ? body.errorReason
               : typeof body.invalidReason === "string"
                 ? body.invalidReason
-                : "Facilitator rejected settlement";
+                : typeof body.error === "string"
+                  ? body.error
+                  : "Facilitator rejected settlement";
+          bestErrorRank = Math.max(bestErrorRank, 50);
+          x402Log.warn("facilitator rejected settlement", {
+            url,
+            error: bestError,
+          });
           continue;
         }
 
         if (!transactionHash || !TX_HASH_RE.test(transactionHash)) {
-          lastError = "Facilitator returned success without a valid transaction hash";
+          bestError = "Facilitator returned success without a valid transaction hash";
+          bestErrorRank = Math.max(bestErrorRank, 50);
+          x402Log.warn("facilitator success without tx hash", { url });
           continue;
         }
 
+        // P2-10: single info line per successful settlement.
+        x402Log.info("settlement ok", { transactionHash, via: "facilitator" });
         return { success: true, transactionHash };
       } catch (err) {
-        lastError = err instanceof Error ? err.message : "Facilitator request failed";
+        const msg = err instanceof Error ? err.message : "Facilitator request failed";
+        x402Log.error("facilitator settle request error", { url, error: msg });
+        if (bestErrorRank < 10) {
+          bestErrorRank = 10;
+          bestError = msg;
+        }
       }
     }
 
+    x402Log.error("facilitator settle exhausted candidates", {
+      bestError,
+      candidateCount: settleUrls.length,
+    });
+
     // Fall back to direct on-chain if we have gas key (facilitator unavailable)
     if (this.rpcUrl && this.settlementPrivateKey) {
+      x402Log.info("settlement fallback", { via: "on_chain" });
       return this.settleOnChain(auth);
     }
 
-    return { success: false, errorMessage: lastError };
+    return { success: false, errorMessage: bestError };
   }
 
-  private buildFacilitatorSettleUrls(baseUrl: string): string[] {
-    const urls = new Set<string>();
-    urls.add(`${baseUrl}/settle`);
-    // CDP platform base may already end with /v2/x402; also try bare /settle variants
-    if (!baseUrl.endsWith("/x402")) {
-      urls.add(`${baseUrl}/v2/x402/settle`);
-      urls.add(`${baseUrl}/x402/settle`);
+  /** Higher rank = more useful diagnostic (prefer 4xx body over generic 404 path misses). */
+  private rankFacilitatorError(status: number): number {
+    if (status === 401 || status === 403) return 100;
+    if (status === 400 || status === 422) return 90;
+    if (status === 402) return 80;
+    if (status === 404) return 20;
+    if (status >= 500) return 40;
+    return 30;
+  }
+
+  private formatFacilitatorError(
+    status: number,
+    body: Record<string, unknown>,
+    url: string,
+  ): string {
+    const errorMessage =
+      typeof body.errorMessage === "string" ? body.errorMessage : undefined;
+    const detail =
+      typeof body.error === "string"
+        ? body.error
+        : typeof body.errorReason === "string"
+          ? body.errorReason
+          : typeof body.message === "string"
+            ? body.message
+            : typeof body.raw === "string"
+              ? body.raw.slice(0, 200)
+              : `Facilitator HTTP ${status}`;
+
+    const combined = errorMessage && errorMessage !== detail ? `${detail}: ${errorMessage}` : detail;
+
+    if (status === 401 || status === 403) {
+      return `${combined} (check CDP_API_KEY_ID / CDP_API_KEY_SECRET for CDP facilitator) [${url}]`;
     }
-    // Legacy facilitators sometimes use /facilitator/settle
-    urls.add(`${baseUrl}/facilitator/settle`);
-    return [...urls];
+    if (status === 404) {
+      return `Facilitator HTTP 404 at ${url} — check X402_FACILITATOR_URL (expected …/platform/v2/x402, settle posts to …/settle)`;
+    }
+    // CDP maps on-chain reverts (bad EIP-712 domain, low balance, bad sig) to this text
+    if (/unable to estimate gas|invalid_payload/i.test(combined)) {
+      return (
+        `${combined} — usually invalid EIP-712 domain/signature or insufficient USDC. ` +
+        `Domain in use: name=${JSON.stringify(this.usdcEip712Name)} version=${JSON.stringify(this.usdcEip712Version)} ` +
+        `asset=${this.usdcAddress} chainId=${this.chainId}. Circle Sepolia USDC must use name "USDC" (not "USD Coin"). [${url}]`
+      );
+    }
+    return `${combined} [${url}]`;
+  }
+
+  /**
+   * Resolve settle endpoint candidates from the configured facilitator base.
+   * CDP canonical: https://api.cdp.coinbase.com/platform/v2/x402 → …/settle
+   * Public testnet: https://x402.org/facilitator → …/settle
+   *
+   * If the env value already ends with /settle, use it as-is (no double suffix).
+   * For CDP hosts we do NOT try legacy /facilitator/settle (those 404 and used to
+   * overwrite a more useful primary error in the client message).
+   */
+  private buildFacilitatorSettleUrls(baseUrl: string): string[] {
+    const normalized = baseUrl.replace(/\/$/, "");
+    const urls: string[] = [];
+
+    // Env already points at the settle endpoint
+    if (normalized.endsWith("/settle")) {
+      urls.push(normalized);
+      return urls;
+    }
+
+    const isCdp = isCdpFacilitatorUrl(normalized);
+
+    if (isCdp) {
+      // Prefer the documented CDP path first
+      if (normalized.endsWith("/v2/x402") || normalized.endsWith("/x402")) {
+        urls.push(`${normalized}/settle`);
+      } else if (normalized.endsWith("/platform")) {
+        urls.push(`${normalized}/v2/x402/settle`);
+      } else if (normalized.includes("api.cdp.coinbase.com")) {
+        // Host only or unexpected base — still try canonical
+        urls.push(`${normalized}/platform/v2/x402/settle`);
+        urls.push(`${normalized}/v2/x402/settle`);
+        urls.push(`${normalized}/settle`);
+      } else {
+        urls.push(`${normalized}/settle`);
+      }
+      return urls;
+    }
+
+    // Non-CDP facilitators (x402.org, self-hosted)
+    urls.push(`${normalized}/settle`);
+    if (!normalized.endsWith("/x402") && !normalized.endsWith("/facilitator")) {
+      urls.push(`${normalized}/v2/x402/settle`);
+      urls.push(`${normalized}/x402/settle`);
+      urls.push(`${normalized}/facilitator/settle`);
+    } else if (normalized.endsWith("/facilitator") === false) {
+      urls.push(`${normalized}/facilitator/settle`);
+    }
+    return [...new Set(urls)];
   }
 
   private async settleOnChain(
@@ -849,16 +1182,35 @@ export class X402PaymentAdapter implements PaymentAdapter {
     }
 
     try {
-      const provider = new ethers.JsonRpcProvider(this.rpcUrl, this.chainId);
-      const wallet = new ethers.Wallet(this.settlementPrivateKey, provider);
-      const usdc = new ethers.Contract(this.usdcAddress, USDC_EIP3009_ABI, wallet);
-      const authorizationState = usdc.getFunction("authorizationState");
-      const transferWithAuthorization = usdc.getFunction("transferWithAuthorization");
+      const chain = chainFromId(this.chainId);
+      const pk = (
+        this.settlementPrivateKey.startsWith("0x")
+          ? this.settlementPrivateKey
+          : `0x${this.settlementPrivateKey}`
+      ) as Hex;
+      const account = privateKeyToAccount(pk);
+      const publicClient = createPublicClient({
+        chain,
+        transport: http(this.rpcUrl),
+      });
+      const walletClient = createWalletClient({
+        account,
+        chain,
+        transport: http(this.rpcUrl),
+      });
+      const usdc = getContract({
+        address: this.usdcAddress as Address,
+        abi: USDC_EIP3009_ABI,
+        client: { public: publicClient, wallet: walletClient },
+      });
 
       // Skip if this nonce was already used (idempotent retry)
       try {
-        const used = await authorizationState(auth.from, auth.nonce);
-        if (used === true || used === 1n || used === 1) {
+        const used = await usdc.read.authorizationState([
+          auth.from as Address,
+          auth.nonce as Hex,
+        ]);
+        if (used === true) {
           // Authorization already consumed — caller must supply the original tx hash
           // or we cannot invent one. Fail closed with a clear message.
           return {
@@ -871,31 +1223,35 @@ export class X402PaymentAdapter implements PaymentAdapter {
         // Some USDC deployments return bool, others uint8; continue to submit
       }
 
-      const sig = ethers.Signature.from(auth.signature);
-      const tx = await transferWithAuthorization(
-        auth.from,
-        auth.to,
-        BigInt(auth.value),
-        BigInt(auth.validAfter),
-        BigInt(auth.validBefore),
-        auth.nonce,
-        sig.v,
-        sig.r,
-        sig.s,
+      const sig = parseSignature(auth.signature as Hex);
+      const v = sig.v !== undefined ? Number(sig.v) : sig.yParity + 27;
+      const hash = await usdc.write.transferWithAuthorization(
+        [
+          auth.from as Address,
+          auth.to as Address,
+          BigInt(auth.value),
+          BigInt(auth.validAfter),
+          BigInt(auth.validBefore),
+          auth.nonce as Hex,
+          v,
+          sig.r,
+          sig.s,
+        ],
+        { account, chain },
       );
 
-      const receipt = await tx.wait();
-      if (!receipt || receipt.status !== 1) {
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
         return {
           success: false,
           errorMessage: "On-chain transferWithAuthorization transaction failed or was reverted",
-          transactionHash: typeof tx.hash === "string" ? tx.hash : undefined,
+          transactionHash: hash,
         };
       }
 
       return {
         success: true,
-        transactionHash: receipt.hash ?? tx.hash,
+        transactionHash: receipt.transactionHash,
       };
     } catch (err) {
       return {
@@ -926,17 +1282,24 @@ export class X402PaymentAdapter implements PaymentAdapter {
     }
 
     try {
-      const provider = new ethers.JsonRpcProvider(this.rpcUrl, this.chainId);
-      const receipt = await provider.getTransactionReceipt(txHash);
-
-      if (!receipt) {
+      const publicClient = createPublicClient({
+        chain: chainFromId(this.chainId),
+        transport: http(this.rpcUrl),
+      });
+      let receipt: Awaited<
+        ReturnType<typeof publicClient.getTransactionReceipt>
+      >;
+      try {
+        receipt = await publicClient.getTransactionReceipt({
+          hash: txHash as Hash,
+        });
+      } catch {
         return { confirmed: false, errorMessage: `Transaction not found: ${txHash}` };
       }
-      if (receipt.status !== 1) {
+      if (receipt.status !== "success") {
         return { confirmed: false, errorMessage: `Transaction reverted: ${txHash}` };
       }
 
-      const usdcInterface = new ethers.Interface(USDC_EIP3009_ABI);
       const usdcAddress = this.usdcAddress.toLowerCase();
       const expectedTo = expected.to.toLowerCase();
       const expectedFrom = expected.from?.toLowerCase();
@@ -944,15 +1307,21 @@ export class X402PaymentAdapter implements PaymentAdapter {
       for (const log of receipt.logs) {
         if (log.address.toLowerCase() !== usdcAddress) continue;
         try {
-          const parsed = usdcInterface.parseLog({
-            topics: [...log.topics],
+          const parsed = decodeEventLog({
+            abi: USDC_EIP3009_ABI,
             data: log.data,
+            topics: log.topics,
           });
-          if (!parsed || parsed.name !== "Transfer") continue;
+          if (parsed.eventName !== "Transfer") continue;
 
-          const transferFrom = String(parsed.args.from ?? parsed.args[0]).toLowerCase();
-          const transferTo = String(parsed.args.to ?? parsed.args[1]).toLowerCase();
-          const transferValue = BigInt(parsed.args.value ?? parsed.args[2]);
+          const args = parsed.args as {
+            from?: Address;
+            to?: Address;
+            value?: bigint;
+          };
+          const transferFrom = String(args.from).toLowerCase();
+          const transferTo = String(args.to).toLowerCase();
+          const transferValue = BigInt(args.value ?? 0n);
 
           if (transferTo !== expectedTo) continue;
           if (expectedFrom && transferFrom !== expectedFrom) continue;

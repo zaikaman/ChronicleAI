@@ -53,6 +53,7 @@ describe("createParaTreasuryClient", () => {
       userIdentifier: "chronicleai-treasury",
       userIdentifierType: "CUSTOM_ID",
       chainId: 84_532,
+      usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       restClient: restClient as any,
     });
@@ -94,6 +95,7 @@ describe("createParaTreasuryClient", () => {
       userIdentifier: "chronicleai-treasury",
       userIdentifierType: "CUSTOM_ID",
       chainId: 84_532,
+      usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       restClient: restClient as any,
     });
@@ -103,7 +105,7 @@ describe("createParaTreasuryClient", () => {
     expect(restClient.createWallet).not.toHaveBeenCalled();
   });
 
-  it("broadcasts native transfers via Para signTransaction when RPC is configured", async () => {
+  it("rejects USDC transfers when RPC_URL is missing", async () => {
     const restClient = {
       listWallets: vi.fn().mockResolvedValue({
         data: [
@@ -122,49 +124,66 @@ describe("createParaTreasuryClient", () => {
       getWallet: vi.fn(),
       getWalletBalance: vi.fn(),
       transfer: vi.fn(),
-      signTransaction: vi.fn().mockResolvedValue({
-        signedTransaction: "0xsigned",
-        txHash: "0x" + "ab".repeat(32),
-        transactionId: "tx_para_1",
-      }),
+      signTransaction: vi.fn(),
     };
 
-    // Minimal JsonRpcProvider stub via undici is heavy; without rpcUrl the
-    // client falls back to transfer(). Test that path here too.
     const clientNoRpc = createParaTreasuryClient({
       apiKey: "sk_test",
       environment: "BETA",
       userIdentifier: "chronicleai-treasury",
       userIdentifierType: "CUSTOM_ID",
       chainId: 84_532,
-      networkLabel: "base-sepolia",
+      networkLabel: "sepolia",
+      usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       restClient: restClient as any,
     });
 
-    restClient.transfer.mockResolvedValueOnce({
-      signedTransaction: "0xsigned",
-      txHash: "0x" + "cd".repeat(32),
-      transactionId: "tx_para_2",
+    await expect(
+      clientNoRpc.sendTransfer("0x70997970C51812dc3A010C7d01b50e0d17dc79C8", 12.5),
+    ).rejects.toThrow(/RPC_URL/);
+    expect(restClient.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid USDC amounts", async () => {
+    const restClient = {
+      listWallets: vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: "w1",
+            type: "EVM",
+            scheme: "DEFAULT",
+            status: "ready",
+            address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        pagination: { cursor: null, hasMore: false, limit: 10 },
+      }),
+      createWallet: vi.fn(),
+      getWallet: vi.fn(),
+      getWalletBalance: vi.fn(),
+      transfer: vi.fn(),
+      signTransaction: vi.fn(),
+    };
+
+    const client = createParaTreasuryClient({
+      apiKey: "sk_test",
+      environment: "BETA",
+      userIdentifier: "chronicleai-treasury",
+      userIdentifierType: "CUSTOM_ID",
+      chainId: 84_532,
+      networkLabel: "sepolia",
+      usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      restClient: restClient as any,
     });
 
-    const receipt = await clientNoRpc.sendTransfer(
-      "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-      0.001,
-    );
-
-    expect(receipt.txHash).toBe("0x" + "cd".repeat(32));
-    expect(receipt.explorerUrl).toContain(receipt.txHash);
-    expect(receipt.keeperHubRunId).toBe("para:tx_para_2");
-    expect(restClient.transfer).toHaveBeenCalledWith(
-      "w1",
-      expect.objectContaining({
-        kind: "NATIVE",
-        broadcast: true,
-        chainId: 84_532,
-      }),
-      expect.any(Object),
-    );
+    await expect(
+      client.sendTransfer("0x70997970C51812dc3A010C7d01b50e0d17dc79C8", 0),
+    ).rejects.toThrow(/Invalid USDC transfer amount/);
+    expect(restClient.signTransaction).not.toHaveBeenCalled();
   });
 
   it("reads native balance from Para", async () => {
@@ -194,6 +213,7 @@ describe("createParaTreasuryClient", () => {
       userIdentifierType: "CUSTOM_ID",
       walletId: "w1",
       chainId: 84_532,
+      usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       restClient: restClient as any,
     });

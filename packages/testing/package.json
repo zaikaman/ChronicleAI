@@ -8,11 +8,11 @@
     "./*": "./src/*"
   },
   "scripts": {
-    "build": "tsc",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc -b --pretty false",
     "test": "vitest run"
   },
   "dependencies": {
+    "@chronicleai/db": "workspace:*",
     "@chronicleai/schemas": "workspace:*"
   },
   "devDependencies": {

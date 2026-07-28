@@ -8,7 +8,13 @@ export function LatestDigestPage(): ReactElement {
   const { state, refetch } = useLatestDigest();
 
   if (state.status === "loading") {
-    return <LoadingState message="Loading latest digest..." data-testid="digest-loading" />;
+    return (
+      <LoadingState
+        message="Loading latest digest..."
+        variant="digest"
+        data-testid="digest-loading"
+      />
+    );
   }
 
   if (state.status === "not-found") {

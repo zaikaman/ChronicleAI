@@ -23,7 +23,7 @@ ChronicleAI is built on top of the KeeperHub execution and reliability layer, ut
 ### Content Generation and Delivery (Actions)
 * **LLM Reasoning**: Synthesizes structured event data into clean markdown reports, articles, and newsletters.
 * **ChronicleAI Publication UI**: The self-hosted React newspaper site displays all articles, digests, and alerts as browsable content.
-* **Discord and Telegram Plugins**: Broadcasts alert summaries and news bulletins directly to public chat channels.
+* **Telegram Plugin**: Broadcasts alert summaries and news bulletins directly to public chat channels.
 * **SMTP Email Service (Nodemailer)**: Sends daily digests to email subscribers using SMTP credentials (e.g. Gmail).
 
 ### On-Chain Execution (KeeperHub Write Actions)
@@ -75,13 +75,13 @@ Once operating funds exceed a configured safety buffer, ChronicleAI routes net r
 ChronicleAI operates via five decoupled loops managed by KeeperHub's execution services:
 
 ### Loop 1: The Alert Loop (Real-Time)
-* **Trigger**: Event Tracker captures a transaction exceeding a specific threshold (e.g., a swap > 100,000 USDC).
+* **Trigger**: Event Tracker captures a transaction exceeding a specific threshold (e.g., a swap > $500,000 USD).
 * **Action**:
   1. The agent fetches transaction details using the web3 plugin.
   2. The LLM generates a breaking alert.
   3. The agent hashes the alert content and source event bundle.
   4. KeeperHub executes a `publishAlert` transaction on the Chronicle Registry contract.
-  5. The agent sends the alert to Discord and Telegram with the KeeperHub execution transaction hash.
+  5. The agent sends the alert to Telegram with the KeeperHub execution transaction hash.
 
 ### Loop 2: The Daily Digest Loop (Scheduled)
 * **Trigger**: Scheduled Trigger (daily cron job).
@@ -124,7 +124,7 @@ ChronicleAI operates via five decoupled loops managed by KeeperHub's execution s
 
 ## 5. Chronicle Registry Contract (On-Chain Execution Target)
 
-To satisfy the hackathon requirement with real, useful transactions, ChronicleAI includes a minimal registry contract deployed to a supported KeeperHub chain such as Base Sepolia for the demo.
+To satisfy the hackathon requirement with real, useful transactions, ChronicleAI includes a minimal registry contract deployed on **Ethereum Sepolia** (ops / desk rail). Human x402 payments settle on **Base Sepolia**; treasury rebalances via CCTP so the desk and registry stay co-located on Ethereum Sepolia.
 
 ### Required Contract Methods
 * **`publishAlert(bytes32 contentHash, bytes32 sourceEventHash, string contentUri)`**: Stores a public alert proof-of-publication.

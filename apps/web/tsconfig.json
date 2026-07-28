@@ -1,32 +1,22 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "rootDir": ".",
+    "outDir": "./dist-types",
+    "tsBuildInfoFile": "./dist-types/.tsbuildinfo",
     "jsx": "react-jsx",
-    "strict": true,
-    "noImplicitAny": true,
-    "noUncheckedIndexedAccess": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-    "sourceMap": true,
+    "exactOptionalPropertyTypes": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@chronicleai/schemas": ["../../packages/schemas/src"],
-      "@chronicleai/schemas/*": ["../../packages/schemas/src/*"],
-      "@chronicleai/config": ["../../packages/config/src"],
-      "@chronicleai/config/*": ["../../packages/config/src/*"],
-      "@chronicleai/ui": ["../../packages/ui/src"],
-      "@chronicleai/ui/*": ["../../packages/ui/src/*"]
+      "@/*": ["src/*"]
     }
   },
-  "include": ["src", "vite.config.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "exclude": ["node_modules", "dist", "dist-types"],
+  "references": [
+    { "path": "../../packages/schemas" },
+    { "path": "../../packages/config" }
+  ]
 }

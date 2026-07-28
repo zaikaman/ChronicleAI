@@ -139,6 +139,7 @@ describe("NewsletterSubscriptionService", () => {
     markExpired: ReturnType<typeof vi.fn>;
     markUnderpaid: ReturnType<typeof vi.fn>;
     markFailed: ReturnType<typeof vi.fn>;
+    markRegistryProof: ReturnType<typeof vi.fn>;
   };
   let subscriberRepo: {
     subscribe: ReturnType<typeof vi.fn>;
@@ -178,6 +179,7 @@ describe("NewsletterSubscriptionService", () => {
       markExpired: vi.fn(),
       markUnderpaid: vi.fn(),
       markFailed: vi.fn(),
+      markRegistryProof: vi.fn(),
     };
     subscriberRepo = {
       subscribe: vi.fn().mockResolvedValue({

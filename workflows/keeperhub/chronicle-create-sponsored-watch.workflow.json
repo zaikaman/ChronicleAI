@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-28T18:00:00.000Z",
+  "exportedAt": "2026-07-09T18:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Create Sponsored Watch (Registry Write)",
     "description": "Material write: createSponsoredWatch on Chronicle Registry with uint64 startsAt/endsAt (IDEA). Triggered with targetContract, watchSpecHash, startsAt, endsAt."
@@ -9,7 +9,10 @@
     {
       "id": "trigger-manual",
       "type": "trigger",
-      "position": { "x": 100, "y": 200 },
+      "position": {
+        "x": 100,
+        "y": 200
+      },
       "data": {
         "type": "trigger",
         "label": "Manual / API Trigger",
@@ -21,14 +24,17 @@
     {
       "id": "write-create-watch",
       "type": "action",
-      "position": { "x": 420, "y": 200 },
+      "position": {
+        "x": 420,
+        "y": 200
+      },
       "data": {
         "type": "action",
         "label": "createSponsoredWatch on Chronicle Registry",
         "config": {
           "actionType": "web3/write-contract",
-          "network": "84532",
-          "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
+          "network": "11155111",
+          "contractAddress": "0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F",
           "abiFunction": "createSponsoredWatch",
           "functionArgs": "[\"{{@trigger-manual:Trigger.targetContract}}\",\"{{@trigger-manual:Trigger.watchSpecHash}}\",\"{{@trigger-manual:Trigger.startsAt}}\",\"{{@trigger-manual:Trigger.endsAt}}\"]",
           "abi": "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"targetContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"watchSpecHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"startsAt\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"endsAt\",\"type\":\"uint64\"}],\"name\":\"createSponsoredWatch\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
@@ -37,7 +43,11 @@
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-manual", "target": "write-create-watch" }
+    {
+      "id": "e1",
+      "source": "trigger-manual",
+      "target": "write-create-watch"
+    }
   ],
   "integrationBindings": []
 }

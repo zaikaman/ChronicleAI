@@ -1,5 +1,6 @@
 // KeeperHub revenue routing handler
-// Processes signed revenue routing requests and triggers batched payouts (Loop 5)
+// Processes signed revenue routing requests and triggers creator-only payouts (Loop 5).
+// Affiliates withdraw separately via the affiliate agent.
 
 import type { RevenueRoutingPayload } from "@chronicleai/schemas";
 import type { ExecutionLogRepository } from "@chronicleai/db";

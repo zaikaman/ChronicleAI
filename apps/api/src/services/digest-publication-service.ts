@@ -1,5 +1,5 @@
 // Digest publication service: orchestrates Chronicle Registry -> SMTP dispatch
-// + community channel bulletins (Discord / Telegram) with self-hosted content
+// + Telegram community channel bulletins with self-hosted content
 //
 // FR-026 / IDEA Loop 3: registry writes are treasury-gated — suspended when
 // the agent treasury balance is below the safety buffer; SMTP/community still
@@ -138,6 +138,7 @@ export function createDigestPublicationService(
 
       // Step 1: Chronicle Registry on-chain publish with the same resolvable URI
       if (allowRegistryWrite) {
+        const registryStartedAt = new Date().toISOString();
         const registryResult: RegistryPublishResult = await registryService.publishDigest(
           contentHash,
           digest.sourceEventRoot ?? digest.id,
@@ -159,9 +160,86 @@ export function createDigestPublicationService(
             ...(keeperHubRunId ? { keeperHubRunId } : {}),
             ...(explorerUrl ? { explorerUrl } : {}),
           });
+          if (execLogRepo) {
+            const completedAt = new Date().toISOString();
+            try {
+              const logResult = await execLogRepo.append({
+                action_type: "registry_write",
+                entity_type: "daily_digest",
+                entity_id: digest.id,
+                status: "succeeded",
+                message: `Digest registry write succeeded${keeperHubRunId ? ` (run ${keeperHubRunId})` : ""}`,
+                details: {
+                  method: "publishDigest",
+                  reason: "registry_write_ok",
+                  tx_hash: registryTxHash,
+                  keeper_hub_run_id: keeperHubRunId ?? null,
+                  explorer_url: explorerUrl ?? null,
+                  gas_used: gasUsed ?? null,
+                  gas_used_wei: gasUsedWei ?? null,
+                  source_event_root: digest.sourceEventRoot ?? digest.id,
+                  content_hash: contentHash,
+                  content_uri: contentUri,
+                  executedViaKeeperHub: Boolean(keeperHubRunId),
+                },
+                started_at: registryStartedAt,
+                completed_at: completedAt,
+              });
+              if (!logResult.ok) {
+                console.error(
+                  "[digest-publication] registry_write success log failed:",
+                  logResult.error.message,
+                );
+              }
+            } catch (error) {
+              console.error(
+                "[digest-publication] registry_write success log threw:",
+                error instanceof Error ? error.message : error,
+              );
+            }
+          }
         } else {
-          failures.push(`Registry: ${registryResult.errorMessage ?? "unknown error"}`);
+          const failMessage =
+            registryResult.errorMessage ??
+            (registryResult.success
+              ? "Registry write reported success without txHash"
+              : "Registry write failed");
+          failures.push(`Registry: ${failMessage}`);
           await digestRepo.updateRegistryMetadata(digest.id, { contentUri, contentHash });
+          if (execLogRepo) {
+            const completedAt = new Date().toISOString();
+            try {
+              const logResult = await execLogRepo.append({
+                action_type: "registry_write",
+                entity_type: "daily_digest",
+                entity_id: digest.id,
+                status: "failed",
+                message: failMessage,
+                details: {
+                  method: "publishDigest",
+                  reason: "registry_write_failed",
+                  error_message: failMessage,
+                  keeper_hub_run_id: registryResult.keeperHubRunId ?? null,
+                  source_event_root: digest.sourceEventRoot ?? digest.id,
+                  content_hash: contentHash,
+                  content_uri: contentUri,
+                },
+                started_at: registryStartedAt,
+                completed_at: completedAt,
+              });
+              if (!logResult.ok) {
+                console.error(
+                  "[digest-publication] registry_write failure log failed:",
+                  logResult.error.message,
+                );
+              }
+            } catch (error) {
+              console.error(
+                "[digest-publication] registry_write failure log threw:",
+                error instanceof Error ? error.message : error,
+              );
+            }
+          }
         }
       }
 
@@ -179,7 +257,7 @@ export function createDigestPublicationService(
         failures.push(`SMTP: ${smtpResult.errorMessage ?? "unknown error"}`);
       }
 
-      // Step 3: Discord / Telegram community bulletins with registry tx hash
+      // Step 3: Telegram community bulletins with registry tx hash
       if (notificationService) {
         try {
           communityBroadcast = await notificationService.sendDigestBroadcast({

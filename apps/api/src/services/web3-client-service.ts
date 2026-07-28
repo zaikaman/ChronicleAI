@@ -2,21 +2,33 @@
 //
 // Production priority:
 // 1. Para MPC treasury + KeeperHub registry (hybrid) — preferred for demo/prod
-// 2. Para MPC only (registry + transfers via Para ethers REST signer)
+// 2. Para MPC only (registry + transfers via Para viem REST account)
 // 3. KeeperHub only (registry + transfers via org wallet)
-// 4. Direct ethers — ALLOW_DIRECT_ETHERS_WRITES=true and never in production
+// 4. Direct viem EOA — ALLOW_DIRECT_ETHERS_WRITES=true and never in production
 //
 // Para uses @getpara/rest-sdk (API-key programmatic wallets) for real MPC
 // signing. No PARA_WALLET_PRIVATE_KEY is used in production.
 
 import type { ServerEnv } from "@chronicleai/config";
-import { createParaRestEthersSigner } from "@getpara/rest-sdk/ethers";
+import { createParaRestViemAccount } from "@getpara/rest-sdk/viem";
 import { ParaRestClient } from "@getpara/rest-sdk";
-import { ethers } from "ethers";
+import {
+  type Address,
+  type Hash,
+  type Hex,
+  createPublicClient,
+  createWalletClient,
+  getAddress,
+  http,
+  isAddress,
+  parseAbi,
+  parseUnits,
+} from "viem";
+import { type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
+import { chainFromId } from "../lib/viem-chain.ts";
 import {
   createKeeperHubWriteClient,
   isKeeperHubWriteConfigured,
-  REGISTRY_ABI,
   toBytes32Hash,
   toUint64Seconds,
 } from "./keeperhub-write-client.ts";
@@ -28,12 +40,14 @@ import {
 import {
   createParaTreasuryClientFromEnv,
   isParaTreasuryConfigured,
+  mapNetworkToChainId,
   type ParaTreasuryClient,
 } from "./para-treasury-client.ts";
+import { decodeSponsoredWatchIdFromLogs } from "./sponsored-watch-id.ts";
 import { resolveTreasuryWallet } from "./treasury-wallet.ts";
 
 /**
- * TRUSTED_CLIENT_OK: ethers used for ABI encoding and Para REST ethers signer.
+ * TRUSTED_CLIENT_OK: viem used for ABI encoding and Para REST viem account.
  * Production treasury spends go through Para MPC when PARA_API_KEY is set.
  */
 
@@ -116,71 +130,91 @@ export interface Web3Client {
   ): Promise<OnChainWriteReceipt>;
 
   /**
-   * Send native transfer from the treasury wallet.
-   * Production: Para MPC transfer when configured, else KeeperHub transfer.
+   * Desk trade ticket: publishTradeTicket(ticketHash, signalHash, intentHash, contentUri).
+   * contentUri should be the public `/desk/tickets/:id` page.
    */
-  sendTransfer(to: string, amountEth: number): Promise<OnChainWriteReceipt>;
+  publishTradeTicket(
+    ticketHash: string,
+    signalHash: string,
+    intentHash: string,
+    contentUri: string,
+  ): Promise<OnChainWriteReceipt>;
+
+  /**
+   * Desk capital audit: recordCapitalMove(moveId, from, to, amount, reasonHash).
+   * amountUsdc is human USDC units (6 decimals on-chain).
+   */
+  recordCapitalMove(
+    moveId: string,
+    from: string,
+    to: string,
+    amountUsdc: number,
+    reasonHash: string,
+  ): Promise<OnChainWriteReceipt>;
+
+  /**
+   * Send USDC from the treasury wallet (human USDC units, e.g. 12.5).
+   * Production: Para MPC ERC-20 transfer when configured, else KeeperHub transfer.
+   */
+  sendTransfer(to: string, amountUsdc: number): Promise<OnChainWriteReceipt>;
 }
 
-/** Full ABI used by Para / direct-ethers paths (includes view helpers). */
-const ETHERS_REGISTRY_ABI = [
-  ...REGISTRY_ABI,
-  "function owner() external view returns (address)",
-] as const;
+/** Full ABI used by Para / direct-EOA paths (includes view helpers). */
+const VIEM_REGISTRY_ABI = parseAbi([
+  "function publishAlert(bytes32 contentHash, bytes32 sourceEventHash, string contentUri)",
+  "function publishDigest(bytes32 contentHash, bytes32 sourceEventRoot, string contentUri)",
+  "function createSponsoredWatch(address targetContract, bytes32 watchSpecHash, uint64 startsAt, uint64 endsAt) returns (uint256 watchId)",
+  "function publishSponsoredReport(uint256 watchId, bytes32 reportHash, bytes32 sourceEventRoot, string contentUri)",
+  "function publishPremiumReceipt(bytes32 contentHash, bytes32 sourceEventHash, string contentUri)",
+  "function recordPayout(bytes32 payoutPeriodHash, address recipient, uint256 amount, bytes32 reasonHash)",
+  "function publishTradeTicket(bytes32 ticketHash, bytes32 signalHash, bytes32 intentHash, string contentUri)",
+  "function recordCapitalMove(bytes32 moveId, address from, address to, uint256 amount, bytes32 reasonHash)",
+  "function owner() view returns (address)",
+]);
 
-interface EthersTxReceipt {
-  hash: string;
-  logs: Array<{ topics?: string[]; data?: string }>;
-  gasUsed?: bigint | number | string;
-}
+const ERC20_TRANSFER_ABI = parseAbi([
+  "function transfer(address to, uint256 amount) returns (bool)",
+]);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ContractMethod = (
-  ...args: any[]
-) => Promise<{
-  wait: () => Promise<EthersTxReceipt | null>;
-}>;
-
-interface EthersContract {
-  publishAlert: ContractMethod;
-  publishDigest: ContractMethod;
-  createSponsoredWatch: ContractMethod;
-  publishSponsoredReport: ContractMethod;
-  publishPremiumReceipt: ContractMethod;
-  recordPayout: ContractMethod;
-  owner: () => Promise<string>;
+function asBytes32(value: string): Hex {
+  return toBytes32Hash(value) as Hex;
 }
 
 function receiptWithGas(
-  receipt: EthersTxReceipt,
+  receipt: {
+    transactionHash: Hash;
+    gasUsed?: bigint;
+    logs: Array<{ topics: readonly Hex[]; data: Hex }>;
+  },
   network?: string,
   extra?: Partial<OnChainWriteReceipt>,
 ): OnChainWriteReceipt {
   const gasUsed = normalizeGasValue(receipt.gasUsed);
   return {
-    txHash: receipt.hash,
-    explorerUrl: explorerUrlFor(receipt.hash, network),
+    txHash: receipt.transactionHash,
+    explorerUrl: explorerUrlFor(receipt.transactionHash, network),
     ...(gasUsed ? { gasUsed } : {}),
     ...extra,
   };
 }
 
 function explorerUrlFor(txHash: string, network?: string): string {
-  const n = (network ?? "base-sepolia").toLowerCase();
+  const n = (network ?? "sepolia").toLowerCase();
   if (n === "base" || n === "8453") {
     return `https://basescan.org/tx/${txHash}`;
   }
-  if (n === "sepolia" || n === "11155111") {
-    return `https://sepolia.etherscan.io/tx/${txHash}`;
+  if (n === "base-sepolia" || n === "84532") {
+    return `https://sepolia.basescan.org/tx/${txHash}`;
   }
   if (n === "ethereum" || n === "mainnet" || n === "1") {
     return `https://etherscan.io/tx/${txHash}`;
   }
-  return `https://sepolia.basescan.org/tx/${txHash}`;
+  // Default product home: Ethereum Sepolia
+  return `https://sepolia.etherscan.io/tx/${txHash}`;
 }
 
 function isDirectEthersAllowed(env: ServerEnv): boolean {
-  // Never allow direct ethers EOA sends in production, even if the flag is set.
+  // Never allow direct EOA sends in production, even if the flag is set.
   if (env.nodeEnv === "production") {
     return false;
   }
@@ -211,6 +245,12 @@ function keeperHubWorkflowIdsFromEnv(env: ServerEnv) {
     ...(env.keeperhubWorkflowRecordPayout
       ? { recordPayout: env.keeperhubWorkflowRecordPayout }
       : {}),
+    ...(env.keeperhubWorkflowPublishTradeTicket
+      ? { publishTradeTicket: env.keeperhubWorkflowPublishTradeTicket }
+      : {}),
+    ...(env.keeperhubWorkflowRecordCapitalMove
+      ? { recordCapitalMove: env.keeperhubWorkflowRecordCapitalMove }
+      : {}),
     ...(env.keeperhubWorkflowTransfer ? { transfer: env.keeperhubWorkflowTransfer } : {}),
   };
 }
@@ -218,13 +258,16 @@ function keeperHubWorkflowIdsFromEnv(env: ServerEnv) {
 function createHybridParaKeeperHubWeb3Client(
   env: ServerEnv,
   paraClient: ParaTreasuryClient,
+  options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
 ): Web3Client {
   const kh = createKeeperHubWriteClient({
     apiBaseUrl: env.keeperhubApiBaseUrl as string,
     apiKey: env.keeperhubApiKey as string,
     network: env.keeperhubNetwork,
     registryAddress: env.chronicleRegistryAddress as string,
+    usdcAddress: env.deskUsdcAddress,
     workflowIds: keeperHubWorkflowIdsFromEnv(env),
+    execLogRepo: options?.execLogRepo ?? null,
   });
 
   return {
@@ -262,14 +305,18 @@ function createHybridParaKeeperHubWeb3Client(
       kh.publishPremiumReceipt(contentHash, sourceEventHash, contentUri),
     recordPayout: (payoutPeriodHash, recipient, amount, reasonHash) =>
       kh.recordPayout(payoutPeriodHash, recipient, amount, reasonHash),
+    publishTradeTicket: (ticketHash, signalHash, intentHash, contentUri) =>
+      kh.publishTradeTicket(ticketHash, signalHash, intentHash, contentUri),
+    recordCapitalMove: (moveId, from, to, amountUsdc, reasonHash) =>
+      kh.recordCapitalMove(moveId, from, to, amountUsdc, reasonHash),
 
-    // Treasury spends: real Para MPC transfer (not KeeperHub org wallet).
-    sendTransfer: (to, amountEth) => paraClient.sendTransfer(to, amountEth),
+    // Treasury spends: real Para MPC USDC transfer (not KeeperHub org wallet).
+    sendTransfer: (to, amountUsdc) => paraClient.sendTransfer(to, amountUsdc),
   };
 }
 
 /**
- * Full Para production client — registry + treasury via Para REST ethers signer.
+ * Full Para production client — registry + treasury via Para REST viem account.
  * Used when PARA_API_KEY is set but KeeperHub is not.
  */
 function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): Web3Client {
@@ -284,42 +331,55 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
     env: env.paraEnvironment,
   });
 
-  const provider = new ethers.JsonRpcProvider(env.rpcUrl);
+  const chainId = mapNetworkToChainId(env.keeperhubNetwork, 11_155_111);
+  const chain = chainFromId(chainId);
+  const rpcUrl = env.rpcUrl;
+  const registryAddress = env.chronicleRegistryAddress as Address;
   const network = env.keeperhubNetwork;
 
-  let registryContractPromise: Promise<EthersContract> | undefined;
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(rpcUrl),
+  });
+
   let signerAddressPromise: Promise<string> | undefined;
 
-  async function getSigner() {
+  async function getWalletClient() {
     const wallet = await paraClient.ensureWallet();
-    return createParaRestEthersSigner({
+    const account = createParaRestViemAccount({
       client: restClient,
       walletId: wallet.walletId,
-      address: wallet.address,
-      provider,
+      address: wallet.address as Address,
     });
+    return {
+      account,
+      walletClient: createWalletClient({
+        account,
+        chain,
+        transport: http(rpcUrl),
+      }),
+    };
   }
 
-  async function getRegistry(): Promise<EthersContract> {
-    if (!registryContractPromise) {
-      registryContractPromise = (async () => {
-        const signer = await getSigner();
-        return new ethers.Contract(
-          env.chronicleRegistryAddress as string,
-          ETHERS_REGISTRY_ABI,
-          signer,
-        ) as unknown as EthersContract;
-      })();
-    }
-    return registryContractPromise;
-  }
-
-  async function waitReceipt(
-    tx: { wait: () => Promise<EthersTxReceipt | null> },
-  ): Promise<EthersTxReceipt> {
-    const receipt = await tx.wait();
-    if (!receipt || typeof receipt.hash !== "string") {
-      throw new Error("Transaction failed or returned no hash");
+  async function writeRegistry(
+    // Dynamic registry method dispatch — args validated by ABI at runtime.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    functionName: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    args: readonly any[],
+  ) {
+    const { account, walletClient } = await getWalletClient();
+    const hash = await walletClient.writeContract({
+      address: registryAddress,
+      abi: VIEM_REGISTRY_ABI,
+      functionName: functionName as "publishAlert",
+      args: args as never,
+      account,
+      chain,
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status === "reverted") {
+      throw new Error(`Transaction failed or reverted: ${hash}`);
     }
     return receipt;
   }
@@ -349,52 +409,34 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
     },
 
     async publishAlert(contentHash, sourceEventHash, contentUri) {
-      const registry = await getRegistry();
-      const tx = await registry.publishAlert(
-        toBytes32Hash(contentHash),
-        toBytes32Hash(sourceEventHash),
+      const receipt = await writeRegistry("publishAlert", [
+        asBytes32(contentHash),
+        asBytes32(sourceEventHash),
         contentUri,
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
     async publishDigest(contentHash, sourceEventRoot, contentUri) {
-      const registry = await getRegistry();
-      const tx = await registry.publishDigest(
-        toBytes32Hash(contentHash),
-        toBytes32Hash(sourceEventRoot),
+      const receipt = await writeRegistry("publishDigest", [
+        asBytes32(contentHash),
+        asBytes32(sourceEventRoot),
         contentUri,
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
     async createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt) {
-      const registry = await getRegistry();
-      const tx = await registry.createSponsoredWatch(
-        targetContract,
-        toBytes32Hash(watchSpecHash),
+      const receipt = await writeRegistry("createSponsoredWatch", [
+        getAddress(targetContract) as Address,
+        asBytes32(watchSpecHash),
         toUint64Seconds(startsAt),
         toUint64Seconds(endsAt),
-      );
-      const receipt = await waitReceipt(tx);
-      const eventIface = new ethers.Interface([
-        "event SponsoredWatchCreated(uint256 indexed watchId, address indexed targetContract, bytes32 watchSpecHash, uint64 startsAt, uint64 endsAt)",
       ]);
-      let watchId = 0;
-      for (const log of receipt.logs) {
-        try {
-          const parsed = eventIface.parseLog({
-            topics: (log.topics ?? []) as string[],
-            data: log.data ?? "0x",
-          });
-          if (parsed?.name === "SponsoredWatchCreated") {
-            watchId = Number(parsed.args[0]);
-            break;
-          }
-        } catch {
-          // not our event
-        }
-      }
+      const watchId = decodeSponsoredWatchIdFromLogs(
+        receipt.logs,
+        "Para createSponsoredWatch",
+      );
       return {
         ...receiptWithGas(receipt, network),
         watchId,
@@ -402,48 +444,71 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
     },
 
     async publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri) {
-      const registry = await getRegistry();
-      const tx = await registry.publishSponsoredReport(
-        watchId,
-        toBytes32Hash(reportHash),
-        toBytes32Hash(sourceEventRoot),
+      const receipt = await writeRegistry("publishSponsoredReport", [
+        BigInt(watchId),
+        asBytes32(reportHash),
+        asBytes32(sourceEventRoot),
         contentUri,
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
     async publishPremiumReceipt(contentHash, sourceEventHash, contentUri) {
-      const registry = await getRegistry();
-      const tx = await registry.publishPremiumReceipt(
-        toBytes32Hash(contentHash),
-        toBytes32Hash(sourceEventHash),
+      const receipt = await writeRegistry("publishPremiumReceipt", [
+        asBytes32(contentHash),
+        asBytes32(sourceEventHash),
         contentUri,
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
     async recordPayout(payoutPeriodHash, recipient, amount, reasonHash) {
-      const registry = await getRegistry();
-      const tx = await registry.recordPayout(
-        toBytes32Hash(payoutPeriodHash),
-        recipient,
-        ethers.parseEther(String(amount)),
-        toBytes32Hash(reasonHash),
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      const receipt = await writeRegistry("recordPayout", [
+        asBytes32(payoutPeriodHash),
+        getAddress(recipient) as Address,
+        parseUnits(String(amount), 6),
+        asBytes32(reasonHash),
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
-    sendTransfer: (to, amountEth) => paraClient.sendTransfer(to, amountEth),
+    async publishTradeTicket(ticketHash, signalHash, intentHash, contentUri) {
+      const receipt = await writeRegistry("publishTradeTicket", [
+        asBytes32(ticketHash),
+        asBytes32(signalHash),
+        asBytes32(intentHash),
+        contentUri,
+      ]);
+      return receiptWithGas(receipt, network);
+    },
+
+    async recordCapitalMove(moveId, from, to, amountUsdc, reasonHash) {
+      const receipt = await writeRegistry("recordCapitalMove", [
+        asBytes32(moveId),
+        getAddress(from) as Address,
+        getAddress(to) as Address,
+        parseUnits(String(amountUsdc), 6),
+        asBytes32(reasonHash),
+      ]);
+      return receiptWithGas(receipt, network);
+    },
+
+    sendTransfer: (to, amountUsdc) => paraClient.sendTransfer(to, amountUsdc),
   };
 }
 
-function createKeeperHubBackedWeb3Client(env: ServerEnv): Web3Client {
+function createKeeperHubBackedWeb3Client(
+  env: ServerEnv,
+  options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
+): Web3Client {
   const kh = createKeeperHubWriteClient({
     apiBaseUrl: env.keeperhubApiBaseUrl as string,
     apiKey: env.keeperhubApiKey as string,
     network: env.keeperhubNetwork,
     registryAddress: env.chronicleRegistryAddress as string,
+    usdcAddress: env.deskUsdcAddress,
     workflowIds: keeperHubWorkflowIdsFromEnv(env),
+    execLogRepo: options?.execLogRepo ?? null,
   });
 
   const treasury = resolveTreasuryWallet(env, { keeperHubBacked: true });
@@ -481,54 +546,83 @@ function createKeeperHubBackedWeb3Client(env: ServerEnv): Web3Client {
       kh.publishPremiumReceipt(contentHash, sourceEventHash, contentUri),
     recordPayout: (payoutPeriodHash, recipient, amount, reasonHash) =>
       kh.recordPayout(payoutPeriodHash, recipient, amount, reasonHash),
-    sendTransfer: (to, amountEth) => kh.sendTransfer(to, amountEth),
+    publishTradeTicket: (ticketHash, signalHash, intentHash, contentUri) =>
+      kh.publishTradeTicket(ticketHash, signalHash, intentHash, contentUri),
+    recordCapitalMove: (moveId, from, to, amountUsdc, reasonHash) =>
+      kh.recordCapitalMove(moveId, from, to, amountUsdc, reasonHash),
+    sendTransfer: (to, amountUsdc) => kh.sendTransfer(to, amountUsdc),
   };
 }
 
 /**
- * Direct ethers client — LOCAL UNIT TESTS ONLY.
+ * Direct EOA client — LOCAL UNIT TESTS ONLY.
  * Gated by ALLOW_DIRECT_ETHERS_WRITES=true and never enabled in production.
  */
-function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
+function createDirectEoaWeb3Client(env: ServerEnv): Web3Client {
   if (!env.rpcUrl || !env.chronicleRegistryAddress || !env.paraWalletPrivateKey) {
     throw new Error(
-      "Direct ethers client requires RPC_URL, CHRONICLE_REGISTRY_ADDRESS, and PARA_WALLET_PRIVATE_KEY (test-only agent EOA)",
+      "Direct EOA client requires RPC_URL, CHRONICLE_REGISTRY_ADDRESS, and PARA_WALLET_PRIVATE_KEY (test-only agent EOA)",
     );
   }
 
-  const provider = new ethers.JsonRpcProvider(env.rpcUrl);
-  const agentWallet = new ethers.Wallet(env.paraWalletPrivateKey, provider);
-  const registryContract = new ethers.Contract(
-    env.chronicleRegistryAddress,
-    ETHERS_REGISTRY_ABI,
-    agentWallet,
-  ) as unknown as EthersContract;
+  const chainId = mapNetworkToChainId(env.keeperhubNetwork, 11_155_111);
+  const chain = chainFromId(chainId);
+  const rpcUrl = env.rpcUrl;
+  const agentKey = (
+    env.paraWalletPrivateKey.startsWith("0x")
+      ? env.paraWalletPrivateKey
+      : `0x${env.paraWalletPrivateKey}`
+  ) as Hex;
+  const agentAccount: PrivateKeyAccount = privateKeyToAccount(agentKey);
+  const registryAddress = env.chronicleRegistryAddress as Address;
+
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(rpcUrl),
+  });
+  const agentWallet = createWalletClient({
+    account: agentAccount,
+    chain,
+    transport: http(rpcUrl),
+  });
 
   const treasury = resolveTreasuryWallet(env, { keeperHubBacked: false });
-  const treasuryWallet = treasury.privateKey
-    ? new ethers.Wallet(treasury.privateKey, provider)
-    : undefined;
+  let treasuryAccount: PrivateKeyAccount | undefined;
+  if (treasury.privateKey) {
+    treasuryAccount = privateKeyToAccount(treasury.privateKey as Hex);
+  }
 
   const network = env.keeperhubNetwork;
 
-  async function waitReceipt(
-    tx: { wait: () => Promise<EthersTxReceipt | null> },
-  ): Promise<EthersTxReceipt> {
-    const receipt = await tx.wait();
-    if (!receipt || typeof receipt.hash !== "string") {
-      throw new Error("Transaction failed or returned no hash");
+  async function writeRegistry(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    functionName: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    args: readonly any[],
+  ) {
+    const hash = await agentWallet.writeContract({
+      address: registryAddress,
+      abi: VIEM_REGISTRY_ABI,
+      functionName: functionName as "publishAlert",
+      args: args as never,
+      account: agentAccount,
+      chain,
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status === "reverted") {
+      throw new Error(`Transaction failed or reverted: ${hash}`);
     }
     return receipt;
   }
 
   return {
     async getSignerAddress() {
-      return await agentWallet.getAddress();
+      return agentAccount.address;
     },
 
     async getTreasuryAddress() {
-      if (treasuryWallet) {
-        return await treasuryWallet.getAddress();
+      if (treasuryAccount) {
+        return treasuryAccount.address;
       }
       return treasury.address;
     },
@@ -546,49 +640,34 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
     },
 
     async publishAlert(contentHash, sourceEventHash, contentUri) {
-      const tx = await registryContract.publishAlert(
-        toBytes32Hash(contentHash),
-        toBytes32Hash(sourceEventHash),
+      const receipt = await writeRegistry("publishAlert", [
+        asBytes32(contentHash),
+        asBytes32(sourceEventHash),
         contentUri,
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
     async publishDigest(contentHash, sourceEventRoot, contentUri) {
-      const tx = await registryContract.publishDigest(
-        toBytes32Hash(contentHash),
-        toBytes32Hash(sourceEventRoot),
+      const receipt = await writeRegistry("publishDigest", [
+        asBytes32(contentHash),
+        asBytes32(sourceEventRoot),
         contentUri,
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
     async createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt) {
-      const tx = await registryContract.createSponsoredWatch(
-        targetContract,
-        toBytes32Hash(watchSpecHash),
+      const receipt = await writeRegistry("createSponsoredWatch", [
+        getAddress(targetContract) as Address,
+        asBytes32(watchSpecHash),
         toUint64Seconds(startsAt),
         toUint64Seconds(endsAt),
-      );
-      const receipt = await waitReceipt(tx);
-      const eventIface = new ethers.Interface([
-        "event SponsoredWatchCreated(uint256 indexed watchId, address indexed targetContract, bytes32 watchSpecHash, uint64 startsAt, uint64 endsAt)",
       ]);
-      let watchId = 0;
-      for (const log of receipt.logs) {
-        try {
-          const parsed = eventIface.parseLog({
-            topics: (log.topics ?? []) as string[],
-            data: log.data ?? "0x",
-          });
-          if (parsed?.name === "SponsoredWatchCreated") {
-            watchId = Number(parsed.args[0]);
-            break;
-          }
-        } catch {
-          // not our event
-        }
-      }
+      const watchId = decodeSponsoredWatchIdFromLogs(
+        receipt.logs,
+        "direct-eoa createSponsoredWatch",
+      );
       return {
         ...receiptWithGas(receipt, network),
         watchId,
@@ -596,51 +675,90 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
     },
 
     async publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri) {
-      const tx = await registryContract.publishSponsoredReport(
-        watchId,
-        toBytes32Hash(reportHash),
-        toBytes32Hash(sourceEventRoot),
+      const receipt = await writeRegistry("publishSponsoredReport", [
+        BigInt(watchId),
+        asBytes32(reportHash),
+        asBytes32(sourceEventRoot),
         contentUri,
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
     async publishPremiumReceipt(contentHash, sourceEventHash, contentUri) {
-      const tx = await registryContract.publishPremiumReceipt(
-        toBytes32Hash(contentHash),
-        toBytes32Hash(sourceEventHash),
+      const receipt = await writeRegistry("publishPremiumReceipt", [
+        asBytes32(contentHash),
+        asBytes32(sourceEventHash),
         contentUri,
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
     async recordPayout(payoutPeriodHash, recipient, amount, reasonHash) {
-      const tx = await registryContract.recordPayout(
-        toBytes32Hash(payoutPeriodHash),
-        recipient,
-        ethers.parseEther(String(amount)),
-        toBytes32Hash(reasonHash),
-      );
-      return receiptWithGas(await waitReceipt(tx), network);
+      const receipt = await writeRegistry("recordPayout", [
+        asBytes32(payoutPeriodHash),
+        getAddress(recipient) as Address,
+        parseUnits(String(amount), 6),
+        asBytes32(reasonHash),
+      ]);
+      return receiptWithGas(receipt, network);
     },
 
-    async sendTransfer(to, amountEth) {
-      if (!treasuryWallet) {
+    async publishTradeTicket(ticketHash, signalHash, intentHash, contentUri) {
+      const receipt = await writeRegistry("publishTradeTicket", [
+        asBytes32(ticketHash),
+        asBytes32(signalHash),
+        asBytes32(intentHash),
+        contentUri,
+      ]);
+      return receiptWithGas(receipt, network);
+    },
+
+    async recordCapitalMove(moveId, from, to, amountUsdc, reasonHash) {
+      const receipt = await writeRegistry("recordCapitalMove", [
+        asBytes32(moveId),
+        getAddress(from) as Address,
+        getAddress(to) as Address,
+        parseUnits(String(amountUsdc), 6),
+        asBytes32(reasonHash),
+      ]);
+      return receiptWithGas(receipt, network);
+    },
+
+    async sendTransfer(to, amountUsdc) {
+      if (!treasuryAccount) {
         throw new Error(
-          "Treasury spending key is not configured — set TREASURY_WALLET_PRIVATE_KEY for direct ethers transfers (test-only path), or configure PARA_API_KEY for production Para MPC",
+          "Treasury spending key is not configured — set TREASURY_WALLET_PRIVATE_KEY for direct EOA USDC transfers (test-only path), or configure PARA_API_KEY for production Para MPC",
         );
       }
-      const tx = await treasuryWallet.sendTransaction({
-        to,
-        value: ethers.parseEther(String(amountEth)),
+      if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) {
+        throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
+      }
+      const usdcAddress = env.deskUsdcAddress?.trim();
+      if (!usdcAddress || !isAddress(usdcAddress, { strict: false })) {
+        throw new Error(
+          "DESK_USDC_ADDRESS must be a valid ERC-20 address for treasury USDC transfers",
+        );
+      }
+      const treasuryWallet = createWalletClient({
+        account: treasuryAccount,
+        chain,
+        transport: http(rpcUrl),
       });
-      const receipt = await tx.wait();
-      if (!receipt || typeof receipt.hash !== "string") {
-        throw new Error("sendTransfer transaction failed");
+      const hash = await treasuryWallet.writeContract({
+        address: getAddress(usdcAddress) as Address,
+        abi: ERC20_TRANSFER_ABI,
+        functionName: "transfer",
+        args: [getAddress(to) as Address, parseUnits(String(amountUsdc), 6)],
+        account: treasuryAccount,
+        chain,
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status === "reverted") {
+        throw new Error("USDC sendTransfer transaction failed");
       }
       return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
+        txHash: receipt.transactionHash,
+        explorerUrl: explorerUrlFor(receipt.transactionHash, network),
       };
     },
   };
@@ -653,18 +771,23 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
  * 1. Para MPC + KeeperHub hybrid (PARA_API_KEY + KEEPERHUB_*)
  * 2. Para MPC only (PARA_API_KEY + RPC + registry)
  * 3. KeeperHub only
- * 4. Direct ethers — only when ALLOW_DIRECT_ETHERS_WRITES=true and not production
- * 5. null — no write path configured
+ * 4. Direct EOA — only when ALLOW_DIRECT_ETHERS_WRITES=true and not production
+ * 5. null — no write path configured (dev/test only; production fail-hard)
  */
-export function createWeb3Client(env: ServerEnv): Web3Client | null {
+export function createWeb3Client(
+  env: ServerEnv,
+  options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
+): Web3Client | null {
   const paraClient = createParaTreasuryClientFromEnv(env);
   const keeperHub = isKeeperHubWriteConfigured(env);
+  const isProduction = env.nodeEnv === "production";
+  const logOpts = options?.execLogRepo !== undefined ? { execLogRepo: options.execLogRepo } : {};
 
   if (paraClient && keeperHub) {
     console.info(
       "[web3] Production path: Para MPC treasury + KeeperHub registry writes",
     );
-    return createHybridParaKeeperHubWeb3Client(env, paraClient);
+    return createHybridParaKeeperHubWeb3Client(env, paraClient, logOpts);
   }
 
   if (paraClient && env.rpcUrl && env.chronicleRegistryAddress) {
@@ -675,34 +798,50 @@ export function createWeb3Client(env: ServerEnv): Web3Client | null {
   }
 
   if (paraClient && !keeperHub) {
-    console.warn(
-      "[web3] PARA_API_KEY is set but CHRONICLE_REGISTRY_ADDRESS/RPC_URL missing and KeeperHub is not configured — treasury-only Para client unavailable for full Web3Client",
-    );
+    const msg =
+      "[web3] PARA_API_KEY is set but CHRONICLE_REGISTRY_ADDRESS/RPC_URL missing and KeeperHub is not configured — treasury-only Para client unavailable for full Web3Client";
+    if (isProduction) {
+      throw new Error(
+        `${msg}. Production refuses soft-null Web3; complete KeeperHub or Para registry config.`,
+      );
+    }
+    console.warn(msg);
   }
 
   if (keeperHub) {
-    return createKeeperHubBackedWeb3Client(env);
+    return createKeeperHubBackedWeb3Client(env, logOpts);
   }
 
   if (isDirectEthersAllowed(env)) {
     if (!env.rpcUrl || !env.chronicleRegistryAddress || !env.paraWalletPrivateKey) {
+      if (isProduction) {
+        throw new Error(
+          "Direct EOA path incomplete and disallowed in production — configure PARA_API_KEY and/or KeeperHub",
+        );
+      }
       return null;
     }
     console.warn(
-      "[web3] ALLOW_DIRECT_ETHERS_WRITES is enabled — using direct ethers (local tests only). Production should use PARA_API_KEY and/or KeeperHub.",
+      "[web3] ALLOW_DIRECT_ETHERS_WRITES is enabled — using direct EOA (local tests only). Production should use PARA_API_KEY and/or KeeperHub.",
     );
-    return createDirectEthersWeb3Client(env);
+    return createDirectEoaWeb3Client(env);
   }
 
   if (env.paraWalletPrivateKey && env.nodeEnv !== "test") {
     console.warn(
-      "[web3] Direct ethers writes are disabled. Configure PARA_API_KEY for Para MPC treasury (production) and/or KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL for registry writes.",
+      "[web3] Direct EOA writes are disabled. Configure PARA_API_KEY for Para MPC treasury (production) and/or KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL for registry writes.",
     );
   }
 
   if (isParaTreasuryConfigured(env) && env.nodeEnv !== "test") {
     console.warn(
       "[web3] PARA_API_KEY present but incomplete write path. Add KEEPERHUB_* for hybrid, or RPC_URL + CHRONICLE_REGISTRY_ADDRESS for Para-only registry writes.",
+    );
+  }
+
+  if (isProduction) {
+    throw new Error(
+      "Web3 client not configured in production — set PARA_API_KEY + KeeperHub (or Para + RPC_URL + CHRONICLE_REGISTRY_ADDRESS). Soft-null on-chain path is not allowed.",
     );
   }
 

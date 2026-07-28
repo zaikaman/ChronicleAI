@@ -37,7 +37,7 @@ function mockRepo(
     ),
     findById: vi.fn(),
     list: vi.fn(),
-    listStatusHistory: vi.fn(),
+      listStatusHistory: vi.fn(),
     update: vi.fn(),
     getAggregates: vi.fn(),
   };
@@ -131,5 +131,26 @@ describe("TreasuryRegistryGate", () => {
 
     expect(decision.allowRegistryWrite).toBe(true);
     expect(decision.reason).toMatch(/lookup failed/i);
+  });
+
+  it("uses configured safetyBuffer override instead of snapshot value", async () => {
+    // Snapshot still has oversized 10000 buffer; env override is 0.01.
+    const gate = createTreasuryRegistryGate(
+      mockRepo(
+        snapshot({
+          available_balance: 0.025,
+          safety_buffer: 10_000,
+          status: "critical",
+        }),
+      ),
+      treasuryService,
+      { safetyBuffer: 0.01 },
+    );
+
+    const decision = await gate.evaluate();
+
+    expect(decision.allowRegistryWrite).toBe(true);
+    expect(decision.safetyBuffer).toBe(0.01);
+    expect(decision.availableBalance).toBe(0.025);
   });
 });

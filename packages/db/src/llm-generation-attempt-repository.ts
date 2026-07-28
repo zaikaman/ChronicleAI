@@ -18,7 +18,10 @@ export function createLLMGenerationAttemptRepository(
 
   return {
     async create(data) {
-      const payload = buildInsertPayload(data as unknown as Record<string, unknown>);
+      // llm_generation_attempts is append-only (created_at only; no updated_at).
+      const payload = buildInsertPayload(data as unknown as Record<string, unknown>, {
+        updated_at: false,
+      });
       const { data: rows, error } = await table().insert(payload).select().single();
 
       if (error) {

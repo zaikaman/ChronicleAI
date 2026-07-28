@@ -1,7 +1,9 @@
-// Fetch a single public alert by id (HTTPS content URI page)
+// Single alert by id — React Query (dedupe, cache, abort)
 
 import type { PublicAlertResponse } from "@chronicleai/schemas";
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiGetJson, isNotFoundError, toErrorMessage } from "../../lib/api.ts";
+import { queryKeys } from "../../lib/query-keys.ts";
 
 export type AlertDetailState =
   | { status: "loading" }
@@ -48,43 +50,41 @@ export function useAlert(alertId: string | undefined): {
   state: AlertDetailState;
   refetch: () => void;
 } {
-  const [state, setState] = useState<AlertDetailState>({ status: "loading" });
+  const query = useQuery({
+    queryKey: queryKeys.alerts.detail(alertId ?? ""),
+    enabled: Boolean(alertId),
+    queryFn: async ({ signal }) => {
+      const raw = await apiGetJson<Record<string, unknown>>(
+        `/alerts/${encodeURIComponent(alertId!)}`,
+        { signal },
+      );
+      return mapAlert(raw);
+    },
+    retry: (failureCount, error) => {
+      if (isNotFoundError(error)) return false;
+      return failureCount < 1;
+    },
+  });
 
-  const fetchAlert = useCallback(async () => {
-    if (!alertId) {
-      setState({ status: "not-found" });
-      return;
-    }
+  let state: AlertDetailState;
+  if (!alertId) {
+    state = { status: "not-found" };
+  } else if (query.isLoading || query.isPending) {
+    state = { status: "loading" };
+  } else if (query.error) {
+    state = isNotFoundError(query.error)
+      ? { status: "not-found" }
+      : { status: "error", error: toErrorMessage(query.error, "Failed to fetch alert") };
+  } else if (query.data) {
+    state = { status: "success", data: query.data };
+  } else {
+    state = { status: "loading" };
+  }
 
-    setState({ status: "loading" });
-
-    try {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
-      const response = await fetch(`${baseUrl}/alerts/${encodeURIComponent(alertId)}`);
-
-      if (response.status === 404) {
-        setState({ status: "not-found" });
-        return;
-      }
-
-      if (!response.ok) {
-        setState({ status: "error", error: `Failed to fetch alert (${response.status})` });
-        return;
-      }
-
-      const raw = (await response.json()) as Record<string, unknown>;
-      setState({ status: "success", data: mapAlert(raw) });
-    } catch (error) {
-      setState({
-        status: "error",
-        error: error instanceof Error ? error.message : "Unknown error fetching alert",
-      });
-    }
-  }, [alertId]);
-
-  useEffect(() => {
-    void fetchAlert();
-  }, [fetchAlert]);
-
-  return { state, refetch: fetchAlert };
+  return {
+    state,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 }

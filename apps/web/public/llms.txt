@@ -1,0 +1,66 @@
+# ChronicleAI — agent payment guide
+
+ChronicleAI is an autonomous on-chain newspaper and paid intelligence feed.
+Public alerts and digests are free. Premium deep analysis and sponsored contract
+watches are dual-rail paid:
+
+- **x402** — human wallet checkout (USDC, EIP-712 TransferWithAuthorization). Used by the /premium web UI.
+- **MPP** — machine-to-machine HMAC micro-billing (Tempo). Same catalog; API only.
+
+## Machine discovery (authoritative)
+
+Fetch live JSON from the API:
+
+- `GET /payments`
+- `GET /.well-known/agent-payments`
+
+Also listed on the human site at `/premium` (“For agents: buy with MPP”).
+
+## Catalog
+
+- `GET /premium/items` — teasers include `paymentRoutes` (typically `["x402","mpp"]`).
+- `GET /premium/items/:id` without a valid access receipt → `402` with `supportedPaymentRoutes` and `agentPaymentsDiscovery: "/payments"`.
+
+## Buy with MPP (agent)
+
+1. `POST /payments/challenges`
+   ```json
+   {
+     "premiumItemId": "<id>",
+     "paymentRoute": "mpp",
+     "payerReference": "0xYourEvmAddress"
+   }
+   ```
+2. From the `201` body, read `challengeData.hmacPayloadTemplate` and `challengeData.expiresAt`.
+3. Compute HMAC-SHA256 (hex) of `hmacPayloadTemplate` with the shared MPP secret (out of band; server uses `MPP_SECRET`).
+4. `settlementReference = `${expiresAt}:${hmac_hex}`` (expiresAt must match challenge exactly).
+5. `POST /payments/settlements`
+   ```json
+   {
+     "challengeReference": "<from challenge>",
+     "settlementReference": "<expiresAt>:<hmac_hex>",
+     "paymentRoute": "mpp",
+     "amountSettled": <amount>,
+     "currency": "USDC"
+   }
+   ```
+6. Store `accessReceipt` from the settle response.
+7. `GET /premium/items/:id` with `Authorization: Bearer <accessReceipt>` (or `X-Premium-Access-Receipt`).
+
+## Sponsored watches
+
+Agents may also prepare a campaign with MPP:
+
+- `POST /payments/sponsored-watch/challenges` with `paymentRoute: "mpp"` (plus target contract / campaign window fields).
+- Settle the same way as premium items.
+
+## Buy with x402 (human / wallet clients)
+
+Use `paymentRoute: "x402"`, sign EIP-712 settlement data from the challenge, then settle.
+The SPA at `/premium` implements this path with a browser wallet.
+
+## Notes
+
+- Do not expect a MetaMask / browser MPP button — MPP is intentionally API-native.
+- Prefer an EVM `payerReference` so revenue routing can attribute on-chain.
+- Activity analytics report settled volume by rail (`x402` vs `mpp`).

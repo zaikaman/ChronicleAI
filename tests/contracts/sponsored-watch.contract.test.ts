@@ -1,11 +1,14 @@
 // Contract tests for sponsored watch creation via payment settlement
 // Validates that settling a sponsored_monitor premium item creates a watch
+// Hits a live API process and can insert payment/watch rows —
+// skipped unless ALLOW_LIVE_API_TESTS=1
 
 import { describe, expect, it } from "vitest";
+import { LIVE_API_BASE, LIVE_API_TESTS_ENABLED } from "./live-api.ts";
 
-const API_BASE = process.env.API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = LIVE_API_BASE;
 
-describe("POST /payments/settlements (sponsored watch)", () => {
+describe.skipIf(!LIVE_API_TESTS_ENABLED)("POST /payments/settlements (sponsored watch)", () => {
   it("should return 400 for malformed settlement request", async () => {
     const response = await fetch(`${API_BASE}/payments/settlements`, {
       method: "POST",

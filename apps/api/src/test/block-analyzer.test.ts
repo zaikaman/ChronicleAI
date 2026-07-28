@@ -23,7 +23,7 @@ describe("block-analyzer", () => {
         blockNumber: 100,
         blockHash: "0xabc",
         timestamp: 1_700_000_000,
-        baseFeeGwei: 650,
+        baseFeeGwei: 75,
         transactionCount: 120,
         createdContracts: [],
       },
@@ -32,7 +32,7 @@ describe("block-analyzer", () => {
 
     expect(result.events.some((e) => e.eventType === "gas_spike")).toBe(true);
     const gas = result.events.find((e) => e.eventType === "gas_spike");
-    expect(gas?.magnitude?.value).toBe(650);
+    expect(gas?.magnitude?.value).toBe(75);
     expect(gas?.magnitude?.unit).toBe("gwei");
   });
 
@@ -44,7 +44,7 @@ describe("block-analyzer", () => {
         blockNumber: 101,
         blockHash: "0xdef",
         timestamp: 1_700_000_012,
-        baseFeeGwei: 40,
+        baseFeeGwei: 25,
         transactionCount: 100,
         createdContracts: [],
       },
@@ -55,8 +55,10 @@ describe("block-analyzer", () => {
 
   it("emits volume_anomaly after enough samples when z-score is high", () => {
     const window = new TransactionVolumeWindow(100);
-    // Seed stable baseline around 100 txs
-    for (let i = 0; i < 25; i++) {
+    // Seed a long stable baseline (~100 txs). Z-score includes the current
+    // sample, so n must be large enough that a spike can clear ≥3σ
+    // (theoretical max |z| ≈ √(n−1) when the outlier is in-sample).
+    for (let i = 0; i < 20; i++) {
       window.push(1, 100 + (i % 3));
     }
 
@@ -66,19 +68,19 @@ describe("block-analyzer", () => {
         blockNumber: 200,
         blockHash: "0xvol",
         timestamp: 1_700_000_100,
-        baseFeeGwei: 20,
-        transactionCount: 400,
+        baseFeeGwei: 2,
+        transactionCount: 500,
         createdContracts: [],
       },
       window,
     );
 
     expect(result.volumeZScore).not.toBeNull();
-    expect(Math.abs(result.volumeZScore as number)).toBeGreaterThanOrEqual(2);
+    expect(Math.abs(result.volumeZScore as number)).toBeGreaterThanOrEqual(3.0);
     expect(result.events.some((e) => e.eventType === "volume_anomaly")).toBe(true);
   });
 
-  it("emits contract_deployment for created contracts", () => {
+  it("emits contract_deployment for created contracts (qualification is separate)", () => {
     const window = new TransactionVolumeWindow(100);
     const result = analyzeBlockStats(
       {
@@ -86,7 +88,8 @@ describe("block-analyzer", () => {
         blockNumber: 300,
         blockHash: "0xdep",
         timestamp: 1_700_000_200,
-        baseFeeGwei: 10,
+        // Keep base fee below gas_spike threshold so this test isolates deploys
+        baseFeeGwei: 25,
         transactionCount: 50,
         createdContracts: ["0xNewContract0000000000000000000000000001"],
       },

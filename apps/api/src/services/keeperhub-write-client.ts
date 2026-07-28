@@ -1,6 +1,7 @@
 // KeeperHub write client: sole production path for material on-chain writes.
-// Uses Direct Execution API (contract-call / transfer) and/or workflow trigger
-// (API key), then polls run status for keeperHubRunId, txHash, and explorer URL.
+// Registry and transfer writes go exclusively through pre-imported KeeperHub
+// workflows (POST /api/workflows/{id}/execute). Direct Execution
+// (/api/execute/contract-call, /api/execute/transfer) is not used.
 //
 // ABI aligned with IDEA Chronicle Registry signatures:
 //   publishAlert(contentHash, sourceEventHash, contentUri)
@@ -9,12 +10,20 @@
 //   publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri)
 //   recordPayout(...)
 //   publishPremiumReceipt(...) — reportType PremiumReceipt
+//   publishTradeTicket(ticketHash, signalHash, intentHash, contentUri) — desk proof
+//   recordCapitalMove(moveId, from, to, amount, reasonHash) — desk capital audit
 
-import { ethers } from "ethers";
+import { keccak256, parseUnits, stringToBytes } from "viem";
+import type { ExecutionLogRepository } from "@chronicleai/db";
 import {
   extractGasFromKeeperHubPayload,
   type OnChainWriteReceipt,
 } from "./on-chain-write-receipt.ts";
+import {
+  actionTypeForWriteMethod,
+  withKeeperHubLog,
+} from "./keeperhub-execution-log.ts";
+import { parseOnChainWatchId, requireOnChainWatchId } from "./sponsored-watch-id.ts";
 
 export interface KeeperHubWriteReceipt extends OnChainWriteReceipt {
   keeperHubRunId: string;
@@ -24,6 +33,10 @@ export interface KeeperHubWriteReceipt extends OnChainWriteReceipt {
   result?: unknown;
 }
 
+/**
+ * Pre-imported KeeperHub workflow IDs. Every write method requires its
+ * corresponding ID — there is no Direct Execution fallback.
+ */
 export interface KeeperHubWorkflowIds {
   publishAlert?: string;
   publishDigest?: string;
@@ -31,6 +44,8 @@ export interface KeeperHubWorkflowIds {
   publishSponsoredReport?: string;
   publishPremiumReceipt?: string;
   recordPayout?: string;
+  publishTradeTicket?: string;
+  recordCapitalMove?: string;
   transfer?: string;
 }
 
@@ -39,9 +54,22 @@ export interface KeeperHubWriteClientConfig {
   apiKey: string;
   network: string;
   registryAddress: string;
+  /**
+   * ERC-20 used for treasury payouts (x402 USDC by default).
+   * Required for sendTransfer (USDC human units → on-chain ERC-20 transfer).
+   */
+  usdcAddress: string;
+  /** USDC decimals (Circle USDC = 6). */
+  usdcDecimals?: number;
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
+  /** Required for all writes — map 1:1 to workflows/keeperhub/*.workflow.json imports. */
   workflowIds?: KeeperHubWorkflowIds;
+  /**
+   * When set, every workflow execute is wrapped with started/succeeded/failed
+   * execution_logs rows (Phase 3 observability). Soft-fails never block writes.
+   */
+  execLogRepo?: ExecutionLogRepository | null;
 }
 
 export interface KeeperHubWriteClient {
@@ -78,10 +106,37 @@ export interface KeeperHubWriteClient {
     amount: number,
     reasonHash: string,
   ): Promise<KeeperHubWriteReceipt>;
-  sendTransfer(to: string, amountEth: number): Promise<KeeperHubWriteReceipt>;
+  /**
+   * Anchor a desk trade ticket on-chain.
+   * Requires KEEPERHUB_WORKFLOW_PUBLISH_TRADE_TICKET.
+   * contentUri should be the public ticket page (e.g. https://…/desk/tickets/:id).
+   */
+  publishTradeTicket(
+    ticketHash: string,
+    signalHash: string,
+    intentHash: string,
+    contentUri: string,
+  ): Promise<KeeperHubWriteReceipt>;
+  /**
+   * Record a desk capital move (top-up / sweep / emergency return) on-chain.
+   * amountUsdc is human USDC units; encoded as 6-decimal base units on-chain.
+   * Requires KEEPERHUB_WORKFLOW_RECORD_CAPITAL_MOVE.
+   */
+  recordCapitalMove(
+    moveId: string,
+    from: string,
+    to: string,
+    amountUsdc: number,
+    reasonHash: string,
+  ): Promise<KeeperHubWriteReceipt>;
+  /**
+   * Transfer treasury USDC to a recipient (human USDC units, e.g. 12.5).
+   * Requires KEEPERHUB_WORKFLOW_TRANSFER (transfer workflow ID).
+   */
+  sendTransfer(to: string, amountUsdc: number): Promise<KeeperHubWriteReceipt>;
 }
 
-/** IDEA-aligned ChronicleRegistry ABI fragment for KeeperHub contract-call. */
+/** IDEA-aligned ChronicleRegistry ABI fragment (encoding helpers / Para path). */
 export const REGISTRY_ABI = [
   "function publishAlert(bytes32 contentHash, bytes32 sourceEventHash, string calldata contentUri) external",
   "function publishDigest(bytes32 contentHash, bytes32 sourceEventRoot, string calldata contentUri) external",
@@ -89,10 +144,12 @@ export const REGISTRY_ABI = [
   "function publishSponsoredReport(uint256 watchId, bytes32 reportHash, bytes32 sourceEventRoot, string calldata contentUri) external",
   "function publishPremiumReceipt(bytes32 contentHash, bytes32 sourceEventHash, string calldata contentUri) external",
   "function recordPayout(bytes32 payoutPeriodHash, address recipient, uint256 amount, bytes32 reasonHash) external",
+  "function publishTradeTicket(bytes32 ticketHash, bytes32 signalHash, bytes32 intentHash, string calldata contentUri) external",
+  "function recordCapitalMove(bytes32 moveId, address from, address to, uint256 amount, bytes32 reasonHash) external",
 ] as const;
 
 function hashString(input: string): string {
-  return ethers.keccak256(ethers.toUtf8Bytes(input));
+  return keccak256(stringToBytes(input));
 }
 
 /**
@@ -146,6 +203,34 @@ interface ExecuteStatusResponse {
   gasUsedWei?: string | number;
 }
 
+const WORKFLOW_ACTION_ENV: Record<keyof KeeperHubWorkflowIds, string> = {
+  publishAlert: "KEEPERHUB_WORKFLOW_PUBLISH_ALERT",
+  publishDigest: "KEEPERHUB_WORKFLOW_PUBLISH_DIGEST",
+  createSponsoredWatch: "KEEPERHUB_WORKFLOW_CREATE_SPONSORED_WATCH",
+  publishSponsoredReport: "KEEPERHUB_WORKFLOW_PUBLISH_SPONSORED_REPORT",
+  publishPremiumReceipt: "KEEPERHUB_WORKFLOW_PUBLISH_PREMIUM_RECEIPT",
+  recordPayout: "KEEPERHUB_WORKFLOW_RECORD_PAYOUT",
+  publishTradeTicket: "KEEPERHUB_WORKFLOW_PUBLISH_TRADE_TICKET",
+  recordCapitalMove: "KEEPERHUB_WORKFLOW_RECORD_CAPITAL_MOVE",
+  transfer: "KEEPERHUB_WORKFLOW_TRANSFER",
+};
+
+function requireWorkflowId(
+  workflowIds: KeeperHubWorkflowIds,
+  action: keyof KeeperHubWorkflowIds,
+): string {
+  const id = workflowIds[action]?.trim();
+  if (!id) {
+    const envName = WORKFLOW_ACTION_ENV[action];
+    throw new Error(
+      `KeeperHub write requires workflow ID for ${action}. ` +
+        `Import the matching workflow from workflows/keeperhub/ and set ${envName}. ` +
+        `Direct Execution is disabled — workflows are the only write path.`,
+    );
+  }
+  return id;
+}
+
 function extractTx(status: ExecuteStatusResponse): { txHash?: string; explorerUrl?: string } {
   if (typeof status.transactionHash === "string" && status.transactionHash.length > 0) {
     const out: { txHash?: string; explorerUrl?: string } = {
@@ -171,29 +256,47 @@ function extractTx(status: ExecuteStatusResponse): { txHash?: string; explorerUr
   return {};
 }
 
+function isTerminalSuccess(body: ExecuteStatusResponse): boolean {
+  return (
+    body.completed === true ||
+    body.status === "success" ||
+    body.status === "completed"
+  );
+}
+
+function isTerminalFailure(body: ExecuteStatusResponse): boolean {
+  return (
+    body.status === "error" ||
+    body.status === "failed" ||
+    body.status === "cancelled"
+  );
+}
+
+function receiptFromStatus(
+  executionId: string,
+  body: ExecuteStatusResponse,
+  network: string,
+): KeeperHubWriteReceipt {
+  const { txHash, explorerUrl } = extractTx(body);
+  if (!txHash) {
+    throw new Error(
+      `KeeperHub execution ${executionId} completed without a transaction hash`,
+    );
+  }
+  const gas = extractGasFromKeeperHubPayload(body);
+  return {
+    keeperHubRunId: executionId,
+    txHash,
+    explorerUrl: explorerUrl ?? buildFallbackExplorerUrl(txHash, network),
+    result: body.result ?? body.output,
+    ...(gas.gasUsed ? { gasUsed: gas.gasUsed } : {}),
+    ...(gas.gasUsedWei ? { gasUsedWei: gas.gasUsedWei } : {}),
+  };
+}
+
+/** @deprecated Use parseOnChainWatchId from sponsored-watch-id.ts */
 function parseWatchId(result: unknown): number | undefined {
-  if (typeof result === "number" && Number.isFinite(result)) {
-    return result;
-  }
-  if (typeof result === "string" && /^\d+$/.test(result)) {
-    return Number(result);
-  }
-  if (typeof result === "bigint") {
-    return Number(result);
-  }
-  if (Array.isArray(result) && result.length > 0) {
-    return parseWatchId(result[0]);
-  }
-  if (result && typeof result === "object") {
-    const record = result as Record<string, unknown>;
-    if ("watchId" in record) {
-      return parseWatchId(record.watchId);
-    }
-    if ("result" in record) {
-      return parseWatchId(record.result);
-    }
-  }
-  return undefined;
+  return parseOnChainWatchId(result);
 }
 
 export function createKeeperHubWriteClient(
@@ -203,6 +306,7 @@ export function createKeeperHubWriteClient(
   const pollIntervalMs = config.pollIntervalMs ?? 2_000;
   const pollTimeoutMs = config.pollTimeoutMs ?? 120_000;
   const workflowIds = config.workflowIds ?? {};
+  const execLogRepo = config.execLogRepo ?? null;
 
   async function authorizedFetch(
     path: string,
@@ -223,13 +327,14 @@ export function createKeeperHubWriteClient(
     });
   }
 
+  /**
+   * Poll workflow execution only (wait → status). No Direct Execution status path.
+   */
   async function pollUntilComplete(executionId: string): Promise<KeeperHubWriteReceipt> {
     const started = Date.now();
     let lastError: string | undefined;
 
     while (Date.now() - started < pollTimeoutMs) {
-      // Prefer workflow wait endpoint when execution id looks like a workflow run;
-      // always fall back to direct-execution status.
       const waitRes = await authorizedFetch(
         `/api/workflows/executions/${encodeURIComponent(executionId)}/wait?timeoutMs=25000`,
         { method: "GET" },
@@ -237,24 +342,10 @@ export function createKeeperHubWriteClient(
 
       if (waitRes.ok) {
         const body = (await waitRes.json()) as ExecuteStatusResponse;
-        if (body.completed === true || body.status === "success" || body.status === "completed") {
-          const { txHash, explorerUrl } = extractTx(body);
-          if (!txHash) {
-            throw new Error(
-              `KeeperHub execution ${executionId} completed without a transaction hash`,
-            );
-          }
-          const gas = extractGasFromKeeperHubPayload(body);
-          return {
-            keeperHubRunId: executionId,
-            txHash,
-            explorerUrl: explorerUrl ?? buildFallbackExplorerUrl(txHash, config.network),
-            result: body.result ?? body.output,
-            ...(gas.gasUsed ? { gasUsed: gas.gasUsed } : {}),
-            ...(gas.gasUsedWei ? { gasUsedWei: gas.gasUsedWei } : {}),
-          };
+        if (isTerminalSuccess(body)) {
+          return receiptFromStatus(executionId, body, config.network);
         }
-        if (body.status === "error" || body.status === "failed" || body.status === "cancelled") {
+        if (isTerminalFailure(body)) {
           throw new Error(
             body.error ?? `KeeperHub execution ${executionId} ended with status ${body.status}`,
           );
@@ -262,33 +353,19 @@ export function createKeeperHubWriteClient(
       }
 
       const statusRes = await authorizedFetch(
-        `/api/execute/${encodeURIComponent(executionId)}/status`,
+        `/api/workflows/executions/${encodeURIComponent(executionId)}/status`,
         { method: "GET" },
       );
 
       if (statusRes.ok) {
         const body = (await statusRes.json()) as ExecuteStatusResponse;
-        const status = body.status ?? "";
-        if (status === "completed" || status === "success") {
-          const { txHash, explorerUrl } = extractTx(body);
-          if (!txHash) {
-            throw new Error(
-              `KeeperHub execution ${executionId} completed without a transaction hash`,
-            );
-          }
-          const gas = extractGasFromKeeperHubPayload(body);
-          return {
-            keeperHubRunId: executionId,
-            txHash,
-            explorerUrl: explorerUrl ?? buildFallbackExplorerUrl(txHash, config.network),
-            result: body.result,
-            ...(gas.gasUsed ? { gasUsed: gas.gasUsed } : {}),
-            ...(gas.gasUsedWei ? { gasUsedWei: gas.gasUsedWei } : {}),
-          };
+        if (isTerminalSuccess(body)) {
+          return receiptFromStatus(executionId, body, config.network);
         }
-        if (status === "failed" || status === "error" || status === "cancelled") {
+        if (isTerminalFailure(body)) {
           throw new Error(
-            body.error ?? `KeeperHub execution ${executionId} ended with status ${status}`,
+            body.error ??
+              `KeeperHub execution ${executionId} ended with status ${body.status}`,
           );
         }
 
@@ -299,7 +376,7 @@ export function createKeeperHubWriteClient(
           continue;
         }
       } else {
-        lastError = `status poll HTTP ${statusRes.status}`;
+        lastError = `workflow status poll HTTP ${statusRes.status}`;
       }
 
       await sleep(pollIntervalMs);
@@ -333,115 +410,59 @@ export function createKeeperHubWriteClient(
     return body.executionId;
   }
 
-  async function startDirectContractCall(
-    functionName: string,
-    functionArgs: unknown[],
+  async function runWorkflow(
+    workflowId: string,
+    input: Record<string, unknown>,
     idempotencyKey: string,
-  ): Promise<string> {
-    const res = await authorizedFetch("/api/execute/contract-call", {
-      method: "POST",
-      body: JSON.stringify({
-        contractAddress: config.registryAddress,
-        network: config.network,
-        functionName,
-        functionArgs: JSON.stringify(functionArgs),
-        abi: JSON.stringify(REGISTRY_ABI),
-      }),
-      idempotencyKey,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`KeeperHub contract-call failed (${res.status}): ${text.slice(0, 400)}`);
-    }
-
-    const body = (await res.json()) as ExecuteStartResponse;
-    if (!body.executionId) {
-      // Some deployments return completed synchronously with a hash nested under result
-      if (body.status === "completed" && typeof (body as { transactionHash?: string }).transactionHash === "string") {
-        return `sync:${(body as { transactionHash: string }).transactionHash}`;
-      }
-      throw new Error("KeeperHub contract-call response missing executionId");
-    }
-    return body.executionId;
-  }
-
-  async function startDirectTransfer(
-    to: string,
-    amountEth: number,
-    idempotencyKey: string,
-  ): Promise<string> {
-    const res = await authorizedFetch("/api/execute/transfer", {
-      method: "POST",
-      body: JSON.stringify({
-        network: config.network,
-        recipientAddress: to,
-        amount: String(amountEth),
-      }),
-      idempotencyKey,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`KeeperHub transfer failed (${res.status}): ${text.slice(0, 400)}`);
-    }
-
-    const body = (await res.json()) as ExecuteStartResponse;
-    if (!body.executionId) {
-      throw new Error("KeeperHub transfer response missing executionId");
-    }
-    return body.executionId;
-  }
-
-  async function runContract(opts: {
-    functionName: string;
-    functionArgs: unknown[];
-    workflowId?: string | undefined;
-    workflowInput?: Record<string, unknown> | undefined;
-    idempotencyKey: string;
-  }): Promise<KeeperHubWriteReceipt> {
-    let executionId: string;
-
-    if (opts.workflowId) {
-      executionId = await startWorkflow(
-        opts.workflowId,
-        opts.workflowInput ?? {
-          functionName: opts.functionName,
-          functionArgs: opts.functionArgs,
-          contractAddress: config.registryAddress,
-          network: config.network,
-        },
-        opts.idempotencyKey,
-      );
-    } else {
-      executionId = await startDirectContractCall(
-        opts.functionName,
-        opts.functionArgs,
-        opts.idempotencyKey,
-      );
-    }
-
-    if (executionId.startsWith("sync:")) {
-      const txHash = executionId.slice("sync:".length);
-      return {
-        keeperHubRunId: executionId,
-        txHash,
-        explorerUrl: buildFallbackExplorerUrl(txHash, config.network),
-      };
-    }
-
+  ): Promise<KeeperHubWriteReceipt> {
+    const executionId = await startWorkflow(workflowId, input, idempotencyKey);
     return pollUntilComplete(executionId);
+  }
+
+  async function runWorkflowLogged(
+    method: keyof typeof WORKFLOW_ACTION_ENV,
+    workflowId: string,
+    input: Record<string, unknown>,
+    idempotencyKey: string,
+    logDetails?: Record<string, unknown>,
+  ): Promise<KeeperHubWriteReceipt> {
+    return withKeeperHubLog(
+      execLogRepo,
+      {
+        actionType: actionTypeForWriteMethod(method),
+        // entity_id is UUID-only; KeeperHub workflow IDs are opaque strings.
+        // Correlate via details.workflowId / details.keeper_hub_run_id instead.
+        entityType: "keeperhub_workflow",
+        entityId: null,
+        method,
+        details: {
+          workflowId,
+          network: config.network,
+          ...(logDetails ?? {}),
+        },
+      },
+      () => runWorkflow(workflowId, input, idempotencyKey),
+      {
+        receiptFromResult: (receipt) => ({
+          keeperHubRunId: receipt.keeperHubRunId,
+          txHash: receipt.txHash,
+          explorerUrl: receipt.explorerUrl,
+          gasUsed: receipt.gasUsed,
+          gasUsedWei: receipt.gasUsedWei,
+        }),
+      },
+    );
   }
 
   return {
     async publishAlert(contentHash, sourceEventHash, contentUri) {
       const contentBytes = toBytes32Hash(contentHash);
       const sourceBytes = toBytes32Hash(sourceEventHash);
-      return runContract({
-        functionName: "publishAlert",
-        functionArgs: [contentBytes, sourceBytes, contentUri],
-        workflowId: workflowIds.publishAlert,
-        workflowInput: {
+      const workflowId = requireWorkflowId(workflowIds, "publishAlert");
+      return runWorkflowLogged(
+        "publishAlert",
+        workflowId,
+        {
           contentHash: contentBytes,
           sourceEventHash: sourceBytes,
           contentUri,
@@ -451,18 +472,19 @@ export function createKeeperHubWriteClient(
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-publishAlert-${contentHash}-${sourceEventHash}`,
-      });
+        `chronicle-publishAlert-${contentHash}-${sourceEventHash}`,
+        { contentUri },
+      );
     },
 
     async publishDigest(contentHash, sourceEventRoot, contentUri) {
       const contentBytes = toBytes32Hash(contentHash);
       const rootBytes = toBytes32Hash(sourceEventRoot);
-      return runContract({
-        functionName: "publishDigest",
-        functionArgs: [contentBytes, rootBytes, contentUri],
-        workflowId: workflowIds.publishDigest,
-        workflowInput: {
+      const workflowId = requireWorkflowId(workflowIds, "publishDigest");
+      return runWorkflowLogged(
+        "publishDigest",
+        workflowId,
+        {
           contentHash: contentBytes,
           sourceEventRoot: rootBytes,
           contentUri,
@@ -472,19 +494,20 @@ export function createKeeperHubWriteClient(
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-publishDigest-${contentHash}`,
-      });
+        `chronicle-publishDigest-${contentHash}`,
+        { contentUri },
+      );
     },
 
     async createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt) {
       const specBytes = toBytes32Hash(watchSpecHash);
       const starts = toUint64Seconds(startsAt);
       const ends = toUint64Seconds(endsAt);
-      const receipt = await runContract({
-        functionName: "createSponsoredWatch",
-        functionArgs: [targetContract, specBytes, starts.toString(), ends.toString()],
-        workflowId: workflowIds.createSponsoredWatch,
-        workflowInput: {
+      const workflowId = requireWorkflowId(workflowIds, "createSponsoredWatch");
+      const receipt = await runWorkflowLogged(
+        "createSponsoredWatch",
+        workflowId,
+        {
           targetContract,
           watchSpecHash: specBytes,
           startsAt: starts.toString(),
@@ -492,21 +515,36 @@ export function createKeeperHubWriteClient(
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-createSponsoredWatch-${watchSpecHash}-${startsAt}-${endsAt}`,
-      });
+        `chronicle-createSponsoredWatch-${watchSpecHash}-${startsAt}-${endsAt}`,
+        { targetContract, watchSpecHash, startsAt, endsAt },
+      );
 
-      const watchId = parseWatchId(receipt.result) ?? 0;
+      // Prefer explicit return value; also scan KeeperHub status payload for event-decoded id.
+      const fromResult = parseWatchId(receipt.result);
+      const fromPayload =
+        fromResult === undefined
+          ? parseWatchId(
+              (receipt as { watchId?: unknown }).watchId ??
+                // Some KeeperHub payloads nest decoded returns under result.watchId
+                undefined,
+            )
+          : fromResult;
+
+      const watchId = requireOnChainWatchId(
+        fromPayload,
+        `KeeperHub createSponsoredWatch run ${receipt.keeperHubRunId}`,
+      );
       return { ...receipt, watchId };
     },
 
     async publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri) {
       const reportBytes = toBytes32Hash(reportHash);
       const rootBytes = toBytes32Hash(sourceEventRoot);
-      return runContract({
-        functionName: "publishSponsoredReport",
-        functionArgs: [watchId, reportBytes, rootBytes, contentUri],
-        workflowId: workflowIds.publishSponsoredReport,
-        workflowInput: {
+      const workflowId = requireWorkflowId(workflowIds, "publishSponsoredReport");
+      return runWorkflowLogged(
+        "publishSponsoredReport",
+        workflowId,
+        {
           watchId,
           reportHash: reportBytes,
           sourceEventRoot: rootBytes,
@@ -517,67 +555,132 @@ export function createKeeperHubWriteClient(
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-publishSponsoredReport-${watchId}-${reportHash}-${sourceEventRoot}`,
-      });
+        `chronicle-publishSponsoredReport-${watchId}-${reportHash}-${sourceEventRoot}`,
+        { watchId, contentUri },
+      );
     },
 
     async publishPremiumReceipt(contentHash, sourceEventHash, contentUri) {
       const contentBytes = toBytes32Hash(contentHash);
       const sourceBytes = toBytes32Hash(sourceEventHash);
-      return runContract({
-        functionName: "publishPremiumReceipt",
-        functionArgs: [contentBytes, sourceBytes, contentUri],
-        workflowId: workflowIds.publishPremiumReceipt,
-        workflowInput: {
+      const workflowId = requireWorkflowId(workflowIds, "publishPremiumReceipt");
+      return runWorkflowLogged(
+        "publishPremiumReceipt",
+        workflowId,
+        {
           contentHash: contentBytes,
           sourceEventHash: sourceBytes,
           contentUri,
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-publishPremiumReceipt-${contentHash}`,
-      });
+        `chronicle-publishPremiumReceipt-${contentHash}`,
+        { contentUri },
+      );
     },
 
     async recordPayout(payoutPeriodHash, recipient, amount, reasonHash) {
       const periodBytes = toBytes32Hash(payoutPeriodHash);
       const reasonBytes = toBytes32Hash(reasonHash);
-      const amountWei = ethers.parseEther(String(amount)).toString();
-      return runContract({
-        functionName: "recordPayout",
-        functionArgs: [periodBytes, recipient, amountWei, reasonBytes],
-        workflowId: workflowIds.recordPayout,
-        workflowInput: {
+      // Registry amount is USDC base units (6 decimals), matching payment accounting.
+      const amountRaw = parseUnits(
+        String(amount),
+        config.usdcDecimals ?? 6,
+      ).toString();
+      const workflowId = requireWorkflowId(workflowIds, "recordPayout");
+      return runWorkflowLogged(
+        "recordPayout",
+        workflowId,
+        {
           payoutPeriodHash: periodBytes,
           recipient,
-          amount: amountWei,
+          amount: amountRaw,
           reasonHash: reasonBytes,
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-recordPayout-${payoutPeriodHash}-${recipient}-${amount}`,
-      });
+        `chronicle-recordPayout-${payoutPeriodHash}-${recipient}-${amount}`,
+        { recipient, amount },
+      );
     },
 
-    async sendTransfer(to, amountEth) {
-      let executionId: string;
-      const idempotencyKey = `chronicle-transfer-${to}-${amountEth}-${Date.now()}`;
+    async publishTradeTicket(ticketHash, signalHash, intentHash, contentUri) {
+      const ticketBytes = toBytes32Hash(ticketHash);
+      const signalBytes = toBytes32Hash(signalHash);
+      const intentBytes = toBytes32Hash(intentHash);
+      const workflowId = requireWorkflowId(workflowIds, "publishTradeTicket");
+      return runWorkflowLogged(
+        "publishTradeTicket",
+        workflowId,
+        {
+          ticketHash: ticketBytes,
+          signalHash: signalBytes,
+          intentHash: intentBytes,
+          contentUri,
+          contractAddress: config.registryAddress,
+          network: config.network,
+        },
+        `chronicle-publishTradeTicket-${ticketHash}`,
+        { contentUri },
+      );
+    },
 
-      if (workflowIds.transfer) {
-        executionId = await startWorkflow(
-          workflowIds.transfer,
-          {
-            recipientAddress: to,
-            amount: String(amountEth),
-            network: config.network,
-          },
-          idempotencyKey,
+    async recordCapitalMove(moveId, from, to, amountUsdc, reasonHash) {
+      const moveBytes = toBytes32Hash(moveId);
+      const reasonBytes = toBytes32Hash(reasonHash);
+      const amountRaw = parseUnits(
+        String(amountUsdc),
+        config.usdcDecimals ?? 6,
+      ).toString();
+      const workflowId = requireWorkflowId(workflowIds, "recordCapitalMove");
+      return runWorkflowLogged(
+        "recordCapitalMove",
+        workflowId,
+        {
+          moveId: moveBytes,
+          from,
+          to,
+          amount: amountRaw,
+          reasonHash: reasonBytes,
+          contractAddress: config.registryAddress,
+          network: config.network,
+        },
+        `chronicle-recordCapitalMove-${moveId}-${from}-${to}-${amountUsdc}`,
+        { from, to, amountUsdc },
+      );
+    },
+
+    async sendTransfer(to, amountUsdc) {
+      const workflowId = requireWorkflowId(workflowIds, "transfer");
+      const usdcAddress = config.usdcAddress.trim();
+      if (!/^0x[0-9a-fA-F]{40}$/.test(usdcAddress)) {
+        throw new Error(
+          `KeeperHub USDC transfer requires a valid usdcAddress (got ${JSON.stringify(usdcAddress)})`,
         );
-      } else {
-        executionId = await startDirectTransfer(to, amountEth, idempotencyKey);
       }
+      const decimals = config.usdcDecimals ?? 6;
+      const idempotencyKey = `chronicle-usdc-transfer-${to}-${amountUsdc}-${Date.now()}`;
 
-      return pollUntilComplete(executionId);
+      return runWorkflowLogged(
+        "transfer",
+        workflowId,
+        {
+          recipientAddress: to,
+          amount: String(amountUsdc),
+          network: config.network,
+          tokenAddress: usdcAddress,
+          tokenConfig: JSON.stringify({
+            mode: "custom",
+            customToken: {
+              address: usdcAddress,
+              symbol: "USDC",
+              decimals,
+            },
+          }),
+        },
+        idempotencyKey,
+        { to, amountUsdc },
+      );
     },
   };
 }
@@ -596,7 +699,8 @@ function buildFallbackExplorerUrl(txHash: string, network: string): string {
   if (n === "ethereum" || n === "mainnet" || n === "1") {
     return `https://etherscan.io/tx/${txHash}`;
   }
-  return `https://sepolia.basescan.org/tx/${txHash}`;
+  // Default product home: Ethereum Sepolia
+  return `https://sepolia.etherscan.io/tx/${txHash}`;
 }
 
 export function isKeeperHubWriteConfigured(env: {

@@ -1,12 +1,14 @@
 // Contract tests: GET /activity
 // Public endpoint — no authentication required
+// Hits a live API process — skipped unless ALLOW_LIVE_API_TESTS=1
 
 import { describe, expect, it } from "vitest";
+import { LIVE_API_BASE, LIVE_API_TESTS_ENABLED } from "./live-api.ts";
 import { assertAgentActivityShape } from "./schema-assertions.ts";
 
-const API_URL = process.env["TEST_API_URL"] ?? "http://localhost:4000";
+const API_URL = LIVE_API_BASE;
 
-describe("Contract: GET /activity", () => {
+describe.skipIf(!LIVE_API_TESTS_ENABLED)("Contract: GET /activity", () => {
   it("should return 200 with activity data shape", async () => {
     const response = await fetch(`${API_URL}/activity`, {
       method: "GET",
@@ -28,6 +30,18 @@ describe("Contract: GET /activity", () => {
     expect(typeof (body.treasury as Record<string, unknown>).availableBalance).toBe("number");
     expect(typeof (body.treasury as Record<string, unknown>).safetyBuffer).toBe("number");
     expect(typeof (body.treasury as Record<string, unknown>).status).toBe("string");
+
+    // Public analytics trail (subscription + referral)
+    expect(body.subscriptionAnalytics).toBeDefined();
+    const analytics = body.subscriptionAnalytics as Record<string, unknown>;
+    expect(typeof analytics.mrr).toBe("number");
+    expect(typeof analytics.conversionRate).toBe("number");
+    expect(Array.isArray(analytics.routeMix)).toBe(true);
+
+    expect(body.referralAttribution).toBeDefined();
+    const referral = body.referralAttribution as Record<string, unknown>;
+    expect(Array.isArray(referral.partners)).toBe(true);
+    expect(typeof referral.totalReferredVolume).toBe("number");
   });
 
   it("should return 200 with empty arrays when no data exists", async () => {

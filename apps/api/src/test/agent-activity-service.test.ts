@@ -56,7 +56,7 @@ describe("AgentActivityService", () => {
           gas_used: "85000",
           gas_used_wei: "85000000000",
           keeper_hub_run_id: "exec_digest_1",
-          explorer_url: "https://sepolia.basescan.org/tx/0xabc123",
+          explorer_url: "https://sepolia.etherscan.io/tx/0xabc123",
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -67,6 +67,7 @@ describe("AgentActivityService", () => {
           premium_item_id: "item-001",
           payment_route: "x402",
           payer_reference: "0xpayer",
+          referral_address: "0xaffiliate000000000000000000000000000001",
           amount_requested: 5,
           amount_settled: 5,
           currency: "USDC",
@@ -76,6 +77,50 @@ describe("AgentActivityService", () => {
           requested_at: new Date().toISOString(),
           settled_at: new Date().toISOString(),
           expires_at: null,
+          registry_tx_hash: null,
+          keeper_hub_run_id: null,
+          explorer_url: null,
+          content_uri: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      paymentAnalytics: [
+        {
+          status: "settled",
+          payment_route: "x402",
+          amount_settled: 5,
+          amount_requested: 5,
+          currency: "USDC",
+          referral_address: "0xaffiliate000000000000000000000000000001",
+        },
+        {
+          status: "expired",
+          payment_route: "mpp",
+          amount_settled: null,
+          amount_requested: 1,
+          currency: "USDC",
+          referral_address: null,
+        },
+      ],
+      newsletterAnalytics: [
+        {
+          status: "active",
+          amount_per_period: 10,
+          currency: "USDC",
+          billing_period_days: 30,
+          referral_address: "0xaffiliate000000000000000000000000000001",
+        },
+      ],
+      affiliates: [
+        {
+          id: "aff-001",
+          wallet_address: "0xaffiliate000000000000000000000000000001",
+          display_name: "Demo Affiliate",
+          referral_code: "demo",
+          status: "approved",
+          metadata: {},
+          approved_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -109,9 +154,9 @@ describe("AgentActivityService", () => {
           payout_tx_hash: "0xtxhash",
           registry_tx_hash: "0xregistry",
           keeper_hub_run_id: "exec_payout_1",
-          explorer_url: "https://sepolia.basescan.org/tx/0xregistry",
+          explorer_url: "https://sepolia.etherscan.io/tx/0xregistry",
           transfer_keeper_hub_run_id: "exec_xfer_1",
-          transfer_explorer_url: "https://sepolia.basescan.org/tx/0xtxhash",
+          transfer_explorer_url: "https://sepolia.etherscan.io/tx/0xtxhash",
           status: "transferred",
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -162,12 +207,29 @@ describe("AgentActivityService", () => {
 
       expect(result.data.payments).toHaveLength(1);
       expect(result.data.payments[0]?.paymentRoute).toBe("x402");
+      expect(result.data.payments[0]?.referralAddress).toBe(
+        "0xaffiliate000000000000000000000000000001",
+      );
 
       expect(result.data.treasury.availableBalance).toBe(50000);
+      expect(result.data.treasury.ethBalance).toBe(50000);
+      expect(result.data.treasury.currency).toBe("USDC");
       expect(result.data.treasury.status).toBe("healthy");
+      // No live USDC provider in unit tests — field omitted.
+      expect(result.data.treasury.usdcBalance).toBeUndefined();
 
       expect(result.data.executionLogs).toHaveLength(1);
       expect(result.data.executionLogs[0]?.actionType).toBe("treasury_check");
+
+      expect(result.data.subscriptionAnalytics).toMatchObject({
+        mrr: 10,
+        activeNewsletterSubscriptions: 1,
+        settledPayments: 1,
+        totalPaymentAttempts: 2,
+        conversionRate: 0.5,
+      });
+      expect(result.data.referralAttribution?.partners).toHaveLength(1);
+      expect(result.data.referralAttribution?.partners[0]?.displayName).toBe("Demo Affiliate");
     }
   });
 
@@ -180,6 +242,9 @@ describe("AgentActivityService", () => {
       activeSponsoredWatches: [],
       recentPayouts: [],
       recentLogs: [],
+      paymentAnalytics: [],
+      newsletterAnalytics: [],
+      affiliates: [],
     });
 
     const mockRepo: AgentActivityRepository = {
@@ -200,6 +265,9 @@ describe("AgentActivityService", () => {
       expect(result.data.digests).toHaveLength(0);
       expect(result.data.payments).toHaveLength(0);
       expect(result.data.executionLogs).toHaveLength(0);
+      expect(result.data.treasury.availableBalance).toBe(0);
+      expect(result.data.treasury.safetyBuffer).toBe(0);
+      expect(result.data.treasury.currency).toBe("ETH");
     }
   });
 
@@ -254,5 +322,109 @@ describe("AgentActivityService", () => {
     expect(result.success).toBe(true);
     expect(result.data?.treasury.status).toBe("warning");
     expect(result.data?.treasury.safetyBuffer).toBe(10000);
+    expect(result.data?.treasury.currency).toBe("USDC");
+  });
+
+  it("should merge live ETH + USDC balances when provider succeeds", async () => {
+    const mockActivityData = createMockActivityData({
+      treasurySnapshots: [
+        {
+          id: "treasury-live",
+          available_balance: 0.01,
+          currency: "ETH",
+          safety_buffer: 0.01,
+          revenue_total: null,
+          estimated_generation_cost: null,
+          estimated_transaction_cost: null,
+          paid_request_count: null,
+          status: "healthy",
+          last_routed_at: null,
+          last_payout_period_hash: null,
+          total_routed_amount: null,
+          captured_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const mockRepo: AgentActivityRepository = {
+      getActivityData: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: mockActivityData,
+      }),
+    };
+
+    const service = createAgentActivityService(mockRepo, {
+      getLiveTreasuryBalances: async () => ({
+        ethBalance: 0.025,
+        usdcBalance: 2,
+        walletAddress: "0xf7aede9453bfb56edbf14b2d05543676d3fcaf11",
+        ethSource: "rpc" as const,
+        usdcSource: "rpc" as const,
+      }),
+    });
+    const result = await service.getActivity();
+
+    expect(result.success).toBe(true);
+    expect(result.data?.treasury.availableBalance).toBe(0.025);
+    expect(result.data?.treasury.ethBalance).toBe(0.025);
+    expect(result.data?.treasury.usdcBalance).toBe(2);
+    expect(result.data?.treasury.currency).toBe("ETH");
+    expect(result.data?.treasury.walletAddress).toBe(
+      "0xf7aede9453bfb56edbf14b2d05543676d3fcaf11",
+    );
+    expect(result.data?.treasury.safetyBuffer).toBe(0.01);
+  });
+
+  it("should merge dual-rail Base/Sepolia USDC and CCTP rebalances", async () => {
+    const mockActivityData = createMockActivityData();
+    const mockRepo: AgentActivityRepository = {
+      getActivityData: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: mockActivityData,
+      }),
+    };
+
+    const service = createAgentActivityService(mockRepo, {
+      getDualRailTreasury: async () => ({
+        walletAddress: "0xf7aede9453bfb56edbf14b2d05543676d3fcaf11",
+        baseUsdc: 40,
+        sepoliaUsdc: 8,
+        baseEth: 0.02,
+        sepoliaEth: 0.03,
+        inFlightCctpUsdc: 10,
+        deployableToDeskUsdc: 0,
+        usdcOperatingReserve: 10,
+        cctpEnabled: true,
+        capitalPlaneNote: "awaiting CCTP rebalance",
+        recentTransfers: [
+          {
+            id: "cctp-1",
+            status: "awaiting_attestation",
+            amountUsdc: 10,
+            mode: "direct",
+            burnTxHash: "0x" + "a".repeat(64),
+            mintTxHash: null,
+            burnExplorerUrl: "https://sepolia.basescan.org/tx/0xaa",
+            mintExplorerUrl: null,
+            errorMessage: null,
+            burnedAt: new Date().toISOString(),
+            mintedAt: null,
+            createdAt: new Date().toISOString(),
+            durationMs: null,
+          },
+        ],
+      }),
+    });
+
+    const result = await service.getActivity();
+    expect(result.success).toBe(true);
+    expect(result.data?.treasury.baseUsdcBalance).toBe(40);
+    expect(result.data?.treasury.sepoliaUsdcBalance).toBe(8);
+    expect(result.data?.treasury.usdcBalance).toBe(8);
+    expect(result.data?.treasury.inFlightCctpUsdc).toBe(10);
+    expect(result.data?.treasury.capitalPlaneNote).toContain("CCTP");
+    expect(result.data?.cctpRebalances).toHaveLength(1);
+    expect(result.data?.cctpRebalances?.[0]?.status).toBe("awaiting_attestation");
   });
 });

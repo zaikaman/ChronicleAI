@@ -1,4 +1,4 @@
-// Shared multi-provider LLM client: Gemini → OpenAI → Groq (OpenAI-compatible)
+// Shared multi-provider LLM client: Gemini → OpenAI → Groq
 
 import OpenAI from "openai";
 import type { LLMProvider } from "@chronicleai/schemas";
@@ -7,6 +7,10 @@ export interface LLMProviderConfig {
   apiKey: string;
   model: string;
   baseUrl?: string | undefined;
+  /** Optional max tokens when a provider supports it. */
+  maxTokens?: number | undefined;
+  /** Sampling temperature (provider default when unset). */
+  temperature?: number | undefined;
 }
 
 export interface LLMProviderMap {
@@ -44,7 +48,7 @@ export async function callGemini(
       },
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.3,
+        temperature: config.temperature ?? 0.3,
         topP: 1,
       },
     }),
@@ -79,6 +83,7 @@ export async function callOpenAI(
       model: config.model,
       instructions: systemInstruction,
       input: prompt,
+      ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
     },
     { signal },
   );
@@ -104,6 +109,7 @@ export async function callGroq(
       model: config.model,
       instructions: systemInstruction,
       input: prompt,
+      ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
     },
     { signal },
   );

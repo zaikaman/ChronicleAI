@@ -6,6 +6,7 @@ import type { ExecutionLogRepository, PaymentRecordRepository } from "@chronicle
 import type { PaymentRoute } from "@chronicleai/schemas";
 import { badRequest } from "../errors.ts";
 import type { PaymentAdapter, SettlementVerificationResult } from "../payments/payment-adapter.ts";
+import type { AffiliateEarningsService } from "./affiliate-earnings-service.ts";
 
 export interface SettlementResult {
   settled: boolean;
@@ -13,6 +14,12 @@ export interface SettlementResult {
   verification: SettlementVerificationResult;
   isSponsoredWatch: boolean;
   sponsoredWatchId?: string;
+  /** Present when a referred settlement credited affiliate earnings. */
+  affiliateReward?: {
+    credited: boolean;
+    rewardAmount: number;
+    reason?: string;
+  };
 }
 
 /** Fallback when a legacy record has no expires_at (matches x402 challenge window). */
@@ -57,15 +64,19 @@ export class PaymentSettlementService {
   private readonly paymentRecordRepo: PaymentRecordRepository;
   private readonly execLogRepo: ExecutionLogRepository;
   private readonly adapters: Map<PaymentRoute, PaymentAdapter>;
+  private readonly earningsService: AffiliateEarningsService | null;
 
   constructor(params: {
     paymentRecordRepo: PaymentRecordRepository;
     execLogRepo: ExecutionLogRepository;
     adapters: Map<PaymentRoute, PaymentAdapter>;
+    /** When set, credits affiliate USDC ledger on successful settlement. */
+    earningsService?: AffiliateEarningsService | null;
   }) {
     this.paymentRecordRepo = params.paymentRecordRepo;
     this.execLogRepo = params.execLogRepo;
     this.adapters = params.adapters;
+    this.earningsService = params.earningsService ?? null;
   }
 
   /**
@@ -183,7 +194,7 @@ export class PaymentSettlementService {
       throw new Error(`Unsupported payment route: ${params.paymentRoute}`);
     }
 
-    // Verify the settlement (pass challenge-time payer for MPP identity mapping)
+    // Verify the settlement (pass challenge-time payer + expiry for MPP rail hygiene)
     const verification = await adapter.verifySettlement({
       challengeReference: params.challengeReference,
       settlementReference: params.settlementReference,
@@ -191,6 +202,7 @@ export class PaymentSettlementService {
       currency: params.currency ?? record.currency ?? "USDC",
       paymentRoute: params.paymentRoute,
       challengePayerReference: record.payer_reference,
+      challengeExpiresAt: record.expires_at,
     });
 
     if (!verification.verified) {
@@ -252,6 +264,35 @@ export class PaymentSettlementService {
       );
     }
 
+    // Credit affiliate ledger when payer is attributed (agent withdraws later — not auto-routed).
+    // Earnings service resolves affiliate from referral_attributions even if referral_address is null.
+    let affiliateReward: SettlementResult["affiliateReward"];
+    if (this.earningsService) {
+      try {
+        const credit = await this.earningsService.creditFromSettledPayment(settleWrite.value);
+        affiliateReward = {
+          credited: credit.credited,
+          rewardAmount: credit.rewardAmount,
+          ...(credit.reason ? { reason: credit.reason } : {}),
+        };
+        if (!credit.credited) {
+          console.warn(
+            `[affiliate-earnings] credit skipped payment=${settleWrite.value.id}: ${credit.reason ?? "unknown"}`,
+          );
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "affiliate_credit_failed";
+        console.error(
+          `[affiliate-earnings] credit failed payment=${settleWrite.value.id}: ${reason}`,
+        );
+        affiliateReward = {
+          credited: false,
+          rewardAmount: 0,
+          reason,
+        };
+      }
+    }
+
     // Log the successful settlement
     await this.execLogRepo.append({
       action_type: "payment",
@@ -262,9 +303,21 @@ export class PaymentSettlementService {
       details: {
         challengeReference: params.challengeReference,
         settlementReference: params.settlementReference,
+        settlement_reference: params.settlementReference,
+        paymentRoute: params.paymentRoute,
         amountSettled: verification.amountSettled,
         currency: verification.currency,
         payerReference: settleWrite.value.payer_reference ?? payerReference,
+        referralAddress: settleWrite.value.referral_address,
+        affiliateReward,
+        // Prefer settlement tx hash when the adapter returns a 0x hash.
+        ...(typeof params.settlementReference === "string" &&
+        /^0x[0-9a-fA-F]{64}$/.test(params.settlementReference)
+          ? {
+              tx_hash: params.settlementReference,
+              registry_tx_hash: params.settlementReference,
+            }
+          : {}),
       },
       started_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
@@ -290,6 +343,7 @@ export class PaymentSettlementService {
       paymentRecordId: record.id,
       verification: verificationWithPayer,
       isSponsoredWatch: false, // Caller determines this from the premium item type
+      ...(affiliateReward ? { affiliateReward } : {}),
     };
   }
 }

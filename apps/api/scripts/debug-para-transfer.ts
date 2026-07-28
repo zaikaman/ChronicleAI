@@ -1,6 +1,6 @@
 import { loadServerEnv } from "@chronicleai/config";
 import { ParaRestClient, ParaRestError } from "@getpara/rest-sdk";
-import { ethers } from "ethers";
+import { parseEther } from "viem";
 
 async function tryTransfer(
   client: ParaRestClient,
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   const walletId = env.paraWalletId;
   const address = "0xf7aede9453bfb56edbf14b2d05543676d3fcaf11";
   const chainId = 84_532;
-  const value = ethers.parseEther("0.000001").toString();
+  const value = parseEther("0.000001").toString();
 
   console.log(`walletId=${walletId}`);
   console.log(`chainId=${chainId}`);

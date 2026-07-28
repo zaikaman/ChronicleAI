@@ -19,8 +19,9 @@ describe("GET /digests/latest", () => {
   let server: TestServer;
 
   beforeAll(async () => {
+    // Force test env (never inherit real Supabase credentials from the shell/.env)
     for (const [key, value] of Object.entries(ENV)) {
-      process.env[key] = process.env[key] || value;
+      process.env[key] = value;
     }
 
     const { app } = await import("../../apps/api/src/app.ts");
@@ -37,10 +38,9 @@ describe("GET /digests/latest", () => {
   });
 
   it("returns DailyDigest shape when a digest exists", async () => {
-    // Note: This test assumes seed data or a prior test created a digest
+    // Note: This test assumes a prior test created a digest; 404 is valid when empty
     const response = await fetch(`${server.url}/digests/latest`);
 
-    // If 404, that's also valid (no seed data in contract test env)
     if (response.status === 404) {
       expect(response.status).toBe(404);
       return;

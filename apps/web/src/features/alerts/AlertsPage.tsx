@@ -1,15 +1,11 @@
 import { type ReactElement, useMemo, useState } from "react";
+import { PaginationControls } from "../../components/pagination-controls.tsx";
+import { Page, PageHeader } from "../../components/page-chrome.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { chainLabel } from "../../lib/explorer.ts";
 import { AlertCard } from "./AlertCard.tsx";
 import { AlertFilters, type AlertFiltersState } from "./AlertFilters.tsx";
 import { useAlerts } from "./use-alerts.ts";
-
-const CHAIN_LABELS: Record<number, string> = {
-  1: "Ethereum",
-  8453: "Base",
-  84532: "Base Sepolia",
-  11155111: "Sepolia",
-};
 
 function formatEventTypeLabel(eventType: string): string {
   return eventType
@@ -19,7 +15,7 @@ function formatEventTypeLabel(eventType: string): string {
 }
 
 export function AlertsPage(): ReactElement {
-  const { alerts, isLoading, error, refetch } = useAlerts(100);
+  const { alerts, pagination, setPage, isLoading, error, refetch } = useAlerts(20);
   const [filters, setFilters] = useState<AlertFiltersState>({
     eventType: "",
     chainId: "",
@@ -44,7 +40,7 @@ export function AlertsPage(): ReactElement {
       .sort((a, b) => a - b)
       .map((id) => ({
         value: String(id),
-        label: CHAIN_LABELS[id] ?? `Chain ${id}`,
+        label: chainLabel(id),
       }));
   }, [alerts]);
 
@@ -60,71 +56,78 @@ export function AlertsPage(): ReactElement {
     });
   }, [alerts, filters.eventType, filters.chainId]);
 
-  if (isLoading) {
-    return <LoadingState message="Loading alerts..." data-testid="alerts-loading" />;
-  }
+  const hasActiveFilters = Boolean(filters.eventType || filters.chainId);
 
-  if (error) {
-    return (
-      <RetryState
-        title="Failed to load alerts"
-        message={error}
-        onRetry={refetch}
-        data-testid="alerts-error"
+  return (
+    <Page data-testid="alerts-list">
+      <PageHeader
+        title="Public Alerts"
+        description="Live public market bulletins from on-chain events — plain-language summaries with proof of publication."
+        meta={
+          !isLoading && !error ? (
+            <span className="tabular-nums">
+              {pagination.total} alert{pagination.total !== 1 ? "s" : ""}
+              {pagination.totalPages > 1
+                ? ` · page ${pagination.page}/${pagination.totalPages}`
+                : ""}
+            </span>
+          ) : undefined
+        }
       />
-    );
-  }
 
-  if (alerts.length === 0) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-6" style={{ fontFamily: "var(--font-space-grotesk)" }}>
-          Public Alerts
-        </h1>
+      {isLoading ? (
+        <LoadingState
+          message="Loading alerts..."
+          variant="cards"
+          count={4}
+          data-testid="alerts-loading"
+        />
+      ) : error ? (
+        <RetryState
+          title="Failed to load alerts"
+          message={error}
+          onRetry={refetch}
+          data-testid="alerts-error"
+        />
+      ) : alerts.length === 0 && pagination.page === 1 ? (
         <EmptyState
           title="No alerts yet"
           description="Public alerts will appear here when significant on-chain events are detected."
           data-testid="alerts-empty"
         />
-      </div>
-    );
-  }
-
-  const hasActiveFilters = Boolean(filters.eventType || filters.chainId);
-
-  return (
-    <div data-testid="alerts-list" className="max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground" style={{ fontFamily: "var(--font-space-grotesk)" }}>
-          Public Alerts
-        </h1>
-        <span className="text-muted-foreground text-sm font-medium">
-          {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? "s" : ""}
-        </span>
-      </div>
-
-      {(eventTypeOptions.length > 0 || chainOptions.length > 0) && (
-        <AlertFilters
-          filters={filters}
-          onChange={setFilters}
-          eventTypeOptions={eventTypeOptions}
-          chainOptions={chainOptions}
-        />
-      )}
-
-      {hasActiveFilters && filteredAlerts.length === 0 ? (
-        <EmptyState
-          title="No matching alerts"
-          description="No alerts match the selected filters. Try a different event type or chain."
-          data-testid="alerts-filtered-empty"
-        />
       ) : (
-        <div className="flex flex-col gap-4 mt-6">
-          {filteredAlerts.map((alert) => (
-            <AlertCard key={alert.id} alert={alert} data-testid={`alert-${alert.id}`} />
-          ))}
-        </div>
+        <>
+          {(eventTypeOptions.length > 0 || chainOptions.length > 0) && (
+            <AlertFilters
+              filters={filters}
+              onChange={setFilters}
+              eventTypeOptions={eventTypeOptions}
+              chainOptions={chainOptions}
+            />
+          )}
+
+          {hasActiveFilters && filteredAlerts.length === 0 ? (
+            <EmptyState
+              title="No matching alerts"
+              description="No alerts on this page match the selected filters. Try a different event type, chain, or page."
+              data-testid="alerts-filtered-empty"
+            />
+          ) : (
+            <div className="flex flex-col gap-4">
+              {filteredAlerts.map((alert) => (
+                <AlertCard key={alert.id} alert={alert} data-testid={`alert-${alert.id}`} />
+              ))}
+            </div>
+          )}
+
+          <PaginationControls
+            pagination={pagination}
+            onPageChange={setPage}
+            disabled={isLoading}
+            data-testid="alerts-pagination"
+          />
+        </>
       )}
-    </div>
+    </Page>
   );
 }

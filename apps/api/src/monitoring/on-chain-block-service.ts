@@ -2,7 +2,13 @@
 
 import { BLOCK_MONITORING } from "@chronicleai/config";
 import type { BlockIngestionPayload, EventIngestionPayload } from "@chronicleai/schemas";
-import { ethers } from "ethers";
+import {
+  type Hash,
+  type PublicClient,
+  createPublicClient,
+  http,
+} from "viem";
+import { chainFromId } from "../lib/viem-chain.ts";
 import {
   analyzeBlockStats,
   type BlockAnalysisResult,
@@ -29,26 +35,35 @@ export function createOnChainBlockService(
     };
   }
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  // Chain is resolved per payload.chainId so multi-chain ingest can share the helper.
+  function clientFor(chainId: number) {
+    return createPublicClient({
+      chain: chainFromId(chainId),
+      transport: http(rpcUrl),
+    });
+  }
 
   return {
     async analyzeBlock(payload: BlockIngestionPayload): Promise<BlockAnalysisResult> {
-      const block = await provider.getBlock(payload.blockNumber, false);
+      const client = clientFor(payload.chainId);
+      const block = await client.getBlock({
+        blockNumber: BigInt(payload.blockNumber),
+      });
       if (!block) {
         throw new Error(`Block ${payload.blockNumber} not found on RPC`);
       }
 
       const createdContracts = await scanDeployments(
-        provider,
-        block,
+        client,
+        block.transactions as Hash[],
         BLOCK_MONITORING.deploymentScanLimit,
       );
 
       const stats: BlockStats = {
         chainId: payload.chainId,
-        blockNumber: block.number,
+        blockNumber: Number(block.number),
         blockHash: block.hash ?? payload.blockHash ?? "",
-        timestamp: block.timestamp,
+        timestamp: Number(block.timestamp),
         baseFeeGwei: weiToGwei(block.baseFeePerGas ?? null),
         transactionCount: block.transactions.length,
         createdContracts,
@@ -63,20 +78,20 @@ export function createOnChainBlockService(
 }
 
 async function scanDeployments(
-  provider: ethers.JsonRpcProvider,
-  block: ethers.Block,
+  client: PublicClient,
+  transactions: readonly Hash[],
   limit: number,
 ): Promise<string[]> {
-  if (limit <= 0 || block.transactions.length === 0) return [];
+  if (limit <= 0 || transactions.length === 0) return [];
 
   const created: string[] = [];
-  const toScan = block.transactions.slice(0, limit);
+  const toScan = transactions.slice(0, limit);
 
   // Concurrent receipt fetches with a modest cap
   const results = await Promise.allSettled(
     toScan.map(async (txHash) => {
-      const receipt = await provider.getTransactionReceipt(txHash);
-      return receipt?.contractAddress ?? null;
+      const receipt = await client.getTransactionReceipt({ hash: txHash });
+      return receipt.contractAddress ?? null;
     }),
   );
 

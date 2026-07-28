@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertProductionContentOrigin,
   buildAlertContentUri,
+  buildDeskTicketContentUri,
   buildDigestContentUri,
+  buildPremiumReceiptContentUri,
   buildSponsoredReportContentUri,
+  isProductionReadyOrigin,
   normalizeOrigin,
 } from "../services/content-uri.ts";
 
@@ -31,5 +35,21 @@ describe("content-uri", () => {
     expect(buildSponsoredReportContentUri("https://app.example.com", "watch-1")).toBe(
       "https://app.example.com/premium/watches/watch-1",
     );
+  });
+
+  it("builds premium receipt and desk ticket content URIs", () => {
+    expect(buildPremiumReceiptContentUri("https://app.example.com", "item-1")).toBe(
+      "https://app.example.com/premium?item=item-1",
+    );
+    expect(buildDeskTicketContentUri("https://app.example.com/", "ticket-9")).toBe(
+      "https://app.example.com/desk/tickets/ticket-9",
+    );
+  });
+
+  it("rejects localhost FRONTEND_ORIGIN for production contentUri", () => {
+    expect(() => assertProductionContentOrigin("http://localhost:5173")).toThrow(/https/i);
+    expect(() => assertProductionContentOrigin("https://localhost:5173")).toThrow(/localhost/i);
+    expect(isProductionReadyOrigin("https://chronicle.example")).toBe(true);
+    expect(isProductionReadyOrigin("http://localhost:5173")).toBe(false);
   });
 });

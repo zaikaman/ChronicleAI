@@ -1,9 +1,12 @@
 // Wagmi + RainbowKit config (browser-only; no secrets except public WalletConnect project id)
+// Payment rail is Base Sepolia (x402 / CDP) — that chain is the only configured network
+// so wallets on any other network are treated as unsupported and must switch.
+// Registry / desk proofs still use Ethereum Sepolia explorers (lib/explorer.ts).
 
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { createStorage, http } from "wagmi";
-import { base, baseSepolia, type Chain } from "wagmi/chains";
-import { resolveTargetChain } from "./chains.ts";
+import { createStorage, http, type Transport } from "wagmi";
+import { base, baseSepolia, type Chain, sepolia } from "wagmi/chains";
+import { BASE_SEPOLIA_CHAIN_ID, resolveTargetChain, SEPOLIA_CHAIN_ID } from "./chains.ts";
 
 /**
  * Persist connector + account under a ChronicleAI-specific key.
@@ -32,30 +35,97 @@ function resolveWalletConnectProjectId(): string {
   return "00000000000000000000000000000000";
 }
 
-function resolveChains(): readonly [Chain, ...Chain[]] {
-  const target = resolveTargetChain();
-  // Preferred payment chain first so RainbowKit / switch defaults there.
-  if (target.chainId === base.id) {
-    return [base, baseSepolia];
-  }
-  return [baseSepolia, base];
+function withRpcOverride(chain: Chain, rpcUrl: string | undefined): Chain {
+  if (!rpcUrl?.trim()) return chain;
+  return {
+    ...chain,
+    rpcUrls: {
+      ...chain.rpcUrls,
+      default: { http: [rpcUrl.trim()] },
+    },
+  };
 }
 
-function resolveTransports(): Record<number, ReturnType<typeof http>> {
-  let sepoliaRpc = "https://sepolia.base.org";
+function resolvePreferredRpc(): string | undefined {
   try {
     const envRpc = import.meta.env.VITE_X402_RPC_URL;
     if (typeof envRpc === "string" && envRpc.trim()) {
-      sepoliaRpc = envRpc.trim();
+      return envRpc.trim();
     }
   } catch {
     // ignore
   }
+  return undefined;
+}
 
+/**
+ * Map app target chain id → wagmi Chain definition.
+ * Defaults to Base Sepolia (x402 payment rail). Desk/registry stay on Ethereum Sepolia.
+ */
+function chainDefinitionForId(chainId: number, rpcUrl: string | undefined): Chain {
+  if (chainId === baseSepolia.id || chainId === BASE_SEPOLIA_CHAIN_ID) {
+    return withRpcOverride(baseSepolia, rpcUrl ?? "https://sepolia.base.org");
+  }
+  if (chainId === sepolia.id || chainId === SEPOLIA_CHAIN_ID) {
+    return withRpcOverride(
+      {
+        ...sepolia,
+        name: "Ethereum Sepolia",
+      },
+      rpcUrl ?? "https://ethereum-sepolia-rpc.publicnode.com",
+    );
+  }
+  if (chainId === base.id) {
+    return withRpcOverride(base, rpcUrl ?? "https://mainnet.base.org");
+  }
+
+  // Unknown env override: synthesize a minimal chain so switch/add still works.
+  const target = resolveTargetChain();
   return {
-    [baseSepolia.id]: http(sepoliaRpc),
-    [base.id]: http("https://mainnet.base.org"),
-  };
+    id: chainId,
+    name: target.name,
+    nativeCurrency: target.nativeCurrency,
+    rpcUrls: {
+      default: {
+        http:
+          target.rpcUrls.length > 0
+            ? target.rpcUrls
+            : rpcUrl
+              ? [rpcUrl]
+              : ["https://sepolia.base.org"],
+      },
+    },
+    blockExplorers:
+      target.blockExplorerUrls[0] != null
+        ? {
+            default: {
+              name: target.name,
+              url: target.blockExplorerUrls[0],
+            },
+          }
+        : undefined,
+    testnet: true,
+  } satisfies Chain;
+}
+
+/**
+ * Only the payment/target chain is configured.
+ * Any other network is "unsupported" in RainbowKit → Wrong network UI,
+ * and switchChainAsync can target exactly one required chain.
+ */
+function resolveChains(): readonly [Chain, ...Chain[]] {
+  const target = resolveTargetChain();
+  const rpcUrl = resolvePreferredRpc();
+  return [chainDefinitionForId(target.chainId, rpcUrl)];
+}
+
+function resolveTransports(chains: readonly [Chain, ...Chain[]]): Record<number, Transport> {
+  const transports: Record<number, Transport> = {};
+  for (const chain of chains) {
+    const rpc = chain.rpcUrls.default.http[0];
+    transports[chain.id] = http(rpc);
+  }
+  return transports;
 }
 
 const chains = resolveChains();
@@ -70,7 +140,7 @@ export const wagmiConfig = getDefaultConfig({
   projectId: resolveWalletConnectProjectId(),
   chains,
   ssr: false,
-  transports: resolveTransports(),
+  transports: resolveTransports(chains),
   storage: walletStorage,
 });
 

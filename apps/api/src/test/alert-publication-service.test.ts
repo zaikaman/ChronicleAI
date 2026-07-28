@@ -38,14 +38,14 @@ function baseAlert(overrides: Partial<PublicAlertRow> = {}): PublicAlertRow {
     keeper_hub_run_id: null,
     explorer_url: null,
     event_type: "large_swap",
-    chain_id: 84532,
+    chain_id: 11155111,
     protocol: "uniswap",
     ...overrides,
   };
 }
 
 describe("AlertPublicationService community broadcast", () => {
-  it("broadcasts to Discord/Telegram after successful registry write", async () => {
+  it("broadcasts to Telegram after successful registry write", async () => {
     const published = baseAlert({
       delivery_status: "published",
       registry_tx_hash: "0xregistry",
@@ -55,7 +55,7 @@ describe("AlertPublicationService community broadcast", () => {
       create: vi.fn(),
       findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
       findByDedupeKey: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
       updateGenerationMetadata: vi.fn(),
       updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: published }),
@@ -66,15 +66,18 @@ describe("AlertPublicationService community broadcast", () => {
         success: true,
         txHash: "0xregistry",
         keeperHubRunId: "run-1",
-        explorerUrl: "https://sepolia.basescan.org/tx/0xregistry",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xregistry",
       }),
       publishDigest: vi.fn(),
       recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
     };
 
     const sendAlertBroadcast = vi.fn().mockResolvedValue({
       delivered: true,
-      destinations: ["log", "discord", "telegram"],
+      destinations: ["log", "telegram"],
       failures: [],
     });
 
@@ -83,7 +86,7 @@ describe("AlertPublicationService community broadcast", () => {
       sendDigestBroadcast: vi.fn(),
       sendLowBalanceWarning: vi.fn(),
       sendRevenueRoutingNotification: vi.fn(),
-      getConfiguredChannels: () => ({ discord: true, telegram: true }),
+      getConfiguredChannels: () => ({ telegram: true }),
     } satisfies NotificationService;
 
     const service = createAlertPublicationService(
@@ -97,7 +100,6 @@ describe("AlertPublicationService community broadcast", () => {
 
     expect(result.success).toBe(true);
     expect(result.registryTxHash).toBe("0xregistry");
-    expect(result.message).toContain("discord");
     expect(result.message).toContain("telegram");
     expect(sendAlertBroadcast).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -106,13 +108,12 @@ describe("AlertPublicationService community broadcast", () => {
         summary: "250k USDC moved on Uniswap",
         eventType: "large_swap",
         registryTxHash: "0xregistry",
-        explorerUrl: "https://sepolia.basescan.org/tx/0xregistry",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xregistry",
         contentUri: expect.stringContaining("alert-1"),
       }),
     );
     expect(result.communityBroadcast?.destinations).toEqual([
       "log",
-      "discord",
       "telegram",
     ]);
   });
@@ -123,7 +124,7 @@ describe("AlertPublicationService community broadcast", () => {
       create: vi.fn(),
       findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
       findByDedupeKey: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
       updateGenerationMetadata: vi.fn(),
       updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: published }),
@@ -134,7 +135,7 @@ describe("AlertPublicationService community broadcast", () => {
       sendDigestBroadcast: vi.fn(),
       sendLowBalanceWarning: vi.fn(),
       sendRevenueRoutingNotification: vi.fn(),
-      getConfiguredChannels: () => ({ discord: true, telegram: false }),
+      getConfiguredChannels: () => ({ telegram: true }),
     } satisfies NotificationService;
 
     const service = createAlertPublicationService(
@@ -157,7 +158,7 @@ describe("AlertPublicationService community broadcast", () => {
       create: vi.fn(),
       findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
       findByDedupeKey: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
       updateGenerationMetadata: vi.fn(),
       updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: published }),
@@ -176,7 +177,7 @@ describe("AlertPublicationService community broadcast", () => {
       create: vi.fn(),
       findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
       findByDedupeKey: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
       updateGenerationMetadata: vi.fn(),
       updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: published }),
@@ -188,13 +189,16 @@ describe("AlertPublicationService community broadcast", () => {
         success: true,
         txHash: "0xgas",
         keeperHubRunId: "run-gas",
-        explorerUrl: "https://sepolia.basescan.org/tx/0xgas",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xgas",
         contentHash,
         gasUsed: "91234",
         gasUsedWei: "91234000000000",
       }),
       publishDigest: vi.fn(),
       recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
     };
 
     const service = createAlertPublicationService(
@@ -227,7 +231,7 @@ describe("AlertPublicationService community broadcast", () => {
       create: vi.fn(),
       findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
       findByDedupeKey: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
       updateGenerationMetadata: vi.fn(),
       updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: published }),
@@ -238,6 +242,9 @@ describe("AlertPublicationService community broadcast", () => {
       publishAlert,
       publishDigest: vi.fn(),
       recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
     };
 
     const sendLowBalanceWarning = vi.fn().mockResolvedValue({
@@ -255,7 +262,7 @@ describe("AlertPublicationService community broadcast", () => {
       sendDigestBroadcast: vi.fn(),
       sendLowBalanceWarning,
       sendRevenueRoutingNotification: vi.fn(),
-      getConfiguredChannels: () => ({ discord: false, telegram: false }),
+      getConfiguredChannels: () => ({ telegram: false }),
     } satisfies NotificationService;
 
     const treasuryGate: TreasuryRegistryGate = {
@@ -274,6 +281,7 @@ describe("AlertPublicationService community broadcast", () => {
       append: vi.fn().mockResolvedValue({ ok: true, value: {} }),
       listByEntity: vi.fn(),
       listRecent: vi.fn(),
+      listPage: vi.fn(),
     } satisfies ExecutionLogRepository;
 
     const service = createAlertPublicationService(
@@ -330,7 +338,7 @@ describe("AlertPublicationService community broadcast", () => {
       create: vi.fn(),
       findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
       findByDedupeKey: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
       updateGenerationMetadata: vi.fn(),
       updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: published }),
@@ -340,12 +348,15 @@ describe("AlertPublicationService community broadcast", () => {
       success: true,
       txHash: "0xok",
       keeperHubRunId: "run-ok",
-      explorerUrl: "https://sepolia.basescan.org/tx/0xok",
+      explorerUrl: "https://sepolia.etherscan.io/tx/0xok",
     });
     const registryService: ChronicleRegistryService = {
       publishAlert,
       publishDigest: vi.fn(),
       recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
     };
 
     const treasuryGate: TreasuryRegistryGate = {
@@ -358,13 +369,20 @@ describe("AlertPublicationService community broadcast", () => {
       }),
     };
 
+    const execLogRepo = {
+      append: vi.fn().mockResolvedValue({ ok: true, value: {} }),
+      listByEntity: vi.fn(),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+    } satisfies ExecutionLogRepository;
+
     const service = createAlertPublicationService(
       alertRepo,
       registryService,
       "https://chronicle.example",
       null,
       treasuryGate,
-      null,
+      execLogRepo,
     );
 
     const result = await service.publishAlert("alert-1", "0xsource");
@@ -373,5 +391,91 @@ describe("AlertPublicationService community broadcast", () => {
     expect(result.registrySuspended).toBeUndefined();
     expect(result.registryTxHash).toBe("0xok");
     expect(publishAlert).toHaveBeenCalledOnce();
+    expect(execLogRepo.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action_type: "registry_write",
+        entity_type: "public_alert",
+        entity_id: "alert-1",
+        status: "succeeded",
+        details: expect.objectContaining({
+          method: "publishAlert",
+          reason: "registry_write_ok",
+          tx_hash: "0xok",
+          keeper_hub_run_id: "run-ok",
+        }),
+      }),
+    );
+  });
+
+  it("logs registry_write failed when KeeperHub write fails without txHash", async () => {
+    const published = baseAlert();
+    const alertRepo: PublicAlertRepository = {
+      create: vi.fn(),
+      findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
+      findByDedupeKey: vi.fn(),
+      list: vi.fn(),
+      listPage: vi.fn(),
+      updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
+      updateGenerationMetadata: vi.fn(),
+      updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: published }),
+    };
+
+    const publishAlert = vi.fn().mockResolvedValue({
+      success: false,
+      errorMessage: "KeeperHub poll timeout",
+      keeperHubRunId: "run-fail",
+    });
+    const registryService: ChronicleRegistryService = {
+      publishAlert,
+      publishDigest: vi.fn(),
+      recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
+    };
+
+    const treasuryGate: TreasuryRegistryGate = {
+      evaluate: vi.fn().mockResolvedValue({
+        allowRegistryWrite: true,
+        reason: "Treasury allows registry write",
+        availableBalance: 50_000,
+        safetyBuffer: 10_000,
+        status: "healthy",
+      }),
+    };
+
+    const execLogRepo = {
+      append: vi.fn().mockResolvedValue({ ok: true, value: {} }),
+      listByEntity: vi.fn(),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+    } satisfies ExecutionLogRepository;
+
+    const service = createAlertPublicationService(
+      alertRepo,
+      registryService,
+      "https://chronicle.example",
+      null,
+      treasuryGate,
+      execLogRepo,
+    );
+
+    const result = await service.publishAlert("alert-1", "0xsource");
+
+    expect(result.success).toBe(true);
+    expect(result.registryTxHash).toBeUndefined();
+    expect(execLogRepo.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action_type: "registry_write",
+        entity_type: "public_alert",
+        entity_id: "alert-1",
+        status: "failed",
+        message: "KeeperHub poll timeout",
+        details: expect.objectContaining({
+          method: "publishAlert",
+          reason: "registry_write_failed",
+        }),
+      }),
+    );
   });
 });

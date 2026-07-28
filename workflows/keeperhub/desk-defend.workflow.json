@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "Chronicle Desk — Risk Defend (Aave)",
+    "description": "Execute risk_defend legs on Ethereum Sepolia: read Aave HF, then repay debt (prefer USDC/LINK inventory) or withdraw collateral. Triggered by Chronicle execution bridge with asset/amount/mode. Signer = KH desk wallet."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": { "x": 80, "y": 260 },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": { "triggerType": "Manual" }
+      }
+    },
+    {
+      "id": "read-hf",
+      "type": "action",
+      "position": { "x": 320, "y": 260 },
+      "data": {
+        "type": "action",
+        "label": "Read Aave User Account Data",
+        "config": {
+          "actionType": "aave-v3/get-user-account-data",
+          "network": "11155111",
+          "user": "{{@trigger-manual:Trigger.deskAddress}}"
+        }
+      }
+    },
+    {
+      "id": "mode-is-repay",
+      "type": "action",
+      "position": { "x": 560, "y": 260 },
+      "data": {
+        "type": "action",
+        "label": "Mode Is Repay",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@trigger-manual:Trigger.mode}} === 'repay'",
+          "conditionConfig": {
+            "group": {
+              "id": "mode-check",
+              "logic": "AND",
+              "rules": [
+                {
+                  "id": "rule-repay",
+                  "operator": "===",
+                  "leftOperand": "{{@trigger-manual:Trigger.mode}}",
+                  "rightOperand": "repay"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "approve-repay-asset",
+      "type": "action",
+      "position": { "x": 820, "y": 120 },
+      "data": {
+        "type": "action",
+        "label": "Approve Asset for Aave Repay",
+        "config": {
+          "actionType": "web3/approve-token",
+          "network": "11155111",
+          "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"{{@trigger-manual:Trigger.asset}}\",\"symbol\":\"ASSET\"}}",
+          "spenderAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+          "amount": "max"
+        }
+      }
+    },
+    {
+      "id": "aave-repay",
+      "type": "action",
+      "position": { "x": 1080, "y": 120 },
+      "data": {
+        "type": "action",
+        "label": "Aave V3 Repay",
+        "config": {
+          "actionType": "aave-v3/repay",
+          "network": "11155111",
+          "asset": "{{@trigger-manual:Trigger.asset}}",
+          "amount": "{{@trigger-manual:Trigger.amount}}",
+          "interestRateMode": "2",
+          "onBehalfOf": "{{@trigger-manual:Trigger.deskAddress}}"
+        }
+      }
+    },
+    {
+      "id": "aave-withdraw",
+      "type": "action",
+      "position": { "x": 820, "y": 400 },
+      "data": {
+        "type": "action",
+        "label": "Aave V3 Withdraw",
+        "config": {
+          "actionType": "aave-v3/withdraw",
+          "network": "11155111",
+          "asset": "{{@trigger-manual:Trigger.asset}}",
+          "amount": "{{@trigger-manual:Trigger.amount}}",
+          "to": "{{@trigger-manual:Trigger.deskAddress}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-manual", "target": "read-hf" },
+    { "id": "e2", "source": "read-hf", "target": "mode-is-repay" },
+    {
+      "id": "e3",
+      "type": "animated",
+      "source": "mode-is-repay",
+      "target": "approve-repay-asset",
+      "sourceHandle": "true"
+    },
+    { "id": "e4", "source": "approve-repay-asset", "target": "aave-repay" },
+    {
+      "id": "e5",
+      "type": "animated",
+      "source": "mode-is-repay",
+      "target": "aave-withdraw",
+      "sourceHandle": "false"
+    }
+  ],
+  "integrationBindings": []
+}

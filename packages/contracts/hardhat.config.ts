@@ -10,19 +10,32 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from the backend API's .env file
 dotenv.config({ path: path.resolve(__dirname, "../../apps/api/.env") });
 
+const deployerKey = process.env.PARA_WALLET_PRIVATE_KEY
+  ? [process.env.PARA_WALLET_PRIVATE_KEY]
+  : [];
+
 const config: HardhatUserConfig = {
   solidity: "0.8.20",
   networks: {
+    /** Primary product home — Ethereum Sepolia. */
+    sepolia: {
+      url:
+        process.env.RPC_URL ||
+        process.env.SEPOLIA_RPC_URL ||
+        "https://ethereum-sepolia-rpc.publicnode.com",
+      chainId: 11_155_111,
+      accounts: deployerKey,
+    },
+    /** Legacy — retained for historical redeploys only. */
     baseSepolia: {
-      url: process.env.RPC_URL || "https://sepolia.base.org",
+      url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
       chainId: 84_532,
-      accounts: process.env.PARA_WALLET_PRIVATE_KEY
-        ? [process.env.PARA_WALLET_PRIVATE_KEY]
-        : [],
+      accounts: deployerKey,
     },
   },
   etherscan: {
     apiKey: {
+      sepolia: process.env.ETHERSCAN_API_KEY || "",
       baseSepolia:
         process.env.BASESCAN_API_KEY || process.env.ETHERSCAN_API_KEY || "",
     },

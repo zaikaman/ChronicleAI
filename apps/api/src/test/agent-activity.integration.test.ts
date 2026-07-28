@@ -16,6 +16,7 @@ import type {
 } from "../services/chronicle-registry-service.ts";
 import { createAgentActivityService } from "../services/agent-activity-service.ts";
 import { createNotificationService } from "../services/notification-service.ts";
+import { createStaticRevenueFxService } from "../services/revenue-fx-service.ts";
 import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
 import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 
@@ -26,7 +27,7 @@ describe("Agent Activity Integration", () => {
     const execLogRepo: ExecutionLogRepository = {
       append: vi.fn().mockResolvedValue({ ok: true as const, value: {} }),
       listByEntity: vi.fn(),
-      listRecent: vi.fn(),
+      listRecent: vi.fn(), listPage: vi.fn()
     };
 
     const evaluation = treasuryService.evaluate({
@@ -109,6 +110,9 @@ describe("Agent Activity Integration", () => {
           recentLogs: [],
           totalMonitoredEvents: 100,
           totalQualifiedEvents: 75,
+          paymentAnalytics: [],
+          newsletterAnalytics: [],
+          affiliates: [],
         },
       }),
     };
@@ -121,6 +125,8 @@ describe("Agent Activity Integration", () => {
     expect(result.data?.alerts).toEqual([]);
     expect(result.data?.treasury.status).toBe("healthy");
     expect(result.data?.treasury.availableBalance).toBe(50000);
+    expect(result.data?.subscriptionAnalytics?.mrr).toBe(0);
+    expect(result.data?.referralAttribution?.partners).toEqual([]);
   });
 
   it("should handle revenue routing end-to-end with mock services", async () => {
@@ -136,7 +142,7 @@ describe("Agent Activity Integration", () => {
       }),
       findById: vi.fn(),
       findByPeriod: vi.fn(),
-      list: vi.fn(),
+      list: vi.fn(), listPage: vi.fn(),
       update: vi.fn(),
       markTransferred: vi.fn().mockImplementation(async (id, payoutTxHash, registryTxHash) => ({
         ok: true as const,
@@ -159,9 +165,10 @@ describe("Agent Activity Integration", () => {
       markUnderpaid: vi.fn(),
       markExpired: vi.fn(),
       markFailed: vi.fn(),
+      markRegistryProof: vi.fn(),
       expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
       listByPremiumItem: vi.fn(),
-      list: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
+      list: vi.fn().mockResolvedValue({ ok: true as const, value: [] }), listPage: vi.fn(),
       listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
       findSettledByPayer: vi.fn(),
     };
@@ -217,7 +224,7 @@ describe("Agent Activity Integration", () => {
     const execLogRepo: ExecutionLogRepository = {
       append: vi.fn().mockResolvedValue({ ok: true as const, value: {} }),
       listByEntity: vi.fn(),
-      listRecent: vi.fn(),
+      listRecent: vi.fn(), listPage: vi.fn()
     };
 
     const mockRegistryService: ChronicleRegistryService = {
@@ -235,6 +242,9 @@ describe("Agent Activity Integration", () => {
             txHash: "0x" + "a".repeat(64),
           }) as RegistryPublishResult,
       ),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
     };
 
     const mockWeb3Client = {
@@ -249,10 +259,12 @@ describe("Agent Activity Integration", () => {
       publishSponsoredReport: vi.fn(),
       publishPremiumReceipt: vi.fn(),
       recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
       sendTransfer: vi.fn().mockResolvedValue({
         txHash: "0x" + "c".repeat(64),
         keeperHubRunId: "exec_transfer",
-        explorerUrl: "https://sepolia.basescan.org/tx/0x" + "c".repeat(64),
+        explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "c".repeat(64),
       }),
     };
 
@@ -282,14 +294,15 @@ describe("Agent Activity Integration", () => {
         treasuryService,
         registryService: mockRegistryService,
         web3Client: mockWeb3Client as never,
+        fxService: createStaticRevenueFxService(0.000001),
       },
       {
         creatorRecoveryWallet: "0x90F8bf6A479f320ced073E570619A864489a3000",
+        creatorRecoveryShare: 0.8,
         referralRewardShare: 0.2,
         referralRewardCap: 1000,
         maxPayoutShare: 0.5,
-        routingIntervalMs: 99999999,
-        ethPerCurrencyUnit: 0.000001,
+        routingIntervalMs: 1,
       },
     );
 

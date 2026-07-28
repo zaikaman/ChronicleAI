@@ -1,0 +1,21 @@
+# Exclude non-API monorepo bulk from the Heroku slug.
+# Leading "/" anchors to the repo root so we never delete API paths like
+# apps/api/src/keeperhub/ (required at build time).
+/keeperhub
+/example
+/apps/web
+/packages/ui
+/packages/contracts
+/docs
+/specs
+/tests
+/workflows
+/supabase
+/.agents
+/.specify
+/.codex
+/.impeccable
+**/*.test.ts
+**/*.spec.ts
+**/*.md
+!Procfile

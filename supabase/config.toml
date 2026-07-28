@@ -1,0 +1,10 @@
+# Supabase local/project config for ChronicleAI
+# Migrations: supabase/migrations/
+
+project_id = "chronicleai"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15

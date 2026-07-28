@@ -203,6 +203,37 @@ describe("MppPaymentAdapter", () => {
       expect(result.errorMessage).toMatch(/expired/i);
     });
 
+    it("should reject settlement expiresAt that does not match challenge expires_at", async () => {
+      const secret = "my-real-secret";
+      const customAdapter = new MppPaymentAdapter({ mppSecret: secret });
+      const amount = 5;
+      const currency = "USDC";
+
+      const challenge = await customAdapter.createChallenge({
+        premiumItemId: "premium-001",
+        amount,
+        currency,
+      });
+
+      // Valid HMAC for a *different* future expiry than the challenge
+      const otherExpires = new Date(Date.now() + 120_000).toISOString();
+      const hmacPayload = `${challenge.challengeReference}|${amount}|${currency}|${otherExpires}`;
+      const expectedHmac = createHmac("sha256", secret).update(hmacPayload).digest("hex");
+      const settlementRef = `${otherExpires}:${expectedHmac}`;
+
+      const result = await customAdapter.verifySettlement({
+        challengeReference: challenge.challengeReference,
+        settlementReference: settlementRef,
+        amountRequested: amount,
+        currency,
+        paymentRoute: "mpp",
+        challengeExpiresAt: challenge.expiresAt,
+      });
+
+      expect(result.verified).toBe(false);
+      expect(result.errorMessage).toMatch(/does not match challenge/i);
+    });
+
     it("should reject invalid expiresAt timestamp in settlement reference", async () => {
       const result = await adapter.verifySettlement({
         challengeReference: "mpp_test",

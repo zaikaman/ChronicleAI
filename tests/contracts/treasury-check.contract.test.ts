@@ -1,17 +1,23 @@
 // Contract tests: POST /keeperhub/treasury/check
 // Tests valid, invalid, and unsigned treasury check requests
+// Hits a live API process and can write treasury snapshots —
+// skipped unless ALLOW_LIVE_API_TESTS=1
 
 import { describe, expect, it } from "vitest";
+import {
+  LIVE_API_BASE,
+  LIVE_API_TESTS_ENABLED,
+  LIVE_KEEPERHUB_SIGNATURE,
+} from "./live-api.ts";
 import { assertHasRequiredFields } from "./schema-assertions.ts";
 
-const API_URL = process.env["TEST_API_URL"] ?? "http://localhost:4000";
-const VALID_SIGNATURE =
-  process.env["TEST_KEEPERHUB_SECRET"] ??
-  process.env["KEEPERHUB_WEBHOOK_SECRET"] ??
-  "test-secret-key-for-testing";
+const API_URL = LIVE_API_BASE;
+const VALID_SIGNATURE = LIVE_KEEPERHUB_SIGNATURE;
 
-describe("Contract: POST /keeperhub/treasury/check", () => {
+describe.skipIf(!LIVE_API_TESTS_ENABLED)("Contract: POST /keeperhub/treasury/check", () => {
   it("should return 201 with valid treasury check payload", async () => {
+    expect(VALID_SIGNATURE.length, "KEEPERHUB_WEBHOOK_SECRET must be set for live signed routes").toBeGreaterThan(0);
+
     const response = await fetch(`${API_URL}/keeperhub/treasury/check`, {
       method: "POST",
       headers: {
@@ -36,6 +42,8 @@ describe("Contract: POST /keeperhub/treasury/check", () => {
   });
 
   it("should return 400 with invalid payload (missing fields)", async () => {
+    expect(VALID_SIGNATURE.length).toBeGreaterThan(0);
+
     const response = await fetch(`${API_URL}/keeperhub/treasury/check`, {
       method: "POST",
       headers: {
@@ -56,6 +64,8 @@ describe("Contract: POST /keeperhub/treasury/check", () => {
   });
 
   it("should return 400 with empty body", async () => {
+    expect(VALID_SIGNATURE.length).toBeGreaterThan(0);
+
     const response = await fetch(`${API_URL}/keeperhub/treasury/check`, {
       method: "POST",
       headers: {

@@ -5,7 +5,9 @@ import type {
   AffiliateRepository,
   PaymentRecordRepository,
   PremiumIntelligenceItemRow,
+  ReferralAttributionRepository,
 } from "@chronicleai/db";
+import { normalizeAffiliateWallet } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
 import { PAYMENT_ROUTES } from "@chronicleai/schemas";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
@@ -20,16 +22,20 @@ export class PaymentChallengeService {
   private readonly paymentRecordRepo: PaymentRecordRepository;
   private readonly adapters: Map<PaymentRoute, PaymentAdapter>;
   private readonly affiliateRepo: AffiliateRepository | null;
+  private readonly attributionRepo: ReferralAttributionRepository | null;
 
   constructor(params: {
     paymentRecordRepo: PaymentRecordRepository;
     adapters: Map<PaymentRoute, PaymentAdapter>;
     /** When set, referralAddress must resolve to an approved affiliate. */
     affiliateRepo?: AffiliateRepository | null;
+    /** Wallet-connect first-touch attribution (preferred over explicit referral). */
+    attributionRepo?: ReferralAttributionRepository | null;
   }) {
     this.paymentRecordRepo = params.paymentRecordRepo;
     this.adapters = params.adapters;
     this.affiliateRepo = params.affiliateRepo ?? null;
+    this.attributionRepo = params.attributionRepo ?? null;
   }
 
   /**
@@ -69,9 +75,19 @@ export class PaymentChallengeService {
       throw new Error(`Unsupported payment route: ${params.paymentRoute}`);
     }
 
-    let resolvedReferral: string | null = params.referralAddress?.trim()
-      ? params.referralAddress.trim()
-      : null;
+    // Prefer sticky first-touch attribution from wallet connect over explicit intent.
+    let resolvedReferral: string | null = null;
+    const payer = normalizeAffiliateWallet(params.payerReference ?? null);
+    if (payer && this.attributionRepo) {
+      const attr = await this.attributionRepo.findByReferredWallet(payer);
+      if (attr.ok && attr.value) {
+        resolvedReferral = attr.value.affiliate_wallet;
+      }
+    }
+
+    if (!resolvedReferral && params.referralAddress?.trim()) {
+      resolvedReferral = params.referralAddress.trim();
+    }
 
     if (resolvedReferral && this.affiliateRepo) {
       const approved = await this.affiliateRepo.findApprovedByWalletOrCode(resolvedReferral);
@@ -79,11 +95,17 @@ export class PaymentChallengeService {
         throw new Error(approved.error.message);
       }
       if (!approved.value) {
-        throw new Error(
-          "referralAddress must be an approved affiliate (register via POST /affiliates)",
-        );
+        // Soft-drop invalid explicit referral rather than failing a paid purchase.
+        // Attribution-sourced wallets should always be approved; if not, clear.
+        if (params.referralAddress?.trim()) {
+          throw new Error(
+            "referralAddress must be an approved affiliate (register via POST /affiliates)",
+          );
+        }
+        resolvedReferral = null;
+      } else {
+        resolvedReferral = approved.value.wallet_address;
       }
-      resolvedReferral = approved.value.wallet_address;
     }
 
     // Generate challenge via adapter

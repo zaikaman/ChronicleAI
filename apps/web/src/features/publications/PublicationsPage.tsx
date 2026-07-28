@@ -1,7 +1,13 @@
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
-import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
+import {
+  MetaChip,
+  Page,
+  PageHeader,
+  Surface,
+} from "../../components/page-chrome.tsx";
+import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { useAgentActivity } from "../activity/use-agent-activity.ts";
 import { useAlerts } from "../alerts/use-alerts.ts";
 import { usePremiumTeasers } from "../premium/use-premium.ts";
@@ -17,16 +23,39 @@ interface PublicationItem {
   meta: Record<string, string>;
 }
 
+const TYPE_STYLES: Record<
+  PublicationItem["type"],
+  { label: string; className: string }
+> = {
+  digest: {
+    label: "Digest",
+    className: "bg-accent/15 text-foreground border-accent/30",
+  },
+  alert: {
+    label: "Alert",
+    className: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25",
+  },
+  premium: {
+    label: "Premium",
+    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25",
+  },
+};
+
 export function PublicationsPage(): ReactElement {
-  const { alerts, isLoading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useAlerts(100);
+  const { alerts, isLoading: alertsLoading, error: alertsError, refetch: refetchAlerts } =
+    useAlerts(100);
   const {
     data: activity,
     isLoading: activityLoading,
     error: activityError,
     refetch: refetchActivity,
   } = useAgentActivity();
-  const { items: premiumItems, isLoading: premiumLoading, error: premiumError, refetch: refetchPremium } =
-    usePremiumTeasers();
+  const {
+    items: premiumItems,
+    isLoading: premiumLoading,
+    error: premiumError,
+    refetch: refetchPremium,
+  } = usePremiumTeasers();
 
   const publications: PublicationItem[] = [];
 
@@ -96,94 +125,92 @@ export function PublicationsPage(): ReactElement {
   };
 
   return (
-    <div className="max-w-4xl mx-auto" data-testid="publications-page">
-      <header className="text-center py-12 mb-8 border-b border-border/20">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground mb-3" style={{ fontFamily: "var(--font-space-grotesk)" }}>
-          Publications Archive
-        </h1>
-        <p className="text-muted-foreground text-base max-w-2xl mx-auto">
-          The complete archive of ChronicleAI intelligence bulletins — public alerts, digests, and premium analysis.
-        </p>
-      </header>
+    <Page data-testid="publications-page">
+      <PageHeader
+        title="Publications Archive"
+        description="The complete archive of ChronicleAI intelligence — public alerts, digests, and premium analysis."
+        meta={
+          !isLoading && !hasError ? (
+            <span>
+              {publications.length} item{publications.length !== 1 ? "s" : ""}
+            </span>
+          ) : undefined
+        }
+      />
 
-      <nav className="flex items-center gap-2 mb-8 p-3 bg-muted/20 border border-border rounded-2xl flex-wrap">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">Sections:</span>
-        <span className="px-3.5 py-1.5 bg-accent/20 text-accent font-semibold text-sm rounded-xl">All Publications</span>
-        <Link to="/digests/latest" className="px-3.5 py-1.5 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors rounded-xl hover:bg-muted/30">Digest</Link>
-        <Link to="/alerts" className="px-3.5 py-1.5 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors rounded-xl hover:bg-muted/30">Alerts</Link>
-        <Link to="/premium" className="px-3.5 py-1.5 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors rounded-xl hover:bg-muted/30">Premium</Link>
-      </nav>
-
-      <section className="mb-12">
-        {isLoading ? (
-          <LoadingState message="Loading publications..." />
-        ) : hasError ? (
-          <RetryState
-            title="Failed to load publications"
-            message={alertsError ?? activityError ?? premiumError ?? "Unknown error"}
-            onRetry={refetchAll}
-          />
-        ) : publications.length === 0 ? (
-          <EmptyState
-            title="No publications yet"
-            description="ChronicleAI content will appear here once alerts, digests, and premium items are published."
-          />
-        ) : (
-          <div className="flex flex-col gap-0">
-            {publications.map((pub) => {
-              const typeColor = pub.type === "digest" ? "var(--accent)" : pub.type === "alert" ? "#f59e0b" : "#22c55e";
-              const typeBorderColor = pub.type === "digest" ? "rgba(168,217,70,0.3)" : pub.type === "alert" ? "rgba(245,158,11,0.3)" : "rgba(34,197,94,0.3)";
-              const typeBgColor = pub.type === "digest" ? "rgba(168,217,70,0.08)" : pub.type === "alert" ? "rgba(245,158,11,0.08)" : "rgba(34,197,94,0.08)";
-
-              return (
-                <article key={`${pub.type}-${pub.id}`} className="flex gap-6">
-                  <div className="flex flex-col items-center w-5 flex-shrink-0 pt-6">
-                    <div 
-                      className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" 
-                      style={{ background: typeColor }} 
-                    />
-                    <div className="w-[1px] flex-1 bg-border/40 mt-2" />
+      {isLoading ? (
+        <LoadingState message="Loading publications..." variant="cards" count={5} />
+      ) : hasError ? (
+        <RetryState
+          title="Failed to load publications"
+          message={alertsError ?? activityError ?? premiumError ?? "Unknown error"}
+          onRetry={refetchAll}
+        />
+      ) : publications.length === 0 ? (
+        <EmptyState
+          title="No publications yet"
+          description="ChronicleAI content will appear here once alerts, digests, and premium items are published."
+        />
+      ) : (
+        <div className="flex flex-col gap-4">
+          {publications.map((pub) => {
+            const typeStyle = TYPE_STYLES[pub.type];
+            return (
+              <Surface
+                as="article"
+                key={`${pub.type}-${pub.id}`}
+                className="p-5 hover:border-accent/40 transition-colors duration-200"
+              >
+                <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${typeStyle.className}`}
+                  >
+                    {typeStyle.label}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {pub.date ? <TimestampDisplay timestamp={pub.date} /> : null}
+                    {pub.status !== "available" ? (
+                      <StatusBadge
+                        label={pub.status}
+                        variant={
+                          pub.status === "published"
+                            ? "success"
+                            : pub.status === "partial_failure"
+                              ? "warning"
+                              : "default"
+                        }
+                      />
+                    ) : null}
                   </div>
-                  
-                  <div className="flex-1 bg-frame border border-border rounded-2xl p-5 mb-5 hover:border-accent/40 transition-all duration-300 shadow-xs hover:shadow-md">
-                    <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
-                      <span 
-                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border"
-                        style={{ color: typeColor, borderColor: typeBorderColor, background: typeBgColor }}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: typeColor }} />
-                        {pub.type.charAt(0).toUpperCase() + pub.type.slice(1)}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        {pub.date && <TimestampDisplay timestamp={pub.date} />}
-                        {pub.status !== "available" && (
-                          <StatusBadge label={pub.status} variant={pub.status === "published" ? "success" : pub.status === "partial_failure" ? "warning" : "default"} />
-                        )}
-                      </div>
-                    </div>
-                    
-                    <h3 className="text-lg font-semibold text-foreground mb-2 leading-snug">{pub.title}</h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed mb-4">{pub.summary}</p>
-                    
-                    <div className="flex justify-between items-center flex-wrap gap-3 pt-4 border-t border-border/10">
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(pub.meta).map(([key, value]) => (
-                          <span key={key} className="text-[11px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded-lg border border-border/40">
-                            {key}: {value.length > 30 ? `${value.slice(0, 16)}...` : value}
-                          </span>
-                        ))}
-                      </div>
-                      <Link to={pub.href} className="text-accent text-xs font-semibold hover:underline">
-                        Read More &rarr;
-                      </Link>
-                    </div>
+                </div>
+
+                <h3 className="text-lg font-semibold text-foreground mb-2 leading-snug">
+                  {pub.title}
+                </h3>
+                <p className="text-muted-foreground text-sm leading-relaxed mb-4">
+                  {pub.summary}
+                </p>
+
+                <div className="flex justify-between items-center flex-wrap gap-3 pt-4 border-t border-border/40">
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(pub.meta).map(([key, value]) => (
+                      <MetaChip key={key}>
+                        {key}: {value.length > 30 ? `${value.slice(0, 16)}…` : value}
+                      </MetaChip>
+                    ))}
                   </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-    </div>
+                  <Link
+                    to={pub.href}
+                    className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Read more →
+                  </Link>
+                </div>
+              </Surface>
+            );
+          })}
+        </div>
+      )}
+    </Page>
   );
 }

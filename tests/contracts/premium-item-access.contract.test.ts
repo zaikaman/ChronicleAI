@@ -1,12 +1,14 @@
 // Contract tests for GET /premium/items/:id
 // Validates payment gating, 402 challenges, and access control
+// Hits a live API process — skipped unless ALLOW_LIVE_API_TESTS=1
 
 import { beforeAll, describe, expect, it } from "vitest";
+import { LIVE_API_BASE, LIVE_API_TESTS_ENABLED } from "./live-api.ts";
 
-const API_BASE = process.env.API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = LIVE_API_BASE;
 let KNOWN_PREMIUM_ITEM_ID = "premium-deep-dive-001";
 
-describe("GET /premium/items/:id", () => {
+describe.skipIf(!LIVE_API_TESTS_ENABLED)("GET /premium/items/:id", () => {
   beforeAll(async () => {
     try {
       const response = await fetch(`${API_BASE}/premium/items`);

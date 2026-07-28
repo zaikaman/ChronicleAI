@@ -39,10 +39,11 @@ export function createTreasurySnapshotRepository(
 
   return {
     async create(snapshot) {
-      const payload = buildInsertPayload(snapshot as unknown as Record<string, unknown>);
-      // updated_at is a generated column; strip it from the insert payload
-      const { updated_at: _unused, ...cleanPayload } = payload;
-      const { data, error } = await table().insert(cleanPayload).select().single();
+      // treasury_snapshots has created_at only (no updated_at).
+      const payload = buildInsertPayload(snapshot as unknown as Record<string, unknown>, {
+        updated_at: false,
+      });
+      const { data, error } = await table().insert(payload).select().single();
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as TreasurySnapshotRow);
@@ -90,10 +91,11 @@ export function createTreasurySnapshotRepository(
     },
 
     async update(id, update) {
-      const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
-      // updated_at is a generated column; strip it from the update payload
-      const { updated_at: _unused, ...cleanPayload } = payload;
-      const { data, error } = await table().update(cleanPayload).eq("id", id).select().single();
+      // treasury_snapshots has no updated_at column.
+      const payload = buildUpdatePayload(update as unknown as Record<string, unknown>, {
+        includeUpdatedAt: false,
+      });
+      const { data, error } = await table().update(payload).eq("id", id).select().single();
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as TreasurySnapshotRow);

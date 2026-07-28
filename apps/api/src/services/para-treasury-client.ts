@@ -18,7 +18,20 @@ import {
   type UserIdentifierType,
   type WalletType,
 } from "@getpara/rest-sdk";
-import { ethers } from "ethers";
+import {
+  type Address,
+  type Hex,
+  createPublicClient,
+  decodeFunctionResult,
+  encodeFunctionData,
+  formatEther,
+  formatUnits,
+  getAddress,
+  http,
+  parseAbi,
+  parseUnits,
+} from "viem";
+import { chainFromId } from "../lib/viem-chain.ts";
 import type { OnChainWriteReceipt } from "./on-chain-write-receipt.ts";
 
 export interface ParaTreasuryWallet {
@@ -31,13 +44,29 @@ export interface ParaTreasuryWallet {
 export interface ParaTreasuryClient {
   /** Ensure the agent treasury wallet exists and return its identity. */
   ensureWallet(): Promise<ParaTreasuryWallet>;
-  /** Native balance in ETH (parsed float) for the configured chain. */
+  /** Native balance in ETH (parsed float) for the configured chain (gas). */
   getNativeBalanceEth(): Promise<number>;
-  /** Broadcast a native transfer from the Para MPC wallet. */
-  sendTransfer(to: string, amountEth: number): Promise<OnChainWriteReceipt>;
+  /**
+   * USDC ERC-20 balance (human units) for the treasury wallet on the configured chain.
+   * Requires `rpcUrl` + `usdcAddress`.
+   */
+  getUsdcBalance(): Promise<number>;
+  /**
+   * Broadcast a USDC ERC-20 transfer from the Para MPC wallet.
+   * @param amountUsdc Human USDC units (e.g. 12.5), not base units.
+   */
+  sendTransfer(to: string, amountUsdc: number): Promise<OnChainWriteReceipt>;
   /** Chain ID used for Para EVM operations. */
   getChainId(): number;
 }
+
+const ERC20_BALANCE_ABI = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
+]);
+
+const ERC20_TRANSFER_ABI = parseAbi([
+  "function transfer(address to, uint256 amount) returns (bool)",
+]);
 
 export interface ParaTreasuryClientConfig {
   apiKey: string;
@@ -50,8 +79,13 @@ export interface ParaTreasuryClientConfig {
   /**
    * Optional JSON-RPC URL. Used as a balance fallback when Para's
    * getWalletBalance endpoint fails (seen on BETA with bad Alchemy hosts).
+   * Also required for USDC ERC-20 transfers via signTransaction.
    */
   rpcUrl?: string;
+  /** Circle (or demo) USDC contract for treasury payouts. */
+  usdcAddress: string;
+  /** USDC decimals (default 6). */
+  usdcDecimals?: number;
   /** Optional injected client for unit tests. */
   restClient?: ParaRestClient;
 }
@@ -77,14 +111,14 @@ function explorerUrlFor(txHash: string, chainId: number, networkLabel?: string):
   if (chainId === 8453 || networkLabel === "base") {
     return `https://basescan.org/tx/${txHash}`;
   }
-  if (chainId === 11_155_111) {
-    return `https://sepolia.etherscan.io/tx/${txHash}`;
+  if (chainId === 84_532 || networkLabel === "base-sepolia") {
+    return `https://sepolia.basescan.org/tx/${txHash}`;
   }
   if (chainId === 1) {
     return `https://etherscan.io/tx/${txHash}`;
   }
-  // Base Sepolia default for hackathon
-  return `https://sepolia.basescan.org/tx/${txHash}`;
+  // Ethereum Sepolia default for product settlement / desk
+  return `https://sepolia.etherscan.io/tx/${txHash}`;
 }
 
 function asIdentifierType(raw: string): UserIdentifierType {
@@ -99,6 +133,13 @@ function requireReadyAddress(wallet: RestWallet): string {
     );
   }
   return wallet.address;
+}
+
+function publicClientFor(rpcUrl: string, chainId: number) {
+  return createPublicClient({
+    chain: chainFromId(chainId),
+    transport: http(rpcUrl.trim()),
+  });
 }
 
 export function createParaTreasuryClient(config: ParaTreasuryClientConfig): ParaTreasuryClient {
@@ -234,16 +275,18 @@ export function createParaTreasuryClient(config: ParaTreasuryClientConfig): Para
           return Number(balance.balance);
         }
         if (balance.rawBalance) {
-          return Number(ethers.formatEther(BigInt(balance.rawBalance)));
+          return Number(formatEther(BigInt(balance.rawBalance)));
         }
         return 0;
       } catch (error) {
         // Production fallback: read native balance directly from the chain.
         if (config.rpcUrl?.trim()) {
           try {
-            const provider = new ethers.JsonRpcProvider(config.rpcUrl.trim());
-            const wei = await provider.getBalance(wallet.address);
-            return Number(ethers.formatEther(wei));
+            const pc = publicClientFor(config.rpcUrl, chainId);
+            const wei = await pc.getBalance({
+              address: wallet.address as Address,
+            });
+            return Number(formatEther(wei));
           } catch (rpcError) {
             const paraMsg = error instanceof Error ? error.message : String(error);
             const rpcMsg = rpcError instanceof Error ? rpcError.message : String(rpcError);
@@ -257,55 +300,106 @@ export function createParaTreasuryClient(config: ParaTreasuryClientConfig): Para
       }
     },
 
-    async sendTransfer(to: string, amountEth: number) {
-      if (!ADDRESS_RE.test(to)) {
-        throw new Error(`Invalid transfer recipient address: ${to}`);
+    async getUsdcBalance() {
+      const usdcAddress = config.usdcAddress?.trim();
+      if (!usdcAddress || !ADDRESS_RE.test(usdcAddress)) {
+        throw new Error(
+          "Para USDC balance requires a valid usdcAddress (DESK_USDC_ADDRESS)",
+        );
       }
-      if (!(amountEth > 0) || !Number.isFinite(amountEth)) {
-        throw new Error(`Invalid transfer amountEth: ${amountEth}`);
+      const rpcUrl = config.rpcUrl?.trim();
+      if (!rpcUrl) {
+        throw new Error("Para USDC balance requires RPC_URL for balanceOf reads");
       }
 
       const wallet = await this.ensureWallet();
-      const valueWei = ethers.parseEther(String(amountEth)).toString();
-      const checksumTo = ethers.getAddress(to);
+      const pc = publicClientFor(rpcUrl, chainId);
+      const decimals = config.usdcDecimals ?? 6;
+      const data = encodeFunctionData({
+        abi: ERC20_BALANCE_ABI,
+        functionName: "balanceOf",
+        args: [getAddress(wallet.address) as Address],
+      });
+      const raw = await pc.call({
+        to: getAddress(usdcAddress) as Address,
+        data,
+      });
+      if (!raw.data || raw.data === "0x") {
+        throw new Error("Empty balanceOf result for USDC");
+      }
+      const amount = decodeFunctionResult({
+        abi: ERC20_BALANCE_ABI,
+        functionName: "balanceOf",
+        data: raw.data as Hex,
+      });
+      return Number(formatUnits(amount, decimals));
+    },
+
+    async sendTransfer(to: string, amountUsdc: number) {
+      if (!ADDRESS_RE.test(to)) {
+        throw new Error(`Invalid transfer recipient address: ${to}`);
+      }
+      if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) {
+        throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
+      }
+
+      const usdcAddress = config.usdcAddress?.trim();
+      if (!usdcAddress || !ADDRESS_RE.test(usdcAddress)) {
+        throw new Error(
+          "Para USDC transfer requires a valid usdcAddress (DESK_USDC_ADDRESS)",
+        );
+      }
+
+      const wallet = await this.ensureWallet();
+      const checksumTo = getAddress(to);
+      const checksumUsdc = getAddress(usdcAddress);
+      const decimals = config.usdcDecimals ?? 6;
+      const amountRaw = parseUnits(String(amountUsdc), decimals);
+      const data = encodeFunctionData({
+        abi: ERC20_TRANSFER_ABI,
+        functionName: "transfer",
+        args: [checksumTo as Address, amountRaw],
+      });
 
       // Prefer signTransaction with full EIP-1559 fields + broadcast.
-      // Para BETA's high-level /transfer endpoint currently returns INTERNAL_ERROR;
-      // signTransaction is proven for Base Sepolia MPC spends.
+      // Para BETA's high-level /transfer endpoint is flaky; signTransaction is proven.
       if (config.rpcUrl?.trim()) {
-        const provider = new ethers.JsonRpcProvider(config.rpcUrl.trim());
-        const [nonce, feeData] = await Promise.all([
-          provider.getTransactionCount(wallet.address, "pending"),
-          provider.getFeeData(),
+        const pc = publicClientFor(config.rpcUrl, chainId);
+        const [nonce, fees] = await Promise.all([
+          pc.getTransactionCount({
+            address: wallet.address as Address,
+            blockTag: "pending",
+          }),
+          pc.estimateFeesPerGas(),
         ]);
 
         const maxPriority =
-          feeData.maxPriorityFeePerGas && feeData.maxPriorityFeePerGas > 0n
-            ? feeData.maxPriorityFeePerGas
+          fees.maxPriorityFeePerGas && fees.maxPriorityFeePerGas > 0n
+            ? fees.maxPriorityFeePerGas
             : 1_000_000n;
         const maxFee =
-          feeData.maxFeePerGas && feeData.maxFeePerGas > maxPriority
-            ? feeData.maxFeePerGas
+          fees.maxFeePerGas && fees.maxFeePerGas > maxPriority
+            ? fees.maxFeePerGas
             : maxPriority * 2n;
 
         const result = await client.signTransaction(
           wallet.walletId,
           {
             transaction: {
-              to: checksumTo,
+              to: checksumUsdc,
               chainId,
               type: 2,
-              value: valueWei,
-              data: "0x",
+              value: "0",
+              data,
               nonce,
-              gasLimit: "21000",
+              gasLimit: "120000",
               maxFeePerGas: maxFee.toString(),
               maxPriorityFeePerGas: maxPriority.toString(),
             },
             broadcast: true,
           },
           {
-            idempotencyKey: `tx-${wallet.walletId}-${checksumTo}-${valueWei}-${nonce}`,
+            idempotencyKey: `usdc-${wallet.walletId}-${checksumTo}-${amountRaw.toString()}-${nonce}`,
             signal: AbortSignal.timeout(60_000),
           },
         );
@@ -327,38 +421,10 @@ export function createParaTreasuryClient(config: ParaTreasuryClientConfig): Para
         return receipt;
       }
 
-      // Fallback when RPC_URL is unavailable: high-level transfer API.
-      const result = await client.transfer(
-        wallet.walletId,
-        {
-          to: checksumTo,
-          value: valueWei,
-          chainId,
-          kind: "NATIVE",
-          broadcast: true,
-          type: 2,
-        },
-        {
-          idempotencyKey: `transfer-${wallet.walletId}-${checksumTo}-${valueWei}-${Date.now()}`,
-          signal: AbortSignal.timeout(60_000),
-        },
+      // ERC-20 transfers need calldata encoding; require RPC for that path.
+      throw new Error(
+        "Para USDC transfer requires RPC_URL so Chronicle can build ERC-20 transfer calldata via signTransaction",
       );
-
-      const txHash = result.txHash;
-      if (!txHash || typeof txHash !== "string") {
-        throw new Error(
-          `Para transfer did not return txHash (wallet=${wallet.walletId}, transactionId=${result.transactionId ?? "n/a"})`,
-        );
-      }
-
-      const receipt: OnChainWriteReceipt = {
-        txHash,
-        explorerUrl: explorerUrlFor(txHash, chainId, config.networkLabel),
-      };
-      if (result.transactionId) {
-        receipt.keeperHubRunId = `para:${result.transactionId}`;
-      }
-      return receipt;
     },
   };
 }
@@ -371,7 +437,8 @@ export function createParaTreasuryClientFromEnv(env: ServerEnv): ParaTreasuryCli
     return null;
   }
 
-  const chainId = mapNetworkToChainId(env.keeperhubNetwork, env.x402ChainId);
+  // Para treasury client signs desk/ops USDC on Ethereum Sepolia (not Base x402).
+  const chainId = mapNetworkToChainId(env.keeperhubNetwork, 11_155_111);
 
   return createParaTreasuryClient({
     apiKey: env.paraApiKey as string,
@@ -381,6 +448,8 @@ export function createParaTreasuryClientFromEnv(env: ServerEnv): ParaTreasuryCli
     ...(env.paraWalletId?.trim() ? { walletId: env.paraWalletId.trim() } : {}),
     chainId,
     networkLabel: env.keeperhubNetwork,
+    usdcAddress: env.deskUsdcAddress,
+    usdcDecimals: 6,
     ...(env.rpcUrl?.trim() ? { rpcUrl: env.rpcUrl.trim() } : {}),
   });
 }

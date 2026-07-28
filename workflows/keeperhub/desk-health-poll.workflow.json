@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T12:00:00.000Z",
+  "workflow": {
+    "name": "Chronicle Desk — Health Factor Poll (Telegram bridge)",
+    "description": "FREE TIER (~1.4k runs/mo): Schedule 30m → web3/read-contract getUserAccountData on Aave V3 Sepolia → Telegram CHRONICLE_INGEST kind:desk_read (health_factor). AFTER IMPORT: replace desk user 0x0000…0001 with DESK_WALLET_ADDRESS and chatId with TELEGRAM_INGEST_CHAT_ID. Monitor org only (not desk-write)."
+  },
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": { "x": 80, "y": 220 },
+      "data": {
+        "type": "trigger",
+        "label": "Every 30 minutes (free tier)",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *",
+          "scheduleTimezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "read-hf",
+      "type": "action",
+      "position": { "x": 360, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Read Aave User Account Data",
+        "config": {
+          "actionType": "web3/read-contract",
+          "network": "11155111",
+          "contractAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+          "abiFunction": "getUserAccountData",
+          "functionArgs": "[\"0x0000000000000000000000000000000000000001\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"}],\"name\":\"getUserAccountData\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"totalCollateralBase\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"totalDebtBase\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"availableBorrowsBase\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"currentLiquidationThreshold\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"ltv\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"healthFactor\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 680, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Telegram → Chronicle desk_read",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"desk_read\",\"payload\":{\"signalType\":\"health_factor\",\"chainId\":11155111,\"pollKind\":\"desk-health-poll\",\"deskAddress\":\"0x0000000000000000000000000000000000000001\",\"features\":{\"healthFactorRay\":\"{{@read-hf:Read Aave User Account Data.result.healthFactor}}\",\"totalCollateralBase\":\"{{@read-hf:Read Aave User Account Data.result.totalCollateralBase}}\",\"totalDebtBase\":\"{{@read-hf:Read Aave User Account Data.result.totalDebtBase}}\",\"availableBorrowsBase\":\"{{@read-hf:Read Aave User Account Data.result.availableBorrowsBase}}\"},\"sources\":{\"pollKind\":\"desk-health-poll\",\"contracts\":[\"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951\"],\"readResults\":{\"healthFactor\":\"{{@read-hf:Read Aave User Account Data.result.healthFactor}}\",\"totalCollateralBase\":\"{{@read-hf:Read Aave User Account Data.result.totalCollateralBase}}\",\"totalDebtBase\":\"{{@read-hf:Read Aave User Account Data.result.totalDebtBase}}\",\"availableBorrowsBase\":\"{{@read-hf:Read Aave User Account Data.result.availableBorrowsBase}}\",\"currentLiquidationThreshold\":\"{{@read-hf:Read Aave User Account Data.result.currentLiquidationThreshold}}\",\"ltv\":\"{{@read-hf:Read Aave User Account Data.result.ltv}}\"}}}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-schedule", "target": "read-hf" },
+    { "id": "e2", "source": "read-hf", "target": "post-chronicle-telegram" }
+  ],
+  "integrationBindings": []
+}

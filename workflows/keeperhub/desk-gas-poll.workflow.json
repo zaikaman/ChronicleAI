@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "Chronicle Desk — Gas Regime Poll (Telegram bridge)",
+    "description": "FREE TIER: Block Dispatcher every 150th Sepolia block (~30 min, ~1.4k runs/mo) → CHRONICLE_INGEST kind:desk_read (signalType gas_regime). Chronicle API enriches gasGwei via RPC. Put on gas/events monitor account. Replace YOUR_TELEGRAM_INGEST_CHAT_ID. Downstream: gas regime feature for policy defer. Do NOT set blockInterval to 1."
+  },
+  "nodes": [
+    {
+      "id": "trigger-block",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Every 150th Sepolia Block (~30 min, free tier)",
+        "config": {
+          "triggerType": "Block",
+          "network": "11155111",
+          "blockInterval": 150
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "Telegram → Chronicle desk_read",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"desk_read\",\"payload\":{\"signalType\":\"gas_regime\",\"chainId\":11155111,\"pollKind\":\"desk-gas-poll\",\"features\":{\"blockNumber\":\"{{@trigger-block:Trigger.blockNumber}}\"},\"sources\":{\"pollKind\":\"desk-gas-poll\",\"readResults\":{\"blockNumber\":\"{{@trigger-block:Trigger.blockNumber}}\",\"blockHash\":\"{{@trigger-block:Trigger.blockHash}}\",\"timestamp\":\"{{@trigger-block:Trigger.timestamp}}\"},\"txRefs\":[]}}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-block", "target": "post-chronicle-telegram" }
+  ],
+  "integrationBindings": []
+}

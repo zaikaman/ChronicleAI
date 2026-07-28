@@ -3,7 +3,16 @@
 import type {
   AffiliateStatus,
   AlertDeliveryStatus,
+  CctpRebalanceDirection,
+  CctpRebalanceMode,
+  CctpRebalanceStatus,
   Confidence,
+  DeskCapitalDirection,
+  DeskHeartbeatSource,
+  DeskIntentStatus,
+  DeskPolicyVerdict,
+  DeskSignalType,
+  DeskStrategy,
   DigestPublicationStatus,
   EmailSubscriberSource,
   EmailSubscriberStatus,
@@ -86,6 +95,10 @@ export interface PublicAlertRow {
   event_type?: EventType | null;
   chain_id?: number | null;
   protocol?: string | null;
+  /** Source on-chain transaction hash from the monitored event (not registry proof). */
+  transaction_hash?: string | null;
+  /** Flow enrichment from monitored_events.raw_payload.flowContext when joined. */
+  flow_context?: Record<string, unknown> | null;
 }
 
 export interface PublicAlertInsert {
@@ -135,6 +148,10 @@ export interface DailyDigestRow {
   gas_used_wei: string | null;
   keeper_hub_run_id: string | null;
   explorer_url: string | null;
+  market_narrative?: Record<string, unknown> | null;
+  market_narrative_provider?: string | null;
+  /** DB CHECK: null | 'succeeded' | 'failed'. */
+  market_narrative_status?: "succeeded" | "failed" | null;
   created_at: string;
   updated_at: string;
 }
@@ -159,6 +176,11 @@ export interface DailyDigestInsert {
   gas_used_wei?: string | null;
   keeper_hub_run_id?: string | null;
   explorer_url?: string | null;
+  /** Sectioned digest copy + precomputed stats (JSON). */
+  market_narrative?: Record<string, unknown> | null;
+  market_narrative_provider?: string | null;
+  /** DB CHECK: null | 'succeeded' | 'failed' (not 'ready'). */
+  market_narrative_status?: "succeeded" | "failed" | null;
 }
 
 export type DailyDigestUpdate = Partial<DailyDigestInsert>;
@@ -307,6 +329,11 @@ export interface PaymentRecordRow {
   /** When the challenge stops accepting settlements (ISO-8601). */
   expires_at: string | null;
   settled_at: string | null;
+  /** On-chain publishPremiumReceipt proof (soft-fail; may be null if registry write failed). */
+  registry_tx_hash: string | null;
+  keeper_hub_run_id: string | null;
+  explorer_url: string | null;
+  content_uri: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -325,6 +352,10 @@ export interface PaymentRecordInsert {
   requested_at?: string;
   expires_at?: string | null;
   settled_at?: string | null;
+  registry_tx_hash?: string | null;
+  keeper_hub_run_id?: string | null;
+  explorer_url?: string | null;
+  content_uri?: string | null;
 }
 
 export type PaymentRecordUpdate = Partial<PaymentRecordInsert>;
@@ -536,4 +567,397 @@ export type AffiliateUpdate = Partial<
   Omit<AffiliateInsert, "wallet_address">
 > & {
   wallet_address?: string;
+};
+
+// ── Referral Attributions (first-touch wallet → affiliate) ─
+export type ReferralAttributionSource = "web_connect" | "payment_intent" | "manual";
+
+export interface ReferralAttributionRow {
+  id: string;
+  referred_wallet: string;
+  affiliate_wallet: string;
+  referral_code: string | null;
+  source: ReferralAttributionSource;
+  attributed_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReferralAttributionInsert {
+  referred_wallet: string;
+  affiliate_wallet: string;
+  referral_code?: string | null;
+  source?: ReferralAttributionSource;
+  attributed_at?: string;
+}
+
+// ── Affiliate Earnings (ledger credits) ─────────────────
+export interface AffiliateEarningRow {
+  id: string;
+  affiliate_wallet: string;
+  referred_wallet: string;
+  payment_record_id: string;
+  payment_amount: number;
+  reward_share: number;
+  reward_amount: number;
+  currency: string;
+  created_at: string;
+}
+
+export interface AffiliateEarningInsert {
+  affiliate_wallet: string;
+  referred_wallet: string;
+  payment_record_id: string;
+  payment_amount: number;
+  reward_share: number;
+  reward_amount: number;
+  currency?: string;
+}
+
+// ── Affiliate Withdrawals (agent-initiated) ─────────────
+export type AffiliateWithdrawalStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface AffiliateWithdrawalRow {
+  id: string;
+  affiliate_wallet: string;
+  amount: number;
+  currency: string;
+  status: AffiliateWithdrawalStatus;
+  agent_message: string | null;
+  payout_record_id: string | null;
+  payout_tx_hash: string | null;
+  registry_tx_hash: string | null;
+  keeper_hub_run_id: string | null;
+  explorer_url: string | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+  updated_at: string;
+}
+
+export interface AffiliateWithdrawalInsert {
+  affiliate_wallet: string;
+  amount: number;
+  currency?: string;
+  status?: AffiliateWithdrawalStatus;
+  agent_message?: string | null;
+  payout_record_id?: string | null;
+  payout_tx_hash?: string | null;
+  registry_tx_hash?: string | null;
+  keeper_hub_run_id?: string | null;
+  explorer_url?: string | null;
+  error_message?: string | null;
+  completed_at?: string | null;
+}
+
+export type AffiliateWithdrawalUpdate = Partial<AffiliateWithdrawalInsert>;
+
+// ── Desk Signals ────────────────────────────────────────
+export interface DeskSignalRow {
+  id: string;
+  signal_type: DeskSignalType;
+  chain_id: number;
+  severity: number;
+  features: Record<string, unknown>;
+  sources: Record<string, unknown>;
+  policy_verdict: DeskPolicyVerdict;
+  dedupe_key: string;
+  created_at: string;
+}
+
+export interface DeskSignalInsert {
+  signal_type: DeskSignalType;
+  chain_id?: number;
+  severity?: number;
+  features?: Record<string, unknown>;
+  sources?: Record<string, unknown>;
+  policy_verdict?: DeskPolicyVerdict;
+  dedupe_key: string;
+  created_at?: string;
+}
+
+// ── Desk Intents ────────────────────────────────────────
+export interface DeskIntentRow {
+  id: string;
+  signal_id: string | null;
+  strategy: DeskStrategy;
+  status: DeskIntentStatus;
+  notional_usdc: number;
+  legs: unknown[];
+  reason_codes: string[];
+  policy_snapshot: Record<string, unknown>;
+  keeper_hub_run_id: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeskIntentInsert {
+  signal_id?: string | null;
+  strategy: DeskStrategy;
+  status?: DeskIntentStatus;
+  notional_usdc?: number;
+  legs?: unknown[];
+  reason_codes?: string[];
+  policy_snapshot?: Record<string, unknown>;
+  keeper_hub_run_id?: string | null;
+  error_message?: string | null;
+}
+
+export type DeskIntentUpdate = Partial<DeskIntentInsert>;
+
+// ── Desk Positions ──────────────────────────────────────
+export interface DeskPositionRow {
+  id: string;
+  as_of: string;
+  desk_address: string;
+  usdc: number;
+  weth: number;
+  link: number;
+  aave: Record<string, unknown>;
+  morpho: Record<string, unknown> | null;
+  lido: Record<string, unknown> | null;
+  equity_usdc: number;
+  raw: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface DeskPositionInsert {
+  as_of: string;
+  desk_address: string;
+  usdc?: number;
+  weth?: number;
+  link?: number;
+  aave?: Record<string, unknown>;
+  morpho?: Record<string, unknown> | null;
+  lido?: Record<string, unknown> | null;
+  equity_usdc?: number;
+  raw?: Record<string, unknown>;
+}
+
+// ── Desk Capital Moves ──────────────────────────────────
+export interface DeskCapitalMoveRow {
+  id: string;
+  direction: DeskCapitalDirection;
+  amount_usdc: number;
+  from_address: string;
+  to_address: string;
+  tx_hash: string | null;
+  explorer_url: string | null;
+  reason: string | null;
+  treasury_usdc_after: number | null;
+  desk_equity_after: number | null;
+  /** recordCapitalMove registry audit tx (distinct from transfer tx_hash). */
+  registry_tx_hash: string | null;
+  keeper_hub_run_id: string | null;
+  registry_explorer_url: string | null;
+  created_at: string;
+}
+
+export interface DeskCapitalMoveInsert {
+  direction: DeskCapitalDirection;
+  amount_usdc: number;
+  from_address: string;
+  to_address: string;
+  tx_hash?: string | null;
+  explorer_url?: string | null;
+  reason?: string | null;
+  treasury_usdc_after?: number | null;
+  desk_equity_after?: number | null;
+  registry_tx_hash?: string | null;
+  keeper_hub_run_id?: string | null;
+  registry_explorer_url?: string | null;
+}
+
+export type DeskCapitalMoveUpdate = Partial<
+  Pick<
+    DeskCapitalMoveInsert,
+    | "tx_hash"
+    | "explorer_url"
+    | "reason"
+    | "treasury_usdc_after"
+    | "desk_equity_after"
+    | "registry_tx_hash"
+    | "keeper_hub_run_id"
+    | "registry_explorer_url"
+  >
+>;
+
+// ── Desk Tickets ────────────────────────────────────────
+export interface DeskTicketRow {
+  id: string;
+  intent_id: string;
+  ticket_hash: string;
+  signal_hash: string | null;
+  intent_hash: string | null;
+  content_uri: string | null;
+  tx_hash: string | null;
+  keeper_hub_run_id: string | null;
+  explorer_url: string | null;
+  summary: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface DeskTicketInsert {
+  intent_id: string;
+  ticket_hash: string;
+  signal_hash?: string | null;
+  intent_hash?: string | null;
+  content_uri?: string | null;
+  tx_hash?: string | null;
+  keeper_hub_run_id?: string | null;
+  explorer_url?: string | null;
+  summary?: string | null;
+  payload?: Record<string, unknown>;
+}
+
+export type DeskTicketUpdate = Partial<
+  Omit<DeskTicketInsert, "intent_id" | "ticket_hash">
+> & {
+  ticket_hash?: string;
+};
+
+// ── Desk Heartbeats ─────────────────────────────────────
+export interface DeskHeartbeatRow {
+  id: string;
+  source: DeskHeartbeatSource;
+  created_at: string;
+}
+
+export interface DeskHeartbeatInsert {
+  source: DeskHeartbeatSource;
+  created_at?: string;
+}
+
+// ── Desk Agent Runs ─────────────────────────────────────
+export interface DeskAgentRunRow {
+  id: string;
+  created_at: string;
+  model: string | null;
+  latency_ms: number | null;
+  proposal: Record<string, unknown>;
+  context_digest: Record<string, unknown>;
+  intent_id: string | null;
+  error_message: string | null;
+}
+
+export interface DeskAgentRunInsert {
+  model?: string | null;
+  latency_ms?: number | null;
+  proposal: Record<string, unknown>;
+  context_digest?: Record<string, unknown>;
+  intent_id?: string | null;
+  error_message?: string | null;
+  created_at?: string;
+}
+
+export type DeskAgentRunUpdate = Partial<DeskAgentRunInsert>;
+
+// ── Desk Control State (singleton kill switch + pause) ──
+/** Fixed singleton primary key for desk_control_state. */
+export const DESK_CONTROL_STATE_ID = "default" as const;
+
+export interface DeskControlStateRow {
+  id: string;
+  kill_armed: boolean;
+  kill_armed_at: string | null;
+  kill_armed_reason: string | null;
+  last_trip_at: string | null;
+  last_trip_reason: string | null;
+  last_keeper_hub_run_id: string | null;
+  last_tx_hash: string | null;
+  desk_paused: boolean;
+  /** Last successful maintenance free-powder / rebalance fill (ISO). */
+  last_maintenance_at: string | null;
+  /** Last event-linked microtrade fill / intent for cooldown (ISO). */
+  last_event_microtrade_at: string | null;
+  updated_at: string;
+}
+
+export interface DeskControlStateUpsert {
+  kill_armed?: boolean;
+  kill_armed_at?: string | null;
+  kill_armed_reason?: string | null;
+  last_trip_at?: string | null;
+  last_trip_reason?: string | null;
+  last_keeper_hub_run_id?: string | null;
+  last_tx_hash?: string | null;
+  desk_paused?: boolean;
+  last_maintenance_at?: string | null;
+  last_event_microtrade_at?: string | null;
+}
+
+// ── CCTP Rebalance Transfers ────────────────────────────
+export interface CctpRebalanceTransferRow {
+  id: string;
+  status: CctpRebalanceStatus;
+  direction: CctpRebalanceDirection;
+  source_domain: number;
+  destination_domain: number;
+  source_chain_id: number;
+  destination_chain_id: number;
+  amount_usdc: number;
+  amount_atomic: string;
+  max_fee_atomic: string | null;
+  min_finality_threshold: number | null;
+  mode: CctpRebalanceMode;
+  treasury_address: string;
+  mint_recipient: string;
+  approve_tx_hash: string | null;
+  burn_tx_hash: string | null;
+  message_bytes: string | null;
+  attestation: string | null;
+  message_hash: string | null;
+  mint_tx_hash: string | null;
+  iris_status: string | null;
+  error_message: string | null;
+  attempt_count: number;
+  burned_at: string | null;
+  attested_at: string | null;
+  minted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface CctpRebalanceTransferInsert {
+  status?: CctpRebalanceStatus;
+  direction?: CctpRebalanceDirection;
+  source_domain?: number;
+  destination_domain?: number;
+  source_chain_id?: number;
+  destination_chain_id?: number;
+  amount_usdc: number;
+  amount_atomic: string;
+  max_fee_atomic?: string | null;
+  min_finality_threshold?: number | null;
+  mode: CctpRebalanceMode;
+  treasury_address: string;
+  mint_recipient?: string;
+  approve_tx_hash?: string | null;
+  burn_tx_hash?: string | null;
+  message_bytes?: string | null;
+  attestation?: string | null;
+  message_hash?: string | null;
+  mint_tx_hash?: string | null;
+  iris_status?: string | null;
+  error_message?: string | null;
+  attempt_count?: number;
+  burned_at?: string | null;
+  attested_at?: string | null;
+  minted_at?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+/** Patch fields allowed on status transitions (not status itself). */
+export type CctpRebalanceTransferPatch = Partial<
+  Omit<CctpRebalanceTransferInsert, "status" | "direction" | "amount_usdc" | "amount_atomic" | "mode" | "treasury_address" | "mint_recipient">
+> & {
+  status?: never;
 };

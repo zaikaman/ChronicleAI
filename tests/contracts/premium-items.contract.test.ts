@@ -1,12 +1,14 @@
 // Contract tests for GET /premium/items
 // Validates teaser list response shape
+// Hits a live API process — skipped unless ALLOW_LIVE_API_TESTS=1
 
 import { describe, expect, it } from "vitest";
+import { LIVE_API_BASE, LIVE_API_TESTS_ENABLED } from "./live-api.ts";
 import { assertPremiumItemTeaserShape } from "./schema-assertions.ts";
 
-const API_BASE = process.env.API_BASE_URL ?? "http://localhost:4000";
+const API_BASE = LIVE_API_BASE;
 
-describe("GET /premium/items", () => {
+describe.skipIf(!LIVE_API_TESTS_ENABLED)("GET /premium/items", () => {
   it("should return 200 with items array", async () => {
     const response = await fetch(`${API_BASE}/premium/items`);
     expect(response.status).toBe(200);

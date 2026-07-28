@@ -1,4 +1,5 @@
-// Test fixture helpers for database-backed tests
+// Test fixture helpers for database-backed tests.
+// Mutating helpers refuse to run against real remote Supabase projects.
 
 interface SupabaseClientLike {
   from: (table: string) => {
@@ -7,6 +8,32 @@ interface SupabaseClientLike {
     };
     insert: (data: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
   };
+}
+
+/**
+ * Destructive table cleanup is only allowed when CHRONICLE_TEST_DB_ISOLATION=1
+ * (set automatically by vitest) or ALLOW_DB_CLEANUP=1 with an explicit local target.
+ * This prevents accidental wipes of shared/staging/production Supabase data.
+ */
+function assertDbMutationAllowed(operation: string): void {
+  if (process.env.CHRONICLE_TEST_DB_ISOLATION === "1") {
+    return;
+  }
+  if (process.env.ALLOW_DB_CLEANUP === "1") {
+    const url = process.env.SUPABASE_URL ?? "";
+    const isLocal =
+      url.includes("127.0.0.1") ||
+      url.includes("localhost") ||
+      url.startsWith("http://127.0.0.1") ||
+      url.startsWith("http://localhost");
+    if (isLocal) {
+      return;
+    }
+  }
+  throw new Error(
+    `${operation} blocked: refusing to mutate a non-isolated database. ` +
+      `Run under vitest (CHRONICLE_TEST_DB_ISOLATION=1) or set ALLOW_DB_CLEANUP=1 with a local SUPABASE_URL.`,
+  );
 }
 
 // ── Deterministic Timestamps ───────────────────────────
@@ -28,6 +55,8 @@ export async function cleanupTable(
   tableName: string,
   idColumn = "id",
 ): Promise<void> {
+  assertDbMutationAllowed(`cleanupTable(${tableName})`);
+
   const { error } = await supabase
     .from(tableName)
     .delete()
@@ -39,6 +68,8 @@ export async function cleanupTable(
 }
 
 export async function cleanupAllTables(supabase: SupabaseClientLike): Promise<void> {
+  assertDbMutationAllowed("cleanupAllTables");
+
   const tables = [
     "execution_logs",
     "payment_records",

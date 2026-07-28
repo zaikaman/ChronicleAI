@@ -19,9 +19,9 @@ function baseDigest(overrides: Partial<DailyDigestRow> = {}): DailyDigestRow {
     summary: "Markets moved.",
     highlights: ["swap"],
     analysis: null,
-    report_date: "2026-07-28",
+    report_date: "2026-07-09",
     period_start: "2026-07-08T00:00:00.000Z",
-    period_end: "2026-07-28T00:00:00.000Z",
+    period_end: "2026-07-09T00:00:00.000Z",
     source_event_ids: [],
     audience: "public",
     source_event_root: null,
@@ -58,6 +58,9 @@ describe("DigestPublicationService treasury gate", () => {
       publishAlert: vi.fn(),
       publishDigest,
       recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
     };
 
     const smtpService = {
@@ -75,7 +78,7 @@ describe("DigestPublicationService treasury gate", () => {
     });
     const sendDigestBroadcast = vi.fn().mockResolvedValue({
       delivered: true,
-      destinations: ["log", "discord"],
+      destinations: ["log", "telegram"],
       failures: [],
     });
     const notificationService = {
@@ -83,7 +86,7 @@ describe("DigestPublicationService treasury gate", () => {
       sendDigestBroadcast,
       sendLowBalanceWarning,
       sendRevenueRoutingNotification: vi.fn(),
-      getConfiguredChannels: () => ({ discord: true, telegram: false }),
+      getConfiguredChannels: () => ({ telegram: true }),
     } satisfies NotificationService;
 
     const treasuryGate: TreasuryRegistryGate = {
@@ -102,6 +105,7 @@ describe("DigestPublicationService treasury gate", () => {
       append: vi.fn().mockResolvedValue({ ok: true, value: {} }),
       listByEntity: vi.fn(),
       listRecent: vi.fn(),
+      listPage: vi.fn(),
     } satisfies ExecutionLogRepository;
 
     const service = createDigestPublicationService(
@@ -119,7 +123,7 @@ describe("DigestPublicationService treasury gate", () => {
       title: "Daily Chronicle",
       summary: "Markets moved.",
       highlights: ["swap"],
-      reportDate: "2026-07-28",
+      reportDate: "2026-07-09",
       sourceEventRoot: "root-1",
     });
 
@@ -169,12 +173,15 @@ describe("DigestPublicationService treasury gate", () => {
       success: true,
       txHash: "0xdigest",
       keeperHubRunId: "run-d1",
-      explorerUrl: "https://sepolia.basescan.org/tx/0xdigest",
+      explorerUrl: "https://sepolia.etherscan.io/tx/0xdigest",
     });
     const registryService: ChronicleRegistryService = {
       publishAlert: vi.fn(),
       publishDigest,
       recordPayout: vi.fn(),
+      publishTradeTicket: vi.fn(),
+      recordCapitalMove: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
     };
 
     const smtpService = {
@@ -195,6 +202,13 @@ describe("DigestPublicationService treasury gate", () => {
       }),
     };
 
+    const execLogRepo = {
+      append: vi.fn().mockResolvedValue({ ok: true, value: {} }),
+      listByEntity: vi.fn(),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+    };
+
     const service = createDigestPublicationService(
       digestRepo,
       registryService,
@@ -202,7 +216,7 @@ describe("DigestPublicationService treasury gate", () => {
       smtpService,
       null,
       treasuryGate,
-      null,
+      execLogRepo as never,
     );
 
     const result = await service.publishDigest({
@@ -210,7 +224,7 @@ describe("DigestPublicationService treasury gate", () => {
       title: "Daily Chronicle",
       summary: "Markets moved.",
       highlights: [],
-      reportDate: "2026-07-28",
+      reportDate: "2026-07-09",
     });
 
     expect(result.success).toBe(true);
@@ -218,5 +232,18 @@ describe("DigestPublicationService treasury gate", () => {
     expect(result.registryTxHash).toBe("0xdigest");
     expect(result.publicationStatus).toBe("published");
     expect(publishDigest).toHaveBeenCalledOnce();
+    expect(execLogRepo.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action_type: "registry_write",
+        entity_type: "daily_digest",
+        entity_id: "digest-1",
+        status: "succeeded",
+        details: expect.objectContaining({
+          method: "publishDigest",
+          keeper_hub_run_id: "run-d1",
+          tx_hash: "0xdigest",
+        }),
+      }),
+    );
   });
 });

@@ -1,49 +1,102 @@
-{
+﻿{
   "version": 1,
-  "exportedAt": "2026-07-27T12:00:00.000Z",
+  "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
-    "name": "ChronicleAI CoW Protocol Trade Monitor",
-    "description": "Event Tracker listens to Trade on CoW GPv2Settlement (mainnet). Chronicle maps sell/buy amounts to large_swap with USD magnitude when tokens are known stables or WETH."
+    "name": "ChronicleAI CoW Protocol Large Trade Monitor (Telegram bridge)",
+    "description": "NEWSPAPER ONLY (not a desk execution input). FREE TIER: Schedule hourly (~720 schedule fires/mo; For Each can add more) → Query Trade events → size filter → Telegram CHRONICLE_INGEST. Prefer a separate vanity account or leave disabled. CoW is not a v1 Sepolia desk venue."
   },
   "nodes": [
     {
-      "id": "trigger-trade",
+      "id": "trigger-schedule",
       "type": "trigger",
-      "position": { "x": 100, "y": 200 },
+      "position": { "x": 80, "y": 220 },
       "data": {
         "type": "trigger",
-        "label": "CoW Trade",
+        "label": "Every hour (free tier)",
         "config": {
-          "triggerType": "Event",
-          "network": "1",
-          "contractAddress": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41",
-          "eventName": "Trade",
-          "contractABI": "[{\"type\":\"event\",\"name\":\"Trade\",\"inputs\":[{\"indexed\":true,\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"sellToken\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"buyToken\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"sellAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"buyAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"feeAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"orderUid\",\"type\":\"bytes\"}]}]"
+          "triggerType": "Schedule",
+          "scheduleCron": "0 * * * *",
+          "scheduleTimezone": "UTC"
         }
       }
     },
     {
-      "id": "post-chronicle-events",
+      "id": "query-trades",
       "type": "action",
-      "position": { "x": 420, "y": 200 },
+      "position": { "x": 320, "y": 220 },
       "data": {
         "type": "action",
-        "label": "POST Chronicle /keeperhub/events",
+        "label": "Query CoW Trades",
         "config": {
-          "actionType": "webhook/send-webhook",
-          "integrationType": "webhook",
-          "webhookUrl": "https://YOUR_CHRONICLE_API_HOST/keeperhub/events",
-          "webhookMethod": "POST",
-          "webhookHeaders": "{\"Content-Type\":\"application/json\",\"X-ChronicleAI-Signature\":\"YOUR_KEEPERHUB_WEBHOOK_SECRET\"}",
-          "webhookPayload": "{\"chainId\":1,\"eventName\":\"Trade\",\"address\":\"0x9008D19f58AAbD9eD0D60971565AA8510560ab41\",\"transactionHash\":\"{{@trigger-trade:Trigger.transactionHash}}\",\"blockNumber\":{{@trigger-trade:Trigger.blockNumber}},\"logIndex\":{{@trigger-trade:Trigger.logIndex}},\"args\":{\"owner\":\"{{@trigger-trade:Trigger.owner}}\",\"sellToken\":\"{{@trigger-trade:Trigger.sellToken}}\",\"buyToken\":\"{{@trigger-trade:Trigger.buyToken}}\",\"sellAmount\":\"{{@trigger-trade:Trigger.sellAmount}}\",\"buyAmount\":\"{{@trigger-trade:Trigger.buyAmount}}\",\"feeAmount\":\"{{@trigger-trade:Trigger.feeAmount}}\"},\"protocol\":\"CoW Protocol\"}"
+          "actionType": "web3/query-events",
+          "network": "1",
+          "contractAddress": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41",
+          "eventName": "Trade",
+          "blockCount": "320",
+          "abi": "[{\"type\":\"event\",\"name\":\"Trade\",\"inputs\":[{\"indexed\":true,\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"sellToken\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"buyToken\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"sellAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"buyAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"feeAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"orderUid\",\"type\":\"bytes\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "for-each-trade",
+      "type": "action",
+      "position": { "x": 560, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "For Each Trade",
+        "config": {
+          "actionType": "For Each",
+          "arraySource": "{{@query-trades:Query CoW Trades.events}}",
+          "maxIterations": "150"
+        }
+      }
+    },
+    {
+      "id": "condition-large",
+      "type": "action",
+      "position": { "x": 800, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Significant size (~$500k+)",
+        "config": {
+          "actionType": "Condition",
+          "condition": "(({{@for-each-trade:For Each Trade.currentItem.args.sellToken}} == \"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\" || {{@for-each-trade:For Each Trade.currentItem.args.sellToken}} == \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\" || {{@for-each-trade:For Each Trade.currentItem.args.sellToken}} == \"0xdAC17F958D2ee523a2206206994597C13D831ec7\" || {{@for-each-trade:For Each Trade.currentItem.args.sellToken}} == \"0xdac17f958d2ee523a2206206994597c13d831ec7\") && {{@for-each-trade:For Each Trade.currentItem.args.sellAmount}} >= 500000000000) || (({{@for-each-trade:For Each Trade.currentItem.args.buyToken}} == \"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\" || {{@for-each-trade:For Each Trade.currentItem.args.buyToken}} == \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\" || {{@for-each-trade:For Each Trade.currentItem.args.buyToken}} == \"0xdAC17F958D2ee523a2206206994597C13D831ec7\" || {{@for-each-trade:For Each Trade.currentItem.args.buyToken}} == \"0xdac17f958d2ee523a2206206994597c13d831ec7\") && {{@for-each-trade:For Each Trade.currentItem.args.buyAmount}} >= 500000000000) || (({{@for-each-trade:For Each Trade.currentItem.args.sellToken}} == \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\" || {{@for-each-trade:For Each Trade.currentItem.args.sellToken}} == \"0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\") && {{@for-each-trade:For Each Trade.currentItem.args.sellAmount}} >= 200000000000000000000) || (({{@for-each-trade:For Each Trade.currentItem.args.buyToken}} == \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\" || {{@for-each-trade:For Each Trade.currentItem.args.buyToken}} == \"0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\") && {{@for-each-trade:For Each Trade.currentItem.args.buyAmount}} >= 200000000000000000000)"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 1040, "y": 160 },
+      "data": {
+        "type": "action",
+        "label": "Telegram â†’ Chronicle ingest bridge",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Trade\",\"address\":\"0x9008D19f58AAbD9eD0D60971565AA8510560ab41\",\"transactionHash\":\"{{@for-each-trade:For Each Trade.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-trade:For Each Trade.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-trade:For Each Trade.currentItem.logIndex}}\",\"args\":{\"owner\":\"{{@for-each-trade:For Each Trade.currentItem.args.owner}}\",\"sellToken\":\"{{@for-each-trade:For Each Trade.currentItem.args.sellToken}}\",\"buyToken\":\"{{@for-each-trade:For Each Trade.currentItem.args.buyToken}}\",\"sellAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.sellAmount}}\",\"buyAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.buyAmount}}\",\"feeAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.feeAmount}}\"},\"protocol\":\"CoW Protocol\"}}",
+          "parseMode": "none"
         }
       }
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-trade", "target": "post-chronicle-events" }
+    { "id": "e1", "source": "trigger-schedule", "target": "query-trades" },
+    { "id": "e2", "source": "query-trades", "target": "for-each-trade" },
+    {
+      "id": "e3",
+      "source": "for-each-trade",
+      "target": "condition-large",
+      "sourceHandle": "loop",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "condition-large",
+      "target": "post-chronicle-telegram",
+      "sourceHandle": "true",
+      "type": "animated"
+    }
   ],
-  "integrationBindings": [
-    { "nodeId": "post-chronicle-events", "integrationType": "webhook" }
-  ]
+  "integrationBindings": []
 }

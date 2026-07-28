@@ -4,3 +4,5 @@ export * from "./server-env.ts";
 export * from "./defaults.ts";
 export * from "./client-env.ts";
 export * from "./protocol-registry.ts";
+export * from "./chains.ts";
+export * from "./entity-labels.ts";

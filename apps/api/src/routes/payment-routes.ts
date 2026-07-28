@@ -1,4 +1,5 @@
 // Payment Routes
+// GET  /payments | /.well-known/agent-payments — dual-rail discovery for agents
 // POST /payments/challenges - Create a payment challenge
 // POST /payments/settlements - Settle a payment challenge
 
@@ -7,25 +8,41 @@ import type {
   ExecutionLogRepository,
   PaymentRecordRepository,
   PremiumIntelligenceRepository,
+  ReferralAttributionRepository,
   SponsoredWatchRepository,
 } from "@chronicleai/db";
 import type { ExecutionLogInsert } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
 import { Router, type Router as RouterType, type Response } from "express";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
+import { buildAgentPaymentsDiscovery } from "../services/agent-payments-discovery.ts";
+import {
+  createChronicleRegistryService,
+  type ChronicleRegistryService,
+} from "../services/chronicle-registry-service.ts";
 import {
   buildPremiumAccessReceiptCookie,
   DEFAULT_PREMIUM_ACCESS_RECEIPT_TTL_SECONDS,
   type PremiumAccessReceiptService,
 } from "../services/premium-access-receipt-service.ts";
+import type { AffiliateEarningsService } from "../services/affiliate-earnings-service.ts";
 import { PaymentChallengeService } from "../services/payment-challenge-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
+import {
+  createPremiumReceiptPublicationService,
+  type PremiumReceiptPublicationService,
+} from "../services/premium-receipt-publication-service.ts";
 import {
   createSponsoredWatchService,
   type SponsoredWatchService,
 } from "../services/sponsored-watch-service.ts";
 import {
+  createSponsoredWatchProductService,
+  type SponsoredWatchProductConfig,
+} from "../services/sponsored-watch-product-service.ts";
+import {
   parseSponsoredMonitorContentPrivate,
+  resolveCampaignWindowFromContent,
   resolveTargetContract,
   resolveWatchSpecHash,
 } from "../services/watch-spec-hash.ts";
@@ -43,10 +60,24 @@ export function createPaymentRoutes(params: {
   watchService?: SponsoredWatchService | null;
   /** Product affiliate registry for referral intent validation. */
   affiliateRepo?: AffiliateRepository | null;
+  /** First-touch wallet-connect attribution. */
+  attributionRepo?: ReferralAttributionRepository | null;
+  /** Credits affiliate ledger on settle. */
+  earningsService?: AffiliateEarningsService | null;
   /** When true, Set-Cookie includes Secure (production / HTTPS). */
   secureCookies?: boolean;
-  /** Public SPA origin for HTTPS sponsored-report content URIs. */
+  /** Public SPA origin for HTTPS sponsored-report / premium-receipt content URIs. */
   frontendOrigin?: string;
+  /** When true, on-chain contentUri must be https non-localhost (production). */
+  strictContentUri?: boolean;
+  /** Optional pre-built registry (defaults from web3Client). */
+  registryService?: ChronicleRegistryService | null;
+  /** Optional pre-built premium receipt publisher. */
+  premiumReceiptService?: PremiumReceiptPublicationService | null;
+  /** Default campaign length when premium item omits endsAt (days). */
+  sponsoredWatchDefaultDurationDays?: number;
+  /** Pricing + duration bounds for custom sponsored watch product creation. */
+  sponsoredWatchProductConfig?: SponsoredWatchProductConfig;
 }): RouterType {
   const router: RouterType = Router();
 
@@ -54,13 +85,40 @@ export function createPaymentRoutes(params: {
     paymentRecordRepo: params.paymentRecordRepo,
     adapters: params.adapters,
     affiliateRepo: params.affiliateRepo ?? null,
+    attributionRepo: params.attributionRepo ?? null,
   });
+
+  const sponsoredWatchProductService = params.sponsoredWatchProductConfig
+    ? createSponsoredWatchProductService({
+        premiumRepo: params.premiumRepo,
+        challengeService,
+        config: params.sponsoredWatchProductConfig,
+      })
+    : null;
 
   const settlementService = new PaymentSettlementService({
     paymentRecordRepo: params.paymentRecordRepo,
     execLogRepo: params.execLogRepo,
     adapters: params.adapters,
+    earningsService: params.earningsService ?? null,
   });
+
+  const registryService =
+    params.registryService !== undefined
+      ? params.registryService
+      : createChronicleRegistryService(params.web3Client ?? null, {
+          strictContentUri: params.strictContentUri === true,
+        });
+
+  const premiumReceiptService =
+    params.premiumReceiptService !== undefined
+      ? params.premiumReceiptService
+      : createPremiumReceiptPublicationService({
+          paymentRecordRepo: params.paymentRecordRepo,
+          execLogRepo: params.execLogRepo,
+          registry: registryService,
+          frontendOrigin: params.frontendOrigin ?? null,
+        });
 
   const watchService =
     params.watchService ??
@@ -68,7 +126,9 @@ export function createPaymentRoutes(params: {
       watchRepo: params.watchRepo,
       execLogRepo: params.execLogRepo,
       web3Client: params.web3Client ?? null,
-      frontendOrigin: params.frontendOrigin,
+      ...(params.frontendOrigin !== undefined
+        ? { frontendOrigin: params.frontendOrigin }
+        : {}),
     });
 
   function issueAccessReceipt(args: {
@@ -108,6 +168,107 @@ export function createPaymentRoutes(params: {
       }),
     );
   }
+
+  function sendAgentPaymentsDiscovery(_req: unknown, res: Response): void {
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.status(200).json(buildAgentPaymentsDiscovery());
+  }
+
+  /**
+   * GET /payments
+   *
+   * Machine-readable dual-rail discovery (x402 + MPP). Safe for agents to crawl.
+   */
+  router.get("/payments", sendAgentPaymentsDiscovery);
+
+  /**
+   * GET /.well-known/agent-payments
+   *
+   * Same discovery document under the well-known path for automated clients.
+   */
+  router.get("/.well-known/agent-payments", sendAgentPaymentsDiscovery);
+
+  /**
+   * POST /payments/sponsored-watch/challenges
+   *
+   * Create a custom sponsored monitoring product from a buyer-submitted
+   * target contract + campaign window, then issue a payment challenge (Loop 4).
+   */
+  router.post("/payments/sponsored-watch/challenges", async (req, res, _next) => {
+    try {
+      if (!sponsoredWatchProductService) {
+        res.status(503).json({
+          error: "Sponsored watch product service is not configured",
+        });
+        return;
+      }
+
+      const body = req.body as {
+        targetContract?: string;
+        eventSignature?: string;
+        description?: string;
+        startsAt?: string;
+        endsAt?: string;
+        durationDays?: number;
+        /** Short demo campaigns (e.g. 1 hour). */
+        durationHours?: number;
+        paymentRoute?: string;
+        payerReference?: string;
+        referralAddress?: string;
+      };
+
+      if (!body.targetContract || typeof body.targetContract !== "string") {
+        res.status(400).json({ error: "targetContract is required" });
+        return;
+      }
+
+      if (!body.paymentRoute) {
+        res.status(400).json({ error: "paymentRoute is required" });
+        return;
+      }
+
+      if (!challengeService.validateRoute(body.paymentRoute)) {
+        res.status(400).json({
+          error: "Unsupported payment route. Supported routes: x402, mpp",
+        });
+        return;
+      }
+
+      const prepared = await sponsoredWatchProductService.prepareCampaign({
+        targetContract: body.targetContract,
+        ...(body.eventSignature !== undefined
+          ? { eventSignature: body.eventSignature }
+          : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.startsAt !== undefined ? { startsAt: body.startsAt } : {}),
+        ...(body.endsAt !== undefined ? { endsAt: body.endsAt } : {}),
+        ...(body.durationDays !== undefined ? { durationDays: body.durationDays } : {}),
+        ...(body.durationHours !== undefined ? { durationHours: body.durationHours } : {}),
+        paymentRoute: body.paymentRoute as PaymentRoute,
+        ...(body.payerReference !== undefined
+          ? { payerReference: body.payerReference }
+          : {}),
+        ...(body.referralAddress !== undefined
+          ? { referralAddress: body.referralAddress }
+          : {}),
+      });
+
+      res.status(201).json({
+        premiumItemId: prepared.premiumItem.id,
+        paymentRecordId: prepared.paymentRecordId,
+        challengeReference: prepared.challenge.challengeReference,
+        paymentRoute: prepared.challenge.paymentRoute,
+        amountRequested: prepared.challenge.amountRequested,
+        currency: prepared.challenge.currency,
+        expiresAt: prepared.challenge.expiresAt,
+        challengeData: prepared.challenge.challengeData,
+        campaign: prepared.campaign,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to prepare sponsored watch";
+      res.status(400).json({ error: message });
+    }
+  });
 
   /**
    * POST /payments/challenges
@@ -209,7 +370,7 @@ export function createPaymentRoutes(params: {
    *
    * Settle a payment challenge and issue an access receipt on success.
    */
-  router.post("/payments/settlements", async (req, res, next) => {
+  router.post("/payments/settlements", async (req, res, _next) => {
     try {
       const { challengeReference, settlementReference, paymentRoute, amountSettled, currency } =
         req.body as {
@@ -285,26 +446,28 @@ export function createPaymentRoutes(params: {
 
       // Check if the premium item is a sponsored_monitor to create a watch
       const premiumItemResult = await params.premiumRepo.findById(paymentRecord.premium_item_id);
+      const premiumItem =
+        premiumItemResult.ok && premiumItemResult.value ? premiumItemResult.value : null;
 
-      if (
-        premiumItemResult.ok &&
-        premiumItemResult.value &&
-        premiumItemResult.value.content_type === "sponsored_monitor"
-      ) {
+      if (premiumItem?.content_type === "sponsored_monitor") {
         try {
-          const now = new Date();
-          const endsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
           // Require real targetContract + watchSpecHash (or derive hash from watchSpec).
-          // Never pad with fabricated 0xccc… hashes.
+          // Campaign window comes from content_private (buyer-chosen) when present.
           let targetContract: string;
           let watchSpecHash: string;
+          let startsAt: string;
+          let endsAt: string;
           try {
             const contentPrivate = parseSponsoredMonitorContentPrivate(
-              premiumItemResult.value.content_private,
+              premiumItem.content_private,
             );
             targetContract = resolveTargetContract(contentPrivate);
             watchSpecHash = resolveWatchSpecHash(contentPrivate);
+            const window = resolveCampaignWindowFromContent(contentPrivate, {
+              defaultDurationDays: params.sponsoredWatchDefaultDurationDays ?? 7,
+            });
+            startsAt = window.startsAt;
+            endsAt = window.endsAt;
           } catch (specError) {
             res.status(400).json({
               settled: false,
@@ -319,7 +482,7 @@ export function createPaymentRoutes(params: {
           const watch = await watchService.createSponsoredWatch({
             targetContract,
             watchSpecHash,
-            startsAt: now.toISOString(),
+            startsAt,
             endsAt,
           });
 
@@ -355,6 +518,49 @@ export function createPaymentRoutes(params: {
         }
       }
 
+      // Soft-fail premium receipt registry write (settlement already succeeded).
+      let premiumReceipt: {
+        attempted: boolean;
+        success: boolean;
+        registryTxHash?: string;
+        keeperHubRunId?: string;
+        explorerUrl?: string;
+        contentUri?: string;
+        errorMessage?: string;
+      } | undefined;
+      if (premiumReceiptService) {
+        try {
+          const pub = await premiumReceiptService.publishForSettlement({
+            payment: paymentRecord,
+            premiumItem,
+          });
+          if (pub.attempted || pub.errorMessage !== "skipped_sponsored_monitor") {
+            premiumReceipt = {
+              attempted: pub.attempted,
+              success: pub.success,
+              ...(pub.registryTxHash ? { registryTxHash: pub.registryTxHash } : {}),
+              ...(pub.keeperHubRunId ? { keeperHubRunId: pub.keeperHubRunId } : {}),
+              ...(pub.explorerUrl ? { explorerUrl: pub.explorerUrl } : {}),
+              ...(pub.contentUri ? { contentUri: pub.contentUri } : {}),
+              ...(pub.errorMessage ? { errorMessage: pub.errorMessage } : {}),
+            };
+          }
+        } catch (receiptError) {
+          console.error(
+            "Failed to publish premium receipt (settlement still valid):",
+            receiptError,
+          );
+          premiumReceipt = {
+            attempted: true,
+            success: false,
+            errorMessage:
+              receiptError instanceof Error
+                ? receiptError.message
+                : "premium_receipt_publish_failed",
+          };
+        }
+      }
+
       res.json({
         settled: true,
         paymentRecordId: result.paymentRecordId,
@@ -366,6 +572,7 @@ export function createPaymentRoutes(params: {
         },
         accessReceipt: receipt.accessReceipt,
         accessReceiptExpiresAt: receipt.accessReceiptExpiresAt,
+        ...(premiumReceipt ? { premiumReceipt } : {}),
       });
     } catch (error: unknown) {
       res.status(400).json({

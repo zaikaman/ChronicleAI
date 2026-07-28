@@ -7,7 +7,9 @@ export type RouteId =
   | "publications"
   | "alerts"
   | "digests"
+  | "desk"
   | "premium"
+  | "affiliates"
   | "activity";
 
 export interface RouteDefinition {
@@ -22,7 +24,9 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { id: "publications", path: "/publications", label: "Archive" },
   { id: "alerts", path: "/alerts", label: "Alerts" },
   { id: "digests", path: "/digests/latest", label: "Latest Digest" },
+  { id: "desk", path: "/desk", label: "Desk" },
   { id: "premium", path: "/premium", label: "Premium" },
+  { id: "affiliates", path: "/affiliates", label: "Affiliates" },
   { id: "activity", path: "/activity", label: "Activity" },
 ];
 

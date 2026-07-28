@@ -1,14 +1,66 @@
 // Unit tests for x402 payment adapter
 
-import { ethers } from "ethers";
+import type { Address, Hex } from "viem";
+import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { describe, expect, it, vi } from "vitest";
 import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 
 const TREASURY = "0x1234567890123456789012345678901234567890";
 
+function randomWallet(): PrivateKeyAccount {
+  return privateKeyToAccount(generatePrivateKey());
+}
+
+interface EIP712Domain {
+  name: string;
+  version: string;
+  chainId: number;
+  verifyingContract: string;
+}
+interface TransferWithAuthorizationType {
+  name: string;
+  type: string;
+}
+interface TransferWithAuthorizationMessage {
+  from: string;
+  to: string;
+  value: string | number;
+  validAfter: string | number;
+  validBefore: string | number;
+  nonce: string;
+}
+
+async function signTransferWithAuthorization(
+  wallet: PrivateKeyAccount,
+  domain: EIP712Domain,
+  types: { TransferWithAuthorization: TransferWithAuthorizationType[] },
+  message: TransferWithAuthorizationMessage,
+): Promise<Hex> {
+  return wallet.signTypedData({
+    domain: {
+      name: domain.name,
+      version: domain.version,
+      chainId: domain.chainId,
+      verifyingContract: domain.verifyingContract as Address,
+    },
+    types: {
+      TransferWithAuthorization: types.TransferWithAuthorization,
+    },
+    primaryType: "TransferWithAuthorization",
+    message: {
+      from: message.from as Address,
+      to: message.to as Address,
+      value: BigInt(message.value),
+      validAfter: BigInt(message.validAfter),
+      validBefore: BigInt(message.validBefore),
+      nonce: message.nonce as Hex,
+    },
+  });
+}
+
 async function signAuthorization(
   adapter: X402PaymentAdapter,
-  wallet: ethers.HDNodeWallet | ethers.Wallet,
+  wallet: PrivateKeyAccount,
   amount: number,
 ) {
   const challenge = await adapter.createChallenge({
@@ -17,25 +69,6 @@ async function signAuthorization(
     currency: "USDC",
     payerReference: wallet.address,
   });
-
-  interface EIP712Domain {
-    name: string;
-    version: string;
-    chainId: number;
-    verifyingContract: string;
-  }
-  interface TransferWithAuthorizationType {
-    name: string;
-    type: string;
-  }
-  interface TransferWithAuthorizationMessage {
-    from: string;
-    to: string;
-    value: number;
-    validAfter: number;
-    validBefore: number;
-    nonce: string;
-  }
 
   const challengeData = challenge.challengeData as {
     domain: EIP712Domain;
@@ -52,11 +85,10 @@ async function signAuthorization(
     to: TREASURY,
   };
 
-  const signature = await wallet.signTypedData(
+  const signature = await signTransferWithAuthorization(
+    wallet,
     domain,
-    {
-      TransferWithAuthorization: types.TransferWithAuthorization,
-    },
+    types,
     messageToSign,
   );
 
@@ -105,7 +137,7 @@ describe("X402PaymentAdapter", () => {
       expect(result.challengeData.network).toBe("eip155:84532");
       expect(result.challengeData.asset).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
       expect(result.challengeData.domain).toMatchObject({
-        name: "USD Coin",
+        name: "USDC",
         version: "2",
         chainId: 84_532,
         verifyingContract: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
@@ -304,7 +336,7 @@ describe("X402PaymentAdapter", () => {
       });
 
       it("should reject a valid EIP-712 signature when no settlement rail is configured", async () => {
-        const wallet = ethers.Wallet.createRandom();
+        const wallet = randomWallet();
         const amount = 5;
         const { challenge, settlementPayload } = await signAuthorization(
           prodAdapter,
@@ -325,7 +357,7 @@ describe("X402PaymentAdapter", () => {
       });
 
       it("should reject authorization when to is not the treasury", async () => {
-        const wallet = ethers.Wallet.createRandom();
+        const wallet = randomWallet();
         const amount = 5;
         const wrongTo = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -337,16 +369,9 @@ describe("X402PaymentAdapter", () => {
         });
 
         const challengeData = challenge.challengeData as {
-          domain: ethers.TypedDataDomain;
-          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
-          message: {
-            from: string;
-            to: string;
-            value: number;
-            validAfter: number;
-            validBefore: number;
-            nonce: string;
-          };
+          domain: EIP712Domain;
+          types: { TransferWithAuthorization: TransferWithAuthorizationType[] };
+          message: TransferWithAuthorizationMessage;
         };
 
         const messageToSign = {
@@ -355,9 +380,10 @@ describe("X402PaymentAdapter", () => {
           to: wrongTo,
         };
 
-        const signature = await wallet.signTypedData(
+        const signature = await signTransferWithAuthorization(
+          wallet,
           challengeData.domain,
-          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          challengeData.types,
           messageToSign,
         );
 
@@ -382,7 +408,7 @@ describe("X402PaymentAdapter", () => {
       });
 
       it("should settle only after successful transfer rail + receipt matching treasury", async () => {
-        const wallet = ethers.Wallet.createRandom();
+        const wallet = randomWallet();
         const amount = 5;
         const txHash =
           "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
@@ -435,7 +461,7 @@ describe("X402PaymentAdapter", () => {
       });
 
       it("should reject when transfer rail succeeds but receipt does not match treasury/amount", async () => {
-        const wallet = ethers.Wallet.createRandom();
+        const wallet = randomWallet();
         const amount = 5;
         const txHash =
           "0x1111111111111111111111111111111111111111111111111111111111111111";
@@ -506,7 +532,7 @@ describe("X402PaymentAdapter", () => {
       });
 
       it("should reject underpaid authorization before settlement rail", async () => {
-        const wallet = ethers.Wallet.createRandom();
+        const wallet = randomWallet();
         const amount = 5;
 
         const railAdapter = new X402PaymentAdapter({
@@ -523,16 +549,9 @@ describe("X402PaymentAdapter", () => {
         });
 
         const challengeData = challenge.challengeData as {
-          domain: ethers.TypedDataDomain;
-          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
-          message: {
-            from: string;
-            to: string;
-            value: number;
-            validAfter: number;
-            validBefore: number;
-            nonce: string;
-          };
+          domain: EIP712Domain;
+          types: { TransferWithAuthorization: TransferWithAuthorizationType[] };
+          message: TransferWithAuthorizationMessage;
         };
 
         // Sign for less than requested
@@ -544,9 +563,10 @@ describe("X402PaymentAdapter", () => {
           value: underpaidValue,
         };
 
-        const signature = await wallet.signTypedData(
+        const signature = await signTransferWithAuthorization(
+          wallet,
           challengeData.domain,
-          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          challengeData.types,
           messageToSign,
         );
 
@@ -574,7 +594,7 @@ describe("X402PaymentAdapter", () => {
       it("should accept unbound challenge (zero from) when client overwrites from at sign time", async () => {
         // Audit #6: challenge may use zero-address from when payer is not pre-bound.
         // Client sets from to the signing wallet; server enforces signer === from + treasury to.
-        const wallet = ethers.Wallet.createRandom();
+        const wallet = randomWallet();
         const amount = 5;
         const txHash =
           "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
@@ -604,16 +624,9 @@ describe("X402PaymentAdapter", () => {
         });
 
         const challengeData = challenge.challengeData as {
-          domain: ethers.TypedDataDomain;
-          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
-          message: {
-            from: string;
-            to: string;
-            value: number;
-            validAfter: number;
-            validBefore: number;
-            nonce: string;
-          };
+          domain: EIP712Domain;
+          types: { TransferWithAuthorization: TransferWithAuthorizationType[] };
+          message: TransferWithAuthorizationMessage;
         };
 
         expect(challengeData.message.from).toBe(
@@ -627,9 +640,10 @@ describe("X402PaymentAdapter", () => {
           from: wallet.address,
         };
 
-        const signature = await wallet.signTypedData(
+        const signature = await signTransferWithAuthorization(
+          wallet,
           challengeData.domain,
-          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          challengeData.types,
           messageToSign,
         );
 
@@ -662,7 +676,7 @@ describe("X402PaymentAdapter", () => {
       });
 
       it("should reject settlement when authorization from remains the zero address", async () => {
-        const wallet = ethers.Wallet.createRandom();
+        const wallet = randomWallet();
         const amount = 5;
         const zero = "0x0000000000000000000000000000000000000000";
 
@@ -679,16 +693,9 @@ describe("X402PaymentAdapter", () => {
         });
 
         const challengeData = challenge.challengeData as {
-          domain: ethers.TypedDataDomain;
-          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
-          message: {
-            from: string;
-            to: string;
-            value: number;
-            validAfter: number;
-            validBefore: number;
-            nonce: string;
-          };
+          domain: EIP712Domain;
+          types: { TransferWithAuthorization: TransferWithAuthorizationType[] };
+          message: TransferWithAuthorizationMessage;
         };
 
         // Sign with real wallet but claim from=zero (should fail closed before rail)
@@ -698,9 +705,10 @@ describe("X402PaymentAdapter", () => {
           to: TREASURY,
         };
 
-        const signature = await wallet.signTypedData(
+        const signature = await signTransferWithAuthorization(
+          wallet,
           challengeData.domain,
-          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          challengeData.types,
           messageToSign,
         );
 
@@ -725,7 +733,7 @@ describe("X402PaymentAdapter", () => {
       });
 
       it("should reject when recovered signer does not match authorization from", async () => {
-        const signer = ethers.Wallet.createRandom();
+        const signer = randomWallet();
         const claimedFrom = "0xcccccccccccccccccccccccccccccccccccccccc";
         const amount = 5;
 
@@ -742,16 +750,9 @@ describe("X402PaymentAdapter", () => {
         });
 
         const challengeData = challenge.challengeData as {
-          domain: ethers.TypedDataDomain;
-          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
-          message: {
-            from: string;
-            to: string;
-            value: number;
-            validAfter: number;
-            validBefore: number;
-            nonce: string;
-          };
+          domain: EIP712Domain;
+          types: { TransferWithAuthorization: TransferWithAuthorizationType[] };
+          message: TransferWithAuthorizationMessage;
         };
 
         // Sign typed data where from is claimedFrom, but with a different key
@@ -761,9 +762,10 @@ describe("X402PaymentAdapter", () => {
           to: TREASURY,
         };
 
-        const signature = await signer.signTypedData(
+        const signature = await signTransferWithAuthorization(
+          signer,
           challengeData.domain,
-          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          challengeData.types,
           messageToSign,
         );
 
@@ -785,6 +787,77 @@ describe("X402PaymentAdapter", () => {
 
         expect(result.verified).toBe(false);
         expect(result.errorMessage).toMatch(/recovered address does not match from/i);
+      });
+
+      it("should send CDP Bearer JWT when settling via CDP facilitator", async () => {
+        const { generateKeyPairSync } = await import("node:crypto");
+        const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+        const privJwk = privateKey.export({ format: "jwk" }) as { d?: string };
+        const pubJwk = publicKey.export({ format: "jwk" }) as { x?: string };
+        const seed = Buffer.from(privJwk.d!, "base64url");
+        const x = Buffer.from(pubJwk.x!, "base64url");
+        const apiKeySecret = Buffer.concat([seed, x]).toString("base64");
+        const apiKeyId = "11111111-1111-4111-8111-111111111111";
+
+        const txHash =
+          "0x3333333333333333333333333333333333333333333333333333333333333333";
+        const wallet = randomWallet();
+        const amount = 2;
+
+        const settleResponseBody = JSON.stringify({ success: true, transaction: txHash });
+        const fetchMock = vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => settleResponseBody,
+          json: async () => JSON.parse(settleResponseBody),
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        try {
+          const railAdapter = new X402PaymentAdapter({
+            facilitatorUrl: "https://api.cdp.coinbase.com/platform/v2/x402",
+            cdpApiKeyId: apiKeyId,
+            cdpApiKeySecret: apiKeySecret,
+            treasuryWalletAddress: TREASURY,
+            verifyTransactionReceipt: async () => ({
+              confirmed: true,
+              from: wallet.address,
+              to: TREASURY,
+              value: BigInt(Math.round(amount * 1_000_000)),
+            }),
+          });
+
+          const { challenge, settlementPayload } = await signAuthorization(
+            railAdapter,
+            wallet,
+            amount,
+          );
+
+          const result = await railAdapter.verifySettlement({
+            challengeReference: challenge.challengeReference,
+            settlementReference: JSON.stringify(settlementPayload),
+            amountRequested: amount,
+            currency: "USDC",
+            paymentRoute: "x402",
+          });
+
+          expect(result.verified).toBe(true);
+          expect(fetchMock).toHaveBeenCalled();
+          const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+          const headers = init.headers as Record<string, string>;
+          expect(headers.Authorization).toMatch(/^Bearer eyJ/);
+          const body = JSON.parse(String(init.body)) as {
+            x402Version: number;
+            paymentPayload: unknown;
+            paymentRequirements: unknown;
+          };
+          expect(body.x402Version).toBe(2);
+          expect(body.paymentPayload).toBeDefined();
+          expect(body.paymentRequirements).toBeDefined();
+        } finally {
+          vi.unstubAllGlobals();
+        }
       });
     });
   });

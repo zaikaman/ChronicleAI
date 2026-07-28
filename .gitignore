@@ -3,7 +3,9 @@ node_modules/
 
 # Build outputs
 dist/
+dist-types/
 build/
+*.tsbuildinfo
 
 # Environment files
 .env
@@ -42,6 +44,9 @@ npm-debug.log*
 
 # Temp files
 *.tmp
+
+# KeeperHub workflows with real secrets / deploy URLs (local only)
+workflows/keeperhub-ready/
 
 # KeeperHub (read-only reference)
 # keeperhub

@@ -15,21 +15,11 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "./dist",
-    "baseUrl": ".",
-    "paths": {
-      "@chronicleai/schemas": ["./packages/schemas/src"],
-      "@chronicleai/schemas/*": ["./packages/schemas/src/*"],
-      "@chronicleai/db": ["./packages/db/src"],
-      "@chronicleai/db/*": ["./packages/db/src/*"],
-      "@chronicleai/config": ["./packages/config/src"],
-      "@chronicleai/config/*": ["./packages/config/src/*"],
-      "@chronicleai/testing": ["./packages/testing/src"],
-      "@chronicleai/testing/*": ["./packages/testing/src/*"],
-      "@chronicleai/ui": ["./packages/ui/src"],
-      "@chronicleai/ui/*": ["./packages/ui/src/*"]
-    }
+    "composite": true,
+    "incremental": true,
+    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": true,
+    "customConditions": ["development"]
   },
-  "include": [],
   "exclude": ["node_modules", "dist", "coverage"]
 }

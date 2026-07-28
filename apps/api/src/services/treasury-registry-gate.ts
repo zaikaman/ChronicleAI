@@ -27,9 +27,19 @@ export interface TreasuryRegistryGate {
   evaluate(): Promise<TreasuryRegistryGateDecision>;
 }
 
+export interface TreasuryRegistryGateOptions {
+  /**
+   * Authoritative safety buffer (from TREASURY_SAFETY_BUFFER).
+   * When set, overrides the value stored on the latest snapshot so env
+   * changes take effect without waiting for the next treasury check payload.
+   */
+  safetyBuffer?: number;
+}
+
 export function createTreasuryRegistryGate(
   treasuryRepo: TreasurySnapshotRepository,
   treasuryService: TreasuryStatusService,
+  options?: TreasuryRegistryGateOptions,
 ): TreasuryRegistryGate {
   return {
     async evaluate() {
@@ -51,7 +61,9 @@ export function createTreasuryRegistryGate(
 
       const snap = latest.value;
       const availableBalance = snap.available_balance;
-      const safetyBuffer = snap.safety_buffer;
+      // Prefer configured env buffer so TREASURY_SAFETY_BUFFER is authoritative.
+      const safetyBuffer =
+        options?.safetyBuffer !== undefined ? options.safetyBuffer : snap.safety_buffer;
       const evaluation = treasuryService.evaluate({
         availableBalance,
         safetyBuffer,

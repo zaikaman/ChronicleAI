@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "workflow": {
+    "name": "Chronicle Desk — Profit Sweep (USDC → Treasury)",
+    "description": "Transfer free USDC from KH desk wallet to Para treasury on Ethereum Sepolia. Triggered by capital manager when equity exceeds target + profit threshold. amount is human USDC units."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": { "triggerType": "Manual" }
+      }
+    },
+    {
+      "id": "transfer-usdc",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "Transfer USDC Desk to Treasury",
+        "config": {
+          "actionType": "web3/transfer-token",
+          "network": "11155111",
+          "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238\",\"symbol\":\"USDC\"}}",
+          "amount": "{{@trigger-manual:Trigger.amount}}",
+          "recipientAddress": "{{@trigger-manual:Trigger.treasuryAddress}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-manual", "target": "transfer-usdc" }
+  ],
+  "integrationBindings": []
+}

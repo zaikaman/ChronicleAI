@@ -2,8 +2,10 @@
 // Returns published public digests for feed + HTTPS content URI resolution
 
 import type { DailyDigestRepository, DailyDigestRow } from "@chronicleai/db";
+import type { DigestSections } from "@chronicleai/schemas";
 import { Router, type Router as RouterType } from "express";
 import { notFound } from "../errors.ts";
+import { parseSectionsFromAnalysis } from "../services/digest-generation-service.ts";
 
 export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterType {
   const router: RouterType = Router();
@@ -17,7 +19,7 @@ export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterTyp
    *   200 - DailyDigestResponse
    *   404 - No published digests available
    */
-  router.get("/digests/latest", async (req, res, next) => {
+  router.get("/digests/latest", async (_req, res, next) => {
     try {
       const result = await digestRepo.findLatestPublic();
 
@@ -76,7 +78,43 @@ export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterTyp
   return router;
 }
 
+function extractSections(digest: DailyDigestRow): DigestSections | undefined {
+  const narrative = digest.market_narrative as Record<string, unknown> | null | undefined;
+  if (narrative && typeof narrative === "object") {
+    const sections = narrative.sections;
+    if (sections && typeof sections === "object") {
+      const s = sections as Record<string, unknown>;
+      if (
+        typeof s.capitalDirection === "string" ||
+        typeof s.exchangeAndProtocolFlows === "string"
+      ) {
+        return {
+          capitalDirection:
+            typeof s.capitalDirection === "string"
+              ? s.capitalDirection
+              : "No qualifying directional flow today.",
+          exchangeAndProtocolFlows:
+            typeof s.exchangeAndProtocolFlows === "string"
+              ? s.exchangeAndProtocolFlows
+              : "No qualifying CEX or protocol flow today.",
+          stressBoard:
+            typeof s.stressBoard === "string"
+              ? s.stressBoard
+              : "No material stress signals today.",
+          storyOfTheDay:
+            typeof s.storyOfTheDay === "string"
+              ? s.storyOfTheDay
+              : "Quiet day — no single multi-event narrative.",
+          coverageNote: typeof s.coverageNote === "string" ? s.coverageNote : "",
+        };
+      }
+    }
+  }
+  return parseSectionsFromAnalysis(digest.analysis) ?? undefined;
+}
+
 function formatDigestResponse(digest: DailyDigestRow): Record<string, unknown> {
+  const sections = extractSections(digest);
   return {
     id: digest.id,
     reportDate: digest.report_date,
@@ -84,6 +122,7 @@ function formatDigestResponse(digest: DailyDigestRow): Record<string, unknown> {
     summary: digest.summary,
     highlights: digest.highlights,
     analysis: digest.analysis ?? undefined,
+    ...(sections ? { sections } : {}),
     publicationStatus: digest.publication_status,
     publishedAt: digest.published_at,
     registryTxHash: digest.registry_tx_hash ?? undefined,

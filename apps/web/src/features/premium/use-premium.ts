@@ -1,9 +1,10 @@
-// Premium data fetching hooks
+// Premium data hooks — React Query for lists; imperative access for payment gating
 
 import type { PremiumItemTeaserResponse } from "@chronicleai/schemas";
-import { useCallback, useEffect, useState } from "react";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
+import { API_BASE, apiGetJson, apiPostJson, toErrorMessage } from "../../lib/api.ts";
+import { queryKeys } from "../../lib/query-keys.ts";
 
 const RECEIPT_STORAGE_PREFIX = "chronicle_premium_receipt:";
 
@@ -60,40 +61,32 @@ export interface PremiumItemAccessResult {
  * Hook to fetch premium item teasers.
  */
 export function usePremiumTeasers(): PremiumTeasersState {
-  const [items, setItems] = useState<PremiumItemTeaserResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.premium.teasers,
+    queryFn: async ({ signal }) => {
+      const data = await apiGetJson<{ items: PremiumItemTeaserResponse[] }>(
+        "/premium/items",
+        { signal },
+      );
+      return data.items ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-  const fetchTeasers = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`${API_BASE}/premium/items`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch premium items: ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as { items: PremiumItemTeaserResponse[] };
-      setItems(data.items ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load premium items");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTeasers();
-  }, [fetchTeasers]);
-
-  return { items, isLoading, error, refetch: fetchTeasers };
+  return {
+    items: query.data ?? [],
+    isLoading: query.isLoading || (query.isFetching && !query.data),
+    error: query.error ? toErrorMessage(query.error, "Failed to load premium items") : null,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 }
 
 /**
  * Hook to access a premium item with payment gating.
  * Handles the 402 -> challenge -> settle -> receipt flow.
+ * Kept imperative (not a pure query) because of multi-step payment UX.
  */
 export function usePremiumItemAccess(): PremiumItemAccessResult {
   const [isLoading, setIsLoading] = useState(false);
@@ -135,17 +128,42 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
       }
 
       if (response.status === 402) {
-        // Stale/invalid receipt should not stick around
         if (receipt) {
           clearPremiumAccessReceipt(itemId);
         }
-        const body = await response.json();
+        const body = (await response.json()) as {
+          premiumItemId?: string;
+          paymentRoute?: string;
+          amountRequested?: number;
+          currency?: string;
+          item?: {
+            priceAmount?: number;
+            priceCurrency?: string;
+            price_amount?: number;
+            price_currency?: string;
+          };
+        };
+
+        const rawAmount =
+          body.item?.priceAmount ??
+          body.amountRequested ??
+          body.item?.price_amount ??
+          0;
+        const amountRequested =
+          typeof rawAmount === "number" && Number.isFinite(rawAmount)
+            ? rawAmount
+            : Number(rawAmount) || 0;
+
         setIsPaymentRequired(true);
         setPaymentChallenge({
           premiumItemId: body.premiumItemId ?? itemId,
           paymentRoute: body.paymentRoute ?? "x402",
-          amountRequested: body.item?.priceAmount ?? 0,
-          currency: body.item?.priceCurrency ?? "USDC",
+          amountRequested,
+          currency:
+            body.item?.priceCurrency ??
+            body.currency ??
+            body.item?.price_currency ??
+            "USDC",
         });
         return;
       }
@@ -180,23 +198,10 @@ export async function createPaymentChallenge(params: {
   premiumItemId: string;
   paymentRoute: string;
   payerReference?: string;
+  /** Optional explicit affiliate; server also resolves first-touch wallet attribution. */
+  referralAddress?: string;
 }): Promise<Record<string, unknown> | null> {
-  try {
-    const response = await fetch(`${API_BASE}/payments/challenges`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(errorBody.error ?? "Failed to create challenge");
-    }
-
-    return (await response.json()) as Record<string, unknown>;
-  } catch (err) {
-    throw err;
-  }
+  return apiPostJson<Record<string, unknown>>("/payments/challenges", params);
 }
 
 /**
@@ -207,56 +212,54 @@ export async function settlePayment(params: {
   settlementReference: string;
   paymentRoute: string;
 }): Promise<Record<string, unknown> | null> {
-  try {
-    const response = await fetch(`${API_BASE}/payments/settlements`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(params),
-    });
+  return apiPostJson<Record<string, unknown>>("/payments/settlements", params, {
+    credentials: "include",
+  });
+}
 
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(errorBody.error ?? "Settlement failed");
-    }
-
-    return (await response.json()) as Record<string, unknown>;
-  } catch (err) {
-    throw err;
-  }
+export interface SponsoredWatchSummary {
+  id: string;
+  targetContract: string;
+  status: string;
+  createTxHash?: string;
+  reportTxHash?: string;
+  createExplorerUrl?: string;
+  reportExplorerUrl?: string;
+  sourceEventRoot?: string;
+  startsAt: string;
+  endsAt: string;
+  [key: string]: unknown;
 }
 
 /**
  * Hook to fetch active sponsored watches.
  */
-export function useSponsoredWatches() {
-  const [watches, setWatches] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useSponsoredWatches(): {
+  watches: SponsoredWatchSummary[];
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+} {
+  const query = useQuery({
+    queryKey: queryKeys.premium.watches,
+    queryFn: async ({ signal }) => {
+      const data = await apiGetJson<{ watches: SponsoredWatchSummary[] }>(
+        "/premium/watches",
+        { signal },
+      );
+      return data.watches ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-  const fetchWatches = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`${API_BASE}/premium/watches`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch sponsored watches: ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as { watches: any[] };
-      setWatches(data.watches ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load sponsored watches");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchWatches();
-  }, [fetchWatches]);
-
-  return { watches, isLoading, error, refetch: fetchWatches };
+  return {
+    watches: query.data ?? [],
+    isLoading: query.isLoading || (query.isFetching && !query.data),
+    error: query.error
+      ? toErrorMessage(query.error, "Failed to load sponsored watches")
+      : null,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 }

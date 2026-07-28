@@ -162,6 +162,17 @@ body {
   outline-offset: 2px;
 }
 
+/* Product surface card — frame + hairline border + comfortable inset.
+   Used by payment panels, metric cards, content views, etc.
+   Design system: spacing.card = 24px, rounded.xl / 2xl = 16px. */
+.card {
+  background-color: var(--frame);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
 .site-frame {
   display: block;
   position: fixed;
@@ -236,5 +247,179 @@ body {
   .site-frame,
   .site-corner {
     display: none;
+  }
+}
+
+/* ── Screen-reader only (spinner a11y) ─────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── Spinner (inline / small) ────────────────────────────
+   Accent tip on hairline ring. Use for buttons & compact waits. */
+.spinner-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.spinner-wrap--labeled {
+  gap: 0.5rem;
+  line-height: 1.4;
+}
+
+.spinner-label {
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.spinner {
+  display: inline-block;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--border) 90%, var(--muted-foreground));
+  border-top-color: var(--accent);
+  border-right-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  animation: spinner-rotate 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.spinner--xs {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-width: 1.5px;
+}
+
+.spinner--sm {
+  width: 1rem;
+  height: 1rem;
+  border-width: 1.5px;
+}
+
+.spinner--md {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-width: 2px;
+}
+
+.spinner--lg {
+  width: 2rem;
+  height: 2rem;
+  border-width: 2.5px;
+}
+
+/* Legacy class used in payment panel — maps to mid spinner */
+.loading-spinner {
+  display: inline-block;
+  width: 1.5rem;
+  height: 1.5rem;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--border) 90%, var(--muted-foreground));
+  border-top-color: var(--accent);
+  border-right-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  animation: spinner-rotate 0.7s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Skeleton bones (page / content loading) ─────────────
+   Soft shimmer on muted surface. Editorial calm, not neon. */
+.skeleton-bone {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  background-color: var(--muted);
+  isolation: isolate;
+}
+
+.skeleton-bone--pill {
+  border-radius: 999px;
+}
+
+.skeleton-bone::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--frame) 55%, transparent) 45%,
+    color-mix(in srgb, var(--frame) 70%, transparent) 55%,
+    transparent 100%
+  );
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.dark .skeleton-bone::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--foreground) 6%, transparent) 45%,
+    color-mix(in srgb, var(--foreground) 10%, transparent) 55%,
+    transparent 100%
+  );
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Staggered entrance for list skeletons (opacity only — layout stable) */
+.skeleton-stagger {
+  animation: skeleton-fade-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--stagger, 0ms);
+}
+
+@keyframes skeleton-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-skeleton {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .loading-spinner {
+    animation: none;
+    border-top-color: var(--accent);
+    opacity: 0.85;
+  }
+
+  .skeleton-bone::after {
+    animation: none;
+    transform: none;
+    background: color-mix(in srgb, var(--frame) 30%, transparent);
+  }
+
+  .dark .skeleton-bone::after {
+    background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  }
+
+  .skeleton-stagger {
+    animation: none;
   }
 }

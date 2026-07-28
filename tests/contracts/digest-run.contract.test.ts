@@ -16,15 +16,17 @@ const ENV = {
   GEMINI_API_KEY: "test-gemini-key",
   OPENAI_API_KEY: "test-openai-key",
   GROQ_API_KEY: "test-groq-key",
+  // Contract suite only asserts HTTP auth/validation — skip boot-time digest generation
+  DIGEST_SCHEDULE_ENABLED: "false",
 };
 
 describe("POST /keeperhub/digests/run", () => {
   let server: TestServer;
 
   beforeAll(async () => {
-    // Set env vars before importing app
+    // Force test env (never inherit real Supabase credentials from the shell/.env)
     for (const [key, value] of Object.entries(ENV)) {
-      process.env[key] = process.env[key] || value;
+      process.env[key] = value;
     }
 
     const { app } = await import("../../apps/api/src/app.ts");

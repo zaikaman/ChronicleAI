@@ -24,9 +24,9 @@ describe("POST /keeperhub/events", () => {
   let server: TestServer;
 
   beforeAll(async () => {
-    // Set env vars before importing app
+    // Force test env (never inherit real Supabase credentials from the shell/.env)
     for (const [key, value] of Object.entries(ENV)) {
-      process.env[key] = process.env[key] || value;
+      process.env[key] = value;
     }
 
     // Use dynamic import to ensure env vars are set before app module executes

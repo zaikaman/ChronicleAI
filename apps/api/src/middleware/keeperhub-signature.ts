@@ -23,7 +23,7 @@ export function keeperhubSignatureMiddleware(secret: string) {
     );
   }
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     const signature = req.headers["x-chronicleai-signature"];
 
     if (!signature || typeof signature !== "string") {

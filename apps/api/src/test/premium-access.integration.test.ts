@@ -23,17 +23,18 @@ describe("Premium Access Integration", () => {
     markUnderpaid: vi.fn(),
     markExpired: vi.fn(),
     markFailed: vi.fn(),
+    markRegistryProof: vi.fn(),
     expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
     listByPremiumItem: vi.fn(),
-    list: vi.fn(),
-    listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
+    list: vi.fn(), listPage: vi.fn(),
+      listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
     findSettledByPayer: vi.fn(),
   };
 
   const mockExecLogRepo = {
     append: vi.fn(),
     listByEntity: vi.fn(),
-    listRecent: vi.fn(),
+    listRecent: vi.fn(), listPage: vi.fn()
   };
 
   const receiptService = new PremiumAccessReceiptService({
@@ -225,6 +226,32 @@ describe("Premium Access Integration", () => {
       const teasers = await accessService.listTeasers();
 
       expect(teasers).toHaveLength(0);
+    });
+
+    it("should omit monthly newsletter catalog items from teaser listing", async () => {
+      mockPremiumRepo.listTeasers.mockResolvedValue({
+        ok: true,
+        value: [
+          mockPremiumItem,
+          {
+            ...mockPremiumItem,
+            id: "newsletter-item",
+            slug: "monthly-newsletter-x402",
+            title: "ChronicleAI Monthly Intelligence Newsletter",
+            content_type: "monthly_newsletter",
+            summary_public: "Recurring digests by email",
+            content_private: { product: "monthly_newsletter" },
+            price_amount: 2,
+            payment_routes: ["x402"],
+          },
+        ],
+      });
+
+      const teasers = await accessService.listTeasers();
+
+      expect(teasers).toHaveLength(1);
+      expect(teasers[0]?.slug).toBe(mockPremiumItem.slug);
+      expect(teasers.some((t) => t.contentType === "monthly_newsletter")).toBe(false);
     });
   });
 });
