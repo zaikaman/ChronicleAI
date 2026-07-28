@@ -64,7 +64,7 @@ import {
   createSignalFusionJudge,
 } from "../desk/index.ts";
 import type { LLMProvider } from "@chronicleai/schemas";
-import type { LLMProviderMap } from "../services/llm-provider-client.ts";
+import { createProviderConfigs, type LLMProviderMap } from "../services/llm-provider-client.ts";
 import {
   createDeskSignalRepository,
   createDeskIntentRepository,
@@ -159,11 +159,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     alertRepo: deps.alertRepo,
     execLogRepo: deps.execLogRepo,
     llmAttemptRepo: deps.llmAttemptRepo,
-    providerConfigs: {
-      gemini: { apiKey: env.geminiApiKey, model: env.geminiModel, baseUrl: env.geminiBaseUrl },
-      openai: { apiKey: env.openaiApiKey, model: env.openaiModel, baseUrl: env.openaiBaseUrl },
-      groq: { apiKey: env.groqApiKey, model: env.groqModel, baseUrl: env.groqBaseUrl },
-    },
+    providerConfigs: createProviderConfigs(env),
     registryService,
     frontendOrigin: env.frontendOrigin,
     notificationService,
@@ -207,23 +203,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   const deskControlStateRepo = createDeskControlStateRepository(deskSupabase);
 
   // LLM providers for desk agent (Gemini → Groq → OpenAI)
-  const deskLlmProviders: LLMProviderMap = {
-    gemini: {
-      apiKey: env.geminiApiKey,
-      model: env.geminiModel,
-      baseUrl: env.geminiBaseUrl,
-    },
-    openai: {
-      apiKey: env.openaiApiKey,
-      model: env.openaiModel,
-      baseUrl: env.openaiBaseUrl,
-    },
-    groq: {
-      apiKey: env.groqApiKey,
-      model: env.groqModel,
-      baseUrl: env.groqBaseUrl,
-    },
-  };
+  const deskLlmProviders: LLMProviderMap = createProviderConfigs(env);
 
   const deskAgentPreferred = (env.deskAgentLlmProvider as LLMProvider | undefined) ?? undefined;
   const deskFusionJudge = createSignalFusionJudge(deskLlmProviders, {
@@ -858,11 +838,7 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
   const windowService = createDigestWindowService(deps.digestRepo);
   const eventSelectionService = createDigestEventSelectionService(deps.eventRepo);
   const generationService = createDigestGenerationService(
-    {
-      gemini: { apiKey: env.geminiApiKey, model: env.geminiModel, baseUrl: env.geminiBaseUrl },
-      openai: { apiKey: env.openaiApiKey, model: env.openaiModel, baseUrl: env.openaiBaseUrl },
-      groq: { apiKey: env.groqApiKey, model: env.groqModel, baseUrl: env.groqBaseUrl },
-    },
+    createProviderConfigs(env),
     deps.llmAttemptRepo,
   );
   const publicationService = createDigestPublicationService(
@@ -1027,23 +1003,7 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
 
   // Shared Loop 4 service: create on payment, monitor window, auto-publish report
   const watchReportService = createSponsoredWatchReportService({
-    providerConfigs: {
-      gemini: {
-        apiKey: env.geminiApiKey,
-        model: env.geminiModel,
-        baseUrl: env.geminiBaseUrl,
-      },
-      openai: {
-        apiKey: env.openaiApiKey,
-        model: env.openaiModel,
-        baseUrl: env.openaiBaseUrl,
-      },
-      groq: {
-        apiKey: env.groqApiKey,
-        model: env.groqModel,
-        baseUrl: env.groqBaseUrl,
-      },
-    },
+    providerConfigs: createProviderConfigs(env),
   });
   const watchService = createSponsoredWatchService({
     watchRepo: deps.watchRepo,
@@ -1479,23 +1439,7 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
     dashboardService,
     withdrawalService,
     // Real LLM tool-calling (Gemini → Groq → OpenAI); falls back to deterministic tools if no keys.
-    providerConfigs: {
-      gemini: {
-        apiKey: env.geminiApiKey,
-        model: env.geminiModel,
-        baseUrl: env.geminiBaseUrl,
-      },
-      openai: {
-        apiKey: env.openaiApiKey,
-        model: env.openaiModel,
-        baseUrl: env.openaiBaseUrl,
-      },
-      groq: {
-        apiKey: env.groqApiKey,
-        model: env.groqModel,
-        baseUrl: env.groqBaseUrl,
-      },
-    },
+    providerConfigs: createProviderConfigs(env),
   });
 
   // KeeperHub treasury check (with signature middleware)

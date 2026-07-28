@@ -80,6 +80,7 @@ export interface ServerEnv {
   openaiModel: string;
   openaiBaseUrl: string | undefined;
   groqApiKey: string;
+  groqApiKeys: string[];
   groqModel: string;
   groqBaseUrl: string | undefined;
   x402FacilitatorUrl: string | undefined;
@@ -689,6 +690,74 @@ function parseOptionalPositiveNumberEnv(name: string): number | undefined {
   return parsed;
 }
 
+let currentGroqKeyIndex = 0;
+
+/**
+ * Resets the Groq key rotation index back to 0 (useful for testing).
+ */
+export function resetGroqKeyIndex(): void {
+  currentGroqKeyIndex = 0;
+}
+
+/**
+ * Returns all configured Groq API keys from process.env (or provided map).
+ * Scans GROQ_API_KEY, GROQ_API_KEY_1, GROQ_API_KEY_2, GROQ_API_KEY_3, ...
+ */
+export function getGroqApiKeys(
+  envMap: Record<string, string | undefined> = process.env,
+): string[] {
+  const keys: string[] = [];
+
+  const addIfValid = (val: string | undefined) => {
+    const trimmed = val?.trim();
+    if (trimmed && !keys.includes(trimmed)) {
+      keys.push(trimmed);
+    }
+  };
+
+  // 1. Primary key: GROQ_API_KEY or GROQ_API_KEY_1
+  addIfValid(envMap.GROQ_API_KEY);
+  addIfValid(envMap.GROQ_API_KEY_1);
+
+  // 2. Sequential scan: GROQ_API_KEY_2, GROQ_API_KEY_3, ...
+  let i = 2;
+  while (true) {
+    const k = envMap[`GROQ_API_KEY_${i}`];
+    if (k === undefined) break;
+    addIfValid(k);
+    i++;
+  }
+
+  // 3. Dynamic scan for any non-sequential GROQ_API_KEY_\d+ keys
+  const numberedKeyNames = Object.keys(envMap)
+    .filter((k) => /^GROQ_API_KEY_\d+$/i.test(k))
+    .sort((a, b) => {
+      const numA = parseInt(a.replace(/^GROQ_API_KEY_/i, ""), 10);
+      const numB = parseInt(b.replace(/^GROQ_API_KEY_/i, ""), 10);
+      return numA - numB;
+    });
+
+  for (const keyName of numberedKeyNames) {
+    addIfValid(envMap[keyName]);
+  }
+
+  return keys;
+}
+
+/**
+ * Returns the next Groq API key in round-robin sequence.
+ * Rotates through all available keys dynamically for each call/request.
+ */
+export function getNextGroqApiKey(
+  envMap: Record<string, string | undefined> = process.env,
+): string {
+  const keys = getGroqApiKeys(envMap);
+  if (keys.length === 0) return "";
+  const key = keys[currentGroqKeyIndex % keys.length];
+  currentGroqKeyIndex = (currentGroqKeyIndex + 1) % keys.length;
+  return key ?? "";
+}
+
 const DEFAULT_ROUTING_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
@@ -1020,7 +1089,10 @@ export function loadServerEnv(): ServerEnv {
     openaiApiKey: optionalEnv("OPENAI_API_KEY", "") as string,
     openaiModel: optionalEnv("OPENAI_MODEL", "gpt-4o-mini") as string,
     openaiBaseUrl: optionalEnv("OPENAI_BASE_URL"),
-    groqApiKey: optionalEnv("GROQ_API_KEY", "") as string,
+    groqApiKeys: getGroqApiKeys(),
+    get groqApiKey() {
+      return getNextGroqApiKey();
+    },
     groqModel: optionalEnv("GROQ_MODEL", "llama-3.3-70b-versatile") as string,
     groqBaseUrl: optionalEnv("GROQ_BASE_URL"),
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),

@@ -21,6 +21,7 @@ import {
 } from "@chronicleai/db";
 import { createAffiliateEarningsService } from "./services/affiliate-earnings-service.ts";
 import { createPremiumProductizerService } from "./services/premium-productizer-service.ts";
+import { createProviderConfigs } from "./services/llm-provider-client.ts";
 import express, { type Express } from "express";
 import compression from "compression";
 import {
@@ -118,11 +119,7 @@ try {
     eventRepo,
     execLogRepo,
     llmAttemptRepo,
-    providerConfigs: {
-      gemini: { apiKey: env.geminiApiKey, model: env.geminiModel, baseUrl: env.geminiBaseUrl },
-      openai: { apiKey: env.openaiApiKey, model: env.openaiModel, baseUrl: env.openaiBaseUrl },
-      groq: { apiKey: env.groqApiKey, model: env.groqModel, baseUrl: env.groqBaseUrl },
-    },
+    providerConfigs: createProviderConfigs(env),
   });
 
   // One-shot cleanup: hide non-LLM auto productizer leftovers (old boot backfill).

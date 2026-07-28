@@ -33,7 +33,7 @@ import {
   toBytes32Hash,
   toUint64Seconds,
 } from "./keeperhub-write-client.ts";
-import type { LLMProviderMap } from "./llm-provider-client.ts";
+import { createProviderConfigs, type LLMProviderMap } from "./llm-provider-client.ts";
 import {
   PRIVATE_ROUTING_CHAIN_ID,
   type PrivateRoutingPolicy,
@@ -286,23 +286,7 @@ function routingPoliciesFromEnv(env: ServerEnv): {
 
 /** LLM map for LangChain MCP publication agent (Loop 1/2). */
 function llmProvidersFromEnv(env: ServerEnv): LLMProviderMap {
-  return {
-    gemini: {
-      apiKey: env.geminiApiKey,
-      model: env.geminiModel,
-      baseUrl: env.geminiBaseUrl,
-    },
-    openai: {
-      apiKey: env.openaiApiKey,
-      model: env.openaiModel,
-      baseUrl: env.openaiBaseUrl,
-    },
-    groq: {
-      apiKey: env.groqApiKey,
-      model: env.groqModel,
-      baseUrl: env.groqBaseUrl,
-    },
-  };
+  return createProviderConfigs(env);
 }
 
 /** Native LangChain + KeeperHub MCP options for alert/digest writes. */

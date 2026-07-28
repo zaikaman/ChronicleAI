@@ -7,6 +7,8 @@ import {
   messageContentToText,
 } from "../agents/langchain/models.ts";
 
+import type { ServerEnv } from "@chronicleai/config";
+
 export interface LLMProviderConfig {
   apiKey: string;
   model: string;
@@ -21,6 +23,24 @@ export interface LLMProviderMap {
   gemini: LLMProviderConfig;
   openai: LLMProviderConfig;
   groq: LLMProviderConfig;
+}
+
+/**
+ * Creates standard LLMProviderMap from ServerEnv.
+ * Groq apiKey uses a dynamic getter to rotate keys in round-robin sequence on each request.
+ */
+export function createProviderConfigs(env: ServerEnv): LLMProviderMap {
+  return {
+    gemini: { apiKey: env.geminiApiKey, model: env.geminiModel, baseUrl: env.geminiBaseUrl },
+    openai: { apiKey: env.openaiApiKey, model: env.openaiModel, baseUrl: env.openaiBaseUrl },
+    groq: {
+      get apiKey() {
+        return env.groqApiKey;
+      },
+      model: env.groqModel,
+      baseUrl: env.groqBaseUrl,
+    },
+  };
 }
 
 export type LLMCaller = (
