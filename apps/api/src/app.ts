@@ -98,6 +98,23 @@ try {
     execLogRepo,
     activityRepo,
   });
+
+  // Periodically reap open payment challenges past expires_at.
+  // Settlement also runs a best-effort reaper; this keeps status rows accurate without traffic.
+  const CHALLENGE_EXPIRY_SWEEP_MS = 60_000;
+  const runChallengeExpirySweep = () => {
+    void paymentRecordRepo.expireOpenChallenges().then((result) => {
+      if (!result.ok) {
+        console.warn("Payment challenge expiry sweep failed:", result.error.message);
+        return;
+      }
+      if (result.value > 0) {
+        console.info(`Expired ${result.value} open payment challenge(s)`);
+      }
+    });
+  };
+  runChallengeExpirySweep();
+  setInterval(runChallengeExpirySweep, CHALLENGE_EXPIRY_SWEEP_MS).unref?.();
 } catch (error) {
   // Log but don't crash - env vars may not be available in all contexts
   console.warn("Routes not fully configured:", error instanceof Error ? error.message : error);

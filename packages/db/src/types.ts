@@ -262,6 +262,8 @@ export interface PaymentRecordRow {
   challenge_reference: string | null;
   settlement_reference: string | null;
   requested_at: string;
+  /** When the challenge stops accepting settlements (ISO-8601). */
+  expires_at: string | null;
   settled_at: string | null;
   created_at: string;
   updated_at: string;
@@ -278,6 +280,7 @@ export interface PaymentRecordInsert {
   challenge_reference?: string | null;
   settlement_reference?: string | null;
   requested_at?: string;
+  expires_at?: string | null;
   settled_at?: string | null;
 }
 

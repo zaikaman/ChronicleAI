@@ -2,7 +2,10 @@
 
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { MppPaymentAdapter } from "../payments/mpp-payment-adapter.ts";
+import {
+  MppPaymentAdapter,
+  resolveMppPayerReference,
+} from "../payments/mpp-payment-adapter.ts";
 
 describe("MppPaymentAdapter", () => {
   const adapter = new MppPaymentAdapter({ mppSecret: "test-secret-key" });
@@ -71,6 +74,18 @@ describe("MppPaymentAdapter", () => {
       expect(diffMs).toBeLessThanOrEqual(300_000 + 1000); // 5 min + 1s tolerance
     });
 
+    it("should include normalized EVM payerReference in challengeData when provided", async () => {
+      const payer = "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01";
+      const result = await adapter.createChallenge({
+        premiumItemId: "premium-001",
+        amount: 5,
+        currency: "USDC",
+        payerReference: payer,
+      });
+
+      expect(result.challengeData.payerReference).toBe(payer.toLowerCase());
+    });
+
     it("should throw when secret is not configured and test mode is off", async () => {
       await expect(
         prodNoSecret.createChallenge({
@@ -102,6 +117,8 @@ describe("MppPaymentAdapter", () => {
 
       expect(result.verified).toBe(true);
       expect(result.amountSettled).toBe(5);
+      // No synthetic mpp-client-* payer when challenge had no real identity
+      expect(result.payerReference).toBeUndefined();
     });
 
     it("should reject non-matching HMAC when allowTestMode is false", async () => {
@@ -163,6 +180,42 @@ describe("MppPaymentAdapter", () => {
       expect(result.verified).toBe(false);
     });
 
+    it("should reject settlements where embedded expiresAt is in the past", async () => {
+      const secret = "my-real-secret";
+      const customAdapter = new MppPaymentAdapter({ mppSecret: secret });
+      const amount = 5;
+      const currency = "USDC";
+      const challengeRef = "mpp_expired_challenge_ref";
+      const pastExpiresAt = new Date(Date.now() - 60_000).toISOString();
+      const hmacPayload = `${challengeRef}|${amount}|${currency}|${pastExpiresAt}`;
+      const expectedHmac = createHmac("sha256", secret).update(hmacPayload).digest("hex");
+      const settlementRef = `${pastExpiresAt}:${expectedHmac}`;
+
+      const result = await customAdapter.verifySettlement({
+        challengeReference: challengeRef,
+        settlementReference: settlementRef,
+        amountRequested: amount,
+        currency,
+        paymentRoute: "mpp",
+      });
+
+      expect(result.verified).toBe(false);
+      expect(result.errorMessage).toMatch(/expired/i);
+    });
+
+    it("should reject invalid expiresAt timestamp in settlement reference", async () => {
+      const result = await adapter.verifySettlement({
+        challengeReference: "mpp_test",
+        settlementReference: "not-a-date:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        amountRequested: 5,
+        currency: "USDC",
+        paymentRoute: "mpp",
+      });
+
+      expect(result.verified).toBe(false);
+      expect(result.errorMessage).toMatch(/expiresAt/i);
+    });
+
     it("should verify a real cryptographic HMAC signature", async () => {
       const secret = "my-real-secret";
       const customAdapter = new MppPaymentAdapter({ mppSecret: secret });
@@ -190,7 +243,57 @@ describe("MppPaymentAdapter", () => {
 
       expect(result.verified).toBe(true);
       expect(result.amountSettled).toBe(amount);
-      expect(result.payerReference).toContain("mpp-client-");
+      expect(result.payerReference).toBeUndefined();
+    });
+
+    it("should map challenge-time EVM payerReference for referral payouts", async () => {
+      const secret = "my-real-secret";
+      const customAdapter = new MppPaymentAdapter({ mppSecret: secret });
+      const amount = 5;
+      const currency = "USDC";
+      const payer = "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01";
+
+      const challenge = await customAdapter.createChallenge({
+        premiumItemId: "premium-001",
+        amount,
+        currency,
+        payerReference: payer,
+      });
+
+      const expiresAt = challenge.expiresAt;
+      const hmacPayload = `${challenge.challengeReference}|${amount}|${currency}|${expiresAt}`;
+      const expectedHmac = createHmac("sha256", secret).update(hmacPayload).digest("hex");
+      const settlementRef = `${expiresAt}:${expectedHmac}`;
+
+      const result = await customAdapter.verifySettlement({
+        challengeReference: challenge.challengeReference,
+        settlementReference: settlementRef,
+        amountRequested: amount,
+        currency,
+        paymentRoute: "mpp",
+        challengePayerReference: payer,
+      });
+
+      expect(result.verified).toBe(true);
+      expect(result.payerReference).toBe(payer.toLowerCase());
+    });
+  });
+
+  describe("resolveMppPayerReference", () => {
+    it("normalizes EVM addresses", () => {
+      expect(resolveMppPayerReference("0xAbCdEf0123456789AbCdEf0123456789AbCdEf01")).toBe(
+        "0xabcdef0123456789abcdef0123456789abcdef01",
+      );
+    });
+
+    it("drops synthetic mpp-client ids", () => {
+      expect(resolveMppPayerReference("mpp-client-2026-07-")).toBeUndefined();
+    });
+
+    it("returns undefined for empty values", () => {
+      expect(resolveMppPayerReference(null)).toBeUndefined();
+      expect(resolveMppPayerReference(undefined)).toBeUndefined();
+      expect(resolveMppPayerReference("")).toBeUndefined();
     });
   });
 });

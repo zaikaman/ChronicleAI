@@ -10,6 +10,32 @@ import type {
 
 const CHALLENGE_EXPIRY_MS = 300_000; // 5 minutes for machine payments
 
+/** EVM address used as a real payout / referral identity. */
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
+/**
+ * Resolve a real payout identity for MPP settlements.
+ * Prefer an EVM address from challenge-time payerReference so revenue-routing
+ * referral transfers can pay out on-chain. Synthetic mpp-client-* ids are never
+ * returned — those cannot receive on-chain transfers.
+ */
+export function resolveMppPayerReference(
+  challengePayerReference?: string | null,
+): string | undefined {
+  if (!challengePayerReference) return undefined;
+  const trimmed = challengePayerReference.trim();
+  if (!trimmed) return undefined;
+  if (EVM_ADDRESS_RE.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  // Non-address machine ids are accepted for access scoping but not invented here.
+  // Only pass through stable client-supplied identifiers (not synthetic expiresAt slices).
+  if (trimmed.startsWith("mpp-client-")) {
+    return undefined;
+  }
+  return trimmed;
+}
+
 /**
  * MPP payment adapter.
  *
@@ -61,6 +87,8 @@ export class MppPaymentAdapter implements PaymentAdapter {
     const hmacPayload = `${challengeReference}|${params.amount}|${params.currency}|${expiresAt}`;
     const expectedHmac = createHmac("sha256", secret).update(hmacPayload).digest("hex");
 
+    const resolvedPayer = resolveMppPayerReference(params.payerReference);
+
     const challengeData: Record<string, unknown> = {
       route: "mpp",
       premiumItemId: params.premiumItemId,
@@ -72,6 +100,7 @@ export class MppPaymentAdapter implements PaymentAdapter {
       hmacPayloadTemplate: `${challengeReference}|${params.amount}|${params.currency}|${expiresAt}`,
       expiresAt,
       verificationType: "hmac_sha256",
+      ...(resolvedPayer ? { payerReference: resolvedPayer } : {}),
     };
 
     // Keep expectedHmac available only in test mode so unit tests can assert shape
@@ -96,6 +125,8 @@ export class MppPaymentAdapter implements PaymentAdapter {
     amountRequested: number;
     currency: string;
     paymentRoute: string;
+    /** Challenge-time payer (from payment_records) for real payout identity mapping. */
+    challengePayerReference?: string | null | undefined;
   }): Promise<SettlementVerificationResult> {
     if (params.paymentRoute !== "mpp") {
       return {
@@ -133,6 +164,27 @@ export class MppPaymentAdapter implements PaymentAdapter {
     const expiresAt = params.settlementReference.slice(0, lastColonIndex);
     const providedHmac = params.settlementReference.slice(lastColonIndex + 1);
 
+    // Enforce settlement / challenge expiry before cryptographic checks are treated as success.
+    const expiresMs = Date.parse(expiresAt);
+    if (Number.isNaN(expiresMs)) {
+      return {
+        verified: false,
+        amountSettled: 0,
+        currency: params.currency,
+        settlementReference: params.settlementReference,
+        errorMessage: "Invalid expiresAt in settlement reference",
+      };
+    }
+    if (expiresMs < Date.now()) {
+      return {
+        verified: false,
+        amountSettled: 0,
+        currency: params.currency,
+        settlementReference: params.settlementReference,
+        errorMessage: "Settlement challenge has expired (expiresAt)",
+      };
+    }
+
     const secret = this.resolveSecret();
     if (!secret) {
       return {
@@ -164,14 +216,16 @@ export class MppPaymentAdapter implements PaymentAdapter {
       }
     }
 
-    const payerReference = `mpp-client-${expiresAt.slice(0, 8) || "unknown"}`;
+    // Map to a real payout identity when the challenge was created with an EVM address.
+    // Never invent synthetic mpp-client-* ids (those skip on-chain referral transfers).
+    const payerReference = resolveMppPayerReference(params.challengePayerReference);
 
     return {
       verified: true,
       amountSettled: params.amountRequested,
       currency: params.currency,
       settlementReference: params.settlementReference,
-      payerReference,
+      ...(payerReference ? { payerReference } : {}),
     };
   }
 }

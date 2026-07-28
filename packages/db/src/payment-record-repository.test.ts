@@ -23,7 +23,7 @@ describe("normalizePayerReference", () => {
     expect(normalizePayerReference("   ")).toBeNull();
   });
 
-  it("preserves non-EVM payer identifiers (e.g. MPP clients)", () => {
-    expect(normalizePayerReference("mpp-client-2026-07-")).toBe("mpp-client-2026-07-");
+  it("preserves non-EVM payer identifiers that are not synthetic", () => {
+    expect(normalizePayerReference("machine-agent-42")).toBe("machine-agent-42");
   });
 });

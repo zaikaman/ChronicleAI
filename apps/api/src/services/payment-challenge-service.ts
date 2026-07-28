@@ -7,8 +7,6 @@ import { PAYMENT_ROUTES } from "@chronicleai/schemas";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
 import type { ChallengeResult } from "../payments/payment-adapter.ts";
 
-const CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes
-
 export interface ChallengeServiceResult {
   challenge: ChallengeResult;
   paymentRecordId: string;
@@ -49,6 +47,7 @@ export class PaymentChallengeService {
 
   /**
    * Create a payment challenge for a premium item using the specified route.
+   * Persists adapter `expiresAt` so settlement can reject stale challenges.
    */
   async createChallenge(params: {
     premiumItem: PremiumIntelligenceItemRow;
@@ -68,7 +67,7 @@ export class PaymentChallengeService {
       payerReference: params.payerReference ?? undefined,
     });
 
-    // Record the challenge in the database
+    // Record the challenge in the database (including expiry from the adapter)
     const result = await this.paymentRecordRepo.createChallenge({
       premium_item_id: params.premiumItem.id,
       payment_route: params.paymentRoute,
@@ -78,6 +77,7 @@ export class PaymentChallengeService {
       status: "challenge_issued",
       challenge_reference: challenge.challengeReference,
       requested_at: new Date().toISOString(),
+      expires_at: challenge.expiresAt,
     });
 
     if (!result.ok) {

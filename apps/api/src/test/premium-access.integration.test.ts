@@ -23,6 +23,7 @@ describe("Premium Access Integration", () => {
     markUnderpaid: vi.fn(),
     markExpired: vi.fn(),
     markFailed: vi.fn(),
+    expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
     listByPremiumItem: vi.fn(),
     list: vi.fn(),
     findSettledByPayer: vi.fn(),

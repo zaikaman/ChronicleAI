@@ -15,6 +15,44 @@ export interface SettlementResult {
   sponsoredWatchId?: string;
 }
 
+/** Fallback when a legacy record has no expires_at (matches x402 challenge window). */
+const LEGACY_CHALLENGE_EXPIRY_MS = 600_000;
+
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
+/**
+ * Prefer a real EVM payout identity (needed for on-chain referral transfers).
+ * Falls back to any non-empty reference for access scoping.
+ */
+export function resolveSettlementPayerReference(
+  verificationPayer: string | null | undefined,
+  challengePayer: string | null | undefined,
+): string | null {
+  const candidates = [verificationPayer, challengePayer]
+    .map((p) => (typeof p === "string" ? p.trim() : ""))
+    .filter((p) => p.length > 0);
+
+  const evm = candidates.find((p) => EVM_ADDRESS_RE.test(p));
+  if (evm) return evm.toLowerCase();
+
+  // Drop synthetic MPP ids that cannot receive on-chain payouts.
+  const usable = candidates.find((p) => !p.startsWith("mpp-client-"));
+  return usable ?? null;
+}
+
+function resolveRecordExpiryMs(record: {
+  expires_at?: string | null;
+  requested_at: string;
+}): number | null {
+  if (record.expires_at) {
+    const parsed = Date.parse(record.expires_at);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  const requested = Date.parse(record.requested_at);
+  if (Number.isNaN(requested)) return null;
+  return requested + LEGACY_CHALLENGE_EXPIRY_MS;
+}
+
 export class PaymentSettlementService {
   private readonly paymentRecordRepo: PaymentRecordRepository;
   private readonly execLogRepo: ExecutionLogRepository;
@@ -35,11 +73,12 @@ export class PaymentSettlementService {
    *
    * Steps:
    * 1. Look up the payment record by challenge reference
-   * 2. Verify the settlement via the route adapter
-   * 3. Check for underpayment / expiry / failure
-   * 4. Record the settlement result
-   * 5. Log execution
-   * 6. Return result (which may trigger sponsored watch creation)
+   * 2. Enforce challenge expiry (status + expires_at)
+   * 3. Verify the settlement via the route adapter
+   * 4. Check for underpayment / failure
+   * 5. Record the settlement result
+   * 6. Log execution
+   * 7. Return result (which may trigger sponsored watch creation)
    */
   async settle(params: {
     challengeReference: string;
@@ -48,6 +87,14 @@ export class PaymentSettlementService {
     amountSettled?: number | undefined;
     currency?: string | undefined;
   }): Promise<SettlementResult> {
+    // Best-effort reaper so open challenges transition to expired without a separate cron hit.
+    // Failures here must not block settlement of a still-valid challenge.
+    try {
+      await this.paymentRecordRepo.expireOpenChallenges();
+    } catch {
+      // ignore reaper errors
+    }
+
     // Look up the payment record
     const recordResult = await this.paymentRecordRepo.findByChallengeReference(
       params.challengeReference,
@@ -79,7 +126,7 @@ export class PaymentSettlementService {
       };
     }
 
-    // Check if expired
+    // Check if already marked expired
     if (record.status === "expired") {
       return {
         settled: false,
@@ -95,19 +142,55 @@ export class PaymentSettlementService {
       };
     }
 
+    // Enforce expires_at even when status was not yet reaped to "expired"
+    const expiryMs = resolveRecordExpiryMs(record);
+    if (expiryMs !== null && Date.now() >= expiryMs) {
+      await this.paymentRecordRepo.markExpired(record.id);
+
+      await this.execLogRepo.append({
+        action_type: "payment",
+        entity_type: "payment_record",
+        entity_id: record.id,
+        status: "failed",
+        message: "Payment settlement rejected: challenge expired",
+        details: {
+          challengeReference: params.challengeReference,
+          settlementReference: params.settlementReference,
+          paymentRoute: params.paymentRoute,
+          expiresAt: record.expires_at ?? new Date(expiryMs).toISOString(),
+        },
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      });
+
+      return {
+        settled: false,
+        paymentRecordId: record.id,
+        verification: {
+          verified: false,
+          amountSettled: 0,
+          currency: params.currency ?? record.currency ?? "USDC",
+          settlementReference: params.settlementReference,
+          errorMessage: "Challenge has expired",
+        },
+        isSponsoredWatch: false,
+      };
+    }
+
     // Get the route adapter
     const adapter = this.adapters.get(params.paymentRoute);
     if (!adapter) {
       throw new Error(`Unsupported payment route: ${params.paymentRoute}`);
     }
 
-    // Verify the settlement
+    // Verify the settlement (pass challenge-time payer for MPP identity mapping)
     const verification = await adapter.verifySettlement({
       challengeReference: params.challengeReference,
       settlementReference: params.settlementReference,
       amountRequested: record.amount_requested ?? 0,
       currency: params.currency ?? record.currency ?? "USDC",
       paymentRoute: params.paymentRoute,
+      challengePayerReference: record.payer_reference,
     });
 
     if (!verification.verified) {
@@ -128,8 +211,11 @@ export class PaymentSettlementService {
         completed_at: new Date().toISOString(),
       });
 
-      // Check if underpaid
-      if (
+      // If adapter reported expiry, mark the record expired for consistency
+      const err = (verification.errorMessage ?? "").toLowerCase();
+      if (err.includes("expired")) {
+        await this.paymentRecordRepo.markExpired(record.id);
+      } else if (
         verification.amountSettled > 0 &&
         verification.amountSettled < (record.amount_requested ?? 0)
       ) {
@@ -146,10 +232,11 @@ export class PaymentSettlementService {
       };
     }
 
-    // Prefer the on-chain / adapter-verified payer; fall back to challenge-time payer.
-    // Persisting this is required for findSettledByPayer and payer-scoped access receipts.
-    const payerReference =
-      verification.payerReference ?? record.payer_reference ?? null;
+    // Prefer on-chain / EVM payer identities so referral rewards can transfer on-chain.
+    const payerReference = resolveSettlementPayerReference(
+      verification.payerReference,
+      record.payer_reference,
+    );
 
     const settleWrite = await this.paymentRecordRepo.markSettled(
       record.id,

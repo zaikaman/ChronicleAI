@@ -288,6 +288,7 @@ export type Database = {
           challenge_reference: string | null
           created_at: string
           currency: string | null
+          expires_at: string | null
           id: string
           payer_reference: string | null
           payment_route: string
@@ -304,6 +305,7 @@ export type Database = {
           challenge_reference?: string | null
           created_at?: string
           currency?: string | null
+          expires_at?: string | null
           id?: string
           payer_reference?: string | null
           payment_route: string
@@ -320,6 +322,7 @@ export type Database = {
           challenge_reference?: string | null
           created_at?: string
           currency?: string | null
+          expires_at?: string | null
           id?: string
           payer_reference?: string | null
           payment_route?: string

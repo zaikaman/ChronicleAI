@@ -54,5 +54,10 @@ export interface PaymentAdapter {
     amountRequested: number;
     currency: string;
     paymentRoute: PaymentRoute;
+    /**
+     * Optional challenge-time payer from the payment record.
+     * Used by routes (e.g. MPP) that cannot recover a payer from the settlement proof alone.
+     */
+    challengePayerReference?: string | null | undefined;
   }): Promise<SettlementVerificationResult>;
 }

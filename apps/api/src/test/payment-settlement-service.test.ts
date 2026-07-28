@@ -49,8 +49,9 @@ describe("PaymentSettlementService", () => {
       findByChallengeReference: vi.fn().mockResolvedValue({ ok: true as const, value: record }),
       markSettled: vi.fn().mockResolvedValue({ ok: true as const, value: settledRow }),
       markUnderpaid: vi.fn().mockResolvedValue({ ok: true as const, value: record }),
-      markExpired: vi.fn(),
+      markExpired: vi.fn().mockResolvedValue({ ok: true as const, value: { ...record, status: "expired" as const } }),
       markFailed: vi.fn().mockResolvedValue({ ok: true as const, value: record }),
+      expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
       listByPremiumItem: vi.fn(),
       list: vi.fn(),
       findSettledByPayer: vi.fn(),
@@ -93,7 +94,7 @@ describe("PaymentSettlementService", () => {
       verification.settlementReference,
       verification.amountSettled,
       verification.currency,
-      verification.payerReference,
+      verification.payerReference!.toLowerCase(),
     );
     expect(result.verification.payerReference).toBe(
       verification.payerReference?.toLowerCase(),
@@ -101,7 +102,7 @@ describe("PaymentSettlementService", () => {
   });
 
   it("falls back to challenge-time payer_reference when verification omits payer", async () => {
-    const challengePayer = "0xChallengePayer00000000000000000000000001";
+    const challengePayer = "0xAbCdEf0123456789AbCdEf0123456789AbCdEf02";
     const { service, paymentRecordRepo, verification } = createMocks({
       record: {
         ...challengeRecord,
@@ -127,7 +128,7 @@ describe("PaymentSettlementService", () => {
       "0xsettlementtx00000000000000000000000000000000002",
       5,
       "USDC",
-      challengePayer,
+      challengePayer.toLowerCase(),
     );
   });
 
@@ -212,5 +213,91 @@ describe("PaymentSettlementService", () => {
         paymentRoute: "x402",
       }),
     ).rejects.toThrow(/Failed to record payment settlement/);
+  });
+
+  it("rejects settlement when record.expires_at is in the past and marks expired", async () => {
+    const { service, paymentRecordRepo, adapter } = createMocks({
+      record: {
+        ...challengeRecord,
+        expires_at: new Date(Date.now() - 1_000).toISOString(),
+      },
+    });
+
+    const result = await service.settle({
+      challengeReference: challengeRecord.challenge_reference!,
+      settlementReference: "0xshouldnotsettle",
+      paymentRoute: "x402",
+    });
+
+    expect(result.settled).toBe(false);
+    expect(result.verification.errorMessage).toMatch(/expired/i);
+    expect(paymentRecordRepo.markExpired).toHaveBeenCalledWith(challengeRecord.id);
+    expect(adapter.verifySettlement).not.toHaveBeenCalled();
+    expect(paymentRecordRepo.markSettled).not.toHaveBeenCalled();
+  });
+
+  it("passes challenge-time payer_reference into adapter.verifySettlement", async () => {
+    const challengePayer = "0xAbCdEf0123456789AbCdEf0123456789AbCdEf03";
+    const { service, adapter, verification } = createMocks({
+      record: {
+        ...challengeRecord,
+        payer_reference: challengePayer,
+      },
+    });
+
+    await service.settle({
+      challengeReference: challengeRecord.challenge_reference!,
+      settlementReference: verification.settlementReference,
+      paymentRoute: "x402",
+    });
+
+    expect(adapter.verifySettlement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        challengePayerReference: challengePayer,
+      }),
+    );
+  });
+
+  it("prefers EVM challenge payer over synthetic verification payer", async () => {
+    const challengePayer = "0xAbCdEf0123456789AbCdEf0123456789AbCdEf04";
+    const { service, paymentRecordRepo } = createMocks({
+      record: {
+        ...challengeRecord,
+        payer_reference: challengePayer,
+      },
+      verification: {
+        verified: true,
+        amountSettled: 5,
+        currency: "USDC",
+        settlementReference: "0xsettlementtx00000000000000000000000000000000003",
+        payerReference: "mpp-client-2026-07-",
+      },
+    });
+
+    await service.settle({
+      challengeReference: challengeRecord.challenge_reference!,
+      settlementReference: "0xsettlementtx00000000000000000000000000000000003",
+      paymentRoute: "x402",
+    });
+
+    expect(paymentRecordRepo.markSettled).toHaveBeenCalledWith(
+      challengeRecord.id,
+      "0xsettlementtx00000000000000000000000000000000003",
+      5,
+      "USDC",
+      challengePayer.toLowerCase(),
+    );
+  });
+
+  it("runs expireOpenChallenges reaper before settling", async () => {
+    const { service, paymentRecordRepo, verification } = createMocks();
+
+    await service.settle({
+      challengeReference: challengeRecord.challenge_reference!,
+      settlementReference: verification.settlementReference,
+      paymentRoute: "x402",
+    });
+
+    expect(paymentRecordRepo.expireOpenChallenges).toHaveBeenCalled();
   });
 });

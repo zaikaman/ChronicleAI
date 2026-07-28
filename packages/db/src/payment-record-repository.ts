@@ -42,6 +42,11 @@ export interface PaymentRecordRepository {
   markUnderpaid(id: string): Promise<Result<PaymentRecordRow>>;
   markExpired(id: string): Promise<Result<PaymentRecordRow>>;
   markFailed(id: string, message?: string): Promise<Result<PaymentRecordRow>>;
+  /**
+   * Reap open challenges whose `expires_at` is at or before `asOf` (default: now).
+   * Returns the number of rows transitioned to `expired`.
+   */
+  expireOpenChallenges(asOf?: string): Promise<Result<number>>;
   listByPremiumItem(premiumItemId: string): Promise<Result<PaymentRecordRow[]>>;
   list(limit?: number): Promise<Result<PaymentRecordRow[]>>;
   findSettledByPayer(
@@ -129,6 +134,19 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
 
     async markFailed(id, _message?) {
       return update(id, { status: "failed" as PaymentStatus });
+    },
+
+    async expireOpenChallenges(asOf?) {
+      const cutoff = asOf ?? new Date().toISOString();
+      const { data, error } = await table()
+        .update({ status: "expired" as PaymentStatus })
+        .in("status", ["challenge_issued", "pending"])
+        .not("expires_at", "is", null)
+        .lte("expires_at", cutoff)
+        .select("id");
+
+      if (error) return failure(mapPostgrestError(error));
+      return success((data ?? []).length);
     },
 
     async listByPremiumItem(premiumItemId) {
