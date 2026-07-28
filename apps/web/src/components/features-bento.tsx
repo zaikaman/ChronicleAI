@@ -288,7 +288,7 @@ function IntegrationsCard({
           Circular Financial Economy
         </h3>
         <p className="text-neutral-700 text-sm">
-          Self-funding model: collected subscription and referral fees replenish Para wallet gas reserves automatically.
+          Self-funding model: collected subscription and referral fees replenish the Para MPC treasury gas reserve automatically.
         </p>
       </div>
 

@@ -50,7 +50,7 @@ function notConfigured(): RegistryPublishResult {
   return {
     success: false,
     errorMessage:
-      "On-chain write path not configured. Set KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL + CHRONICLE_REGISTRY_ADDRESS (production), or ALLOW_DIRECT_ETHERS_WRITES=true with RPC_URL/PARA_WALLET_PRIVATE_KEY (local tests only).",
+      "On-chain write path not configured. Set KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL + CHRONICLE_REGISTRY_ADDRESS (production KeeperHub org wallet), or ALLOW_DIRECT_ETHERS_WRITES=true with RPC_URL/PARA_WALLET_PRIVATE_KEY test EOA (local tests only — not Para MPC).",
   };
 }
 

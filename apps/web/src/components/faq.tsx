@@ -22,7 +22,7 @@ const faqs = [
   {
     question: "How is ChronicleAI self-sustaining?",
     answer:
-      "The agent funds its own operational costs—including gas fees and API keys—autonomously. It runs a circular economy loop where subscription, sponsorship, and micro-payment revenues are collected into its Para MPC wallet, which is then used to cover its own operational overhead.",
+      "The agent funds its own operational costs—including gas fees and API keys—autonomously. It runs a circular economy loop where subscription, sponsorship, and micro-payment revenues are collected into its Para MPC treasury wallet, with KeeperHub executing on-chain registry writes and Para signing revenue transfers.",
   },
   {
     question: "What are sponsored watches?",

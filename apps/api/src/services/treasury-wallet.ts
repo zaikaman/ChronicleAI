@@ -1,18 +1,49 @@
-// Resolve the treasury wallet used for inbound x402 payments and outbound revenue splits.
-// Address is derived from TREASURY_WALLET_PRIVATE_KEY when set so the spend key always
-// matches the payment destination.
+// Resolve the agent treasury wallet used for inbound x402 payments and outbound
+// revenue splits.
+//
+// Production priority:
+// 1. Para MPC (PARA_API_KEY) — address from ensureWallet(); spends via Para REST
+// 2. KeeperHub-backed address-only (TREASURY_WALLET_ADDRESS) — spends via KeeperHub
+// 3. Local EOA (TREASURY_WALLET_PRIVATE_KEY) — test path only
+//
+// Synchronous resolve covers env-based identity. Para address is resolved
+// asynchronously via resolveTreasuryWalletAsync / ParaTreasuryClient.ensureWallet.
 
 import type { ServerEnv } from "@chronicleai/config";
 import { ethers } from "ethers";
+import {
+  createParaTreasuryClientFromEnv,
+  isParaTreasuryConfigured,
+  type ParaTreasuryClient,
+} from "./para-treasury-client.ts";
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const PRIVATE_KEY_RE = /^(0x)?[a-fA-F0-9]{64}$/;
 
+/**
+ * How outbound treasury spends are expected to be authorized.
+ */
+export type TreasurySpendMode = "para" | "keeperhub" | "eoa" | "none";
+
+/**
+ * Operator-facing provider label.
+ */
+export type TreasuryProvider = "para-mpc" | "keeperhub" | "eoa" | "unconfigured";
+
 export interface ResolvedTreasuryWallet {
   /** Public address used as x402 `to` and as the sender identity for splits. */
   address: string | undefined;
-  /** Spending key for revenue routing transfers. */
+  /**
+   * Spending key for revenue routing transfers.
+   * Present only in direct-EOA (test) mode; production uses Para MPC or KeeperHub.
+   */
   privateKey: string | undefined;
+  /** How outbound spends should be authorized. */
+  spendMode: TreasurySpendMode;
+  /** Honest provider label for logs / operator tooling. */
+  provider: TreasuryProvider;
+  /** Para wallet id when provider is para-mpc and already resolved. */
+  paraWalletId?: string;
 }
 
 /**
@@ -35,20 +66,48 @@ export function deriveAddressFromPrivateKey(privateKey: string): string {
 }
 
 /**
- * Resolve treasury address + private key from env.
+ * Synchronous resolve from env (no Para network calls).
  *
- * Rules:
- * - Private key present → address is always derived from the key (source of truth).
- * - If TREASURY_WALLET_ADDRESS is also set, it must match the derived address.
- * - Address-only (legacy) is still allowed for x402 challenges, but sendTransfer
- *   will fail until TREASURY_WALLET_PRIVATE_KEY is configured.
+ * When PARA_API_KEY is set, returns provider=para-mpc with address from
+ * TREASURY_WALLET_ADDRESS if provided (optional cache). Call
+ * `resolveTreasuryWalletAsync` at startup / first spend to load the live address.
  */
-export function resolveTreasuryWallet(env: Pick<
-  ServerEnv,
-  "treasuryWalletAddress" | "treasuryWalletPrivateKey"
->): ResolvedTreasuryWallet {
+export function resolveTreasuryWallet(
+  env: Pick<
+    ServerEnv,
+    | "treasuryWalletAddress"
+    | "treasuryWalletPrivateKey"
+    | "paraApiKey"
+    | "paraWalletId"
+  >,
+  options?: {
+    /**
+     * When true (and Para not configured), address-only treasuries are labeled
+     * as KeeperHub-backed. Defaults to true.
+     */
+    keeperHubBacked?: boolean;
+  },
+): ResolvedTreasuryWallet {
   const rawKey = env.treasuryWalletPrivateKey?.trim();
   const rawAddress = env.treasuryWalletAddress?.trim();
+  const keeperHubBacked = options?.keeperHubBacked !== false;
+  const paraConfigured = isParaTreasuryConfigured(env);
+
+  // Production: Para MPC takes priority over EOA keys when API key is present.
+  if (paraConfigured) {
+    if (rawAddress && !ADDRESS_RE.test(rawAddress)) {
+      throw new Error(
+        "TREASURY_WALLET_ADDRESS must be a valid EIP-55 / hex address (0x + 40 hex chars)",
+      );
+    }
+    return {
+      address: rawAddress && ADDRESS_RE.test(rawAddress) ? rawAddress : undefined,
+      privateKey: undefined,
+      spendMode: "para",
+      provider: "para-mpc",
+      ...(env.paraWalletId?.trim() ? { paraWalletId: env.paraWalletId.trim() } : {}),
+    };
+  }
 
   if (rawKey) {
     const address = deriveAddressFromPrivateKey(rawKey);
@@ -66,7 +125,12 @@ export function resolveTreasuryWallet(env: Pick<
       }
     }
     const normalizedKey = rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`;
-    return { address, privateKey: normalizedKey };
+    return {
+      address,
+      privateKey: normalizedKey,
+      spendMode: "eoa",
+      provider: "eoa",
+    };
   }
 
   if (rawAddress) {
@@ -75,8 +139,63 @@ export function resolveTreasuryWallet(env: Pick<
         "TREASURY_WALLET_ADDRESS must be a valid EIP-55 / hex address (0x + 40 hex chars)",
       );
     }
-    return { address: rawAddress, privateKey: undefined };
+    if (keeperHubBacked) {
+      return {
+        address: rawAddress,
+        privateKey: undefined,
+        spendMode: "keeperhub",
+        provider: "keeperhub",
+      };
+    }
+    return {
+      address: rawAddress,
+      privateKey: undefined,
+      spendMode: "none",
+      provider: "unconfigured",
+    };
   }
 
-  return { address: undefined, privateKey: undefined };
+  return {
+    address: undefined,
+    privateKey: undefined,
+    spendMode: "none",
+    provider: "unconfigured",
+  };
+}
+
+/**
+ * Async resolve that enrolls/loads the Para MPC treasury wallet when configured.
+ * Falls back to synchronous env resolution otherwise.
+ */
+export async function resolveTreasuryWalletAsync(
+  env: ServerEnv,
+  options?: {
+    keeperHubBacked?: boolean;
+    paraClient?: ParaTreasuryClient | null;
+  },
+): Promise<ResolvedTreasuryWallet> {
+  const paraClient = options?.paraClient ?? createParaTreasuryClientFromEnv(env);
+
+  if (paraClient) {
+    const wallet = await paraClient.ensureWallet();
+    const sync = resolveTreasuryWallet(env, options);
+    if (
+      sync.address &&
+      sync.address.toLowerCase() !== wallet.address.toLowerCase()
+    ) {
+      throw new Error(
+        `TREASURY_WALLET_ADDRESS (${sync.address}) does not match Para MPC wallet address (${wallet.address}). ` +
+          "Update TREASURY_WALLET_ADDRESS to the Para address or remove it so it is derived from Para.",
+      );
+    }
+    return {
+      address: wallet.address,
+      privateKey: undefined,
+      spendMode: "para",
+      provider: "para-mpc",
+      paraWalletId: wallet.walletId,
+    };
+  }
+
+  return resolveTreasuryWallet(env, options);
 }

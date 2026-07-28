@@ -1,5 +1,5 @@
 // Treasury-gated registry writes (FR-026 / IDEA Loop 3)
-// Registry writes only proceed when the latest Para wallet snapshot is at or
+// Registry writes only proceed when the latest treasury snapshot is at or
 // above the safety buffer. Publication services consult this gate before any
 // on-chain Chronicle Registry write.
 

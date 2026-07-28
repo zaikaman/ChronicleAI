@@ -12,8 +12,14 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
     async getTreasuryAddress() {
       return "0xtreasury";
     },
+    async getTreasuryProvider() {
+      return "keeperhub" as const;
+    },
     isKeeperHubBacked() {
       return true;
+    },
+    isParaTreasuryBacked() {
+      return false;
     },
     async publishAlert(_alertHash: string, _ipfsUri: string) {
       return {

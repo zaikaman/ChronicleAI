@@ -1,5 +1,7 @@
 // KeeperHub treasury check handler
-// Records treasury snapshots and creates low-balance warning logs (Loop 3)
+// Records treasury snapshots and creates low-balance warning logs (Loop 3).
+// When a live Para MPC balance provider is configured, the on-chain/Para
+// balance overrides the payload figure for production accuracy.
 
 import type { TreasuryCheckPayload } from "@chronicleai/schemas";
 import type {
@@ -8,6 +10,12 @@ import type {
 } from "@chronicleai/db";
 import type { TreasuryStatusService } from "../services/treasury-status-service.ts";
 import type { NotificationService } from "../services/notification-service.ts";
+
+export interface LiveTreasuryBalance {
+  availableBalance: number;
+  currency: string;
+  source: "para-mpc" | "rpc";
+}
 
 export interface TreasuryCheckResult {
   accepted: boolean;
@@ -21,17 +29,23 @@ export class TreasuryCheckHandler {
   private readonly execLogRepo: ExecutionLogRepository;
   private readonly treasuryService: TreasuryStatusService;
   private readonly notificationService: NotificationService;
+  private readonly liveBalanceProvider:
+    | (() => Promise<LiveTreasuryBalance | undefined>)
+    | undefined;
 
   constructor(deps: {
     treasuryRepo: TreasurySnapshotRepository;
     execLogRepo: ExecutionLogRepository;
     treasuryService: TreasuryStatusService;
     notificationService: NotificationService;
+    /** Optional production live balance (Para MPC getWalletBalance). */
+    liveBalanceProvider?: () => Promise<LiveTreasuryBalance | undefined>;
   }) {
     this.treasuryRepo = deps.treasuryRepo;
     this.execLogRepo = deps.execLogRepo;
     this.treasuryService = deps.treasuryService;
     this.notificationService = deps.notificationService;
+    this.liveBalanceProvider = deps.liveBalanceProvider;
   }
 
   async check(payload: TreasuryCheckPayload, _source = "keeperhub"): Promise<TreasuryCheckResult> {
@@ -42,9 +56,29 @@ export class TreasuryCheckHandler {
         ? latestResult.value.status
         : undefined;
 
+      // Prefer live Para/RPC balance when available (production Loop 3).
+      let availableBalance = payload.availableBalance;
+      let currency = payload.currency;
+      let balanceSource: "payload" | "para-mpc" | "rpc" = "payload";
+      if (this.liveBalanceProvider) {
+        try {
+          const live = await this.liveBalanceProvider();
+          if (live && Number.isFinite(live.availableBalance)) {
+            availableBalance = live.availableBalance;
+            currency = live.currency;
+            balanceSource = live.source;
+          }
+        } catch (error) {
+          console.warn(
+            "[treasury] Live balance provider failed; using payload balance:",
+            error instanceof Error ? error.message : error,
+          );
+        }
+      }
+
       // 2. Evaluate treasury health
       const evaluation = this.treasuryService.evaluate({
-        availableBalance: payload.availableBalance,
+        availableBalance,
         safetyBuffer: payload.safetyBuffer,
         ...(previousStatus ? { previousStatus: previousStatus as "healthy" | "warning" | "critical" } : {}),
       });
@@ -53,8 +87,8 @@ export class TreasuryCheckHandler {
 
       // 3. Record snapshot
       const snapshotResult = await this.treasuryRepo.create({
-        available_balance: payload.availableBalance,
-        currency: payload.currency,
+        available_balance: availableBalance,
+        currency,
         safety_buffer: payload.safetyBuffer,
         revenue_total: latestResult.ok ? (latestResult.value?.revenue_total ?? null) : null,
         estimated_generation_cost: null,
@@ -81,10 +115,12 @@ export class TreasuryCheckHandler {
         entity_type: "treasury_snapshot",
         entity_id: snapshot.id,
         status: "succeeded",
-        message: `Treasury check: ${evaluation.status} ($${payload.availableBalance} available, $${payload.safetyBuffer} buffer)`,
+        message: `Treasury check: ${evaluation.status} (${availableBalance} ${currency} available, buffer ${payload.safetyBuffer}, source=${balanceSource})`,
         details: {
-          available_balance: payload.availableBalance,
+          available_balance: availableBalance,
           safety_buffer: payload.safetyBuffer,
+          currency,
+          balance_source: balanceSource,
           status: evaluation.status,
           previous_status: evaluation.previousStatus,
           status_changed: evaluation.changed,
@@ -94,7 +130,7 @@ export class TreasuryCheckHandler {
       // 5. Send low-balance warning if status is warning or critical
       if (evaluation.status !== "healthy" && deficitPct > 0) {
         await this.notificationService.sendLowBalanceWarning({
-          availableBalance: payload.availableBalance,
+          availableBalance,
           safetyBuffer: payload.safetyBuffer,
           deficitPercentage: deficitPct,
           status: evaluation.status,

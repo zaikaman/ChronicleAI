@@ -34,15 +34,14 @@ export interface ServerEnv {
   premiumAccessSecret: string | undefined;
   /**
    * Optional public treasury address for x402 `to`.
-   * Prefer deriving this from TREASURY_WALLET_PRIVATE_KEY (see apps/api treasury-wallet).
-   * If both are set, they must match.
+   * Production preference: derive from Para MPC wallet (PARA_API_KEY).
+   * Fallback: TREASURY_WALLET_PRIVATE_KEY (tests) or explicit address.
    */
   treasuryWalletAddress: string | undefined;
   /**
-   * Private key for the treasury wallet that receives premium payments and
-   * signs outbound revenue-routing transfers. Required for real payouts.
-   * Distinct from CREATOR_RECOVERY_WALLET (payout destination) and
-   * PARA_WALLET_PRIVATE_KEY (registry / agent ops).
+   * Optional EOA private key for the treasury wallet (LOCAL TESTS ONLY).
+   * Production treasury spends use Para MPC (PARA_API_KEY) or KeeperHub.
+   * Do not put a treasury private key in production env.
    */
   treasuryWalletPrivateKey: string | undefined;
   /** Creator recovery payout recipient (required for revenue routing). */
@@ -55,14 +54,37 @@ export interface ServerEnv {
   chronicleRegistryAddress: string | undefined;
   rpcUrl: string | undefined;
   /**
-   * Para / agent key for registry writes — ONLY used when
-   * ALLOW_DIRECT_ETHERS_WRITES=true (local unit tests). Production writes go
-   * through KeeperHub (KEEPERHUB_API_KEY).
+   * Production Para partner API key (server-side only).
+   * Enables real Para MPC treasury wallets via @getpara/rest-sdk.
+   * Get from https://developer.getpara.com
+   */
+  paraApiKey: string | undefined;
+  /**
+   * Para environment: BETA (default, testnets) | PROD | SANDBOX.
+   */
+  paraEnvironment: "BETA" | "PROD" | "SANDBOX";
+  /**
+   * Identifier used to create/lookup the agent treasury wallet under Para.
+   * Default: chronicleai-treasury
+   */
+  paraTreasuryUserIdentifier: string;
+  /**
+   * Identifier type for Para wallet lookup. Default CUSTOM_ID for agent wallets.
+   */
+  paraTreasuryUserIdentifierType: string;
+  /**
+   * Optional pre-created Para wallet ID. When set, skips create/list lookup.
+   */
+  paraWalletId: string | undefined;
+  /**
+   * Test-only agent/registry EOA private key. Historical env name
+   * (`PARA_WALLET_PRIVATE_KEY`) — this is NOT a Para MPC credential.
+   * Used only when ALLOW_DIRECT_ETHERS_WRITES=true (local unit tests).
    */
   paraWalletPrivateKey: string | undefined;
   /**
    * When true (and NODE_ENV is not production), allow direct ethers
-   * sendTransaction for local unit tests. Default false — KeeperHub only.
+   * sendTransaction for local unit tests. Default false.
    */
   allowDirectEthersWrites: boolean;
   /** KeeperHub REST base URL (e.g. https://app.keeperhub.com). */
@@ -143,6 +165,17 @@ function parseEvmAddressEnv(name: string, fallback: string): string {
   return address;
 }
 
+function parseParaEnvironment(raw: string | undefined): "BETA" | "PROD" | "SANDBOX" {
+  const value = (raw ?? "BETA").trim().toUpperCase();
+  if (value === "PROD" || value === "PRODUCTION") {
+    return "PROD";
+  }
+  if (value === "SANDBOX") {
+    return "SANDBOX";
+  }
+  return "BETA";
+}
+
 export function loadServerEnv(): ServerEnv {
   const nodeEnv = optionalEnv("NODE_ENV", "development") as string;
 
@@ -172,6 +205,13 @@ export function loadServerEnv(): ServerEnv {
     ),
     chronicleRegistryAddress: optionalEnv("CHRONICLE_REGISTRY_ADDRESS"),
     rpcUrl: optionalEnv("RPC_URL"),
+    paraApiKey: optionalEnv("PARA_API_KEY"),
+    paraEnvironment: parseParaEnvironment(optionalEnv("PARA_ENVIRONMENT", "BETA")),
+    paraTreasuryUserIdentifier:
+      optionalEnv("PARA_TREASURY_USER_IDENTIFIER", "chronicleai-treasury") as string,
+    paraTreasuryUserIdentifierType:
+      optionalEnv("PARA_TREASURY_USER_IDENTIFIER_TYPE", "CUSTOM_ID") as string,
+    paraWalletId: optionalEnv("PARA_WALLET_ID"),
     paraWalletPrivateKey: optionalEnv("PARA_WALLET_PRIVATE_KEY"),
     allowDirectEthersWrites:
       optionalEnv("ALLOW_DIRECT_ETHERS_WRITES", "false")?.toLowerCase() === "true",

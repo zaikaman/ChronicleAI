@@ -14,6 +14,7 @@
     "@chronicleai/config": "workspace:*",
     "@chronicleai/db": "workspace:*",
     "@chronicleai/schemas": "workspace:*",
+    "@getpara/rest-sdk": "3.5.1",
     "cors": "^2.8.5",
     "ethers": "^6.17.0",
     "express": "^5.1.0",

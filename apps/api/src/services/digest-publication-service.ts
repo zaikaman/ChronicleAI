@@ -2,7 +2,7 @@
 // + community channel bulletins (Discord / Telegram) with self-hosted content
 //
 // FR-026 / IDEA Loop 3: registry writes are treasury-gated — suspended when
-// the Para wallet balance is below the safety buffer; SMTP/community still
+// the agent treasury balance is below the safety buffer; SMTP/community still
 // proceed and a public low-balance warning is emitted.
 
 import type { DailyDigestRepository, ExecutionLogRepository } from "@chronicleai/db";

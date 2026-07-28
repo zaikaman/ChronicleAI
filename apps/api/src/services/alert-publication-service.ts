@@ -5,7 +5,7 @@
 // to Discord and Telegram including the KeeperHub execution transaction hash.
 //
 // FR-026 / IDEA Loop 3: registry writes are treasury-gated — suspended when
-// the Para wallet balance is below the safety buffer; local publish still
+// the agent treasury balance is below the safety buffer; local publish still
 // proceeds and a public low-balance warning is emitted.
 
 import type { ExecutionLogRepository, PublicAlertRepository } from "@chronicleai/db";

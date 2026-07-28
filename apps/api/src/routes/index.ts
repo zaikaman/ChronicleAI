@@ -43,7 +43,7 @@ export interface US1Dependencies {
   alertRepo: PublicAlertRepository;
   execLogRepo: ExecutionLogRepository;
   llmAttemptRepo: LLMGenerationAttemptRepository;
-  /** Latest Para wallet snapshots for FR-026 treasury-gated registry writes. */
+  /** Latest treasury snapshots for FR-026 treasury-gated registry writes. */
   treasuryRepo: TreasurySnapshotRepository;
 }
 
@@ -116,6 +116,7 @@ import {
   createNotificationService,
 } from "../services/notification-service.ts";
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
+import { createParaTreasuryClientFromEnv } from "../services/para-treasury-client.ts";
 import { resolveTreasuryWallet } from "../services/treasury-wallet.ts";
 import { createWeb3Client } from "../services/web3-client-service.ts";
 import { createDigestRoutes } from "./digest-routes.ts";
@@ -127,7 +128,7 @@ export interface US2Dependencies {
   digestRepo: DailyDigestRepository;
   execLogRepo: ExecutionLogRepository;
   subscriberRepo: EmailSubscriberRepository;
-  /** Latest Para wallet snapshots for FR-026 treasury-gated registry writes. */
+  /** Latest treasury snapshots for FR-026 treasury-gated registry writes. */
   treasuryRepo: TreasurySnapshotRepository;
 }
 
@@ -233,15 +234,35 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
   const web3Client = createWeb3Client(env);
   const treasury = resolveTreasuryWallet(env);
 
+  // Production: resolve Para MPC treasury address (async warm-up; x402 uses sync fallback then refresh)
+  const treasuryAddressHolder = { address: treasury.address };
+  if (web3Client?.isParaTreasuryBacked()) {
+    void web3Client
+      .getTreasuryAddress()
+      .then((address) => {
+        if (address) {
+          treasuryAddressHolder.address = address;
+          console.info(`[para] Production treasury MPC wallet ready: ${address}`);
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "[para] Failed to ensure Para MPC treasury wallet:",
+          error instanceof Error ? error.message : error,
+        );
+      });
+  }
+
   // Initialize payment adapters
   const adapters = new Map<PaymentRoute, PaymentAdapter>();
   adapters.set(
     "x402",
     new X402PaymentAdapter({
       facilitatorUrl: env.x402FacilitatorUrl ?? undefined,
-      // Prefer address derived from TREASURY_WALLET_PRIVATE_KEY so receive === spend key
-      treasuryWalletAddress: treasury.address,
-      // Real settlement rail: facilitator (preferred) or direct EIP-3009 submission
+      // Prefer Para MPC address (production) once warm-up completes
+      treasuryWalletAddress: () => treasuryAddressHolder.address,
+      // Real settlement rail: facilitator (preferred) or direct EIP-3009 submission.
+      // Gas key is only for submitting transferWithAuthorization — not the Para MPC spend key.
       rpcUrl: env.rpcUrl ?? undefined,
       settlementPrivateKey: treasury.privateKey ?? undefined,
       // Env-driven EIP-712 domain (defaults: Base Sepolia + Circle USDC)
@@ -351,10 +372,25 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
     },
   });
   const treasury = resolveTreasuryWallet(env);
+  const paraTreasury = createParaTreasuryClientFromEnv(env);
 
-  if (!treasury.privateKey) {
+  if (paraTreasury) {
+    void paraTreasury
+      .ensureWallet()
+      .then((wallet) => {
+        console.info(
+          `[para] Revenue routing treasury MPC wallet: ${wallet.address} (id=${wallet.walletId})`,
+        );
+      })
+      .catch((error) => {
+        console.error(
+          "[para] Failed to ensure Para MPC treasury for revenue routing:",
+          error instanceof Error ? error.message : error,
+        );
+      });
+  } else if (!treasury.privateKey && treasury.provider !== "keeperhub") {
     console.warn(
-      "TREASURY_WALLET_PRIVATE_KEY is not set — revenue routing transfers will fail until the treasury can sign payouts",
+      "No production treasury spend path: set PARA_API_KEY for Para MPC, or KeeperHub write config, or TREASURY_WALLET_PRIVATE_KEY for local tests only",
     );
   }
 
@@ -410,6 +446,18 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
     execLogRepo: deps.execLogRepo,
     treasuryService,
     notificationService,
+    ...(paraTreasury
+      ? {
+          liveBalanceProvider: async () => {
+            const eth = await paraTreasury.getNativeBalanceEth();
+            return {
+              availableBalance: eth,
+              currency: "ETH",
+              source: "para-mpc" as const,
+            };
+          },
+        }
+      : {}),
   });
 
   const revenueHandler = new RevenueRoutingHandler({

@@ -74,7 +74,14 @@ export class X402PaymentAdapter implements PaymentAdapter {
   readonly route = "x402" as const;
 
   private readonly facilitatorUrl: string | undefined;
-  private readonly treasuryWalletAddress: string | undefined;
+  /**
+   * Static address or live resolver (production Para MPC warm-up updates the
+   * address after ensureWallet completes).
+   */
+  private readonly treasuryWalletAddressResolver:
+    | string
+    | undefined
+    | (() => string | undefined);
   private readonly allowTestMode: boolean;
   private readonly rpcUrl: string | undefined;
   private readonly settlementPrivateKey: string | undefined;
@@ -93,9 +100,22 @@ export class X402PaymentAdapter implements PaymentAdapter {
       ) => Promise<X402ReceiptVerificationResult>)
     | undefined;
 
+  /** Resolved treasury receive address (supports live Para resolver). */
+  private get treasuryWalletAddress(): string | undefined {
+    const resolved = this.treasuryWalletAddressResolver;
+    if (typeof resolved === "function") {
+      return resolved();
+    }
+    return resolved;
+  }
+
   constructor(options?: {
     facilitatorUrl?: string | undefined;
-    treasuryWalletAddress?: string | undefined;
+    /**
+     * Treasury receive address for x402 `to`. Accepts a static string or a
+     * getter so production can point at a Para MPC wallet once enrolled.
+     */
+    treasuryWalletAddress?: string | undefined | (() => string | undefined);
     /**
      * When true, the adapter will accept plain-string settlement references
      * without EIP-712 signature verification or on-chain settlement.
@@ -106,7 +126,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
     rpcUrl?: string | undefined;
     /**
      * Private key that pays gas for direct `transferWithAuthorization` when no
-     * facilitator is configured. Typically TREASURY_WALLET_PRIVATE_KEY.
+     * facilitator is configured. Not the Para MPC spend key.
      */
     settlementPrivateKey?: string | undefined;
     /**
@@ -138,7 +158,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
       | undefined;
   }) {
     this.facilitatorUrl = options?.facilitatorUrl?.replace(/\/$/, "") || undefined;
-    this.treasuryWalletAddress = options?.treasuryWalletAddress;
+    this.treasuryWalletAddressResolver = options?.treasuryWalletAddress;
     this.allowTestMode = options?.allowTestMode ?? false;
     this.rpcUrl = options?.rpcUrl;
     this.settlementPrivateKey = options?.settlementPrivateKey;

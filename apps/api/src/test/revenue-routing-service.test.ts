@@ -151,7 +151,9 @@ describe("RevenueRoutingService", () => {
     const mockWeb3Client: Web3Client = {
       getSignerAddress: vi.fn().mockResolvedValue("0xsigner"),
       getTreasuryAddress: vi.fn().mockResolvedValue("0xtreasury"),
+      getTreasuryProvider: vi.fn().mockResolvedValue("keeperhub"),
       isKeeperHubBacked: vi.fn().mockReturnValue(true),
+      isParaTreasuryBacked: vi.fn().mockReturnValue(false),
       publishAlert: vi.fn(),
       publishDigest: vi.fn(),
       createSponsoredWatch: vi.fn(),
