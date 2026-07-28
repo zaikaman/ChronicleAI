@@ -106,6 +106,52 @@ describe("X402PaymentAdapter", () => {
       expect((result.challengeData.message as { to: string }).to).toBe(TREASURY);
       expect(result.challengeData.network).toBe("eip155:84532");
       expect(result.challengeData.asset).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
+      expect(result.challengeData.domain).toMatchObject({
+        name: "USD Coin",
+        version: "2",
+        chainId: 84_532,
+        verifyingContract: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      });
+    });
+
+    it("should use configured chainId and USDC address in EIP-712 domain", async () => {
+      const baseMainnetUsdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+      const custom = new X402PaymentAdapter({
+        allowTestMode: true,
+        treasuryWalletAddress: TREASURY,
+        chainId: 8453,
+        usdcAddress: baseMainnetUsdc,
+      });
+
+      const result = await custom.createChallenge({
+        premiumItemId: "premium-001",
+        amount: 5,
+        currency: "USDC",
+      });
+
+      expect(result.challengeData.network).toBe("eip155:8453");
+      expect(result.challengeData.asset).toBe(baseMainnetUsdc);
+      expect(result.challengeData.domain).toMatchObject({
+        chainId: 8453,
+        verifyingContract: baseMainnetUsdc,
+      });
+    });
+
+    it("should reject invalid chainId or USDC address at construction", () => {
+      expect(
+        () =>
+          new X402PaymentAdapter({
+            treasuryWalletAddress: TREASURY,
+            chainId: 0,
+          }),
+      ).toThrow(/Invalid x402 chainId/);
+      expect(
+        () =>
+          new X402PaymentAdapter({
+            treasuryWalletAddress: TREASURY,
+            usdcAddress: "not-an-address",
+          }),
+      ).toThrow(/Invalid x402 USDC address/);
     });
 
     it("should create a challenge with default expiry within 10 minutes", async () => {

@@ -1,8 +1,11 @@
 // x402 Payment Adapter
-// Implements the x402 (Base Sepolia EVM subscription) payment route.
+// Implements the x402 (EVM USDC subscription) payment route.
 // Settlement requires a real USDC transfer: either via a facilitator
 // (POST /settle) or by submitting EIP-3009 transferWithAuthorization on-chain.
 // Signature verification alone never unlocks premium.
+//
+// Chain ID and USDC verifyingContract are configurable (env-driven in production
+// wiring). Defaults target Base Sepolia for the hackathon demo.
 
 import { randomUUID } from "node:crypto";
 import { ethers } from "ethers";
@@ -12,10 +15,12 @@ import type {
   SettlementVerificationResult,
 } from "./payment-adapter.ts";
 
-/** Base Sepolia chain ID and Circle official USDC for x402 EIP-712 domain. */
-const X402_CHAIN_ID = 84_532;
-const X402_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
-const X402_NETWORK_CAIP2 = `eip155:${X402_CHAIN_ID}`;
+/** Defaults: Base Sepolia + Circle official USDC (EIP-3009). */
+export const DEFAULT_X402_CHAIN_ID = 84_532;
+export const DEFAULT_X402_USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+/** EIP-712 domain name/version for Circle USDC transferWithAuthorization. */
+const USDC_EIP712_NAME = "USD Coin";
+const USDC_EIP712_VERSION = "2";
 
 const CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes
 
@@ -71,6 +76,11 @@ export class X402PaymentAdapter implements PaymentAdapter {
   private readonly allowTestMode: boolean;
   private readonly rpcUrl: string | undefined;
   private readonly settlementPrivateKey: string | undefined;
+  /** EVM chain ID for EIP-712 domain + RPC network (env: X402_CHAIN_ID). */
+  private readonly chainId: number;
+  /** USDC contract address for EIP-712 verifyingContract (env: X402_USDC_ADDRESS). */
+  private readonly usdcAddress: string;
+  private readonly networkCaip2: string;
   private readonly settleAuthorization:
     | ((auth: X402AuthorizationPayload, expectedAmountAtomic: bigint) => Promise<X402SettlementRailResult>)
     | undefined;
@@ -90,13 +100,23 @@ export class X402PaymentAdapter implements PaymentAdapter {
      * Intended for local development and integration tests only. Defaults to false.
      */
     allowTestMode?: boolean | undefined;
-    /** JSON-RPC URL for Base Sepolia (used for direct settlement + receipt checks). */
+    /** JSON-RPC URL for the configured chain (used for direct settlement + receipt checks). */
     rpcUrl?: string | undefined;
     /**
      * Private key that pays gas for direct `transferWithAuthorization` when no
      * facilitator is configured. Typically TREASURY_WALLET_PRIVATE_KEY.
      */
     settlementPrivateKey?: string | undefined;
+    /**
+     * EVM chain ID for the x402 EIP-712 domain. Defaults to Base Sepolia (84532).
+     * Production mainnet deployments should pass the target chain (e.g. 8453 for Base).
+     */
+    chainId?: number | undefined;
+    /**
+     * USDC (EIP-3009) contract used as verifyingContract / asset.
+     * Defaults to Circle official USDC on Base Sepolia.
+     */
+    usdcAddress?: string | undefined;
     /**
      * Injectable settlement rail for unit tests. When omitted, the adapter uses
      * the facilitator (if configured) or direct on-chain submission.
@@ -122,6 +142,36 @@ export class X402PaymentAdapter implements PaymentAdapter {
     this.settlementPrivateKey = options?.settlementPrivateKey;
     this.settleAuthorization = options?.settleAuthorization;
     this.verifyTransactionReceipt = options?.verifyTransactionReceipt;
+
+    const chainId = options?.chainId ?? DEFAULT_X402_CHAIN_ID;
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      throw new Error(`Invalid x402 chainId: expected a positive integer, got ${String(chainId)}`);
+    }
+    this.chainId = chainId;
+
+    const usdcAddress = (options?.usdcAddress ?? DEFAULT_X402_USDC_ADDRESS).trim();
+    if (!ADDRESS_RE.test(usdcAddress)) {
+      throw new Error(
+        `Invalid x402 USDC address: expected a 0x-prefixed 40-hex address, got ${JSON.stringify(usdcAddress)}`,
+      );
+    }
+    this.usdcAddress = usdcAddress;
+    this.networkCaip2 = `eip155:${this.chainId}`;
+  }
+
+  /** EIP-712 domain for TransferWithAuthorization on the configured chain/USDC. */
+  private eip712Domain(): {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: string;
+  } {
+    return {
+      name: USDC_EIP712_NAME,
+      version: USDC_EIP712_VERSION,
+      chainId: this.chainId,
+      verifyingContract: this.usdcAddress,
+    };
   }
 
   async createChallenge(params: {
@@ -136,13 +186,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
     const challengeReference = `x402_${randomUUID()}`;
     const nonce = ethers.keccak256(ethers.toUtf8Bytes(challengeReference));
 
-    // Reconstruct domain (Base Sepolia USDC)
-    const domain = {
-      name: "USD Coin",
-      version: "2",
-      chainId: X402_CHAIN_ID,
-      verifyingContract: X402_USDC,
-    };
+    const domain = this.eip712Domain();
 
     const types = {
       TransferWithAuthorization: [
@@ -186,8 +230,8 @@ export class X402PaymentAdapter implements PaymentAdapter {
       facilitatorUrl: this.facilitatorUrl ?? null,
       referralAddress: params.payerReference ?? null,
       challengeType: "permit",
-      network: X402_NETWORK_CAIP2,
-      asset: X402_USDC,
+      network: this.networkCaip2,
+      asset: this.usdcAddress,
       domain,
       types,
       message,
@@ -349,12 +393,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
       };
     }
 
-    const domain = {
-      name: "USD Coin",
-      version: "2",
-      chainId: X402_CHAIN_ID,
-      verifyingContract: X402_USDC,
-    };
+    const domain = this.eip712Domain();
 
     const types = {
       TransferWithAuthorization: [
@@ -612,27 +651,27 @@ export class X402PaymentAdapter implements PaymentAdapter {
     const valueStr = BigInt(auth.value).toString();
     const paymentRequirements = {
       scheme: "exact",
-      network: X402_NETWORK_CAIP2,
+      network: this.networkCaip2,
       amount: expectedAmountAtomic.toString(),
       maxAmountRequired: expectedAmountAtomic.toString(),
-      asset: X402_USDC,
+      asset: this.usdcAddress,
       payTo: this.treasuryWalletAddress,
       maxTimeoutSeconds: 120,
       extra: {
-        name: "USD Coin",
-        version: "2",
+        name: USDC_EIP712_NAME,
+        version: USDC_EIP712_VERSION,
       },
     };
 
     const paymentPayload = {
       x402Version: 2,
       scheme: "exact",
-      network: X402_NETWORK_CAIP2,
+      network: this.networkCaip2,
       accepted: {
         scheme: "exact",
-        network: X402_NETWORK_CAIP2,
+        network: this.networkCaip2,
         amount: expectedAmountAtomic.toString(),
-        asset: X402_USDC,
+        asset: this.usdcAddress,
         payTo: this.treasuryWalletAddress,
         maxTimeoutSeconds: 120,
       },
@@ -733,9 +772,9 @@ export class X402PaymentAdapter implements PaymentAdapter {
     }
 
     try {
-      const provider = new ethers.JsonRpcProvider(this.rpcUrl, X402_CHAIN_ID);
+      const provider = new ethers.JsonRpcProvider(this.rpcUrl, this.chainId);
       const wallet = new ethers.Wallet(this.settlementPrivateKey, provider);
-      const usdc = new ethers.Contract(X402_USDC, USDC_EIP3009_ABI, wallet);
+      const usdc = new ethers.Contract(this.usdcAddress, USDC_EIP3009_ABI, wallet);
       const authorizationState = usdc.getFunction("authorizationState");
       const transferWithAuthorization = usdc.getFunction("transferWithAuthorization");
 
@@ -810,7 +849,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
     }
 
     try {
-      const provider = new ethers.JsonRpcProvider(this.rpcUrl, X402_CHAIN_ID);
+      const provider = new ethers.JsonRpcProvider(this.rpcUrl, this.chainId);
       const receipt = await provider.getTransactionReceipt(txHash);
 
       if (!receipt) {
@@ -821,7 +860,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
       }
 
       const usdcInterface = new ethers.Interface(USDC_EIP3009_ABI);
-      const usdcAddress = X402_USDC.toLowerCase();
+      const usdcAddress = this.usdcAddress.toLowerCase();
       const expectedTo = expected.to.toLowerCase();
       const expectedFrom = expected.from?.toLowerCase();
 

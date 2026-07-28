@@ -15,6 +15,17 @@ export interface ServerEnv {
   groqModel: string;
   groqBaseUrl: string | undefined;
   x402FacilitatorUrl: string | undefined;
+  /**
+   * EVM chain ID for x402 EIP-712 domain + settlement (default Base Sepolia = 84532).
+   * Set to 8453 for Base mainnet when deploying production multi-chain payments.
+   */
+  x402ChainId: number;
+  /**
+   * USDC (EIP-3009) contract address used as verifyingContract / asset for x402.
+   * Default is Circle official USDC on Base Sepolia.
+   * Base mainnet: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+   */
+  x402UsdcAddress: string;
   mppSecret: string | undefined;
   /**
    * HMAC secret for premium access receipts (min 16 chars).
@@ -89,6 +100,40 @@ function optionalEnv(name: string, fallback?: string): string | undefined {
   return process.env[name] ?? fallback;
 }
 
+/** Base Sepolia — default hackathon / demo target for x402. */
+const DEFAULT_X402_CHAIN_ID = 84_532;
+/** Circle official USDC on Base Sepolia (EIP-3009). */
+const DEFAULT_X402_USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
+function parsePositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(
+      `Invalid ${name}: expected a positive integer chain ID, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return parsed;
+}
+
+function parseEvmAddressEnv(name: string, fallback: string): string {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const address = raw.trim();
+  if (!EVM_ADDRESS_RE.test(address)) {
+    throw new Error(
+      `Invalid ${name}: expected a 0x-prefixed 40-hex EVM address, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return address;
+}
+
 export function loadServerEnv(): ServerEnv {
   const nodeEnv = optionalEnv("NODE_ENV", "development") as string;
 
@@ -106,6 +151,8 @@ export function loadServerEnv(): ServerEnv {
     groqModel: optionalEnv("GROQ_MODEL", "llama-3.3-70b-versatile") as string,
     groqBaseUrl: optionalEnv("GROQ_BASE_URL"),
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),
+    x402ChainId: parsePositiveIntEnv("X402_CHAIN_ID", DEFAULT_X402_CHAIN_ID),
+    x402UsdcAddress: parseEvmAddressEnv("X402_USDC_ADDRESS", DEFAULT_X402_USDC_ADDRESS),
     mppSecret: optionalEnv("MPP_SECRET"),
     premiumAccessSecret: optionalEnv("PREMIUM_ACCESS_SECRET"),
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),

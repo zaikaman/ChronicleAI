@@ -191,6 +191,9 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
       // Real settlement rail: facilitator (preferred) or direct EIP-3009 submission
       rpcUrl: env.rpcUrl ?? undefined,
       settlementPrivateKey: treasury.privateKey ?? undefined,
+      // Env-driven EIP-712 domain (defaults: Base Sepolia + Circle USDC)
+      chainId: env.x402ChainId,
+      usdcAddress: env.x402UsdcAddress,
     }),
   );
   adapters.set("mpp", new MppPaymentAdapter({ mppSecret: env.mppSecret ?? undefined }));
