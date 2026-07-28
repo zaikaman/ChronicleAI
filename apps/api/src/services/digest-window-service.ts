@@ -1,12 +1,36 @@
 // Digest window service: validates reporting windows and checks for existing digests
 
 import { DIGEST_REPORTING_WINDOW_HOURS } from "@chronicleai/config";
-import type { DailyDigestRepository } from "@chronicleai/db";
+import type { DailyDigestRepository, DailyDigestRow } from "@chronicleai/db";
+
+/** Digests still awaiting a successful publish pass — safe to resume. */
+export const RESUMABLE_DIGEST_STATUSES = new Set([
+  "draft",
+  "queued",
+  "failed",
+]);
+
+export interface ExistingDigestSummary {
+  id: string;
+  title: string;
+  summary: string;
+  highlights: string[];
+  analysis: string | null;
+  reportDate: string;
+  sourceEventIds: string[];
+  publicationStatus: string;
+  sourceEventRoot: string | null;
+  periodStart: string;
+  periodEnd: string;
+}
 
 export interface WindowValidationResult {
   valid: boolean;
   reason?: string;
   existingDigestId?: string;
+  existingPublicationStatus?: string;
+  /** Full summary when a digest already exists for this window. */
+  existingDigest?: ExistingDigestSummary;
 }
 
 export interface DigestWindowService {
@@ -21,6 +45,22 @@ export interface DigestWindowService {
     periodStart: string;
     periodEnd: string;
   }): Promise<WindowValidationResult>;
+}
+
+function toExistingDigestSummary(row: DailyDigestRow): ExistingDigestSummary {
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    highlights: row.highlights ?? [],
+    analysis: row.analysis ?? null,
+    reportDate: row.report_date,
+    sourceEventIds: row.source_event_ids ?? [],
+    publicationStatus: row.publication_status,
+    sourceEventRoot: row.source_event_root ?? null,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+  };
 }
 
 export function createDigestWindowService(digestRepo: DailyDigestRepository): DigestWindowService {
@@ -62,10 +102,13 @@ export function createDigestWindowService(digestRepo: DailyDigestRepository): Di
       const existing = await digestRepo.findByWindow(periodStart, periodEnd);
 
       if (existing) {
+        const summary = toExistingDigestSummary(existing);
         return {
           valid: false,
           reason: `Digest already exists for this window (ID: ${existing.id}, status: ${existing.publication_status})`,
           existingDigestId: existing.id,
+          existingPublicationStatus: existing.publication_status,
+          existingDigest: summary,
         };
       }
 

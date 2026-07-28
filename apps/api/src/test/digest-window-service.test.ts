@@ -139,6 +139,10 @@ describe("DigestWindowService", () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toContain("already exists");
     expect(result.existingDigestId).toBe("existing-digest-id");
+    expect(result.existingPublicationStatus).toBe("published");
+    expect(result.existingDigest?.id).toBe("existing-digest-id");
+    expect(result.existingDigest?.publicationStatus).toBe("published");
+    expect(result.existingDigest?.title).toBe("Existing Digest");
   });
 
   it("passes duplicate check for unique window", async () => {

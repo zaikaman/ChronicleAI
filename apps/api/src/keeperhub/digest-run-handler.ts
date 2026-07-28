@@ -6,14 +6,23 @@ import type {
   MonitoredEventRepository,
 } from "@chronicleai/db";
 import type { DigestRunPayload } from "@chronicleai/schemas";
-import type { DigestWindowService } from "../services/digest-window-service.ts";
-import type { DigestEventSelectionService } from "../services/digest-event-selection-service.ts";
+import type {
+  DigestEventSelectionService,
+} from "../services/digest-event-selection-service.ts";
 import {
   DigestGenerationError,
   type DigestGenerationService,
 } from "../services/digest-generation-service.ts";
-import type { DigestPublicationService } from "../services/digest-publication-service.ts";
+import type {
+  DigestPublicationResult,
+  DigestPublicationService,
+} from "../services/digest-publication-service.ts";
 import type { PremiumProductizerService } from "../services/premium-productizer-service.ts";
+import {
+  RESUMABLE_DIGEST_STATUSES,
+  type DigestWindowService,
+  type ExistingDigestSummary,
+} from "../services/digest-window-service.ts";
 
 export interface DigestRunResult {
   accepted: boolean;
@@ -76,13 +85,43 @@ export class DigestRunHandler {
       };
     }
 
-    // 2. Check for duplicate digest
+    // 2. Check for existing digest — complete ones are idempotent no-ops;
+    // incomplete ones (draft/queued/failed) resume publication so a crash
+    // mid-publish cannot permanently block the window.
     const duplicateCheck = await this.windowService.checkDuplicate({
       periodStart: payload.periodStart,
       periodEnd: payload.periodEnd,
     });
 
+    if (!duplicateCheck.valid && duplicateCheck.existingDigest) {
+      const existing = duplicateCheck.existingDigest;
+      if (RESUMABLE_DIGEST_STATUSES.has(existing.publicationStatus)) {
+        return this.resumeIncompleteDigest(existing, payload);
+      }
+
+      await this.execLogRepo.append({
+        action_type: "generate_digest",
+        entity_type: "daily_digest",
+        entity_id: existing.id,
+        status: "succeeded",
+        message: `Duplicate skipped: ${duplicateCheck.reason}`,
+        details: {
+          periodStart: payload.periodStart,
+          periodEnd: payload.periodEnd,
+          publicationStatus: existing.publicationStatus,
+        },
+      });
+
+      return {
+        accepted: true,
+        statusCode: 202,
+        digestId: existing.id,
+        message: "Digest already exists for this window",
+      };
+    }
+
     if (!duplicateCheck.valid) {
+      // Defensive: checkDuplicate said duplicate but no row summary — treat as 202.
       const existingDigestId = duplicateCheck.existingDigestId ?? null;
       await this.execLogRepo.append({
         action_type: "generate_digest",
@@ -218,6 +257,24 @@ export class DigestRunHandler {
     );
 
     if (!digestResult.ok) {
+      // Unique window index race: another worker created the row first.
+      // Re-check and resume or skip rather than hard-fail.
+      const raced = await this.windowService.checkDuplicate({
+        periodStart: payload.periodStart,
+        periodEnd: payload.periodEnd,
+      });
+      if (raced.existingDigest) {
+        if (RESUMABLE_DIGEST_STATUSES.has(raced.existingDigest.publicationStatus)) {
+          return this.resumeIncompleteDigest(raced.existingDigest, payload);
+        }
+        return {
+          accepted: true,
+          statusCode: 202,
+          digestId: raced.existingDigest.id,
+          message: "Digest already exists for this window",
+        };
+      }
+
       return {
         accepted: false,
         statusCode: 500,
@@ -247,7 +304,9 @@ export class DigestRunHandler {
       },
     });
 
-    // 6. Publish through all channels
+    // 6. Claim + publish through all channels
+    await this.digestRepo.updatePublicationStatus(digest.id, "queued");
+
     const sourceEventRoot = digestContent.sourceEventIds.length > 0
       ? digestContent.sourceEventIds.sort().join(",")
       : digest.id;
@@ -262,7 +321,105 @@ export class DigestRunHandler {
       sourceEventRoot,
     });
 
-    // 7. Log publication result
+    await this.logPublicationResult(digest.id, publicationResult);
+
+    // 7. Premium productizer — public digest stays free; mint paid SKUs from the
+    // same real event set (structured feed + multi-event deep dive).
+    if (this.premiumProductizer && eventSelection.events.length > 0) {
+      await this.runPremiumProductizer({
+        digestId: digest.id,
+        reportDate,
+        periodStart: payload.periodStart,
+        periodEnd: payload.periodEnd,
+        title: digestContent.title,
+        summary: digestContent.summary,
+        highlights: digestContent.highlights,
+        analysis: digestContent.analysis ?? null,
+        eventIds: eventSelection.events.map((e) => e.id),
+      });
+    }
+
+    return {
+      accepted: true,
+      statusCode: 201,
+      digestId: digest.id,
+      message: publicationResult.success
+        ? "Digest generated and published"
+        : "Digest generated but publication had issues",
+    };
+  }
+
+  /**
+   * Resume a digest that was generated but never fully published
+   * (left in draft/queued/failed after a crash or channel failure).
+   */
+  private async resumeIncompleteDigest(
+    existing: ExistingDigestSummary,
+    payload: DigestRunPayload,
+  ): Promise<DigestRunResult> {
+    await this.execLogRepo.append({
+      action_type: "generate_digest",
+      entity_type: "daily_digest",
+      entity_id: existing.id,
+      status: "started",
+      message: `Resuming incomplete digest (was ${existing.publicationStatus})`,
+      details: {
+        periodStart: payload.periodStart,
+        periodEnd: payload.periodEnd,
+        priorStatus: existing.publicationStatus,
+      },
+    });
+
+    // Soft claim so concurrent ticks see "queued" instead of re-entering draft resume.
+    await this.digestRepo.updatePublicationStatus(existing.id, "queued");
+
+    const sourceEventRoot =
+      existing.sourceEventRoot ??
+      (existing.sourceEventIds.length > 0
+        ? [...existing.sourceEventIds].sort().join(",")
+        : existing.id);
+
+    const publicationResult = await this.publicationService.publishDigest({
+      id: existing.id,
+      title: existing.title,
+      summary: existing.summary,
+      highlights: existing.highlights,
+      analysis: existing.analysis,
+      reportDate: existing.reportDate,
+      sourceEventRoot,
+    });
+
+    await this.logPublicationResult(existing.id, publicationResult, { resumed: true });
+
+    if (this.premiumProductizer && existing.sourceEventIds.length > 0) {
+      await this.runPremiumProductizer({
+        digestId: existing.id,
+        reportDate: existing.reportDate,
+        periodStart: payload.periodStart,
+        periodEnd: payload.periodEnd,
+        title: existing.title,
+        summary: existing.summary,
+        highlights: existing.highlights,
+        analysis: existing.analysis,
+        eventIds: existing.sourceEventIds,
+      });
+    }
+
+    return {
+      accepted: true,
+      statusCode: publicationResult.success ? 201 : 202,
+      digestId: existing.id,
+      message: publicationResult.success
+        ? "Incomplete digest resumed and published"
+        : `Incomplete digest resume had issues: ${publicationResult.errorMessage ?? "unknown error"}`,
+    };
+  }
+
+  private async logPublicationResult(
+    digestId: string,
+    publicationResult: DigestPublicationResult,
+    extra: { resumed?: boolean } = {},
+  ): Promise<void> {
     const viaKh = Boolean(publicationResult.keeperHubRunId);
     const pubResultMessage = publicationResult.success
       ? viaKh
@@ -275,9 +432,9 @@ export class DigestRunHandler {
     await this.execLogRepo.append({
       action_type: "publish_digest",
       entity_type: "daily_digest",
-      entity_id: digest.id,
+      entity_id: digestId,
       status: publicationResult.success ? "succeeded" : "failed",
-      message: pubResultMessage,
+      message: extra.resumed ? `Resume: ${pubResultMessage}` : pubResultMessage,
       details: {
         registry_tx_hash: publicationResult.registryTxHash ?? null,
         keeper_hub_run_id: publicationResult.keeperHubRunId ?? null,
@@ -288,77 +445,85 @@ export class DigestRunHandler {
         contentUri: publicationResult.contentUri ?? null,
         smtpRecipients: publicationResult.smtpResult?.recipientsReached ?? null,
         executedViaKeeperHub: viaKh,
+        resumed: extra.resumed ?? false,
       },
     });
+  }
 
-    // 8. Premium productizer — public digest stays free; mint paid SKUs from the
-    // same real event set (structured feed + multi-event deep dive).
-    if (this.premiumProductizer && eventSelection.events.length > 0) {
-      try {
-        const fullEvents = await this.eventRepo.listInWindow({
-          periodStart: payload.periodStart,
-          periodEnd: payload.periodEnd,
-          status: "qualified",
-          limit: 2000,
-        });
-        const eventsForPremium = fullEvents.ok
-          ? fullEvents.value
-          : (await Promise.all(
-              eventSelection.events.map(async (e) => {
-                const found = await this.eventRepo.findById(e.id);
-                return found.ok ? found.value : null;
-              }),
-            )).filter((e): e is NonNullable<typeof e> => e != null);
+  private async runPremiumProductizer(params: {
+    digestId: string;
+    reportDate: string;
+    periodStart: string;
+    periodEnd: string;
+    title: string;
+    summary: string;
+    highlights: string[];
+    analysis: string | null;
+    eventIds: string[];
+  }): Promise<void> {
+    if (!this.premiumProductizer) {
+      return;
+    }
 
-        const productized = await this.premiumProductizer.productizeDigest({
-          digest: {
-            id: digest.id,
-            report_date: reportDate,
-            period_start: payload.periodStart,
-            period_end: payload.periodEnd,
-            title: digestContent.title,
-            summary: digestContent.summary,
-            highlights: digestContent.highlights,
-            analysis: digestContent.analysis ?? null,
-          },
-          events: eventsForPremium,
-        });
+    try {
+      const fullEvents = await this.eventRepo.listInWindow({
+        periodStart: params.periodStart,
+        periodEnd: params.periodEnd,
+        status: "qualified",
+        limit: 2000,
+      });
+      const eventsForPremium = fullEvents.ok
+        ? fullEvents.value
+        : (await Promise.all(
+            params.eventIds.map(async (id) => {
+              const found = await this.eventRepo.findById(id);
+              return found.ok ? found.value : null;
+            }),
+          )).filter((e): e is NonNullable<typeof e> => e != null);
 
-        if (productized.created.length > 0 || productized.errors.length > 0) {
-          await this.execLogRepo.append({
-            action_type: "monitor",
-            entity_type: "daily_digest",
-            entity_id: digest.id,
-            status: productized.errors.length > 0 ? "failed" : "succeeded",
-            message:
-              productized.created.length > 0
-                ? `Premium productizer minted ${productized.created.length} item(s) for digest`
-                : `Premium productizer errors: ${productized.errors.join("; ")}`,
-            details: {
-              createdSlugs: productized.created.map((i) => i.slug),
-              skipped: productized.skipped,
-              errors: productized.errors,
-            },
-          });
-        }
-      } catch (error) {
+      if (eventsForPremium.length === 0) {
+        return;
+      }
+
+      const productized = await this.premiumProductizer.productizeDigest({
+        digest: {
+          id: params.digestId,
+          report_date: params.reportDate,
+          period_start: params.periodStart,
+          period_end: params.periodEnd,
+          title: params.title,
+          summary: params.summary,
+          highlights: params.highlights,
+          analysis: params.analysis,
+        },
+        events: eventsForPremium,
+      });
+
+      if (productized.created.length > 0 || productized.errors.length > 0) {
         await this.execLogRepo.append({
           action_type: "monitor",
           entity_type: "daily_digest",
-          entity_id: digest.id,
-          status: "failed",
-          message: `Premium productizer failed: ${error instanceof Error ? error.message : String(error)}`,
+          entity_id: params.digestId,
+          status: productized.errors.length > 0 ? "failed" : "succeeded",
+          message:
+            productized.created.length > 0
+              ? `Premium productizer minted ${productized.created.length} item(s) for digest`
+              : `Premium productizer errors: ${productized.errors.join("; ")}`,
+          details: {
+            createdSlugs: productized.created.map((i) => i.slug),
+            skipped: productized.skipped,
+            errors: productized.errors,
+          },
         });
       }
+    } catch (error) {
+      await this.execLogRepo.append({
+        action_type: "monitor",
+        entity_type: "daily_digest",
+        entity_id: params.digestId,
+        status: "failed",
+        message: `Premium productizer failed: ${error instanceof Error ? error.message : String(error)}`,
+      });
     }
-
-    return {
-      accepted: true,
-      statusCode: 201,
-      digestId: digest.id,
-      message: publicationResult.success
-        ? "Digest generated and published"
-        : "Digest generated but publication had issues",
-    };
   }
 }

@@ -253,4 +253,133 @@ describe("DigestRunHandler", () => {
     expect(result.accepted).toBe(false);
     expect(result.statusCode).toBe(400);
   });
+
+  it("resumes publication for a draft digest instead of skipping as duplicate", async () => {
+    const now = Date.now();
+    const periodStart = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const periodEnd = new Date(now).toISOString();
+    const draftRow = makeDigestRow({
+      id: "c6d169a6-cb4b-4f44-a1b1-c641b0402f71",
+      period_start: periodStart,
+      period_end: periodEnd,
+      publication_status: "draft",
+      title: "Stuck Draft Digest",
+      summary: "Generated but never published",
+      highlights: ["Resume me"],
+      source_event_ids: [],
+    });
+
+    const statusUpdates: string[] = [];
+    const resumeRepo: DailyDigestRepository = {
+      ...mockDigestRepo,
+      async findByWindow(start, end) {
+        if (start === periodStart && end === periodEnd) {
+          return draftRow;
+        }
+        return null;
+      },
+      async create() {
+        throw new Error("create must not be called when resuming a draft digest");
+      },
+      async updatePublicationStatus(id, status, publishedAt) {
+        statusUpdates.push(status);
+        return {
+          ok: true,
+          value: makeDigestRow({
+            id,
+            publication_status: status as DailyDigestRow["publication_status"],
+            published_at: publishedAt ?? null,
+          }),
+        };
+      },
+    };
+
+    const resumeHandler = new DigestRunHandler({
+      digestRepo: resumeRepo,
+      eventRepo: mockEventRepo,
+      execLogRepo: mockExecLogRepo,
+      windowService: createDigestWindowService(resumeRepo),
+      eventSelectionService: createDigestEventSelectionService(mockEventRepo),
+      generationService: mockGenerationService,
+      publicationService: createDigestPublicationService(
+        resumeRepo,
+        createChronicleRegistryService(null),
+        "http://localhost:5173",
+        createSmtpEmailService({
+          host: undefined,
+          port: undefined,
+          user: undefined,
+          pass: undefined,
+          fromAddress: undefined,
+          resolveRecipients: async () => [],
+        }),
+      ),
+    });
+
+    const result = await resumeHandler.runDigest({ periodStart, periodEnd });
+
+    expect(result.accepted).toBe(true);
+    expect(result.digestId).toBe(draftRow.id);
+    // Must not no-op as a completed duplicate — resume runs even if channels fail in test.
+    expect(result.message).not.toBe("Digest already exists for this window");
+    expect(result.message.toLowerCase()).toContain("resume");
+    // Soft-claim queued, then final published/partial/failed from publication service
+    expect(statusUpdates[0]).toBe("queued");
+    expect(statusUpdates.some((s) => s !== "queued" && s !== "draft")).toBe(true);
+  });
+
+  it("skips a fully published digest as a true duplicate", async () => {
+    const now = Date.now();
+    const periodStart = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const periodEnd = new Date(now).toISOString();
+    const publishedRow = makeDigestRow({
+      id: "published-digest-001",
+      period_start: periodStart,
+      period_end: periodEnd,
+      publication_status: "published",
+      published_at: new Date().toISOString(),
+    });
+
+    const publishedRepo: DailyDigestRepository = {
+      ...mockDigestRepo,
+      async findByWindow(start, end) {
+        if (start === periodStart && end === periodEnd) {
+          return publishedRow;
+        }
+        return null;
+      },
+      async create() {
+        throw new Error("create must not be called for published duplicate");
+      },
+    };
+
+    const publishedHandler = new DigestRunHandler({
+      digestRepo: publishedRepo,
+      eventRepo: mockEventRepo,
+      execLogRepo: mockExecLogRepo,
+      windowService: createDigestWindowService(publishedRepo),
+      eventSelectionService: createDigestEventSelectionService(mockEventRepo),
+      generationService: mockGenerationService,
+      publicationService: createDigestPublicationService(
+        publishedRepo,
+        createChronicleRegistryService(null),
+        "http://localhost:5173",
+        createSmtpEmailService({
+          host: undefined,
+          port: undefined,
+          user: undefined,
+          pass: undefined,
+          fromAddress: undefined,
+          resolveRecipients: async () => [],
+        }),
+      ),
+    });
+
+    const result = await publishedHandler.runDigest({ periodStart, periodEnd });
+
+    expect(result.accepted).toBe(true);
+    expect(result.statusCode).toBe(202);
+    expect(result.digestId).toBe(publishedRow.id);
+    expect(result.message).toBe("Digest already exists for this window");
+  });
 });
