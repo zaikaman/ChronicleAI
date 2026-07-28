@@ -258,10 +258,18 @@ async function tryLlmNarrative(
     if (!config?.apiKey) continue;
 
     const caller = LLM_PROVIDER_CALLERS[provider];
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
+    const controller = provider === "openai" ? undefined : new AbortController();
+    const timer =
+      provider === "openai" || !controller
+        ? undefined
+        : setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
     try {
-      const raw = await caller(config, prompt, controller.signal, system);
+      const raw = await caller(
+        config,
+        prompt,
+        controller ? controller.signal : new AbortController().signal,
+        system,
+      );
       const jsonText = extractJsonObject(raw);
       if (!jsonText) continue;
       const parsed = JSON.parse(jsonText) as Record<string, unknown>;
@@ -292,7 +300,7 @@ async function tryLlmNarrative(
     } catch {
       // Try next provider
     } finally {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     }
   }
 

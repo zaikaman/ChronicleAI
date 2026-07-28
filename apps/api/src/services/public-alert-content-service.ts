@@ -215,8 +215,11 @@ export function createPublicAlertContentService(
           continue;
         }
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
+        const controller = provider === "openai" ? undefined : new AbortController();
+        const timeoutId =
+          provider === "openai" || !controller
+            ? undefined
+            : setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
         const startTime = Date.now();
 
         try {
@@ -226,11 +229,11 @@ export function createPublicAlertContentService(
             userPrompt: prompt,
             responseFormat: alertContentSchema,
             provider,
-            signal: controller.signal,
+            signal: controller?.signal,
             runLimit: 1,
           });
           const latencyMs = Date.now() - startTime;
-          clearTimeout(timeoutId);
+          if (timeoutId) clearTimeout(timeoutId);
 
           const content =
             validateResponse(JSON.stringify(result.structured), input) ??

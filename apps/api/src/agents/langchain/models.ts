@@ -69,9 +69,10 @@ export function createChatModel(
     return new ChatOpenAI({
       apiKey: config.apiKey,
       model,
+      timeout: undefined,
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(config.baseUrl
-        ? { configuration: { baseURL: config.baseUrl } }
+        ? { configuration: { baseURL: config.baseUrl, timeout: undefined } }
         : {}),
     });
   }
@@ -81,6 +82,7 @@ export function createChatModel(
     apiKey: config.apiKey,
     model,
     temperature,
+    maxRetries: 3,
     ...(maxTokens !== undefined ? { maxTokens } : {}),
     configuration: {
       baseURL: config.baseUrl || "https://api.groq.com/openai/v1",

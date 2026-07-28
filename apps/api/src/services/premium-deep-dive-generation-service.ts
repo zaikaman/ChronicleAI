@@ -301,8 +301,11 @@ export function createPremiumDeepDiveGenerationService(
           continue;
         }
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), PREMIUM_GENERATION_TIMEOUT_MS);
+        const controller = provider === "openai" ? undefined : new AbortController();
+        const timeoutId =
+          provider === "openai" || !controller
+            ? undefined
+            : setTimeout(() => controller.abort(), PREMIUM_GENERATION_TIMEOUT_MS);
         const startTime = Date.now();
 
         try {
@@ -312,11 +315,11 @@ export function createPremiumDeepDiveGenerationService(
             userPrompt: prompt,
             responseFormat: premiumNarrativeSchema,
             provider,
-            signal: controller.signal,
+            signal: controller?.signal,
             runLimit: 1,
           });
           const latencyMs = Date.now() - startTime;
-          clearTimeout(timeoutId);
+          if (timeoutId) clearTimeout(timeoutId);
 
           const content =
             validateNarrative(JSON.stringify(agentResult.structured), params) ??

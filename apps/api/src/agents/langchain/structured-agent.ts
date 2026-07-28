@@ -99,13 +99,18 @@ async function invokeGroqJsonObjectStructuredAgent<TSchema extends InteropZodObj
 ): Promise<StructuredAgentResult<Record<string, unknown>>> {
   const modelWithConfig = params.model as ChronicleChatModel & {
     withConfig?: (config: Record<string, unknown>) => ChronicleChatModel;
+    bind?: (kwargs: Record<string, unknown>) => ChronicleChatModel;
   };
   const bound =
-    typeof modelWithConfig.withConfig === "function"
-      ? modelWithConfig.withConfig({
+    typeof modelWithConfig.bind === "function"
+      ? modelWithConfig.bind({
           response_format: { type: "json_object" },
         })
-      : params.model;
+      : typeof modelWithConfig.withConfig === "function"
+        ? modelWithConfig.withConfig({
+            response_format: { type: "json_object" },
+          })
+        : params.model;
 
   let schemaHint = "";
   try {
@@ -115,64 +120,100 @@ async function invokeGroqJsonObjectStructuredAgent<TSchema extends InteropZodObj
   }
 
   const systemPrompt = schemaHint
-    ? `${params.systemPrompt}\n\nRespond with a single JSON object only (no markdown fences) matching this JSON Schema:\n${schemaHint}`
-    : `${params.systemPrompt}\n\nRespond with a single JSON object only (no markdown fences).`;
+    ? `${params.systemPrompt}\n\nCRITICAL: Respond with a single raw JSON object only (no markdown fences, no preamble, no prose) matching this JSON Schema:\n${schemaHint}`
+    : `${params.systemPrompt}\n\nCRITICAL: Respond with a single raw JSON object only (no markdown fences, no preamble, no prose).`;
 
-  const response = await raceAbort(
-    bound.invoke(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: params.userPrompt },
-      ],
-      params.signal ? { signal: params.signal } : undefined,
-    ),
-    params.signal,
-  );
+  const inputMessages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: params.userPrompt },
+  ];
 
-  const rawText = messageContentToText(
-    (response as { content?: unknown }).content,
-  );
-  if (!rawText.trim()) {
-    throw new Error("Groq structured agent returned empty response");
-  }
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    try {
+      let response: unknown;
+      try {
+        response = await raceAbort(
+          bound.invoke(
+            inputMessages,
+            params.signal ? { signal: params.signal } : undefined,
+          ),
+          params.signal,
+        );
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (
+          errorMsg.includes("400") ||
+          errorMsg.includes("Failed to validate JSON") ||
+          errorMsg.includes("response_format") ||
+          errorMsg.includes("failed_generation")
+        ) {
+          // Fallback: invoke Groq without response_format if Groq server-side JSON mode rejects generation
+          response = await raceAbort(
+            params.model.invoke(
+              inputMessages,
+              params.signal ? { signal: params.signal } : undefined,
+            ),
+            params.signal,
+          );
+        } else {
+          throw error;
+        }
+      }
 
-  const jsonStr = extractJsonObject(rawText) ?? rawText;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch {
-    throw new Error(
-      `Groq returned non-JSON structured response: ${rawText.slice(0, 200)}`,
-    );
-  }
-
-  const schema = params.responseFormat as unknown as ZodLikeSchema;
-  if (typeof schema.safeParse === "function") {
-    const validated = schema.safeParse(parsed);
-    if (!validated.success) {
-      throw new Error(
-        `Groq JSON failed schema validation: ${validated.error.message}`,
+      const rawText = messageContentToText(
+        (response as { content?: unknown }).content,
       );
-    }
-    const data = validated.data;
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
-      throw new Error("Groq structured response was not a JSON object");
-    }
-    return {
-      structured: data as Record<string, unknown>,
-      rawText,
-      toolCallCount: 0,
-    };
-  }
+      if (!rawText.trim()) {
+        throw new Error("Groq structured agent returned empty response");
+      }
 
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Groq structured response was not a JSON object");
+      const jsonStr = extractJsonObject(rawText) ?? rawText;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch {
+        throw new Error(
+          `Groq returned non-JSON structured response: ${rawText.slice(0, 200)}`,
+        );
+      }
+
+      const schema = params.responseFormat as unknown as ZodLikeSchema;
+      if (typeof schema.safeParse === "function") {
+        const validated = schema.safeParse(parsed);
+        if (!validated.success) {
+          throw new Error(
+            `Groq JSON failed schema validation: ${validated.error.message}`,
+          );
+        }
+        const data = validated.data;
+        if (!data || typeof data !== "object" || Array.isArray(data)) {
+          throw new Error("Groq structured response was not a JSON object");
+        }
+        return {
+          structured: data as Record<string, unknown>,
+          rawText,
+          toolCallCount: 0,
+        };
+      }
+
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Groq structured response was not a JSON object");
+      }
+      return {
+        structured: parsed as Record<string, unknown>,
+        rawText,
+        toolCallCount: 0,
+      };
+    } catch (err) {
+      lastError = err;
+      if (params.signal?.aborted) throw err;
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+      }
+    }
   }
-  return {
-    structured: parsed as Record<string, unknown>,
-    rawText,
-    toolCallCount: 0,
-  };
+  throw lastError;
 }
 
 /**
@@ -186,6 +227,7 @@ export async function invokeStructuredAgent<TSchema extends InteropZodObject>(
     return invokeGroqJsonObjectStructuredAgent(params);
   }
 
+  const effectiveSignal = params.provider === "openai" ? undefined : params.signal;
   const runLimit = params.runLimit ?? 1;
 
   const agent = createAgent({
@@ -206,9 +248,9 @@ export async function invokeStructuredAgent<TSchema extends InteropZodObject>(
       {
         messages: [{ role: "user", content: params.userPrompt }],
       },
-      params.signal ? { signal: params.signal } : undefined,
+      effectiveSignal ? { signal: effectiveSignal } : undefined,
     ),
-    params.signal,
+    effectiveSignal,
   );
 
   const structured = (result as { structuredResponse?: Record<string, unknown> })
@@ -312,8 +354,11 @@ export async function invokeStructuredAgentWithFallback<TSchema extends InteropZ
   const attempts: ProviderStructuredAttempt[] = [];
 
   for (const { provider, model } of params.models) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), params.timeoutMs);
+    const controller = provider === "openai" ? undefined : new AbortController();
+    const timer =
+      provider === "openai" || !controller
+        ? undefined
+        : setTimeout(() => controller.abort(), params.timeoutMs);
     const started = Date.now();
     try {
       const result = await invokeStructuredAgent({
@@ -322,7 +367,7 @@ export async function invokeStructuredAgentWithFallback<TSchema extends InteropZ
         userPrompt: params.userPrompt,
         responseFormat: params.responseFormat,
         provider,
-        signal: controller.signal,
+        signal: controller?.signal,
       });
       const latencyMs = Date.now() - started;
 
@@ -393,7 +438,7 @@ export async function invokeStructuredAgentWithFallback<TSchema extends InteropZ
         failureReason,
       });
     } finally {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     }
   }
 

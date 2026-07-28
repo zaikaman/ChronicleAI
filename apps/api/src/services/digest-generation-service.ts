@@ -624,8 +624,11 @@ export function createDigestGenerationService(
           continue;
         }
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), DIGEST_GENERATION_TIMEOUT_MS);
+        const controller = provider === "openai" ? undefined : new AbortController();
+        const timeoutId =
+          provider === "openai" || !controller
+            ? undefined
+            : setTimeout(() => controller.abort(), DIGEST_GENERATION_TIMEOUT_MS);
         const startTime = Date.now();
 
         try {
@@ -635,11 +638,11 @@ export function createDigestGenerationService(
             userPrompt: prompt,
             responseFormat: digestContentSchema,
             provider,
-            signal: controller.signal,
+            signal: controller?.signal,
             runLimit: 1,
           });
           const latencyMs = Date.now() - startTime;
-          clearTimeout(timeoutId);
+          if (timeoutId) clearTimeout(timeoutId);
 
           const content =
             validateDigestResponse(JSON.stringify(agentResult.structured), params, stats) ??

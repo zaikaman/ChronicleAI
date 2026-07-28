@@ -499,10 +499,13 @@ async function runLangChainChat(
       content: h.content,
     }));
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+  const primary = models[0]!;
+  const controller = primary.provider === "openai" ? undefined : new AbortController();
+  const timer =
+    primary.provider === "openai" || !controller
+      ? undefined
+      : setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
   try {
-    const primary = models[0]!;
     const fallbacks = models.slice(1).map((m) => m.model);
     const result = await invokeToolAgent({
       model: primary.model,
@@ -514,7 +517,7 @@ async function runLangChainChat(
         { role: "user", content: params.message },
       ],
       runLimit: MAX_TOOL_ROUNDS,
-      signal: controller.signal,
+      signal: controller?.signal,
       providerLabels: models.map((m) => m.provider),
     });
 
@@ -539,7 +542,7 @@ async function runLangChainChat(
       provider: result.provider ?? primary.provider,
     };
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 
