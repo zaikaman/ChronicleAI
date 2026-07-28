@@ -2,6 +2,11 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* RainbowKit modals must sit above fixed header (z-9990) and site frames */
+div[data-rk] {
+  --rk-z-index: 100000;
+}
+
 :root {
   --background: #f5f5f5;
   --foreground: #0a0a0a;

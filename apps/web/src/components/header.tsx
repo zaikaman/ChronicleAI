@@ -2,6 +2,7 @@ import { ArrowDownRight } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link, useLocation } from "react-router-dom";
 import { useState, type ReactNode } from "react";
+import { ConnectWalletButton } from "@/features/wallet";
 
 const navLinks = [
   { label: "Alerts", href: "/alerts", description: "Live public market bulletins" },
@@ -84,12 +85,7 @@ export function Header(): ReactNode {
         </nav>
 
         <div className="flex items-center gap-3 max-[850px]:hidden">
-          <Link
-            to="/premium"
-            className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-          >
-            Premium
-          </Link>
+          <ConnectWalletButton data-testid="header-connect-wallet" />
           <Link to="/digests/latest" className="group relative inline-flex items-center">
             <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-xl bg-accent" />
             <span className="relative z-10 px-5 py-2.5 rounded-xl bg-foreground text-background text-sm font-medium">
@@ -145,27 +141,30 @@ export function Header(): ReactNode {
                 ))}
               </nav>
 
-              <div className="flex items-center justify-between pt-8 pb-2">
-                <Link
-                  to="/premium"
-                  className="text-base font-medium text-foreground"
-                  onClick={closeMobile}
-                >
-                  Unlock premium
-                </Link>
-                <Link
-                  to="/digests/latest"
-                  className="group relative inline-flex items-center"
-                  onClick={closeMobile}
-                >
-                  <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-2xl bg-accent" />
-                  <span className="relative z-10 px-5 py-3 rounded-2xl bg-foreground text-background text-sm font-medium">
-                    Read digest
-                  </span>
-                  <span className="relative -left-px z-10 w-10 h-10 rounded-2xl flex items-center justify-center text-foreground">
-                    <ArrowDownRight className="w-4 h-4 transition-transform duration-300 group-hover:-rotate-45" />
-                  </span>
-                </Link>
+              <div className="flex flex-col gap-4 pt-8 pb-2">
+                <ConnectWalletButton data-testid="mobile-connect-wallet" />
+                <div className="flex items-center justify-between">
+                  <Link
+                    to="/premium"
+                    className="text-base font-medium text-foreground"
+                    onClick={closeMobile}
+                  >
+                    Unlock premium
+                  </Link>
+                  <Link
+                    to="/digests/latest"
+                    className="group relative inline-flex items-center"
+                    onClick={closeMobile}
+                  >
+                    <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-2xl bg-accent" />
+                    <span className="relative z-10 px-5 py-3 rounded-2xl bg-foreground text-background text-sm font-medium">
+                      Read digest
+                    </span>
+                    <span className="relative -left-px z-10 w-10 h-10 rounded-2xl flex items-center justify-center text-foreground">
+                      <ArrowDownRight className="w-4 h-4 transition-transform duration-300 group-hover:-rotate-45" />
+                    </span>
+                  </Link>
+                </div>
               </div>
             </div>
           </motion.div>

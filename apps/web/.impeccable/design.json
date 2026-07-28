@@ -1,0 +1,308 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-28T00:00:00.000Z",
+  "title": "Design System: ChronicleAI",
+  "extensions": {
+    "colorMeta": {
+      "chartreuse": {
+        "role": "primary",
+        "displayName": "Signal Chartreuse",
+        "canonical": "#a8d946",
+        "tonalRamp": ["#1a2a05", "#2f4a0c", "#4a6f14", "#6a9a1f", "#8fc23a", "#a8d946", "#c5e87a", "#e8f5c8"]
+      },
+      "chartreuse-mist": {
+        "role": "secondary",
+        "displayName": "Chartreuse Mist",
+        "canonical": "#e8f5c8",
+        "tonalRamp": ["#212c12", "#3a4a20", "#5a6f30", "#7a943f", "#a8c060", "#c5d980", "#e8f5c8", "#f4fbe6"]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#f5f5f5",
+        "tonalRamp": ["#0f0f10", "#1a1a1c", "#262626", "#525252", "#737373", "#a3a3a3", "#e5e5e5", "#f5f5f5"]
+      },
+      "frame": {
+        "role": "neutral",
+        "displayName": "Frame White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#050505", "#0f0f10", "#1a1a1c", "#262626", "#e5e5e5", "#eaeaea", "#f5f5f5", "#ffffff"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Near Black Ink",
+        "canonical": "#0a0a0a",
+        "tonalRamp": ["#0a0a0a", "#171717", "#262626", "#525252", "#737373", "#a3a3a3", "#e5e5e5", "#fafafa"]
+      },
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#737373",
+        "tonalRamp": ["#262626", "#404040", "#525252", "#737373", "#a3a3a3", "#d4d4d4", "#e5e5e5", "#f5f5f5"]
+      },
+      "focus-ring": {
+        "role": "tertiary",
+        "displayName": "Focus Blue",
+        "canonical": "#0066ff",
+        "tonalRamp": ["#001a4d", "#003399", "#004dcc", "#0066ff", "#3b82f6", "#60a5fa", "#93c5fd", "#dbeafe"]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Success",
+        "canonical": "#22c55e",
+        "tonalRamp": ["#052e16", "#14532d", "#166534", "#16a34a", "#22c55e", "#4ade80", "#86efac", "#dcfce7"]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Warning",
+        "canonical": "#f59e0b",
+        "tonalRamp": ["#451a03", "#78350f", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fef3c7"]
+      },
+      "error": {
+        "role": "semantic",
+        "displayName": "Error",
+        "canonical": "#ef4444",
+        "tonalRamp": ["#450a0a", "#7f1d1d", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5", "#fee2e2"]
+      },
+      "info": {
+        "role": "semantic",
+        "displayName": "Info",
+        "canonical": "#3b82f6",
+        "tonalRamp": ["#1e3a5f", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#dbeafe"]
+      },
+      "dark-paper": {
+        "role": "neutral",
+        "displayName": "Dark Paper",
+        "canonical": "#0f0f10",
+        "tonalRamp": ["#050505", "#0f0f10", "#1a1a1c", "#262626", "#525252", "#a3a3a3", "#e5e5e5", "#fafafa"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Marketing hero headlines only. Fluid clamp; max ~3.75rem; tracking ≥ -0.04em."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Product page titles; Space Grotesk preferred."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Alert and publication card titles; primary scan target."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Summaries and report prose at text-sm, relaxed leading."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Meta chips and secondary labels; avoid all-caps section eyebrows."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Hashes, addresses, providers, on-chain identifiers only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-rest",
+        "value": "0 1px 2px rgba(0,0,0,0.04)",
+        "purpose": "Optional rest shadow; prefer border-only."
+      },
+      {
+        "name": "card-hover",
+        "value": "0 4px 12px rgba(0,0,0,0.08)",
+        "purpose": "Interactive publication/premium cards on hover with border-accent/40."
+      },
+      {
+        "name": "dropdown",
+        "value": "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
+        "purpose": "Wallet menus and floating panels."
+      },
+      {
+        "name": "header",
+        "value": "0 25px 50px -12px rgba(0,0,0,0.15)",
+        "purpose": "Fixed header float; structural chrome only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-expo-out",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Header, menu, and marketing reveals (motion/react)."
+      },
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Default product transitions (~300ms)."
+      },
+      {
+        "name": "duration-fast",
+        "value": "150ms",
+        "purpose": "Button and control state changes."
+      },
+      {
+        "name": "duration-card",
+        "value": "300ms",
+        "purpose": "Card hover border/shadow transitions."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "opacity-only or 0.01ms",
+        "purpose": "Global prefers-reduced-motion: strip transform choreography."
+      }
+    ],
+    "breakpoints": [
+      { "name": "frame-hide", "value": "850px" },
+      { "name": "header-compress", "value": "1200px" },
+      { "name": "content-max", "value": "64rem" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button (Chartreuse)",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "High-emphasis brand CTA; black text on chartreuse.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Subscribe</button>",
+      "css": ".ds-btn-primary { background: var(--accent, #a8d946); color: #000; padding: 12px 24px; border: none; border-radius: 12px; font-family: Outfit, Inter, sans-serif; font-size: 0.875rem; font-weight: 700; cursor: pointer; transition: background 0.15s cubic-bezier(0.4,0,0.2,1), opacity 0.15s; } .ds-btn-primary:hover { opacity: 0.85; } .ds-btn-primary:focus-visible { outline: 2px solid var(--ring, #0066ff); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }"
+    },
+    {
+      "name": "Ink Button",
+      "kind": "button",
+      "refersTo": "button-ink",
+      "description": "Default product CTA (wallet connect, access).",
+      "html": "<button class=\"ds-btn-ink\" type=\"button\">Access</button>",
+      "css": ".ds-btn-ink { background: var(--foreground, #0a0a0a); color: var(--frame, #fff); padding: 8px 14px; border: none; border-radius: 12px; font-family: Outfit, Inter, sans-serif; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s; } .ds-btn-ink:hover { opacity: 0.9; } .ds-btn-ink:focus-visible { outline: 2px solid var(--ring, #0066ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary nav and low-emphasis actions.",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\">Digest</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: var(--muted-foreground, #737373); padding: 6px 14px; border: none; border-radius: 12px; font-family: Outfit, Inter, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: color 0.15s, background 0.15s; } .ds-btn-ghost:hover { color: var(--foreground, #0a0a0a); background: rgba(0,0,0,0.04); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--ring, #0066ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Publication Card",
+      "kind": "card",
+      "refersTo": "card-publication",
+      "description": "Alert/digest list card: frame, border, editorial stack.",
+      "html": "<article class=\"ds-card-pub\"><h3 class=\"ds-card-pub-title\">Large swap detected on Base</h3><p class=\"ds-card-pub-body\">A significant transfer crossed the configured threshold. Summary stays calm and sourced.</p><div class=\"ds-card-pub-meta\"><span class=\"ds-chip\">Large Swap</span><span class=\"ds-chip\">Base Sepolia</span></div><footer class=\"ds-card-pub-foot\"><code class=\"ds-mono\">0x7a3f…c21e</code></footer></article>",
+      "css": ".ds-card-pub { display: block; background: var(--frame, #fff); border: 1px solid var(--border, #e5e5e5); border-radius: 16px; padding: 24px; font-family: Outfit, Inter, sans-serif; transition: border-color 0.3s, box-shadow 0.3s; } .ds-card-pub:hover { border-color: color-mix(in srgb, var(--accent, #a8d946) 40%, transparent); box-shadow: 0 4px 12px rgba(0,0,0,0.08); } .ds-card-pub-title { margin: 0 0 12px; font-size: 1.25rem; font-weight: 600; color: var(--foreground, #0a0a0a); line-height: 1.35; } .ds-card-pub-body { margin: 0 0 16px; font-size: 0.875rem; line-height: 1.625; color: var(--muted-foreground, #737373); } .ds-card-pub-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; } .ds-chip { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 8px; background: var(--muted, #eaeaea); border: 1px solid color-mix(in srgb, var(--border, #e5e5e5) 40%, transparent); color: var(--muted-foreground, #737373); } .ds-card-pub-foot { border-top: 1px solid color-mix(in srgb, var(--border, #e5e5e5) 20%, transparent); padding-top: 16px; } .ds-mono { font-family: SFMono-Regular, Consolas, ui-monospace, monospace; font-size: 0.75rem; background: var(--muted, #eaeaea); padding: 2px 6px; border-radius: 6px; color: var(--foreground, #0a0a0a); }"
+    },
+    {
+      "name": "Feature Tile (Chartreuse)",
+      "kind": "card",
+      "refersTo": "card-feature-primary",
+      "description": "Marketing home bento primary tile only.",
+      "html": "<div class=\"ds-feature-primary\"><h3 class=\"ds-feature-title\">Proof of publication</h3><p class=\"ds-feature-body\">Every alert anchors a content hash on-chain via KeeperHub.</p></div>",
+      "css": ".ds-feature-primary { background: var(--card-primary, #a8d946); color: var(--card-foreground, #171717); border-radius: 24px; padding: 32px; font-family: Outfit, Inter, sans-serif; min-height: 200px; } .ds-feature-title { margin: 0 0 12px; font-size: 1.5rem; font-weight: 500; line-height: 1.2; color: #171717; } .ds-feature-body { margin: 0; font-size: 0.875rem; color: #525252; line-height: 1.5; }"
+    },
+    {
+      "name": "Meta Chip",
+      "kind": "chip",
+      "refersTo": "chip-meta",
+      "description": "Event type, chain, protocol labels on cards.",
+      "html": "<span class=\"ds-chip-meta\">Liquidation</span>",
+      "css": ".ds-chip-meta { display: inline-flex; align-items: center; font-family: Outfit, Inter, sans-serif; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 8px; background: var(--muted, #eaeaea); border: 1px solid color-mix(in srgb, var(--border, #e5e5e5) 40%, transparent); color: var(--muted-foreground, #737373); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-status",
+      "description": "Delivery/confidence status; semantic tint + text label.",
+      "html": "<span class=\"ds-badge ds-badge-success\">published</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-family: Outfit, Inter, sans-serif; font-size: 11px; font-weight: 500; border: 1px solid transparent; } .ds-badge-success { background: rgba(34, 197, 94, 0.1); color: #22c55e; border-color: rgba(34, 197, 94, 0.2); } .ds-badge-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; border-color: rgba(245, 158, 11, 0.2); } .ds-badge-error { background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.2); } .ds-badge-info { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-color: rgba(59, 130, 246, 0.2); } .ds-badge-default { background: rgba(113, 113, 122, 0.15); color: #a1a1aa; border-color: rgba(113, 113, 122, 0.2); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Default field: frame surface, focus blue ring.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Amount</span><input class=\"ds-input\" type=\"text\" placeholder=\"0.05 USDC\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; font-family: Outfit, Inter, sans-serif; } .ds-field-label { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground, #737373); } .ds-input { background: var(--frame, #fff); color: var(--foreground, #0a0a0a); border: 1px solid var(--border, #e5e5e5); border-radius: 12px; padding: 10px 14px; font-size: 0.875rem; font-family: inherit; } .ds-input::placeholder { color: var(--muted-foreground, #737373); opacity: 1; } .ds-input:focus-visible { outline: 2px solid var(--ring, #0066ff); outline-offset: 2px; border-color: transparent; }"
+    },
+    {
+      "name": "Header Nav",
+      "kind": "nav",
+      "refersTo": "nav-header",
+      "description": "Fixed frame header with product section links.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Primary\"><a class=\"ds-nav-brand\" href=\"/\">ChronicleAI</a><div class=\"ds-nav-links\"><a class=\"ds-nav-link ds-nav-link-active\" href=\"/alerts\">Alerts</a><a class=\"ds-nav-link\" href=\"/digests/latest\">Digest</a><a class=\"ds-nav-link\" href=\"/activity\">Activity</a></div></nav>",
+      "css": ".ds-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--frame, #fff); border-radius: 0 0 24px 24px; padding: 12px 24px; font-family: Outfit, Inter, sans-serif; border-bottom: 1px solid color-mix(in srgb, var(--border, #e5e5e5) 10%, transparent); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.08); } .ds-nav-brand { font-weight: 600; color: var(--foreground, #0a0a0a); text-decoration: none; font-size: 1rem; } .ds-nav-links { display: flex; gap: 8px; } .ds-nav-link { color: var(--muted-foreground, #737373); text-decoration: none; font-size: 0.875rem; font-weight: 500; padding: 6px 10px; border-radius: 8px; transition: color 0.15s; } .ds-nav-link:hover { color: var(--foreground, #0a0a0a); } .ds-nav-link-active { color: var(--foreground, #0a0a0a); font-weight: 600; } .ds-nav-link:focus-visible { outline: 2px solid var(--ring, #0066ff); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Verified Desk",
+    "overview": "ChronicleAI reads like a calm market newsroom, not a crypto trading terminal. Surfaces are cool, near-neutral paper with a white frame canvas; the only saturated brand voice is a chartreuse accent that marks confirmation, selection, and primary action. Hierarchy is editorial: headline → summary → source → proof. Density is calm—high signal, low noise—so a reader can scan alerts under time pressure without hype chrome.\n\nThe system serves product UI first (alerts, digests, premium, activity) while the marketing home borrows the same tokens with more motion and feature-scale surfaces. Depth comes from tonal layers and thin borders, not stacked glass or purple gradients. Dark mode inverts paper/frame into near-black canvas while keeping chartreuse as the constant signal color.\n\nThis system explicitly rejects generic SaaS crypto dashboards (navy/purple gradients, glassmorphism, hero-metric templates, identical icon+heading card grids), casino/meme degen aesthetics (neon overload, confetti, pump-style urgency), and pure blockchain explorers (raw tables with no editorial hierarchy or human-readable narrative).",
+    "keyCharacteristics": [
+      "Restrained palette: cool paper neutrals + one chartreuse accent (≤10% of most product screens)",
+      "Editorial content structure over dashboard metric walls",
+      "Proof-of-publication (hashes, explorer links, status) as first-class UI",
+      "Soft radii (12–16px product cards; larger only on marketing feature tiles)",
+      "Motion as state feedback and restrained reveal—always reduced-motion safe",
+      "Light and dark themes share the same accent and component vocabulary"
+    ],
+    "rules": [
+      {
+        "name": "The One Signal Rule",
+        "body": "Chartreuse is the only brand-saturated color on product screens and appears on ≤10% of the surface. Status uses the semantic set; chrome stays neutral.",
+        "section": "colors"
+      },
+      {
+        "name": "The Proof Is Not Decorative Rule",
+        "body": "Transaction hashes, explorer links, and delivery status use mono + muted surfaces—never neon or gradient treatment. Trust comes from legibility.",
+        "section": "colors"
+      },
+      {
+        "name": "The Black-on-Lime Rule",
+        "body": "Text and icons on chartreuse fills are black (or soft ink), never white. Selection is chartreuse background + black text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Editorial Stack Rule",
+        "body": "Every publication unit is title → summary → meta chips → proof/footer. Do not invert to metrics-first layout on content cards.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Means On-Chain Rule",
+        "body": "Monospace signals machine-verifiable data (tx, address, provider). Do not use mono for marketing slogans.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces rest flat. Shadow is a response to interactivity or floating chrome, never a default card skin paired with heavy borders.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Frame Rule",
+        "body": "Desktop uses a 10px frame and corner marks (hidden ≤850px). Content lives inside the frame; do not add competing full-bleed colored sidebars.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do structure content as headline → summary → source → proof (PRODUCT: “Proof before polish”, “Editorial over dashboard”).",
+      "Do keep chartreuse rare and intentional: CTAs, confirmation, hover accents, selection.",
+      "Do use black (or soft ink) text on chartreuse fills and selection.",
+      "Do show registry tx hashes, explorer links, and delivery status when publication claimed.",
+      "Do use Outfit for UI; Space Grotesk for major page titles; mono only for on-chain/machine data.",
+      "Do rest cards on frame + 1px border; lift shadow only on hover for interactive cards.",
+      "Do honor prefers-reduced-motion (opacity-only or instant alternatives).",
+      "Do meet WCAG 2.2 AA: body contrast ≥4.5:1, visible focus, skip link, semantic status not color-only.",
+      "Do keep product card radii at 12–16px; reserve larger radii for marketing feature tiles and header chrome."
+    ],
+    "donts": [
+      "Don't ship generic SaaS crypto dashboards: navy/purple gradients, glassmorphism, hero-metric templates, identical icon+heading feature card grids, or “AI made that” landing scaffolds.",
+      "Don't use casino / meme degen aesthetics: neon overload, confetti, pump-style urgency, gambling UI.",
+      "Don't design pure blockchain explorers: raw transaction tables with no editorial hierarchy, no human-readable narrative, no publication craft.",
+      "Don't use side-stripe borders (border-left/border-right >1px) as accent on cards or alerts.",
+      "Don't use gradient text (background-clip: text).",
+      "Don't pair 1px borders with soft wide drop shadows (blur ≥16px) as resting decoration on the same element.",
+      "Don't use 32px+ radius on product list cards or inputs (pills for tags only).",
+      "Don't put tiny uppercase tracked eyebrows above every section—one deliberate kicker is voice; every section is AI grammar.",
+      "Don't use numbered section markers (01 / 02 / 03) as default page scaffolding unless the content is a true ordered sequence.",
+      "Don't put white text on chartreuse or lighten muted body text below readable contrast.",
+      "Don't invent a second brand hue (purple, cyan glow, gold) for “crypto feel.”"
+    ]
+  }
+}
