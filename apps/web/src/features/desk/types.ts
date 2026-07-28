@@ -36,6 +36,14 @@ export interface DeskAgentSummary {
   errorMessage: string | null;
 }
 
+export interface DeskPrivateRoutingStatus {
+  enabled: boolean;
+  strict: boolean;
+  provider: string;
+  chainId: number;
+  label: string;
+}
+
 export interface DeskStatus {
   chainId: number;
   deskWalletAddress: string | null;
@@ -59,6 +67,8 @@ export interface DeskStatus {
     basisBps: number;
     apyDeltaBps: number;
   };
+  /** Private routing policy surface (Phase 2). */
+  privateRouting?: DeskPrivateRoutingStatus | null;
   lastAgent?: DeskAgentSummary | null;
   /** True when mandatory LLM path is live (enabled + LLM key). */
   agentEnabled?: boolean;
@@ -112,6 +122,12 @@ export interface DeskTicketNarrative {
   agentThesis?: string | null;
   agentConfidence?: number | null;
   agentAction?: string | null;
+  /** private_mempool | public when stored at fill time. */
+  routing?: string | null;
+  routingStrict?: boolean | null;
+  routingProvider?: string | null;
+  /** Calm product copy for execution path. */
+  executionPath?: string | null;
 }
 
 export interface DeskTicketProofs {

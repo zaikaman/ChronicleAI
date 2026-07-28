@@ -23,6 +23,11 @@ import {
   actionTypeForWriteMethod,
   withKeeperHubLog,
 } from "./keeperhub-execution-log.ts";
+import {
+  buildPrivateRoutingDetails,
+  type PrivateRoutingPolicy,
+  type RoutingDetails,
+} from "./routing-metadata.ts";
 import { parseOnChainWatchId, requireOnChainWatchId } from "./sponsored-watch-id.ts";
 
 export interface KeeperHubWriteReceipt extends OnChainWriteReceipt {
@@ -70,6 +75,14 @@ export interface KeeperHubWriteClientConfig {
    * execution_logs rows (Phase 3 observability). Soft-fails never block writes.
    */
   execLogRepo?: ExecutionLogRepository | null;
+  /**
+   * Private routing policy for registry / transfer logs (Phase 2).
+   * When set, execution_logs.details include routing metadata.
+   * Transfer methods use transferRouting when provided; else this policy.
+   */
+  routingPolicy?: PrivateRoutingPolicy | null;
+  /** Override routing for sendTransfer / recordPayout (KH transfer path). */
+  transferRoutingPolicy?: PrivateRoutingPolicy | null;
 }
 
 export interface KeeperHubWriteClient {
@@ -308,6 +321,18 @@ export function createKeeperHubWriteClient(
   const workflowIds = config.workflowIds ?? {};
   const execLogRepo = config.execLogRepo ?? null;
 
+  function routingDetailsForMethod(
+    method: keyof typeof WORKFLOW_ACTION_ENV,
+  ): RoutingDetails | null {
+    if (method === "transfer" || method === "recordPayout") {
+      const policy = config.transferRoutingPolicy ?? config.routingPolicy;
+      return policy ? buildPrivateRoutingDetails(policy) : null;
+    }
+    return config.routingPolicy
+      ? buildPrivateRoutingDetails(config.routingPolicy)
+      : null;
+  }
+
   async function authorizedFetch(
     path: string,
     init: RequestInit & { idempotencyKey?: string } = {},
@@ -426,6 +451,7 @@ export function createKeeperHubWriteClient(
     idempotencyKey: string,
     logDetails?: Record<string, unknown>,
   ): Promise<KeeperHubWriteReceipt> {
+    const routing = routingDetailsForMethod(method);
     return withKeeperHubLog(
       execLogRepo,
       {
@@ -438,6 +464,7 @@ export function createKeeperHubWriteClient(
         details: {
           workflowId,
           network: config.network,
+          ...(routing ?? {}),
           ...(logDetails ?? {}),
         },
       },

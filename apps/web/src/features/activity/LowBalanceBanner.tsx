@@ -74,7 +74,8 @@ export function LowBalanceBanner({
           <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed max-w-2xl">
             Registry writes are suspended until the Para MPC treasury is above{" "}
             {formatAmount(treasury.safetyBuffer, currency)}. Public utility metrics below reflect
-            recent operating demand.
+            recent operating demand. Private routing on Sepolia requires desk wallet Sepolia ETH for
+            gas — private submission disables KeeperHub gas sponsorship.
           </p>
         </div>
         <span

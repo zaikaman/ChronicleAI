@@ -9,6 +9,10 @@ import type {
 } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import type { AgentActivityService } from "../services/agent-activity-service.ts";
+import {
+  extractRoutingFromDetails,
+  routingBadgeLabel,
+} from "../services/routing-metadata.ts";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 
 export interface ActivityRouteDeps {
@@ -69,16 +73,32 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
       }
 
       res.json(
-        fromDbPage(result.value, (l) => ({
-          id: l.id,
-          actionType: l.action_type,
-          entityType: l.entity_type,
-          entityId: l.entity_id,
-          status: l.status,
-          message: l.message,
-          details: l.details,
-          createdAt: l.created_at,
-        })),
+        fromDbPage(result.value, (l) => {
+          const details =
+            l.details && typeof l.details === "object" && !Array.isArray(l.details)
+              ? (l.details as Record<string, unknown>)
+              : null;
+          const routingMeta = extractRoutingFromDetails(details);
+          const entry: Record<string, unknown> = {
+            id: l.id,
+            actionType: l.action_type,
+            entityType: l.entity_type,
+            entityId: l.entity_id,
+            status: l.status,
+            message: l.message,
+            details: l.details,
+            createdAt: l.created_at,
+          };
+          if (routingMeta) {
+            entry.routing = routingMeta.routing;
+            entry.routingStrict = routingMeta.routingStrict;
+            entry.routingProvider = routingMeta.routingProvider;
+            entry.routingRequested = routingMeta.routingRequested;
+            entry.routingApplied = routingMeta.routingApplied;
+            entry.routingLabel = routingBadgeLabel(routingMeta);
+          }
+          return entry;
+        }),
       );
     } catch (error) {
       next(error);
@@ -177,10 +197,23 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
           };
           if (p.payout_tx_hash) payout.payoutTxHash = p.payout_tx_hash;
           if (p.registry_tx_hash) payout.registryTxHash = p.registry_tx_hash;
-          if (p.keeper_hub_run_id) payout.keeperHubRunId = p.keeper_hub_run_id;
+          if (p.keeper_hub_run_id) {
+            payout.keeperHubRunId = p.keeper_hub_run_id;
+            // KH-backed payouts use private transfer workflow when configured.
+            payout.routing = "private_mempool";
+            payout.routingRequested = "private_mempool";
+            payout.routingApplied = "unknown";
+            payout.routingLabel = "Private route (requested)";
+          }
           if (p.explorer_url) payout.explorerUrl = p.explorer_url;
           if (p.transfer_keeper_hub_run_id) {
             payout.transferKeeperHubRunId = p.transfer_keeper_hub_run_id;
+            if (!payout.routing) {
+              payout.routing = "private_mempool";
+              payout.routingRequested = "private_mempool";
+              payout.routingApplied = "unknown";
+              payout.routingLabel = "Private route (requested)";
+            }
           }
           if (p.transfer_explorer_url) {
             payout.transferExplorerUrl = p.transfer_explorer_url;

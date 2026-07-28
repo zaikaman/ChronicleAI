@@ -33,6 +33,12 @@ import type { IntentService } from "./intent-service.ts";
 import type { KillSwitchService, KillSwitchState, KillSwitchTripResult } from "./kill-switch-service.ts";
 import { detectPowderThrash } from "./policy-engine.ts";
 import type { PositionService } from "./position-service.ts";
+import {
+  extractRoutingFromDetails,
+  publicPrivateRoutingStatus,
+  routingExecutionPathCopy,
+  type RoutingPolicyEnv,
+} from "../services/routing-metadata.ts";
 import type {
   StrategyEvaluateResult,
   StrategyExecuteResult,
@@ -90,6 +96,18 @@ export function strategyForSignalType(signalType: DeskSignalType | string): Desk
 
 // ── Public response shapes ──────────────────────────────
 
+export interface PublicPrivateRoutingStatus {
+  /** Whether desk prefers private mempool submission (Flashbots Protect · Sepolia). */
+  enabled: boolean;
+  /** Workflow strict mode expectation. */
+  strict: boolean;
+  /** Provider label for UI (e.g. flashbots_protect). */
+  provider: string;
+  chainId: number;
+  /** Calm product label, e.g. "Private routing: ON". */
+  label: string;
+}
+
 export interface PublicDeskStatus {
   chainId: number;
   deskWalletAddress: string | null;
@@ -113,6 +131,11 @@ export interface PublicDeskStatus {
     basisBps: number;
     apyDeltaBps: number;
   };
+  /**
+   * Private routing policy surface (Phase 2). When present, desk status panel
+   * shows "Private routing: ON/OFF" for Sepolia KH submissions.
+   */
+  privateRouting?: PublicPrivateRoutingStatus | null;
   /** Last LLM agent action (hold/propose/defend/defer) + age. */
   lastAgent: PublicDeskAgentSummary | null;
   /**
@@ -140,6 +163,8 @@ export interface PublicDeskIntentSummary {
   agentThesis: string | null;
   agentConfidence: number | null;
   agentAction: string | null;
+  /** Routing mode when stored on policy_snapshot (Phase 2). */
+  routing?: string | null;
 }
 
 export interface PremiumDeskIntentDetail extends PublicDeskIntentSummary {
@@ -182,6 +207,15 @@ export interface PublicDeskTicketNarrative extends PublicDeskTicketSummary {
   agentThesis: string | null;
   agentConfidence: number | null;
   agentAction: string | null;
+  /**
+   * Execution routing for this ticket (private_mempool | public) when stored
+   * on ticket policy at fill time (Phase 2).
+   */
+  routing?: string | null;
+  routingStrict?: boolean | null;
+  routingProvider?: string | null;
+  /** Calm product copy for ticket detail page. */
+  executionPath?: string | null;
 }
 
 export interface PremiumDeskTicketDetail extends PublicDeskTicketSummary {
@@ -352,6 +386,12 @@ export interface DeskControlPlaneDeps {
    */
   execLogRepo?: ExecutionLogRepository | null | undefined;
 
+  /**
+   * Private routing policy env for desk status panel (Phase 2).
+   * When set, GET /desk/status includes privateRouting: { enabled, label, … }.
+   */
+  routingPolicyEnv?: RoutingPolicyEnv | null | undefined;
+
   /** Live treasury USDC + ETH (null when unreadable). Sepolia ops pocket. */
   loadTreasuryBalances: () => Promise<{
     usdcBalance: number;
@@ -435,6 +475,11 @@ function agentFieldsFromSnapshot(
 export function toPublicIntent(row: DeskIntentRow): PublicDeskIntentSummary {
   const legs = Array.isArray(row.legs) ? row.legs : [];
   const agent = agentFieldsFromSnapshot(row.policy_snapshot);
+  const snapshot =
+    row.policy_snapshot && typeof row.policy_snapshot === "object"
+      ? (row.policy_snapshot as Record<string, unknown>)
+      : null;
+  const routingMeta = extractRoutingFromDetails(snapshot);
   return {
     id: row.id,
     strategy: row.strategy,
@@ -449,6 +494,7 @@ export function toPublicIntent(row: DeskIntentRow): PublicDeskIntentSummary {
     agentThesis: agent.thesis,
     agentConfidence: agent.confidence,
     agentAction: agent.action,
+    routing: routingMeta?.routing ?? null,
   };
 }
 
@@ -534,6 +580,8 @@ export function toPublicTicketNarrative(row: DeskTicketRow): PublicDeskTicketNar
       : null;
 
   const agent = agentFieldsFromSnapshot(policy);
+  const routingMeta = extractRoutingFromDetails(policy);
+  const executionPath = routingExecutionPathCopy(routingMeta);
 
   return {
     ...base,
@@ -547,6 +595,10 @@ export function toPublicTicketNarrative(row: DeskTicketRow): PublicDeskTicketNar
     agentThesis: agent.thesis,
     agentConfidence: agent.confidence,
     agentAction: agent.action,
+    routing: routingMeta?.routing ?? null,
+    routingStrict: routingMeta?.routingStrict ?? null,
+    routingProvider: routingMeta?.routingProvider ?? null,
+    executionPath,
   };
 }
 
@@ -1324,6 +1376,13 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         }
       }
 
+      const privateRouting = deps.routingPolicyEnv
+        ? publicPrivateRoutingStatus({
+            ...deps.routingPolicyEnv,
+            chainId: deps.routingPolicyEnv.chainId ?? deps.chainId,
+          })
+        : null;
+
       return {
         chainId: deps.chainId,
         deskWalletAddress: deskAddress,
@@ -1347,6 +1406,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
           basisBps: deps.config.basisBps,
           apyDeltaBps: deps.config.apyDeltaBps,
         },
+        privateRouting,
         lastAgent,
         agentEnabled: agentPathLive(),
         agentBlockedReason: agentBlockedReason(),

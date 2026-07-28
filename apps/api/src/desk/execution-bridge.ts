@@ -17,6 +17,12 @@ import {
   isExecutionLogEntityUuid,
   withKeeperHubLog,
 } from "../services/keeperhub-execution-log.ts";
+import {
+  buildKillSwitchRoutingDetails,
+  buildPrivateRoutingDetails,
+  type PrivateRoutingPolicy,
+  type RoutingDetails,
+} from "../services/routing-metadata.ts";
 
 export type DeskWorkflowAction =
   | "sweep"
@@ -45,6 +51,11 @@ export interface ExecutionBridgeConfig {
    * started/succeeded/failed `desk_workflow` execution_logs rows.
    */
   execLogRepo?: ExecutionLogRepository | null;
+  /**
+   * Private routing policy for desk strategy/capital workflows (Phase 2).
+   * Kill-switch always uses private + strict regardless of policy.enabled.
+   */
+  routingPolicy?: PrivateRoutingPolicy | null;
 }
 
 export interface DeskWorkflowReceipt extends OnChainWriteReceipt {
@@ -244,6 +255,18 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
   const workflowIds = config.workflowIds;
   const execLogRepo = config.execLogRepo ?? null;
 
+  function routingDetailsForAction(action: DeskWorkflowAction): RoutingDetails | null {
+    if (action === "kill_switch") {
+      return buildKillSwitchRoutingDetails({
+        routingProviderLabel:
+          config.routingPolicy?.provider ?? "flashbots_protect",
+        chainId: config.routingPolicy?.chainId,
+      });
+    }
+    if (!config.routingPolicy) return null;
+    return buildPrivateRoutingDetails(config.routingPolicy);
+  }
+
   function requireWorkflowId(action: DeskWorkflowAction): string {
     const key = ACTION_KEY[action];
     const id = workflowIds[key]?.trim();
@@ -441,6 +464,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
       const intentId =
         typeof input.intentId === "string" ? input.intentId : null;
       const entityId = isExecutionLogEntityUuid(intentId) ? intentId : null;
+      const routing = routingDetailsForAction(action);
 
       return withKeeperHubLog(
         execLogRepo,
@@ -455,6 +479,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
             network: config.network,
             wait,
             idempotencyKey,
+            ...(routing ?? {}),
             ...(intentId && !entityId ? { intent_id_raw: intentId } : {}),
           },
         },
@@ -514,6 +539,9 @@ export function createExecutionBridgeFromEnv(
     keeperhubWorkflowDeskRotate?: string | undefined;
     keeperhubWorkflowDeskOracleArb?: string | undefined;
     keeperhubWorkflowDeskKillSwitch?: string | undefined;
+    deskUsePrivateMempool?: boolean | undefined;
+    deskPrivateMempoolStrict?: boolean | undefined;
+    routingProviderLabel?: string | undefined;
   },
   options?: { execLogRepo?: ExecutionLogRepository | null },
 ): ExecutionBridge | null {
@@ -522,11 +550,18 @@ export function createExecutionBridgeFromEnv(
   if (!base || !key || !key.startsWith("kh_")) {
     return null;
   }
+  const routingPolicy: PrivateRoutingPolicy = {
+    enabled: env.deskUsePrivateMempool !== false,
+    strict: env.deskPrivateMempoolStrict !== false,
+    provider: env.routingProviderLabel?.trim() || "flashbots_protect",
+    chainId: 11_155_111,
+  };
   return createExecutionBridge({
     apiBaseUrl: base,
     apiKey: key,
     network: env.keeperhubNetwork,
     workflowIds: deskWorkflowIdsFromEnv(env),
     execLogRepo: options?.execLogRepo ?? null,
+    routingPolicy,
   });
 }

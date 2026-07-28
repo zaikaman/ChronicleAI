@@ -233,4 +233,63 @@ describe("execution-bridge", () => {
       }),
     });
   });
+
+  it("includes private routing metadata when routingPolicy is set", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/execute") && init?.method === "POST") {
+        return new Response(JSON.stringify({ executionId: "exec-route" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/wait") || u.includes("/status")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-route",
+            status: "completed",
+            completed: true,
+            transactionHash: "0xdef",
+            transactionLink: "https://sepolia.etherscan.io/tx/0xdef",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const append = vi.fn().mockResolvedValue({ ok: true, value: {} });
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: { rotate: "wf-rotate-1" },
+      routingPolicy: {
+        enabled: true,
+        strict: true,
+        provider: "flashbots_protect",
+        chainId: 11_155_111,
+      },
+      execLogRepo: {
+        append,
+        listByEntity: vi.fn(),
+        listRecent: vi.fn(),
+        listPage: vi.fn(),
+      } as never,
+    });
+
+    await bridge.execute("rotate", {}, { idempotencyKey: "k-route" });
+
+    expect(append.mock.calls[0]?.[0]).toMatchObject({
+      details: expect.objectContaining({
+        routing: "private_mempool",
+        routingRequested: "private_mempool",
+        routingApplied: "unknown",
+        routingStrict: true,
+        routingProvider: "flashbots_protect",
+        chainId: 11_155_111,
+      }),
+    });
+  });
 });

@@ -10,6 +10,12 @@ import type { IntentService } from "./intent-service.ts";
 import type { PolicyEngine } from "./policy-engine.ts";
 import type { TicketService, TicketPublishResult } from "./ticket-service.ts";
 import { softAppendExecutionLog } from "../services/keeperhub-execution-log.ts";
+import {
+  buildDeskRoutingDetails,
+  buildKillSwitchRoutingDetails,
+  type RoutingDetails,
+  type RoutingPolicyEnv,
+} from "../services/routing-metadata.ts";
 import { createRiskDefendStrategy } from "./strategy-risk.ts";
 import {
   createYieldRotationStrategy,
@@ -122,10 +128,23 @@ export function createStrategyRunner(deps: {
   executionBridge?: ExecutionBridge | null | undefined;
   tickets?: TicketService | null | undefined;
   execLogRepo?: ExecutionLogRepository | null | undefined;
+  /**
+   * Private routing policy env (Phase 2). When set, intent logs and ticket
+   * policy include routing metadata for Activity / product surface.
+   */
+  routingPolicyEnv?: RoutingPolicyEnv | null | undefined;
 }): StrategyRunner {
   const risk = createRiskDefendStrategy(deps.config);
   const rotation = createYieldRotationStrategy(deps.config);
   const oracle = createOracleAmmStrategy(deps.config);
+
+  function deskRoutingDetails(action?: string): RoutingDetails | null {
+    if (!deps.routingPolicyEnv) return null;
+    if (action === "kill_switch") {
+      return buildKillSwitchRoutingDetails(deps.routingPolicyEnv);
+    }
+    return buildDeskRoutingDetails(deps.routingPolicyEnv);
+  }
 
   function plan(
     strategy: DeskStrategy,
@@ -285,6 +304,7 @@ export function createStrategyRunner(deps: {
       }
 
       const intentStartedAt = new Date().toISOString();
+      const routingForIntent = deskRoutingDetails();
       const logIntent = async (
         status: "started" | "succeeded" | "failed",
         message: string,
@@ -299,6 +319,7 @@ export function createStrategyRunner(deps: {
           details: {
             strategy: intent.strategy,
             notionalUsdc: intent.notional_usdc,
+            ...(routingForIntent ?? {}),
             ...details,
           },
           started_at: intentStartedAt,
@@ -423,6 +444,9 @@ export function createStrategyRunner(deps: {
 
         let ticket: TicketPublishResult | undefined;
         if (params.publishTicket !== false && deps.tickets) {
+          const basePolicy =
+            (filled.policy_snapshot ?? {}) as Record<string, unknown>;
+          const routing = deskRoutingDetails(action);
           ticket = await deps.tickets.publish({
             intentId: filled.id,
             strategy,
@@ -451,7 +475,13 @@ export function createStrategyRunner(deps: {
                   keeperHubRunId: receipt.keeperHubRunId,
                 }));
             })(),
-            policy: (filled.policy_snapshot ?? {}) as Record<string, unknown>,
+            policy: {
+              ...basePolicy,
+              ...(routing ?? {}),
+              ...(routing
+                ? { execution_routing: routing.routing }
+                : {}),
+            },
             notionalUsdc: filled.notional_usdc,
           });
         }

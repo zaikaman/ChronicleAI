@@ -33,6 +33,10 @@ import {
   toUint64Seconds,
 } from "./keeperhub-write-client.ts";
 import {
+  PRIVATE_ROUTING_CHAIN_ID,
+  type PrivateRoutingPolicy,
+} from "./routing-metadata.ts";
+import {
   normalizeGasValue,
   type OnChainWriteReceipt,
   type SponsoredWatchWriteReceipt,
@@ -255,11 +259,33 @@ function keeperHubWorkflowIdsFromEnv(env: ServerEnv) {
   };
 }
 
+function routingPoliciesFromEnv(env: ServerEnv): {
+  routingPolicy: PrivateRoutingPolicy;
+  transferRoutingPolicy: PrivateRoutingPolicy;
+} {
+  const provider = env.routingProviderLabel?.trim() || "flashbots_protect";
+  return {
+    routingPolicy: {
+      enabled: env.registryUsePrivateMempool !== false,
+      strict: env.deskPrivateMempoolStrict !== false,
+      provider,
+      chainId: PRIVATE_ROUTING_CHAIN_ID,
+    },
+    transferRoutingPolicy: {
+      enabled: env.deskUsePrivateMempool !== false,
+      strict: env.deskPrivateMempoolStrict !== false,
+      provider,
+      chainId: PRIVATE_ROUTING_CHAIN_ID,
+    },
+  };
+}
+
 function createHybridParaKeeperHubWeb3Client(
   env: ServerEnv,
   paraClient: ParaTreasuryClient,
   options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
 ): Web3Client {
+  const routing = routingPoliciesFromEnv(env);
   const kh = createKeeperHubWriteClient({
     apiBaseUrl: env.keeperhubApiBaseUrl as string,
     apiKey: env.keeperhubApiKey as string,
@@ -268,6 +294,8 @@ function createHybridParaKeeperHubWeb3Client(
     usdcAddress: env.deskUsdcAddress,
     workflowIds: keeperHubWorkflowIdsFromEnv(env),
     execLogRepo: options?.execLogRepo ?? null,
+    routingPolicy: routing.routingPolicy,
+    transferRoutingPolicy: routing.transferRoutingPolicy,
   });
 
   return {
@@ -501,6 +529,7 @@ function createKeeperHubBackedWeb3Client(
   env: ServerEnv,
   options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
 ): Web3Client {
+  const routing = routingPoliciesFromEnv(env);
   const kh = createKeeperHubWriteClient({
     apiBaseUrl: env.keeperhubApiBaseUrl as string,
     apiKey: env.keeperhubApiKey as string,
@@ -509,6 +538,8 @@ function createKeeperHubBackedWeb3Client(
     usdcAddress: env.deskUsdcAddress,
     workflowIds: keeperHubWorkflowIdsFromEnv(env),
     execLogRepo: options?.execLogRepo ?? null,
+    routingPolicy: routing.routingPolicy,
+    transferRoutingPolicy: routing.transferRoutingPolicy,
   });
 
   const treasury = resolveTreasuryWallet(env, { keeperHubBacked: true });

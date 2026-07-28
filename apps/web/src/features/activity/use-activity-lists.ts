@@ -17,6 +17,12 @@ export interface ExecutionLogItem {
   message: string | null;
   details?: Record<string, unknown> | null;
   createdAt: string;
+  routing?: string;
+  routingLabel?: string;
+  routingApplied?: string;
+  routingRequested?: string;
+  routingStrict?: boolean;
+  routingProvider?: string;
 }
 
 export interface PaymentItem {
@@ -47,6 +53,10 @@ export interface PayoutItem {
   transferExplorerUrl?: string;
   status: string;
   createdAt: string;
+  routing?: string;
+  routingLabel?: string;
+  routingRequested?: string;
+  routingApplied?: string;
 }
 
 export interface PaginatedListState<T> {

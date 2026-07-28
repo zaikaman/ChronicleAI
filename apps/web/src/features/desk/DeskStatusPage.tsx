@@ -184,6 +184,37 @@ export function DeskStatusPage(): ReactElement {
         </div>
       </PageSection>
 
+      {data.privateRouting ? (
+        <PageSection
+          title="Private routing"
+          description="Desk KeeperHub executions on Ethereum Sepolia may use a private submission path (Flashbots Protect). Private route skips gas sponsorship — desk wallet needs Sepolia ETH."
+        >
+          <Surface className="p-5" data-testid="desk-private-routing">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <StatusBadge
+                label={data.privateRouting.label}
+                variant={data.privateRouting.enabled ? "info" : "default"}
+                data-testid="desk-private-routing-badge"
+              />
+              {data.privateRouting.strict ? (
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-muted border border-border/40 text-muted-foreground">
+                  Strict
+                </span>
+              ) : null}
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
+              {data.privateRouting.enabled
+                ? `Policy prefers private mempool submission via ${
+                    data.privateRouting.provider === "flashbots_protect"
+                      ? "Flashbots Protect"
+                      : data.privateRouting.provider
+                  } on chain ${data.privateRouting.chainId}.`
+                : "Private routing is off for desk workflows; submissions use the public mempool path."}
+            </p>
+          </Surface>
+        </PageSection>
+      ) : null}
+
       <PageSection title="Risk & kill switch">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
           <Surface className="p-4">

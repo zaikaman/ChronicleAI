@@ -85,6 +85,10 @@ function mapExecutionLog(log: {
   message: string | null;
   details?: Record<string, unknown> | null;
   createdAt: string;
+  routing?: string;
+  routingLabel?: string;
+  routingApplied?: string;
+  routingRequested?: string;
 }) {
   const details = log.details ?? undefined;
   const keeperHubRunId =
@@ -132,6 +136,29 @@ function mapExecutionLog(log: {
   const executedViaKeeperHub =
     details?.executedViaKeeperHub === true || Boolean(keeperHubRunId);
 
+  const routingFromTop =
+    typeof log.routing === "string"
+      ? log.routing
+      : typeof details?.routing === "string"
+        ? details.routing
+        : undefined;
+  const routingLabel =
+    typeof log.routingLabel === "string"
+      ? log.routingLabel
+      : undefined;
+  const routingApplied =
+    typeof log.routingApplied === "string"
+      ? log.routingApplied
+      : typeof details?.routingApplied === "string"
+        ? details.routingApplied
+        : undefined;
+  const routingRequested =
+    typeof log.routingRequested === "string"
+      ? log.routingRequested
+      : typeof details?.routingRequested === "string"
+        ? details.routingRequested
+        : undefined;
+
   const entry: {
     id: string;
     actionType: string;
@@ -144,6 +171,10 @@ function mapExecutionLog(log: {
     txHash?: string;
     explorerUrl?: string;
     executedViaKeeperHub: boolean;
+    routing?: string;
+    routingLabel?: string;
+    routingApplied?: string;
+    routingRequested?: string;
   } = {
     id: log.id,
     actionType: log.actionType,
@@ -157,6 +188,10 @@ function mapExecutionLog(log: {
   if (keeperHubRunId) entry.keeperHubRunId = keeperHubRunId;
   if (txHash) entry.txHash = txHash;
   if (explorerUrl) entry.explorerUrl = explorerUrl;
+  if (routingFromTop) entry.routing = routingFromTop;
+  if (routingLabel) entry.routingLabel = routingLabel;
+  if (routingApplied) entry.routingApplied = routingApplied;
+  if (routingRequested) entry.routingRequested = routingRequested;
   return entry;
 }
 
@@ -301,6 +336,10 @@ function PayoutsSection(): ReactElement {
         explorerUrl?: string;
         status: string;
         createdAt: string;
+        routing?: string;
+        routingLabel?: string;
+        routingRequested?: string;
+        routingApplied?: string;
       } = {
         id: p.id,
         payoutPeriodHash: p.payoutPeriodHash,
@@ -314,6 +353,10 @@ function PayoutsSection(): ReactElement {
       if (p.registryTxHash) entry.registryTxHash = p.registryTxHash;
       if (p.keeperHubRunId) entry.keeperHubRunId = p.keeperHubRunId;
       if (p.explorerUrl) entry.explorerUrl = p.explorerUrl;
+      if (p.routing) entry.routing = p.routing;
+      if (p.routingLabel) entry.routingLabel = p.routingLabel;
+      if (p.routingRequested) entry.routingRequested = p.routingRequested;
+      if (p.routingApplied) entry.routingApplied = p.routingApplied;
       return entry;
     });
   }, [payoutsPage.items]);

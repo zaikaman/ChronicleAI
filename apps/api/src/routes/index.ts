@@ -379,6 +379,13 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     executionBridge: deskExecutionBridge,
     tickets: deskTicketService,
     execLogRepo: deps.execLogRepo,
+    routingPolicyEnv: {
+      deskUsePrivateMempool: env.deskUsePrivateMempool,
+      deskPrivateMempoolStrict: env.deskPrivateMempoolStrict,
+      registryUsePrivateMempool: env.registryUsePrivateMempool,
+      routingProviderLabel: env.routingProviderLabel,
+      chainId: mapNetworkToChainId(env.keeperhubNetwork, 11_155_111),
+    },
   });
 
   // Late-bound CCTP service: control plane + starvation probe close over this ref.
@@ -414,6 +421,13 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     failureClassifier: deskFailureClassifier,
     narrative: deskNarrative,
     execLogRepo: deps.execLogRepo,
+    routingPolicyEnv: {
+      deskUsePrivateMempool: env.deskUsePrivateMempool,
+      deskPrivateMempoolStrict: env.deskPrivateMempoolStrict,
+      registryUsePrivateMempool: env.registryUsePrivateMempool,
+      routingProviderLabel: env.routingProviderLabel,
+      chainId: mapNetworkToChainId(env.keeperhubNetwork, 11_155_111),
+    },
     monitoredEvents: deps.eventRepo,
     loadTreasuryBalances: async () => {
       const balances = await loadLiveTreasuryBalances({
@@ -858,6 +872,7 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
     generationService,
     publicationService,
     premiumProductizer: deps.premiumProductizer ?? null,
+    executionRouting: env.deskUsePrivateMempool ? "private_mempool" : "public",
   });
 
   // Late-bind for Telegram free-plan digest_run bridge (US1 webhook route)

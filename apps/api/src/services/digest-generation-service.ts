@@ -68,6 +68,11 @@ export interface DigestGenerationParams {
   periodStart: string;
   periodEnd: string;
   events: DigestEventInput[];
+  /**
+   * Optional desk execution routing mode for LLM context (Phase 2).
+   * When desk trades use private mempool, set `private_mempool`.
+   */
+  executionRouting?: "private_mempool" | "public" | undefined;
 }
 
 export interface DigestProviderAttemptResult {
@@ -344,6 +349,19 @@ function buildDigestPrompt(params: DigestGenerationParams, stats: DigestStats): 
     `Period labels: ${periodStartDate} to ${periodEndDate}`,
     `Qualified event count: ${params.events.length}`,
     "",
+  ];
+
+  if (params.executionRouting) {
+    lines.push(
+      `execution_routing: ${params.executionRouting}`,
+      params.executionRouting === "private_mempool"
+        ? "(Desk trades in this window may use KeeperHub private submission path on Sepolia — do not claim mainnet MEV protection.)"
+        : "(Desk executions use public mempool submission when applicable.)",
+      "",
+    );
+  }
+
+  lines.push(
     "DIGEST STATS (precomputed — use these numbers; do not invent nets):",
     `- netRiskOnUsd: ${stats.netRiskOnUsd} (${formatUsd(stats.netRiskOnUsd)})`,
     `- netDeRiskUsd: ${stats.netDeRiskUsd} (${formatUsd(stats.netDeRiskUsd)})`,
@@ -360,7 +378,7 @@ function buildDigestPrompt(params: DigestGenerationParams, stats: DigestStats): 
     `- swapCount: ${stats.swapCount}`,
     `- swapUsd: ${stats.swapUsd} (${formatUsd(stats.swapUsd)})`,
     "",
-  ];
+  );
 
   if (params.events.length === 0) {
     lines.push(

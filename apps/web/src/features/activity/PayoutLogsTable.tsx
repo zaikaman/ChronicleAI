@@ -3,6 +3,7 @@
 
 import type React from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
+import { RoutingBadge } from "../../components/routing-badge.tsx";
 import { sepoliaAddressUrl, sepoliaTxUrl } from "../../lib/explorer.ts";
 
 interface PayoutEntry {
@@ -17,6 +18,10 @@ interface PayoutEntry {
   explorerUrl?: string;
   status: string;
   createdAt: string;
+  routing?: string;
+  routingLabel?: string;
+  routingRequested?: string;
+  routingApplied?: string;
 }
 
 interface PayoutLogsTableProps {
@@ -161,6 +166,7 @@ export function PayoutLogsTable({
               <th style={tableHeaderStyle}>Recipient</th>
               <th style={tableHeaderStyle}>Amount</th>
               <th style={tableHeaderStyle}>Status</th>
+              <th style={tableHeaderStyle}>Route</th>
               <th style={tableHeaderStyle}>KeeperHub</th>
               <th style={tableHeaderStyle}>Transfer Tx</th>
               <th style={tableHeaderStyle}>Registry Tx</th>
@@ -214,6 +220,24 @@ export function PayoutLogsTable({
                     label={payout.status}
                     variant={getPayoutStatusVariant(payout.status)}
                   />
+                </td>
+                <td style={tableCellStyle}>
+                  {payout.routing ||
+                  payout.routingLabel ||
+                  payout.keeperHubRunId ? (
+                    <RoutingBadge
+                      routing={
+                        payout.routing ??
+                        (payout.keeperHubRunId ? "private_mempool" : undefined)
+                      }
+                      label={payout.routingLabel}
+                      routingApplied={payout.routingApplied}
+                      routingRequested={payout.routingRequested}
+                      data-testid="payout-routing-badge"
+                    />
+                  ) : (
+                    <span style={{ color: "var(--fg-tertiary)" }}>-</span>
+                  )}
                 </td>
                 <td style={tableCellStyle}>
                   {payout.keeperHubRunId ? (

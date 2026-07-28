@@ -48,10 +48,14 @@ import {
   DESK_TARGET_AUM_USDC,
   DESK_TOPUP_CHUNK_USDC,
   DESK_TOPUP_COOLDOWN_MS,
+  DESK_USE_PRIVATE_MEMPOOL,
+  DESK_PRIVATE_MEMPOOL_STRICT,
   DIGEST_SCHEDULE_CHECK_INTERVAL_MS,
   PREMIUM_DESK_FEED_PRICE_USDC,
+  REGISTRY_USE_PRIVATE_MEMPOOL,
   REVENUE_MIN_DISTRIBUTABLE_USDC,
   REVENUE_ROUTING_SCHEDULE_INTERVAL_MS,
+  ROUTING_PROVIDER_LABEL,
   SPONSORED_WATCH_DEFAULT_DURATION_DAYS,
   SPONSORED_WATCH_MAX_DURATION_DAYS,
   SPONSORED_WATCH_MIN_DURATION_HOURS,
@@ -59,6 +63,7 @@ import {
   TREASURY_BASE_MIN_GAS_ETH,
   TREASURY_CHECK_MIN_INTERVAL_MS,
   TREASURY_CHECK_SCHEDULE_INTERVAL_MS,
+  TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC,
   TREASURY_SEPOLIA_MIN_GAS_ETH,
   UTILITY_COST_PER_GENERATION_USDC,
   UTILITY_COST_PER_REGISTRY_WRITE_USDC,
@@ -304,6 +309,32 @@ export interface ServerEnv {
    * Never put a desk EOA private key in env — production forbids DESK_*_PRIVATE_KEY.
    */
   deskWalletAddress: string | undefined;
+  /**
+   * Prefer private mempool routing for desk strategy/capital KH executions.
+   * Workflow JSON sets usePrivateMempool; this is Chronicle policy for logs/UI.
+   * Default true. Env: DESK_USE_PRIVATE_MEMPOOL.
+   */
+  deskUsePrivateMempool: boolean;
+  /**
+   * Expect workflow strict mode (private RPC failure does not fall back to public).
+   * Kill-switch residual transfers always strict. Env: DESK_PRIVATE_MEMPOOL_STRICT.
+   */
+  deskPrivateMempoolStrict: boolean;
+  /**
+   * USDC notional at/above this forces KeeperHub private transfer path (Phase 3).
+   * Env: TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC.
+   */
+  treasuryPrivateTransferThresholdUsdc: number;
+  /**
+   * Registry publish/record workflows: true = full-stack private metadata;
+   * false = public/sponsorship-friendly labeling. Env: REGISTRY_USE_PRIVATE_MEMPOOL.
+   */
+  registryUsePrivateMempool: boolean;
+  /**
+   * Provider label for Activity / execution_logs (not a network endpoint).
+   * Default flashbots_protect. Env: ROUTING_PROVIDER_LABEL.
+   */
+  routingProviderLabel: string;
   /** Steady-state desk book size (USDC). */
   deskTargetAumUsdc: number;
   /** Hard ceiling on desk equity (USDC). */
@@ -1110,6 +1141,30 @@ export function loadServerEnv(): ServerEnv {
     ),
     keeperhubWorkflowGasVolumeBlock: optionalEnv("KEEPERHUB_WORKFLOW_GAS_VOLUME_BLOCK"),
     deskWalletAddress: deskWalletRaw,
+    deskUsePrivateMempool:
+      (optionalEnv(
+        "DESK_USE_PRIVATE_MEMPOOL",
+        DESK_USE_PRIVATE_MEMPOOL ? "true" : "false",
+      ) ?? (DESK_USE_PRIVATE_MEMPOOL ? "true" : "false")).toLowerCase() !== "false",
+    deskPrivateMempoolStrict:
+      (optionalEnv(
+        "DESK_PRIVATE_MEMPOOL_STRICT",
+        DESK_PRIVATE_MEMPOOL_STRICT ? "true" : "false",
+      ) ?? (DESK_PRIVATE_MEMPOOL_STRICT ? "true" : "false")).toLowerCase() !==
+      "false",
+    treasuryPrivateTransferThresholdUsdc: parsePositiveNumberEnv(
+      "TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC",
+      TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC,
+    ),
+    registryUsePrivateMempool:
+      (optionalEnv(
+        "REGISTRY_USE_PRIVATE_MEMPOOL",
+        REGISTRY_USE_PRIVATE_MEMPOOL ? "true" : "false",
+      ) ?? (REGISTRY_USE_PRIVATE_MEMPOOL ? "true" : "false")).toLowerCase() !==
+      "false",
+    routingProviderLabel:
+      optionalEnv("ROUTING_PROVIDER_LABEL", ROUTING_PROVIDER_LABEL)?.trim() ||
+      ROUTING_PROVIDER_LABEL,
     deskTargetAumUsdc,
     deskMaxAumUsdc,
     deskMinAumUsdc,

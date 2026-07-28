@@ -9,6 +9,7 @@ import {
   PageSection,
   Surface,
 } from "../../components/page-chrome.tsx";
+import { RoutingBadge } from "../../components/routing-badge.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { sepoliaTxUrl } from "../../lib/explorer.ts";
 import {
@@ -231,6 +232,36 @@ export function DeskTicketPage(): ReactElement {
           </p>
         ) : null}
       </PageSection>
+
+      {/* Execution path (private routing) */}
+      {(ticket.executionPath || ticket.routing) && (
+        <PageSection
+          title="Execution path"
+          description="How this trade was submitted on Ethereum Sepolia via KeeperHub."
+        >
+          <Surface className="p-5" data-testid="desk-ticket-routing">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <RoutingBadge
+                routing={ticket.routing}
+                routingApplied={
+                  ticket.routing === "private_mempool" ? "unknown" : ticket.routing
+                }
+                data-testid="ticket-routing-badge"
+              />
+            </div>
+            <p className="text-sm text-foreground leading-relaxed max-w-2xl text-pretty">
+              {ticket.executionPath ??
+                (ticket.routing === "private_mempool"
+                  ? "Execution path: KeeperHub private mempool requested (Flashbots Protect · Sepolia)"
+                  : "Execution path: public mempool submission")}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground leading-relaxed max-w-2xl">
+              Private submission path on Sepolia — not a claim of mainnet-scale sandwich
+              protection.
+            </p>
+          </Surface>
+        </PageSection>
+      )}
 
       {/* Proofs */}
       <PageSection

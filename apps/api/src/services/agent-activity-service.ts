@@ -16,6 +16,10 @@ import {
   buildReferralAttribution,
   buildSubscriptionAnalytics,
 } from "./activity-analytics.ts";
+import {
+  extractRoutingFromDetails,
+  routingBadgeLabel,
+} from "./routing-metadata.ts";
 import type { LiveTreasuryBalances } from "./treasury-balances.ts";
 
 export interface AgentActivityService {
@@ -263,16 +267,32 @@ export function createAgentActivityService(
         return payment;
       });
 
-      const executionLogs = data.recentLogs.map((l) => ({
-        id: l.id,
-        actionType: l.action_type,
-        entityType: l.entity_type,
-        entityId: l.entity_id,
-        status: l.status,
-        message: l.message,
-        details: l.details,
-        createdAt: l.created_at,
-      }));
+      const executionLogs = data.recentLogs.map((l) => {
+        const details =
+          l.details && typeof l.details === "object" && !Array.isArray(l.details)
+            ? (l.details as Record<string, unknown>)
+            : null;
+        const routingMeta = extractRoutingFromDetails(details);
+        const entry: Record<string, unknown> = {
+          id: l.id,
+          actionType: l.action_type,
+          entityType: l.entity_type,
+          entityId: l.entity_id,
+          status: l.status,
+          message: l.message,
+          details: l.details,
+          createdAt: l.created_at,
+        };
+        if (routingMeta) {
+          entry.routing = routingMeta.routing;
+          entry.routingStrict = routingMeta.routingStrict;
+          entry.routingProvider = routingMeta.routingProvider;
+          entry.routingRequested = routingMeta.routingRequested;
+          entry.routingApplied = routingMeta.routingApplied;
+          entry.routingLabel = routingBadgeLabel(routingMeta);
+        }
+        return entry;
+      });
 
       const payouts = data.recentPayouts.map((p) => {
         const payout: Record<string, unknown> = {
@@ -286,10 +306,31 @@ export function createAgentActivityService(
         };
         if (p.payout_tx_hash) payout.payoutTxHash = p.payout_tx_hash;
         if (p.registry_tx_hash) payout.registryTxHash = p.registry_tx_hash;
-        if (p.keeper_hub_run_id) payout.keeperHubRunId = p.keeper_hub_run_id;
+        if (p.keeper_hub_run_id) {
+          payout.keeperHubRunId = p.keeper_hub_run_id;
+          // KH-backed payouts use private transfer workflow when desk policy is on.
+          // Surface requested routing for Activity badges (Phase 2).
+          payout.routing = "private_mempool";
+          payout.routingRequested = "private_mempool";
+          payout.routingApplied = "unknown";
+          payout.routingLabel = routingBadgeLabel({
+            routing: "private_mempool",
+            routingStrict: true,
+            routingProvider: "flashbots_protect",
+            chainId: 11_155_111,
+            routingRequested: "private_mempool",
+            routingApplied: "unknown",
+          });
+        }
         if (p.explorer_url) payout.explorerUrl = p.explorer_url;
         if (p.transfer_keeper_hub_run_id) {
           payout.transferKeeperHubRunId = p.transfer_keeper_hub_run_id;
+          if (!payout.routing) {
+            payout.routing = "private_mempool";
+            payout.routingRequested = "private_mempool";
+            payout.routingApplied = "unknown";
+            payout.routingLabel = "Private route (requested)";
+          }
         }
         if (p.transfer_explorer_url) payout.transferExplorerUrl = p.transfer_explorer_url;
         return payout;

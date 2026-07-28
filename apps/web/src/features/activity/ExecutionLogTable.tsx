@@ -3,6 +3,7 @@
 
 import type React from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
+import { RoutingBadge } from "../../components/routing-badge.tsx";
 import { sepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
 
 interface ExecutionLogEntry {
@@ -17,6 +18,11 @@ interface ExecutionLogEntry {
   txHash?: string;
   explorerUrl?: string;
   executedViaKeeperHub?: boolean;
+  /** private_mempool | public when logged (Phase 2). */
+  routing?: string | null;
+  routingLabel?: string | null;
+  routingApplied?: string | null;
+  routingRequested?: string | null;
 }
 
 interface ExecutionLogTableProps {
@@ -173,6 +179,7 @@ export function ExecutionLogTable({
               <th style={tableHeaderStyle}>Action</th>
               <th style={tableHeaderStyle}>Entity</th>
               <th style={tableHeaderStyle}>Status</th>
+              <th style={tableHeaderStyle}>Route</th>
               <th style={tableHeaderStyle}>KeeperHub</th>
               <th style={tableHeaderStyle}>Message</th>
               <th style={tableHeaderStyle}>Time</th>
@@ -217,6 +224,21 @@ export function ExecutionLogTable({
                 </td>
                 <td style={tableCellStyle}>
                   <StatusBadge label={log.status} variant={getStatusVariant(log.status)} />
+                </td>
+                <td style={tableCellStyle}>
+                  {log.routing || log.routingLabel || log.routingRequested ? (
+                    <RoutingBadge
+                      routing={log.routing}
+                      label={log.routingLabel}
+                      routingApplied={log.routingApplied}
+                      routingRequested={log.routingRequested}
+                      data-testid="log-routing-badge"
+                    />
+                  ) : (
+                    <span style={{ color: "var(--fg-tertiary)", fontSize: "var(--font-size-xs)" }}>
+                      —
+                    </span>
+                  )}
                 </td>
                 <td style={tableCellStyle}>
                   {log.executedViaKeeperHub || log.keeperHubRunId ? (

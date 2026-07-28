@@ -31,6 +31,7 @@ export class DigestRunHandler {
   private readonly generationService: DigestGenerationService;
   private readonly publicationService: DigestPublicationService;
   private readonly premiumProductizer: PremiumProductizerService | null;
+  private readonly executionRouting: "private_mempool" | "public" | undefined;
 
   constructor(deps: {
     digestRepo: DailyDigestRepository;
@@ -42,6 +43,11 @@ export class DigestRunHandler {
     publicationService: DigestPublicationService;
     /** Mints period deep dives + structured feeds from real digest events. */
     premiumProductizer?: PremiumProductizerService | null;
+    /**
+     * Optional desk execution routing for LLM context (Phase 2).
+     * When desk prefers private mempool, pass `private_mempool`.
+     */
+    executionRouting?: "private_mempool" | "public" | null;
   }) {
     this.digestRepo = deps.digestRepo;
     this.eventRepo = deps.eventRepo;
@@ -51,6 +57,7 @@ export class DigestRunHandler {
     this.generationService = deps.generationService;
     this.publicationService = deps.publicationService;
     this.premiumProductizer = deps.premiumProductizer ?? null;
+    this.executionRouting = deps.executionRouting ?? undefined;
   }
 
   async runDigest(payload: DigestRunPayload, _source = "keeperhub"): Promise<DigestRunResult> {
@@ -124,6 +131,9 @@ export class DigestRunHandler {
         periodStart: payload.periodStart,
         periodEnd: payload.periodEnd,
         events: eventSelection.events,
+        ...(this.executionRouting
+          ? { executionRouting: this.executionRouting }
+          : {}),
       });
     } catch (error) {
       const message =
