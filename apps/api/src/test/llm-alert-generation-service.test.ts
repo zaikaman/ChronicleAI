@@ -35,7 +35,7 @@ describe("LLMAlertGenerationService - Fallback", () => {
 
   it("has the correct fallback order", async () => {
     const { LLM_FALLBACK_ORDER } = await import("@chronicleai/config");
-    expect(LLM_FALLBACK_ORDER).toEqual(["gemini", "openai", "groq"]);
+    expect(LLM_FALLBACK_ORDER).toEqual(["gemini", "groq", "openai"]);
   });
 
   it("creates service with correct provider configs", () => {
@@ -118,7 +118,7 @@ describe("LLMAlertGenerationService - Fallback", () => {
       expect(result.providerUsed).toBeUndefined();
 
       const providers = result.attempts.map((a) => a.provider);
-      expect(providers).toEqual(["gemini", "openai", "groq"]);
+      expect(providers).toEqual(["gemini", "groq", "openai"]);
     } finally {
       globalThis.fetch = originalFetch;
     }

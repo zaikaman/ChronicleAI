@@ -1,4 +1,4 @@
-// LLM-backed daily digest generator with Gemini → OpenAI → Groq fallback.
+// LLM-backed daily digest generator with Gemini → Groq → OpenAI fallback.
 // Fails hard if every provider fails — no heuristic/template content path.
 // Precomputes DigestStats and forces sectioned JSON output.
 
@@ -634,6 +634,7 @@ export function createDigestGenerationService(
             systemPrompt: DIGEST_SYSTEM_INSTRUCTION,
             userPrompt: prompt,
             responseFormat: digestContentSchema,
+            provider,
             signal: controller.signal,
             runLimit: 1,
           });

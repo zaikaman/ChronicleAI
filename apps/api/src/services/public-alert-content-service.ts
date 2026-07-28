@@ -225,6 +225,7 @@ export function createPublicAlertContentService(
             systemPrompt: ALERT_SYSTEM_INSTRUCTION,
             userPrompt: prompt,
             responseFormat: alertContentSchema,
+            provider,
             signal: controller.signal,
             runLimit: 1,
           });

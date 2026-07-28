@@ -1,5 +1,5 @@
 // LLM-backed premium deep-dive / historical narrative generation.
-// Same provider fallback as alerts/digests: Gemini → OpenAI → Groq.
+// Same provider fallback as alerts/digests: Gemini → Groq → OpenAI.
 // Grounded only in provided monitored events — never invents txs/protocols.
 
 import {
@@ -311,6 +311,7 @@ export function createPremiumDeepDiveGenerationService(
             systemPrompt: SYSTEM_INSTRUCTION,
             userPrompt: prompt,
             responseFormat: premiumNarrativeSchema,
+            provider,
             signal: controller.signal,
             runLimit: 1,
           });

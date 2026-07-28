@@ -4,6 +4,7 @@
  */
 
 import {
+  DESK_AGENT_LLM_FALLBACK_ORDER,
   DESK_AGENT_NARRATIVE_TEMPERATURE,
   DESK_AGENT_TIMEOUT_MS,
 } from "@chronicleai/config";
@@ -144,8 +145,8 @@ export function createNarrativeService(
 
       if (opts.callLlm) {
         const order: LLMProvider[] = opts.preferredProvider
-          ? [opts.preferredProvider, "gemini", "openai", "groq"]
-          : ["gemini", "openai", "groq"];
+          ? [opts.preferredProvider, ...DESK_AGENT_LLM_FALLBACK_ORDER]
+          : [...DESK_AGENT_LLM_FALLBACK_ORDER];
         for (const provider of order) {
           const base = providerConfigs[provider];
           if (!base?.apiKey?.trim()) continue;
@@ -194,7 +195,7 @@ export function createNarrativeService(
 
       const models = createChatModelsInOrder(
         providerConfigs,
-        ["gemini", "openai", "groq"] as const,
+        DESK_AGENT_LLM_FALLBACK_ORDER,
         {
           preferredProvider: opts.preferredProvider,
           temperature,
@@ -210,6 +211,7 @@ export function createNarrativeService(
             systemPrompt: NARRATIVE_SYSTEM,
             userPrompt: prompt,
             responseFormat: ticketNarrativeSchema,
+            provider,
             signal: controller.signal,
             runLimit: 1,
           });

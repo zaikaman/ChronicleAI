@@ -370,7 +370,7 @@ export function createPremiumProductizerService(deps: {
   premiumRepo: PremiumIntelligenceRepository;
   eventRepo: MonitoredEventRepository;
   execLogRepo?: ExecutionLogRepository;
-  /** Gemini → OpenAI → Groq configs for paid narrative generation. */
+  /** Gemini → Groq → OpenAI configs for paid narrative generation. */
   providerConfigs?: LLMProviderMap | null;
   llmAttemptRepo?: LLMGenerationAttemptRepository | null;
   /** Test seam — overrides default LLM deep-dive generator. */

@@ -206,7 +206,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   const deskAgentRunRepo = createDeskAgentRunRepository(deskSupabase);
   const deskControlStateRepo = createDeskControlStateRepository(deskSupabase);
 
-  // LLM providers for desk agent (Gemini → OpenAI → Groq)
+  // LLM providers for desk agent (Gemini → Groq → OpenAI)
   const deskLlmProviders: LLMProviderMap = {
     gemini: {
       apiKey: env.geminiApiKey,
@@ -737,7 +737,7 @@ export interface US2Dependencies {
   eventRepo: MonitoredEventRepository;
   digestRepo: DailyDigestRepository;
   execLogRepo: ExecutionLogRepository;
-  /** Multi-provider LLM attempt logging for digest generation (Gemini → OpenAI → Groq). */
+  /** Multi-provider LLM attempt logging for digest generation (Gemini → Groq → OpenAI). */
   llmAttemptRepo: LLMGenerationAttemptRepository;
   subscriberRepo: EmailSubscriberRepository;
   /** Latest treasury snapshots for FR-026 treasury-gated registry writes. */
@@ -1478,7 +1478,7 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
   const agentService = createAffiliateAgentService({
     dashboardService,
     withdrawalService,
-    // Real LLM tool-calling (Gemini → OpenAI → Groq); falls back to deterministic tools if no keys.
+    // Real LLM tool-calling (Gemini → Groq → OpenAI); falls back to deterministic tools if no keys.
     providerConfigs: {
       gemini: {
         apiKey: env.geminiApiKey,

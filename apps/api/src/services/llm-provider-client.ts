@@ -1,5 +1,5 @@
 // Shared multi-provider LLM client backed by LangChain chat models.
-// Provider order remains Gemini → OpenAI → Groq at call sites.
+// Provider order remains Gemini → Groq → OpenAI at call sites.
 
 import type { LLMProvider } from "@chronicleai/schemas";
 import {

@@ -252,8 +252,8 @@ export type LLMProvider = "gemini" | "openai" | "groq";
 
 export const LLM_PROVIDERS: readonly LLMProvider[] = [
   "gemini",
-  "openai",
   "groq",
+  "openai",
 ] as const;
 
 export type LLMGenerationAttemptStatus = "succeeded" | "failed" | "invalid_response";

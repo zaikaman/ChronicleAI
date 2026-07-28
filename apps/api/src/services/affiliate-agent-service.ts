@@ -1,6 +1,6 @@
 // Affiliate payout agent: LangChain createAgent with tool calling.
 // Tools execute on-chain via KeeperHub (withdrawals are never automatic).
-// Provider order: Gemini → OpenAI → Groq. Deterministic fallback if no keys / LLM fails.
+// Provider order: Gemini → Groq → OpenAI. Deterministic fallback if no keys / LLM fails.
 
 import { tool } from "langchain";
 import { z } from "zod";
@@ -686,7 +686,7 @@ export function createAffiliateAgentService(deps: {
         return runFallbackChat(params, deps);
       }
 
-      // Production: LangChain createAgent with Gemini → OpenAI → Groq fallback
+      // Production: LangChain createAgent with Gemini → Groq → OpenAI fallback
       if (deps.providerConfigs) {
         try {
           return await runLangChainChat(params, deps, deps.providerConfigs);

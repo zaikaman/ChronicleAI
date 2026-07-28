@@ -414,7 +414,7 @@ export interface ServerEnv {
   deskScheduleExecute: boolean;
   /**
    * Preferred LLM provider for the desk agent (gemini|openai|groq).
-   * Empty → auto: first keyed provider in Gemini → OpenAI → Groq order.
+   * Empty → auto: first keyed provider in Gemini → Groq → OpenAI order.
    * LLM is always mandatory for strategy decisions (no off-switch).
    */
   deskAgentLlmProvider: string | undefined;

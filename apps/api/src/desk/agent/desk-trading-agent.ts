@@ -296,6 +296,7 @@ export function createDeskTradingAgent(
               systemPrompt: systemInstruction,
               userPrompt,
               responseFormat: deskProposalSchema,
+              provider,
               signal: controller.signal,
               runLimit: 1,
             });

@@ -1,15 +1,18 @@
 /**
  * LangChain model factory + structured schema contracts.
- * Guards OpenAI strict json_schema compatibility and Gemini base URL normalization.
+ * Guards OpenAI strict json_schema compatibility, Gemini base URL normalization,
+ * and Groq JSON Object Mode (no json_schema) structured extraction.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { toJsonSchema } from "@langchain/core/utils/json_schema";
+import { LLM_FALLBACK_ORDER } from "@chronicleai/config";
 import {
   alertContentSchema,
   deskProposalSchema,
   digestContentSchema,
   failureClassificationSchema,
+  invokeStructuredAgent,
   normalizeGeminiBaseUrl,
   premiumNarrativeSchema,
   signalFusionSchema,
@@ -140,5 +143,78 @@ describe("structured response schemas are OpenAI-strict compatible", () => {
       declineReasons: [],
     });
     expect(withoutVersion.success).toBe(false);
+  });
+});
+
+describe("LLM fallback order", () => {
+  it("is Gemini → Groq → OpenAI", () => {
+    expect(LLM_FALLBACK_ORDER).toEqual(["gemini", "groq", "openai"]);
+  });
+});
+
+describe("invokeStructuredAgent groq JSON Object Mode", () => {
+  it("uses response_format json_object and validates with Zod (not json_schema)", async () => {
+    const proposal = {
+      version: 1 as const,
+      action: "hold" as const,
+      strategy: null,
+      notionalUsdc: 0,
+      priority: 0,
+      confidence: 0.5,
+      thesis: "No actionable edge.",
+      riskNotes: [] as string[],
+      legsHint: [] as string[],
+      declineReasons: ["no_edge"] as string[],
+    };
+
+    const withConfig = vi.fn((config: Record<string, unknown>) => {
+      expect(config).toEqual({
+        response_format: { type: "json_object" },
+      });
+      return {
+        invoke: vi.fn(async () => ({
+          content: JSON.stringify(proposal),
+        })),
+      };
+    });
+
+    const model = {
+      withConfig,
+      invoke: vi.fn(async () => {
+        throw new Error("unbound invoke should not be used for groq");
+      }),
+    };
+
+    const result = await invokeStructuredAgent({
+      model: model as never,
+      systemPrompt: "You are the desk agent.",
+      userPrompt: "Propose an action.",
+      responseFormat: deskProposalSchema,
+      provider: "groq",
+    });
+
+    expect(withConfig).toHaveBeenCalledOnce();
+    expect(result.structured).toMatchObject(proposal);
+    expect(result.toolCallCount).toBe(0);
+  });
+
+  it("rejects invalid groq JSON against the schema", async () => {
+    const model = {
+      withConfig: () => ({
+        invoke: vi.fn(async () => ({
+          content: JSON.stringify({ action: "hold" }),
+        })),
+      }),
+    };
+
+    await expect(
+      invokeStructuredAgent({
+        model: model as never,
+        systemPrompt: "sys",
+        userPrompt: "user",
+        responseFormat: deskProposalSchema,
+        provider: "groq",
+      }),
+    ).rejects.toThrow(/schema validation/i);
   });
 });

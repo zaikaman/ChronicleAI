@@ -112,7 +112,7 @@ try {
   );
 
   // Auto-mint deep dives / structured / historical feeds from real monitored activity.
-  // Deep dives + historical narratives use Gemini → OpenAI → Groq (same stack as alerts).
+  // Deep dives + historical narratives use Gemini → Groq → OpenAI (same stack as alerts).
   const premiumProductizer = createPremiumProductizerService({
     premiumRepo,
     eventRepo,
