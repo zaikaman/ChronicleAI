@@ -18,7 +18,9 @@ import {
 } from "./activity-analytics.ts";
 import {
   extractRoutingFromDetails,
+  flashbotsProtectStatusUrl,
   routingBadgeLabel,
+  shouldLinkProtectStatus,
 } from "./routing-metadata.ts";
 import type { LiveTreasuryBalances } from "./treasury-balances.ts";
 
@@ -290,6 +292,19 @@ export function createAgentActivityService(
           entry.routingRequested = routingMeta.routingRequested;
           entry.routingApplied = routingMeta.routingApplied;
           entry.routingLabel = routingBadgeLabel(routingMeta);
+        }
+        const txHash =
+          typeof details?.txHash === "string"
+            ? details.txHash
+            : typeof details?.transactionHash === "string"
+              ? details.transactionHash
+              : null;
+        if (txHash && shouldLinkProtectStatus(routingMeta)) {
+          const protectUrl = flashbotsProtectStatusUrl(
+            txHash,
+            routingMeta?.chainId,
+          );
+          if (protectUrl) entry.protectStatusUrl = protectUrl;
         }
         return entry;
       });

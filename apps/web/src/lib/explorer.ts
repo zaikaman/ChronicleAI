@@ -16,10 +16,23 @@ import {
 
 const SEPOLIA_EXPLORER = "https://sepolia.etherscan.io";
 const BASE_SEPOLIA_EXPLORER = "https://sepolia.basescan.org";
+/** Flashbots Protect transaction status (Sepolia desk rail). */
+const FLASHBOTS_PROTECT_SEPOLIA_STATUS_BASE =
+  "https://protect-sepolia.flashbots.net/tx";
 
 /** Registry / desk proof tx URL (Ethereum Sepolia). */
 export function sepoliaTxUrl(txHash: string): string {
   return `${SEPOLIA_EXPLORER}/tx/${txHash}`;
+}
+
+/**
+ * Flashbots Protect status page for a Sepolia tx hash.
+ * Returns null when the hash is not a 32-byte hex tx id.
+ */
+export function flashbotsProtectStatusUrl(txHash: string): string | null {
+  const hash = txHash?.trim() ?? "";
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return null;
+  return `${FLASHBOTS_PROTECT_SEPOLIA_STATUS_BASE}/${hash}`;
 }
 
 /** Registry / desk address URL (Ethereum Sepolia). */

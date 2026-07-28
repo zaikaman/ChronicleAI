@@ -3,6 +3,10 @@
 
 import type { AgentPaymentsDiscovery } from "@chronicleai/schemas";
 import { PAYMENT_ROUTES } from "@chronicleai/schemas";
+import { PRIVATE_ROUTING_PRODUCT_DESCRIPTION } from "./routing-metadata.ts";
+
+/** Stable desk feed catalog slug (must match desk-feed-product.ts). */
+const DESK_FEED_PRODUCT_SLUG = "chronicle-desk-feed";
 
 /**
  * Build the agent payments discovery document.
@@ -13,7 +17,9 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
     version: "1",
     name: "ChronicleAI Premium Payments",
     description:
-      "Dual-rail micropayments for premium intelligence and sponsored contract watches. Humans pay with x402 (wallet USDC authorization). Machines pay with MPP (HMAC micro-billing on Tempo).",
+      "Dual-rail micropayments for premium intelligence, sponsored contract watches, and the desk feed. " +
+      "Humans pay with x402 (wallet USDC authorization). Machines pay with MPP (HMAC micro-billing on Tempo). " +
+      PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
     routes: [
       {
         id: "x402",
@@ -45,6 +51,20 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
       settlePayment: "POST /payments/settlements",
       createSponsoredWatchChallenge: "POST /payments/sponsored-watch/challenges",
       listSponsoredWatches: "GET /premium/watches",
+      deskIntents: "GET /premium/desk/intents",
+      deskTicket: "GET /premium/desk/tickets/:id",
+      deskStream: "GET /premium/desk/stream",
+    },
+    deskFeed: {
+      productSlug: DESK_FEED_PRODUCT_SLUG,
+      priceNote:
+        "Buy the chronicle-desk-feed premium item via x402, then call desk endpoints with the access receipt.",
+      executionRouting: PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
+      endpoints: {
+        intents: "GET /premium/desk/intents",
+        ticket: "GET /premium/desk/tickets/:id",
+        stream: "GET /premium/desk/stream",
+      },
     },
     mpp: {
       summary:
@@ -94,6 +114,7 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
         "Prefer an EVM payerReference (0x…) so revenue routing can attribute on-chain; synthetic mpp-client-* ids skip on-chain referral transfers.",
         "Sponsored watches accept the same dual rails via POST /payments/sponsored-watch/challenges.",
         `Supported paymentRoute values: ${PAYMENT_ROUTES.join(", ")}.`,
+        `Desk feed: settle x402 for slug ${DESK_FEED_PRODUCT_SLUG}, then GET /premium/desk/stream. ${PRIVATE_ROUTING_PRODUCT_DESCRIPTION}`,
       ],
     },
     humanUi: {

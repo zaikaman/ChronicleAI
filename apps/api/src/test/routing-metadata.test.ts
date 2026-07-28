@@ -4,17 +4,23 @@ import {
   buildKillSwitchRoutingDetails,
   buildPrivateRoutingDetails,
   buildRegistryRoutingDetails,
+  buildRoutingDetailsFromExecutionRouting,
   buildTransferRoutingDetails,
   executionRoutingForDigest,
+  executionRoutingToPolicy,
   extractRoutingFromDetails,
+  flashbotsProtectStatusUrl,
   isAmountAtOrAbovePrivateTransferThreshold,
   isKeeperHubTransferPath,
   PRIVATE_ROUTING_CHAIN_ID,
+  PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
   publicPrivateRoutingStatus,
+  resolveExecutionRouting,
   routingBadgeLabel,
   routingExecutionPathCopy,
   routingPolicyForClass,
   selectTreasuryTransferPath,
+  shouldLinkProtectStatus,
 } from "../services/routing-metadata.ts";
 
 describe("routing-metadata", () => {
@@ -228,6 +234,142 @@ describe("routing-metadata", () => {
       expect(isKeeperHubTransferPath("keeperhub_private")).toBe(true);
       expect(isKeeperHubTransferPath("keeperhub")).toBe(true);
       expect(isKeeperHubTransferPath("para")).toBe(false);
+    });
+  });
+
+  describe("Phase 4 control-plane ExecutionRouting enum", () => {
+    it("kill_switch is always private strict", () => {
+      expect(
+        resolveExecutionRouting({
+          subject: { kind: "kill_switch" },
+          env: { ...baseEnv, deskUsePrivateMempool: false },
+        }),
+      ).toEqual({ mode: "private_mempool", strict: true });
+    });
+
+    it("desk strategies follow DESK_USE_PRIVATE_MEMPOOL", () => {
+      for (const strategy of [
+        "oracle_amm",
+        "yield_rotation",
+        "risk_defend",
+      ] as const) {
+        expect(
+          resolveExecutionRouting({
+            subject: { kind: "desk", strategy, notionalUsdc: 100 },
+            env: baseEnv,
+          }),
+        ).toEqual({ mode: "private_mempool", strict: true });
+        expect(
+          resolveExecutionRouting({
+            subject: { kind: "desk", strategy },
+            env: { ...baseEnv, deskUsePrivateMempool: false },
+          }),
+        ).toEqual({ mode: "public_sponsored" });
+      }
+    });
+
+    it("registry follows REGISTRY_USE_PRIVATE_MEMPOOL", () => {
+      expect(
+        resolveExecutionRouting({
+          subject: { kind: "registry" },
+          env: baseEnv,
+        }).mode,
+      ).toBe("private_mempool");
+      expect(
+        resolveExecutionRouting({
+          subject: { kind: "registry" },
+          env: { ...baseEnv, registryUsePrivateMempool: false },
+        }),
+      ).toEqual({ mode: "public_sponsored" });
+    });
+
+    it("treasury: large + KH → private; small → public_sponsored", () => {
+      expect(
+        resolveExecutionRouting({
+          subject: { kind: "treasury_transfer", amountUsdc: 50 },
+          env: {
+            ...baseEnv,
+            treasuryPrivateTransferThresholdUsdc: 50,
+            keeperHubTransferConfigured: true,
+          },
+        }),
+      ).toEqual({ mode: "private_mempool", strict: true });
+      expect(
+        resolveExecutionRouting({
+          subject: { kind: "treasury_transfer", amountUsdc: 10 },
+          env: {
+            ...baseEnv,
+            treasuryPrivateTransferThresholdUsdc: 50,
+            keeperHubTransferConfigured: true,
+          },
+        }),
+      ).toEqual({ mode: "public_sponsored" });
+      expect(
+        resolveExecutionRouting({
+          subject: { kind: "treasury_transfer", amountUsdc: 100 },
+          env: {
+            ...baseEnv,
+            treasuryPrivateTransferThresholdUsdc: 50,
+            keeperHubTransferConfigured: false,
+          },
+        }),
+      ).toEqual({ mode: "public_sponsored" });
+    });
+
+    it("maps ExecutionRouting to policy + routing details", () => {
+      const privateRouting = resolveExecutionRouting({
+        subject: { kind: "desk", strategy: "oracle_amm" },
+        env: baseEnv,
+      });
+      const policy = executionRoutingToPolicy(privateRouting, baseEnv);
+      expect(policy.enabled).toBe(true);
+      expect(policy.strict).toBe(true);
+      const details = buildRoutingDetailsFromExecutionRouting(
+        privateRouting,
+        baseEnv,
+      );
+      expect(details.routing).toBe("private_mempool");
+      expect(details.routingRequested).toBe("private_mempool");
+
+      const publicDetails = buildRoutingDetailsFromExecutionRouting(
+        { mode: "public_sponsored" },
+        baseEnv,
+      );
+      expect(publicDetails.routing).toBe("public");
+    });
+
+    it("Flashbots Protect status URL is Sepolia-scoped", () => {
+      const hash =
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      expect(flashbotsProtectStatusUrl(hash)).toBe(
+        `https://protect-sepolia.flashbots.net/tx/${hash}`,
+      );
+      expect(flashbotsProtectStatusUrl(hash, 1)).toBe(
+        `https://protect.flashbots.net/tx/${hash}`,
+      );
+      expect(flashbotsProtectStatusUrl("not-a-hash")).toBeNull();
+      expect(flashbotsProtectStatusUrl(hash, 84532)).toBeNull();
+    });
+
+    it("shouldLinkProtectStatus only for private requests", () => {
+      expect(shouldLinkProtectStatus(buildDeskRoutingDetails(baseEnv))).toBe(
+        true,
+      );
+      expect(
+        shouldLinkProtectStatus(
+          buildDeskRoutingDetails({
+            ...baseEnv,
+            deskUsePrivateMempool: false,
+          }),
+        ),
+      ).toBe(false);
+      expect(shouldLinkProtectStatus(null)).toBe(false);
+    });
+
+    it("product description is honest Sepolia private submission copy", () => {
+      expect(PRIVATE_ROUTING_PRODUCT_DESCRIPTION).toMatch(/Flashbots Protect/i);
+      expect(PRIVATE_ROUTING_PRODUCT_DESCRIPTION).toMatch(/Sepolia/i);
+      expect(PRIVATE_ROUTING_PRODUCT_DESCRIPTION).not.toMatch(/MEV-proof/i);
     });
   });
 });

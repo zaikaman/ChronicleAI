@@ -11,7 +11,7 @@ import {
 } from "../../components/page-chrome.tsx";
 import { RoutingBadge } from "../../components/routing-badge.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
-import { sepoliaTxUrl } from "../../lib/explorer.ts";
+import { flashbotsProtectStatusUrl, sepoliaTxUrl } from "../../lib/explorer.ts";
 import {
   formatUsdc,
   signalTypeLabel,
@@ -259,6 +259,29 @@ export function DeskTicketPage(): ReactElement {
               Private submission path on Sepolia — not a claim of mainnet-scale sandwich
               protection.
             </p>
+            {(() => {
+              const protectUrl =
+                ticket.protectStatusUrl ??
+                (ticket.routing === "private_mempool" && ticket.fillTxHashes[0]
+                  ? flashbotsProtectStatusUrl(ticket.fillTxHashes[0])
+                  : ticket.routing === "private_mempool" && proofs.txHash
+                    ? flashbotsProtectStatusUrl(proofs.txHash)
+                    : null);
+              if (!protectUrl) return null;
+              return (
+                <p className="mt-3">
+                  <a
+                    href={protectUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    data-testid="ticket-protect-status-link"
+                  >
+                    Flashbots Protect status →
+                  </a>
+                </p>
+              );
+            })()}
           </Surface>
         </PageSection>
       )}

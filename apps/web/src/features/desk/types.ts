@@ -128,6 +128,9 @@ export interface DeskTicketNarrative {
   routingProvider?: string | null;
   /** Calm product copy for execution path. */
   executionPath?: string | null;
+  /** Flashbots Protect status URL when private routing was requested (Sepolia). */
+  protectStatusUrl?: string | null;
+  protectStatusUrls?: Array<{ txHash: string; url: string }> | null;
 }
 
 export interface DeskTicketProofs {

@@ -12,8 +12,14 @@ import {
   extractAccessReceiptFromRequest,
   type PremiumAccessReceiptService,
 } from "../services/premium-access-receipt-service.ts";
+import { PRIVATE_ROUTING_PRODUCT_DESCRIPTION } from "../services/routing-metadata.ts";
 
 export const DESK_FEED_PRODUCT_SLUG = "chronicle-desk-feed";
+
+/** Public teaser for the desk feed product (x402 catalog + OpenAPI-style discovery). */
+export const DESK_FEED_SUMMARY_PUBLIC =
+  "Machine-readable desk intents, trade tickets, and live feed snapshot (x402). " +
+  PRIVATE_ROUTING_PRODUCT_DESCRIPTION;
 
 export interface DeskFeedProductConfig {
   priceUsdc: number;
@@ -51,7 +57,8 @@ export function createDeskFeedAccessGate(deps: {
         existing.value.price_amount !== deps.priceUsdc ||
         existing.value.price_currency !== "USDC" ||
         !existing.value.payment_routes.includes("x402") ||
-        existing.value.status !== "available";
+        existing.value.status !== "available" ||
+        existing.value.summary_public !== DESK_FEED_SUMMARY_PUBLIC;
 
       if (!needsUpdate) {
         return existing.value;
@@ -64,8 +71,7 @@ export function createDeskFeedAccessGate(deps: {
         status: "available",
         content_type: "structured_feed",
         title: "Chronicle Desk Feed",
-        summary_public:
-          "Machine-readable desk intents, trade tickets, and live feed snapshot (x402).",
+        summary_public: DESK_FEED_SUMMARY_PUBLIC,
       });
       if (!updated.ok) {
         throw new Error(`Failed to update desk feed product: ${updated.error.message}`);
@@ -77,15 +83,18 @@ export function createDeskFeedAccessGate(deps: {
       slug: DESK_FEED_PRODUCT_SLUG,
       title: "Chronicle Desk Feed",
       content_type: "structured_feed",
-      summary_public:
-        "Premium machine-readable desk feed: full intent legs, ticket payloads, and feed snapshots. " +
-        `Priced at ${deps.priceUsdc} USDC via x402.`,
+      summary_public: DESK_FEED_SUMMARY_PUBLIC,
       content_private: {
         product: "desk_feed",
         endpoints: [
           "/premium/desk/intents",
           "/premium/desk/tickets/:id",
           "/premium/desk/stream",
+        ],
+        executionRouting: PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
+        notes: [
+          "Private submission path on Sepolia via KeeperHub + Flashbots Protect — not mainnet sandwich claims.",
+          `Priced at ${deps.priceUsdc} USDC via x402.`,
         ],
       },
       source_event_ids: [],

@@ -35,8 +35,10 @@ import { detectPowderThrash } from "./policy-engine.ts";
 import type { PositionService } from "./position-service.ts";
 import {
   extractRoutingFromDetails,
+  flashbotsProtectStatusUrl,
   publicPrivateRoutingStatus,
   routingExecutionPathCopy,
+  shouldLinkProtectStatus,
   type RoutingPolicyEnv,
 } from "../services/routing-metadata.ts";
 import type {
@@ -216,6 +218,13 @@ export interface PublicDeskTicketNarrative extends PublicDeskTicketSummary {
   routingProvider?: string | null;
   /** Calm product copy for ticket detail page. */
   executionPath?: string | null;
+  /**
+   * Flashbots Protect status URL for fill/registry txs when private routing
+   * was requested (Sepolia). Optional Phase 4 UX.
+   */
+  protectStatusUrl?: string | null;
+  /** Protect status links for each fill tx hash (when private route). */
+  protectStatusUrls?: Array<{ txHash: string; url: string }> | null;
 }
 
 export interface PremiumDeskTicketDetail extends PublicDeskTicketSummary {
@@ -582,6 +591,24 @@ export function toPublicTicketNarrative(row: DeskTicketRow): PublicDeskTicketNar
   const agent = agentFieldsFromSnapshot(policy);
   const routingMeta = extractRoutingFromDetails(policy);
   const executionPath = routingExecutionPathCopy(routingMeta);
+  const linkProtect = shouldLinkProtectStatus(routingMeta);
+  const chainId = routingMeta?.chainId ?? depsChainIdFallback(policy);
+
+  const protectStatusUrls = linkProtect
+    ? fillTxHashes
+        .map((hash) => {
+          const url = flashbotsProtectStatusUrl(hash, chainId);
+          return url ? { txHash: hash, url } : null;
+        })
+        .filter((x): x is { txHash: string; url: string } => x != null)
+    : [];
+
+  const primaryProtectHash =
+    fillTxHashes[0] ?? asOptionalString(base.txHash) ?? null;
+  const protectStatusUrl =
+    linkProtect && primaryProtectHash
+      ? flashbotsProtectStatusUrl(primaryProtectHash, chainId)
+      : null;
 
   return {
     ...base,
@@ -599,7 +626,16 @@ export function toPublicTicketNarrative(row: DeskTicketRow): PublicDeskTicketNar
     routingStrict: routingMeta?.routingStrict ?? null,
     routingProvider: routingMeta?.routingProvider ?? null,
     executionPath,
+    protectStatusUrl,
+    protectStatusUrls: protectStatusUrls.length > 0 ? protectStatusUrls : null,
   };
+}
+
+function depsChainIdFallback(policy: Record<string, unknown>): number {
+  if (typeof policy.chainId === "number" && Number.isFinite(policy.chainId)) {
+    return policy.chainId;
+  }
+  return 11_155_111;
 }
 
 export function toPremiumTicket(row: DeskTicketRow): PremiumDeskTicketDetail {

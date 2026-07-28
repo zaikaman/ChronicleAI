@@ -97,6 +97,7 @@ import {
   resolvePublicApiBaseUrl,
 } from "../services/telegram-webhook-registration.ts";
 import { createTelegramWebhookRoutes } from "./telegram-webhook-routes.ts";
+import { warnIfPrivateRoutingMisconfigured } from "../services/keeperhub-private-capability.ts";
 
 export interface US1Dependencies {
   eventRepo: MonitoredEventRepository;
@@ -488,6 +489,15 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
         ")",
     );
   }
+
+  // Phase 4: warn when private policy is on but KH Sepolia lacks private mempool capability.
+  void warnIfPrivateRoutingMisconfigured({
+    apiBaseUrl: env.keeperhubApiBaseUrl,
+    apiKey: env.keeperhubApiKey,
+    privatePolicyEnabled:
+      env.deskUsePrivateMempool || env.registryUsePrivateMempool,
+    chainId: mapNetworkToChainId(env.keeperhubNetwork, 11_155_111),
+  });
 
   // ── CCTP rebalance (Base Sepolia → Ethereum Sepolia) ──
   // Feature flag: CCTP_REBALANCE_ENABLED gates automated ticks; force route still works.

@@ -23,6 +23,7 @@ export interface ExecutionLogItem {
   routingRequested?: string;
   routingStrict?: boolean;
   routingProvider?: string;
+  protectStatusUrl?: string;
 }
 
 export interface PaymentItem {

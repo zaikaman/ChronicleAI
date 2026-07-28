@@ -59,6 +59,18 @@ Agents may also prepare a campaign with MPP:
 Use `paymentRoute: "x402"`, sign EIP-712 settlement data from the challenge, then settle.
 The SPA at `/premium` implements this path with a browser wallet.
 
+## Desk feed (x402)
+
+Premium machine-readable desk intents, tickets, and stream:
+
+- `GET /premium/desk/intents`
+- `GET /premium/desk/tickets/:id`
+- `GET /premium/desk/stream`
+
+Buy the `chronicle-desk-feed` catalog product via x402, then pass the access receipt.
+**Execution routing:** Executions use KeeperHub private mempool submission (Flashbots Protect on Sepolia).
+This is a private submission path on testnet — not a claim of mainnet-scale sandwich protection.
+
 ## Notes
 
 - Do not expect a MetaMask / browser MPP button — MPP is intentionally API-native.

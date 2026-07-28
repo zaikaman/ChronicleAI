@@ -89,6 +89,7 @@ function mapExecutionLog(log: {
   routingLabel?: string;
   routingApplied?: string;
   routingRequested?: string;
+  protectStatusUrl?: string;
 }) {
   const details = log.details ?? undefined;
   const keeperHubRunId =
@@ -159,6 +160,13 @@ function mapExecutionLog(log: {
         ? details.routingRequested
         : undefined;
 
+  const protectStatusUrl =
+    typeof log.protectStatusUrl === "string"
+      ? log.protectStatusUrl
+      : typeof details?.protectStatusUrl === "string"
+        ? details.protectStatusUrl
+        : undefined;
+
   const entry: {
     id: string;
     actionType: string;
@@ -175,6 +183,7 @@ function mapExecutionLog(log: {
     routingLabel?: string;
     routingApplied?: string;
     routingRequested?: string;
+    protectStatusUrl?: string;
   } = {
     id: log.id,
     actionType: log.actionType,
@@ -192,6 +201,7 @@ function mapExecutionLog(log: {
   if (routingLabel) entry.routingLabel = routingLabel;
   if (routingApplied) entry.routingApplied = routingApplied;
   if (routingRequested) entry.routingRequested = routingRequested;
+  if (protectStatusUrl) entry.protectStatusUrl = protectStatusUrl;
   return entry;
 }
 

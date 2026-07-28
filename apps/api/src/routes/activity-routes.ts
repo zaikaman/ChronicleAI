@@ -11,7 +11,9 @@ import { Router, type Router as RouterType } from "express";
 import type { AgentActivityService } from "../services/agent-activity-service.ts";
 import {
   extractRoutingFromDetails,
+  flashbotsProtectStatusUrl,
   routingBadgeLabel,
+  shouldLinkProtectStatus,
 } from "../services/routing-metadata.ts";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 
@@ -96,6 +98,22 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
             entry.routingRequested = routingMeta.routingRequested;
             entry.routingApplied = routingMeta.routingApplied;
             entry.routingLabel = routingBadgeLabel(routingMeta);
+          }
+          const txHash =
+            typeof details?.txHash === "string"
+              ? details.txHash
+              : typeof details?.transactionHash === "string"
+                ? details.transactionHash
+                : null;
+          if (
+            txHash &&
+            shouldLinkProtectStatus(routingMeta) &&
+            flashbotsProtectStatusUrl(txHash, routingMeta?.chainId)
+          ) {
+            entry.protectStatusUrl = flashbotsProtectStatusUrl(
+              txHash,
+              routingMeta?.chainId,
+            );
           }
           return entry;
         }),

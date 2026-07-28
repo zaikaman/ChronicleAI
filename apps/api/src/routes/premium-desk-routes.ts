@@ -15,6 +15,7 @@ import {
   toPublicCapitalMove,
 } from "../desk/control-plane.ts";
 import type { DeskFeedAccessGate } from "../desk/desk-feed-product.ts";
+import { PRIVATE_ROUTING_PRODUCT_DESCRIPTION } from "../services/routing-metadata.ts";
 
 function parseLimit(raw: unknown, fallback = 50): number {
   if (raw === undefined || raw === null || raw === "") return fallback;
@@ -59,7 +60,8 @@ export function createPremiumDeskRoutes(deps: {
       error: "Payment required",
       message:
         "Premium desk feed requires a settled x402 payment. " +
-        "Create a challenge via POST /payments/challenges with premiumItemId, settle, then retry with the access receipt.",
+        "Create a challenge via POST /payments/challenges with premiumItemId, settle, then retry with the access receipt. " +
+        PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
       paymentRoute: "x402",
       supportedPaymentRoutes: product.payment_routes,
       premiumItemId: product.id,
@@ -67,10 +69,15 @@ export function createPremiumDeskRoutes(deps: {
       priceAmount: product.price_amount,
       priceCurrency: product.price_currency,
       title: product.title,
+      summaryPublic: product.summary_public,
+      executionRouting: PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
       agentPaymentsDiscovery: "/payments",
       endpoints: {
         challenge: "POST /payments/challenges",
         settle: "POST /payments/settlements",
+        intents: "GET /premium/desk/intents",
+        ticket: "GET /premium/desk/tickets/:id",
+        stream: "GET /premium/desk/stream",
       },
     });
     return false;
@@ -153,6 +160,12 @@ export function createPremiumDeskRoutes(deps: {
       res.json({
         feed: "chronicle-desk",
         generatedAt: new Date().toISOString(),
+        /** Product / OpenAPI description for agent consumers. */
+        description: PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
+        executionRouting: {
+          description: PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
+          policy: status.privateRouting ?? null,
+        },
         status,
         intents: intents.map(toPremiumIntent),
         tickets: tickets.map(toPremiumTicket),

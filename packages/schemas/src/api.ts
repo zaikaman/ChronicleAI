@@ -152,6 +152,25 @@ export interface AgentPaymentEndpoints {
   settlePayment: string;
   createSponsoredWatchChallenge: string;
   listSponsoredWatches: string;
+  /** Premium desk feed (x402) — optional for agents that trade on desk proofs. */
+  deskIntents?: string;
+  deskTicket?: string;
+  deskStream?: string;
+}
+
+/**
+ * Desk feed product surface for agents (OpenAPI-style discovery).
+ * Routing copy is Sepolia private submission path — not mainnet sandwich claims.
+ */
+export interface AgentDeskFeedDiscovery {
+  productSlug: string;
+  priceNote: string;
+  executionRouting: string;
+  endpoints: {
+    intents: string;
+    ticket: string;
+    stream: string;
+  };
 }
 
 export interface AgentMppFlowGuide {
@@ -192,6 +211,8 @@ export interface AgentPaymentsDiscovery {
     paymentRoute: PaymentRoute;
     note: string;
   };
+  /** Premium desk feed catalog + private-routing product note (Phase 4). */
+  deskFeed?: AgentDeskFeedDiscovery;
 }
 
 // ── Payment Record ──────────────────────────────────────

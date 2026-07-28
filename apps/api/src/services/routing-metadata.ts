@@ -11,6 +11,21 @@
 /** Ethereum Sepolia — sole desk / registry ops chain for private routing. */
 export const PRIVATE_ROUTING_CHAIN_ID = 11_155_111 as const;
 
+/** Flashbots Protect transaction status (Sepolia). */
+export const FLASHBOTS_PROTECT_SEPOLIA_STATUS_BASE =
+  "https://protect-sepolia.flashbots.net/tx" as const;
+
+/** Flashbots Protect transaction status (mainnet — not desk scope, helper only). */
+export const FLASHBOTS_PROTECT_MAINNET_STATUS_BASE =
+  "https://protect.flashbots.net/tx" as const;
+
+/**
+ * Honest product one-liner for desk feed / OpenAPI / agent discovery.
+ * Private submission path on Sepolia — not mainnet sandwich claims.
+ */
+export const PRIVATE_ROUTING_PRODUCT_DESCRIPTION =
+  "Executions use KeeperHub private mempool submission (Flashbots Protect on Sepolia)." as const;
+
 export type RoutingMode = "private_mempool" | "public";
 
 /**
@@ -24,6 +39,50 @@ export type RoutingApplied =
   | "public";
 
 export type RoutingProviderLabel = "flashbots_protect" | string;
+
+/**
+ * Control-plane routing decision (Phase 4).
+ * `private_mempool` always carries `strict: true` (fail closed on private RPC).
+ * `public_sponsored` covers public KH + optional gas sponsorship / Para.
+ */
+export type ExecutionRouting =
+  | { mode: "private_mempool"; strict: true }
+  | { mode: "public_sponsored" };
+
+/** Desk strategy keys used by the control-plane resolver. */
+export type ExecutionRoutingStrategy =
+  | "oracle_amm"
+  | "yield_rotation"
+  | "risk_defend"
+  | "kill";
+
+/**
+ * What the control plane is about to submit.
+ * Kill is separate from desk strategies so policy cannot disable residual protection.
+ */
+export type ExecutionRoutingSubject =
+  | { kind: "kill_switch" }
+  | {
+      kind: "desk";
+      strategy: Exclude<ExecutionRoutingStrategy, "kill">;
+      /** Optional notional for future size-based desk rules; ignored for v1 defaults. */
+      notionalUsdc?: number;
+    }
+  | { kind: "registry" }
+  | {
+      kind: "treasury_transfer";
+      amountUsdc: number;
+    };
+
+export interface ResolveExecutionRoutingInput {
+  subject: ExecutionRoutingSubject;
+  env: RoutingPolicyEnv & {
+    /** TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC (default 50). */
+    treasuryPrivateTransferThresholdUsdc?: number;
+    /** True when KH transfer workflow is configured (required for large private path). */
+    keeperHubTransferConfigured?: boolean;
+  };
+}
 
 export interface PrivateRoutingPolicy {
   /** Prefer private mempool for this transaction class. */
@@ -141,6 +200,120 @@ export function selectTreasuryTransferPath(
 /** Whether selected path routes the spend through KeeperHub (not Para alone). */
 export function isKeeperHubTransferPath(path: TreasuryTransferPath): boolean {
   return path === "keeperhub_private" || path === "keeperhub";
+}
+
+const PRIVATE_STRICT: ExecutionRouting = {
+  mode: "private_mempool",
+  strict: true,
+};
+
+const PUBLIC_SPONSORED: ExecutionRouting = { mode: "public_sponsored" };
+
+/**
+ * Control-plane routing enum resolver (Phase 4).
+ *
+ * Defaults:
+ * 1. Kill switch → private strict always
+ * 2. Desk write (oracle_amm / yield_rotation / risk_defend) → private strict if DESK_USE_PRIVATE_MEMPOOL
+ * 3. Registry → per REGISTRY_USE_PRIVATE_MEMPOOL
+ * 4. Small treasury → public_sponsored (Para / sponsored OK); large + KH transfer → private strict
+ */
+export function resolveExecutionRouting(
+  input: ResolveExecutionRoutingInput,
+): ExecutionRouting {
+  const { subject, env } = input;
+
+  if (subject.kind === "kill_switch") {
+    return PRIVATE_STRICT;
+  }
+
+  if (subject.kind === "desk") {
+    // Strategy notional is informational today; all desk writes share the desk flag.
+    void subject.strategy;
+    void subject.notionalUsdc;
+    return env.deskUsePrivateMempool ? PRIVATE_STRICT : PUBLIC_SPONSORED;
+  }
+
+  if (subject.kind === "registry") {
+    return env.registryUsePrivateMempool ? PRIVATE_STRICT : PUBLIC_SPONSORED;
+  }
+
+  // treasury_transfer
+  const threshold =
+    typeof env.treasuryPrivateTransferThresholdUsdc === "number" &&
+    Number.isFinite(env.treasuryPrivateTransferThresholdUsdc) &&
+    env.treasuryPrivateTransferThresholdUsdc > 0
+      ? env.treasuryPrivateTransferThresholdUsdc
+      : 50;
+  const forcePrivate =
+    isAmountAtOrAbovePrivateTransferThreshold(subject.amountUsdc, threshold) &&
+    env.keeperHubTransferConfigured === true;
+  return forcePrivate ? PRIVATE_STRICT : PUBLIC_SPONSORED;
+}
+
+/** Map control-plane enum → workflow-facing private routing policy. */
+export function executionRoutingToPolicy(
+  routing: ExecutionRouting,
+  env: Pick<RoutingPolicyEnv, "routingProviderLabel" | "chainId">,
+): PrivateRoutingPolicy {
+  const chainId = env.chainId ?? PRIVATE_ROUTING_CHAIN_ID;
+  const provider = (env.routingProviderLabel || "flashbots_protect").trim();
+  if (routing.mode === "private_mempool") {
+    return {
+      enabled: true,
+      strict: true,
+      provider,
+      chainId,
+    };
+  }
+  return {
+    enabled: false,
+    strict: false,
+    provider,
+    chainId,
+  };
+}
+
+/** Map control-plane enum → log/ticket RoutingDetails. */
+export function buildRoutingDetailsFromExecutionRouting(
+  routing: ExecutionRouting,
+  env: Pick<RoutingPolicyEnv, "routingProviderLabel" | "chainId">,
+): RoutingDetails {
+  return buildPrivateRoutingDetails(executionRoutingToPolicy(routing, env));
+}
+
+/**
+ * Flashbots Protect status page for a tx hash (Sepolia desk rail).
+ * Returns null when hash is invalid or chain is not supported by Protect status API.
+ */
+export function flashbotsProtectStatusUrl(
+  txHash: string,
+  chainId: number = PRIVATE_ROUTING_CHAIN_ID,
+): string | null {
+  const hash = txHash?.trim() ?? "";
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return null;
+  if (chainId === PRIVATE_ROUTING_CHAIN_ID) {
+    return `${FLASHBOTS_PROTECT_SEPOLIA_STATUS_BASE}/${hash}`;
+  }
+  if (chainId === 1) {
+    return `${FLASHBOTS_PROTECT_MAINNET_STATUS_BASE}/${hash}`;
+  }
+  return null;
+}
+
+/**
+ * Whether Activity / tickets should surface a Protect status link for this routing.
+ * Only when private route was requested (or confirmed applied).
+ */
+export function shouldLinkProtectStatus(
+  details: RoutingDetails | null | undefined,
+): boolean {
+  if (!details) return false;
+  return (
+    details.routing === "private_mempool" ||
+    details.routingRequested === "private_mempool" ||
+    details.routingApplied === "private_mempool"
+  );
 }
 
 /**

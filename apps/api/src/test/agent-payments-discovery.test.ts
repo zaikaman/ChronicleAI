@@ -30,4 +30,15 @@ describe("buildAgentPaymentsDiscovery", () => {
     expect(doc.humanUi.path).toBe("/premium");
     expect(doc.routes.find((r) => r.id === "mpp")?.audience).toBe("machine");
   });
+
+  it("surfaces desk feed endpoints and Sepolia private-routing product copy", () => {
+    const doc = buildAgentPaymentsDiscovery();
+
+    expect(doc.endpoints.deskStream).toBe("GET /premium/desk/stream");
+    expect(doc.deskFeed?.productSlug).toBe("chronicle-desk-feed");
+    expect(doc.deskFeed?.executionRouting).toMatch(/Flashbots Protect/i);
+    expect(doc.deskFeed?.executionRouting).toMatch(/Sepolia/i);
+    expect(doc.description).toMatch(/private mempool/i);
+    expect(JSON.stringify(doc)).not.toMatch(/MEV-proof/i);
+  });
 });

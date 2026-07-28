@@ -4,7 +4,11 @@
 import type React from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
 import { RoutingBadge } from "../../components/routing-badge.tsx";
-import { sepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
+import {
+  flashbotsProtectStatusUrl,
+  sepoliaTxUrl,
+  truncateHash,
+} from "../../lib/explorer.ts";
 
 interface ExecutionLogEntry {
   id: string;
@@ -23,6 +27,8 @@ interface ExecutionLogEntry {
   routingLabel?: string | null;
   routingApplied?: string | null;
   routingRequested?: string | null;
+  /** Flashbots Protect status URL when private route was requested (Phase 4). */
+  protectStatusUrl?: string | null;
 }
 
 interface ExecutionLogTableProps {
@@ -284,6 +290,35 @@ export function ExecutionLogTable({
                           {truncateHash(log.txHash)}
                         </a>
                       ) : null}
+                      {(() => {
+                        const protectUrl =
+                          log.protectStatusUrl ??
+                          (log.routing === "private_mempool" ||
+                          log.routingRequested === "private_mempool"
+                            ? log.txHash
+                              ? flashbotsProtectStatusUrl(log.txHash)
+                              : null
+                            : null);
+                        if (!protectUrl) return null;
+                        return (
+                          <a
+                            href={protectUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: 500,
+                              color: "var(--fg-tertiary)",
+                              textDecoration: "underline",
+                              textUnderlineOffset: "2px",
+                            }}
+                            data-testid="log-protect-status-link"
+                            title="Flashbots Protect status (Sepolia)"
+                          >
+                            Protect status
+                          </a>
+                        );
+                      })()}
                     </div>
                   ) : (
                     <span style={{ color: "var(--fg-tertiary)", fontSize: "var(--font-size-xs)" }}>

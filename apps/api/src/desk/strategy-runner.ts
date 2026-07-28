@@ -11,8 +11,8 @@ import type { PolicyEngine } from "./policy-engine.ts";
 import type { TicketService, TicketPublishResult } from "./ticket-service.ts";
 import { softAppendExecutionLog } from "../services/keeperhub-execution-log.ts";
 import {
-  buildDeskRoutingDetails,
-  buildKillSwitchRoutingDetails,
+  buildRoutingDetailsFromExecutionRouting,
+  resolveExecutionRouting,
   type RoutingDetails,
   type RoutingPolicyEnv,
 } from "../services/routing-metadata.ts";
@@ -140,10 +140,15 @@ export function createStrategyRunner(deps: {
 
   function deskRoutingDetails(action?: string): RoutingDetails | null {
     if (!deps.routingPolicyEnv) return null;
-    if (action === "kill_switch") {
-      return buildKillSwitchRoutingDetails(deps.routingPolicyEnv);
-    }
-    return buildDeskRoutingDetails(deps.routingPolicyEnv);
+    // Phase 4 control-plane enum: kill always private; desk writes follow DESK flag.
+    const routing = resolveExecutionRouting({
+      subject:
+        action === "kill_switch"
+          ? { kind: "kill_switch" }
+          : { kind: "desk", strategy: "oracle_amm" },
+      env: deps.routingPolicyEnv,
+    });
+    return buildRoutingDetailsFromExecutionRouting(routing, deps.routingPolicyEnv);
   }
 
   function plan(
