@@ -106,6 +106,15 @@ export interface ServerEnv {
   smtpPass: string | undefined;
   smtpFromAddress: string | undefined;
   /**
+   * Monthly x402 newsletter price in USDC (human units, e.g. 2 = 2 USDC).
+   * Default 2 USDC / billing period.
+   */
+  newsletterMonthlyPriceUsdc: number;
+  /** Billing period length in days for recurring newsletter agreements. Default 30. */
+  newsletterBillingPeriodDays: number;
+  /** Days after period end before entitlement expires. Default 3. */
+  newsletterGracePeriodDays: number;
+  /**
    * Discord incoming webhook URL for community alert/bulletin broadcasts.
    * Must be https://discord.com|discordapp.com/api/webhooks/...
    */
@@ -145,7 +154,35 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new Error(
-      `Invalid ${name}: expected a positive integer chain ID, got ${JSON.stringify(raw)}`,
+      `Invalid ${name}: expected a positive integer, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return parsed;
+}
+
+function parseNonNegativeIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(
+      `Invalid ${name}: expected a non-negative integer, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return parsed;
+}
+
+function parsePositiveNumberEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(
+      `Invalid ${name}: expected a positive number, got ${JSON.stringify(raw)}`,
     );
   }
   return parsed;
@@ -233,6 +270,18 @@ export function loadServerEnv(): ServerEnv {
     smtpUser: optionalEnv("SMTP_USER"),
     smtpPass: optionalEnv("SMTP_PASS"),
     smtpFromAddress: optionalEnv("SMTP_FROM_ADDRESS"),
+    newsletterMonthlyPriceUsdc: parsePositiveNumberEnv(
+      "NEWSLETTER_MONTHLY_PRICE_USDC",
+      2,
+    ),
+    newsletterBillingPeriodDays: parsePositiveIntEnv(
+      "NEWSLETTER_BILLING_PERIOD_DAYS",
+      30,
+    ),
+    newsletterGracePeriodDays: parseNonNegativeIntEnv(
+      "NEWSLETTER_GRACE_PERIOD_DAYS",
+      3,
+    ),
     discordWebhookUrl: optionalEnv("DISCORD_WEBHOOK_URL"),
     telegramBotToken: optionalEnv("TELEGRAM_BOT_TOKEN"),
     telegramChatId: optionalEnv("TELEGRAM_CHAT_ID"),

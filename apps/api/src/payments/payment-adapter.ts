@@ -37,12 +37,22 @@ export interface PaymentAdapter {
 
   /**
    * Create a payment challenge for a given amount.
+   * Optional `agreement` marks recurring products (e.g. monthly newsletter).
    */
   createChallenge(params: {
     premiumItemId: string;
     amount: number;
     currency: string;
     payerReference?: string | undefined;
+    agreement?:
+      | {
+          type: "recurring_newsletter";
+          billingPeriodDays: number;
+          subscriptionId?: string | undefined;
+          periodKind: "initial" | "renewal";
+          referralAddress?: string | null | undefined;
+        }
+      | undefined;
   }): Promise<ChallengeResult>;
 
   /**

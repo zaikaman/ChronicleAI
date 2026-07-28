@@ -1,5 +1,6 @@
 // SMTP email subscription dispatch service using Nodemailer
-// Recipients are resolved from real email_subscribers at send time (not env lists).
+// Digest recipients are resolved from active paid x402 newsletter subscriptions
+// (premium entitlement). Alert recipients come from free email_subscribers.
 
 export interface SmtpSendResult {
   success: boolean;
@@ -78,7 +79,7 @@ export function createSmtpEmailService(config: {
         ${params.contentUri ? `<p><a href="${escapeHtml(params.contentUri)}" style="color: #6366f1;">Read full digest on ChronicleAI</a></p>` : ""}
         <hr style="border: none; border-top: 1px solid #e4e4e7;" />
         <p style="font-size: 12px; color: #a1a1aa;">ChronicleAI — Autonomous On-Chain Intelligence</p>
-        <p style="font-size: 11px; color: #a1a1aa;">You received this because you subscribed to ChronicleAI updates. Unsubscribe via the link in your subscription confirmation or contact support.</p>
+        <p style="font-size: 11px; color: #a1a1aa;">You received this premium digest because your monthly x402 newsletter subscription is active. Manage or cancel at ChronicleAI → Newsletter subscription.</p>
       </body>
       </html>
     `;

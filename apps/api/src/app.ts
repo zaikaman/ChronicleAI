@@ -6,6 +6,7 @@ import {
   createLLMGenerationAttemptRepository,
   createMonitoredEventRepository,
   createAgentActivityRepository,
+  createNewsletterSubscriptionRepository,
   createPaymentRecordRepository,
   createPayoutRecordRepository,
   createPremiumIntelligenceRepository,
@@ -57,6 +58,7 @@ try {
   const llmAttemptRepo = createLLMGenerationAttemptRepository(supabase);
   const digestRepo = createDailyDigestRepository(supabase);
   const subscriberRepo = createEmailSubscriberRepository(supabase);
+  const newsletterRepo = createNewsletterSubscriptionRepository(supabase);
   const premiumRepo = createPremiumIntelligenceRepository(supabase);
   const paymentRecordRepo = createPaymentRecordRepository(supabase);
   const watchRepo = createSponsoredWatchRepository(supabase);
@@ -75,13 +77,16 @@ try {
     treasuryRepo,
   });
 
-  // US2: Daily Digests + email subscribers (treasury-gated registry writes)
+  // US2: Daily Digests + free email + recurring x402 newsletter (treasury-gated registry writes)
   setupUS2Routes(app, env, {
     eventRepo,
     digestRepo,
     execLogRepo,
     subscriberRepo,
     treasuryRepo,
+    newsletterRepo,
+    premiumRepo,
+    paymentRecordRepo,
   });
 
   // US3: Premium Access & Sponsored Watch (Loop 4: create → monitor → report)

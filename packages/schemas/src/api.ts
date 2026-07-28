@@ -5,6 +5,7 @@ import type {
   DigestPublicationStatus,
   EmailSubscriberSource,
   EventType,
+  NewsletterSubscriptionStatus,
   PaymentRoute,
   PaymentStatus,
   TreasuryStatus,
@@ -219,6 +220,79 @@ export interface SubscribeResponse {
 export interface UnsubscribeResponse {
   email: string;
   status: "unsubscribed";
+}
+
+// ── Recurring x402 Newsletter Subscription ──────────────
+export interface NewsletterSubscribeRequest {
+  email: string;
+  /** EVM wallet that will sign the x402 TransferWithAuthorization. */
+  payerReference?: string;
+  /** Optional referral / affiliate wallet for revenue attribution. */
+  referralAddress?: string;
+}
+
+export interface NewsletterRenewRequest {
+  email?: string;
+  payerWallet?: string;
+}
+
+export interface NewsletterCancelRequest {
+  email?: string;
+  payerWallet?: string;
+  /** When true (default), access continues until current_period_end. */
+  atPeriodEnd?: boolean;
+}
+
+export interface NewsletterSettlementRequest {
+  challengeReference: string;
+  settlementReference: string;
+}
+
+export interface NewsletterSubscriptionResponse {
+  id: string;
+  email: string;
+  status: NewsletterSubscriptionStatus;
+  amountPerPeriod: number;
+  currency: string;
+  billingPeriodDays: number;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  nextRenewalAt: string | null;
+  periodsPaid: number;
+  payerWallet: string | null;
+  referralAddress: string | null;
+  cancelAtPeriodEnd: boolean;
+  cancelledAt: string | null;
+  lastSettledAt: string | null;
+  /** True when the subscriber is entitled to premium digests right now. */
+  entitled: boolean;
+}
+
+export interface NewsletterChallengeResponse {
+  subscriptionId: string;
+  email: string;
+  status: NewsletterSubscriptionStatus;
+  challengeReference: string;
+  paymentRoute: "x402";
+  amountRequested: number;
+  currency: string;
+  expiresAt: string;
+  challengeData: Record<string, unknown>;
+  paymentRecordId: string;
+  billingPeriodDays: number;
+  agreementType: "recurring_newsletter";
+}
+
+export interface NewsletterSettlementResponse {
+  settled: boolean;
+  subscription: NewsletterSubscriptionResponse;
+  paymentRecordId: string;
+  verification: {
+    amountSettled: number;
+    currency: string;
+    settlementReference: string;
+    payerReference?: string;
+  };
 }
 
 // ── Response Wrappers ───────────────────────────────────

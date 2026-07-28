@@ -10,6 +10,7 @@ import type {
   ExecutionLogActionType,
   ExecutionLogStatus,
   MonitoredEventStatus,
+  NewsletterSubscriptionStatus,
   PaymentRoute,
   PaymentStatus,
   PremiumContentType,
@@ -433,3 +434,59 @@ export type EmailSubscriberUpdate = Partial<
   email?: string;
   email_normalized?: string;
 };
+
+// ── x402 Newsletter Subscriptions ───────────────────────
+export interface NewsletterSubscriptionRow {
+  id: string;
+  email: string;
+  email_normalized: string;
+  payer_wallet: string | null;
+  status: NewsletterSubscriptionStatus;
+  amount_per_period: number;
+  currency: string;
+  billing_period_days: number;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  next_renewal_at: string | null;
+  periods_paid: number;
+  grace_period_days: number;
+  referral_address: string | null;
+  cancel_at_period_end: boolean;
+  cancelled_at: string | null;
+  premium_item_id: string | null;
+  email_subscriber_id: string | null;
+  last_payment_record_id: string | null;
+  last_settlement_reference: string | null;
+  last_settled_at: string | null;
+  pending_challenge_reference: string | null;
+  pending_payment_record_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewsletterSubscriptionInsert {
+  email: string;
+  email_normalized: string;
+  payer_wallet?: string | null;
+  status?: NewsletterSubscriptionStatus;
+  amount_per_period: number;
+  currency?: string;
+  billing_period_days?: number;
+  current_period_start?: string | null;
+  current_period_end?: string | null;
+  next_renewal_at?: string | null;
+  periods_paid?: number;
+  grace_period_days?: number;
+  referral_address?: string | null;
+  cancel_at_period_end?: boolean;
+  cancelled_at?: string | null;
+  premium_item_id?: string | null;
+  email_subscriber_id?: string | null;
+  last_payment_record_id?: string | null;
+  last_settlement_reference?: string | null;
+  last_settled_at?: string | null;
+  pending_challenge_reference?: string | null;
+  pending_payment_record_id?: string | null;
+}
+
+export type NewsletterSubscriptionUpdate = Partial<NewsletterSubscriptionInsert>;

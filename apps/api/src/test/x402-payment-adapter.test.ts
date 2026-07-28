@@ -114,6 +114,31 @@ describe("X402PaymentAdapter", () => {
       });
     });
 
+    it("should embed recurring newsletter agreement metadata in challengeData", async () => {
+      const result = await adapter.createChallenge({
+        premiumItemId: "newsletter-item",
+        amount: 2,
+        currency: "USDC",
+        payerReference: "0x1111111111111111111111111111111111111111",
+        agreement: {
+          type: "recurring_newsletter",
+          billingPeriodDays: 30,
+          subscriptionId: "sub-uuid",
+          periodKind: "renewal",
+          referralAddress: "0x2222222222222222222222222222222222222222",
+        },
+      });
+
+      expect(result.challengeData.agreementType).toBe("recurring_newsletter");
+      expect(result.challengeData.billingPeriodDays).toBe(30);
+      expect(result.challengeData.periodKind).toBe("renewal");
+      expect(result.challengeData.subscriptionId).toBe("sub-uuid");
+      expect(result.challengeData.product).toBe("monthly_newsletter");
+      expect(result.challengeData.referralAddress).toBe(
+        "0x2222222222222222222222222222222222222222",
+      );
+    });
+
     it("should use configured chainId and USDC address in EIP-712 domain", async () => {
       const baseMainnetUsdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
       const custom = new X402PaymentAdapter({

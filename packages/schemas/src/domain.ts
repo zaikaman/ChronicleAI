@@ -114,13 +114,15 @@ export type PremiumContentType =
   | "deep_dive"
   | "historical_feed"
   | "structured_feed"
-  | "sponsored_monitor";
+  | "sponsored_monitor"
+  | "monthly_newsletter";
 
 export const PREMIUM_CONTENT_TYPES: readonly PremiumContentType[] = [
   "deep_dive",
   "historical_feed",
   "structured_feed",
   "sponsored_monitor",
+  "monthly_newsletter",
 ] as const;
 
 export type PremiumItemStatus = "draft" | "available" | "archived";
@@ -185,6 +187,31 @@ export const EMAIL_SUBSCRIBER_SOURCES: readonly EmailSubscriberSource[] = [
   "premium",
   "import",
 ] as const;
+
+// ── x402 Newsletter Subscriptions (recurring) ───────────
+export type NewsletterSubscriptionStatus =
+  | "pending"
+  | "active"
+  | "past_due"
+  | "cancelled"
+  | "expired";
+
+export const NEWSLETTER_SUBSCRIPTION_STATUSES: readonly NewsletterSubscriptionStatus[] = [
+  "pending",
+  "active",
+  "past_due",
+  "cancelled",
+  "expired",
+] as const;
+
+/** Canonical premium catalog slug for the monthly x402 newsletter product. */
+export const MONTHLY_NEWSLETTER_SLUG = "monthly-newsletter-x402" as const;
+
+/** Default billing period for recurring x402 newsletter agreements (days). */
+export const DEFAULT_NEWSLETTER_BILLING_PERIOD_DAYS = 30;
+
+/** Default grace window after period end before status becomes expired (days). */
+export const DEFAULT_NEWSLETTER_GRACE_PERIOD_DAYS = 3;
 
 // ── Branded ID Types ────────────────────────────────────
 declare const brand: unique symbol;

@@ -50,6 +50,157 @@ paths:
                 $ref: "#/components/schemas/DailyDigest"
         "404":
           description: No digest available
+  /subscribers:
+    post:
+      summary: Free email opt-in for alerts (and optional digests)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                receivesDigests:
+                  type: boolean
+                receivesAlerts:
+                  type: boolean
+                payerReference:
+                  type: string
+                source:
+                  type: string
+                  enum: [web, api, premium, import]
+      responses:
+        "200":
+          description: Existing subscriber updated
+        "201":
+          description: Subscriber created
+  /subscribers/newsletter/subscribe:
+    post:
+      summary: Start a recurring x402 monthly newsletter agreement (issues payment challenge)
+      description: |
+        Creates or re-opens a newsletter subscription agreement and returns an x402
+        TransferWithAuthorization challenge for the first billing period.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                payerReference:
+                  type: string
+                  description: EVM wallet that will sign the x402 authorization
+                referralAddress:
+                  type: string
+                  description: Optional affiliate wallet for revenue attribution
+      responses:
+        "201":
+          description: Newsletter x402 challenge issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterChallenge"
+        "400":
+          description: Invalid request or already entitled for the current period
+  /subscribers/newsletter/renew:
+    post:
+      summary: Issue an x402 renewal challenge for the next billing period
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                payerWallet:
+                  type: string
+      responses:
+        "201":
+          description: Renewal challenge issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterChallenge"
+  /subscribers/newsletter/settlements:
+    post:
+      summary: Settle an x402 newsletter challenge and activate or extend the billing period
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeReference, settlementReference]
+              properties:
+                challengeReference:
+                  type: string
+                settlementReference:
+                  type: string
+      responses:
+        "200":
+          description: Settlement result and subscription state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterSettlement"
+  /subscribers/newsletter/status:
+    get:
+      summary: Get recurring newsletter subscription status and entitlement
+      parameters:
+        - name: email
+          in: query
+          schema:
+            type: string
+            format: email
+        - name: payerWallet
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Subscription status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterSubscription"
+        "404":
+          description: Subscription not found
+  /subscribers/newsletter/cancel:
+    post:
+      summary: Cancel a recurring newsletter subscription (at period end by default)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                payerWallet:
+                  type: string
+                atPeriodEnd:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          description: Updated subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterSubscription"
   /premium/items:
     get:
       summary: List public metadata for premium intelligence
@@ -522,3 +673,135 @@ components:
         status:
           type: string
           enum: [pending, transferred, failed]
+    NewsletterSubscription:
+      type: object
+      required:
+        - id
+        - email
+        - status
+        - amountPerPeriod
+        - currency
+        - billingPeriodDays
+        - periodsPaid
+        - cancelAtPeriodEnd
+        - entitled
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [pending, active, past_due, cancelled, expired]
+        amountPerPeriod:
+          type: number
+        currency:
+          type: string
+        billingPeriodDays:
+          type: integer
+        currentPeriodStart:
+          type: string
+          format: date-time
+          nullable: true
+        currentPeriodEnd:
+          type: string
+          format: date-time
+          nullable: true
+        nextRenewalAt:
+          type: string
+          format: date-time
+          nullable: true
+        periodsPaid:
+          type: integer
+        payerWallet:
+          type: string
+          nullable: true
+        referralAddress:
+          type: string
+          nullable: true
+        cancelAtPeriodEnd:
+          type: boolean
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastSettledAt:
+          type: string
+          format: date-time
+          nullable: true
+        entitled:
+          type: boolean
+          description: True when the subscriber may receive premium digests now
+    NewsletterChallenge:
+      type: object
+      required:
+        - subscriptionId
+        - email
+        - status
+        - challengeReference
+        - paymentRoute
+        - amountRequested
+        - currency
+        - expiresAt
+        - challengeData
+        - paymentRecordId
+        - billingPeriodDays
+        - agreementType
+      properties:
+        subscriptionId:
+          type: string
+        email:
+          type: string
+        status:
+          type: string
+          enum: [pending, active, past_due, cancelled, expired]
+        challengeReference:
+          type: string
+        paymentRoute:
+          type: string
+          enum: [x402]
+        amountRequested:
+          type: number
+        currency:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        challengeData:
+          type: object
+          additionalProperties: true
+        paymentRecordId:
+          type: string
+        billingPeriodDays:
+          type: integer
+        agreementType:
+          type: string
+          enum: [recurring_newsletter]
+        periodKind:
+          type: string
+          enum: [initial, renewal]
+    NewsletterSettlement:
+      type: object
+      required: [settled, subscription, paymentRecordId, verification]
+      properties:
+        settled:
+          type: boolean
+        subscription:
+          $ref: "#/components/schemas/NewsletterSubscription"
+        paymentRecordId:
+          type: string
+        verification:
+          type: object
+          required: [amountSettled, currency, settlementReference]
+          properties:
+            amountSettled:
+              type: number
+            currency:
+              type: string
+            settlementReference:
+              type: string
+            payerReference:
+              type: string
+            errorMessage:
+              type: string

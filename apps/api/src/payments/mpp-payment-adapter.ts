@@ -72,7 +72,17 @@ export class MppPaymentAdapter implements PaymentAdapter {
     amount: number;
     currency: string;
     payerReference?: string | undefined;
+    agreement?:
+      | {
+          type: "recurring_newsletter";
+          billingPeriodDays: number;
+          subscriptionId?: string | undefined;
+          periodKind: "initial" | "renewal";
+          referralAddress?: string | null | undefined;
+        }
+      | undefined;
   }): Promise<ChallengeResult> {
+    // MPP is one-shot micro-billing; agreement metadata is ignored when present.
     const secret = this.resolveSecret();
     if (!secret) {
       throw new Error("MPP secret key is not configured on the server (MPP_SECRET)");

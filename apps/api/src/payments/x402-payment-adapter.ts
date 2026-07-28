@@ -201,6 +201,20 @@ export class X402PaymentAdapter implements PaymentAdapter {
     amount: number;
     currency: string;
     payerReference?: string | undefined;
+    /**
+     * Optional recurring-agreement metadata for monthly newsletter (and similar)
+     * x402 subscription intents. Embedded in challengeData so clients and
+     * settlement handlers can distinguish one-shot vs period renewals.
+     */
+    agreement?:
+      | {
+          type: "recurring_newsletter";
+          billingPeriodDays: number;
+          subscriptionId?: string | undefined;
+          periodKind: "initial" | "renewal";
+          referralAddress?: string | null | undefined;
+        }
+      | undefined;
   }): Promise<ChallengeResult> {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + CHALLENGE_EXPIRY_MS).toISOString();
@@ -248,13 +262,20 @@ export class X402PaymentAdapter implements PaymentAdapter {
       nonce,
     };
 
+    const referralFromAgreement =
+      params.agreement?.referralAddress &&
+      ADDRESS_RE.test(params.agreement.referralAddress)
+        ? params.agreement.referralAddress
+        : null;
+
     const challengeData: Record<string, unknown> = {
       route: "x402",
       premiumItemId: params.premiumItemId,
       expectedAmount: params.amount,
       expectedCurrency: params.currency,
       facilitatorUrl: this.facilitatorUrl ?? null,
-      referralAddress: params.payerReference ?? null,
+      // Prefer explicit referral from agreement; else challenge-time payer ref.
+      referralAddress: referralFromAgreement ?? params.payerReference ?? null,
       challengeType: "permit",
       network: this.networkCaip2,
       asset: this.usdcAddress,
@@ -262,6 +283,14 @@ export class X402PaymentAdapter implements PaymentAdapter {
       types,
       message,
     };
+
+    if (params.agreement) {
+      challengeData.agreementType = params.agreement.type;
+      challengeData.billingPeriodDays = params.agreement.billingPeriodDays;
+      challengeData.periodKind = params.agreement.periodKind;
+      challengeData.subscriptionId = params.agreement.subscriptionId ?? null;
+      challengeData.product = "monthly_newsletter";
+    }
 
     return {
       challengeReference,

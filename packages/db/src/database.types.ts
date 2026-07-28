@@ -654,6 +654,119 @@ export type Database = {
         }
         Relationships: []
       }
+      x402_newsletter_subscriptions: {
+        Row: {
+          amount_per_period: number
+          billing_period_days: number
+          cancel_at_period_end: boolean
+          cancelled_at: string | null
+          created_at: string
+          currency: string
+          current_period_end: string | null
+          current_period_start: string | null
+          email: string
+          email_normalized: string
+          email_subscriber_id: string | null
+          grace_period_days: number
+          id: string
+          last_payment_record_id: string | null
+          last_settled_at: string | null
+          last_settlement_reference: string | null
+          next_renewal_at: string | null
+          payer_wallet: string | null
+          pending_challenge_reference: string | null
+          pending_payment_record_id: string | null
+          periods_paid: number
+          premium_item_id: string | null
+          referral_address: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_per_period: number
+          billing_period_days?: number
+          cancel_at_period_end?: boolean
+          cancelled_at?: string | null
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          email: string
+          email_normalized: string
+          email_subscriber_id?: string | null
+          grace_period_days?: number
+          id?: string
+          last_payment_record_id?: string | null
+          last_settled_at?: string | null
+          last_settlement_reference?: string | null
+          next_renewal_at?: string | null
+          payer_wallet?: string | null
+          pending_challenge_reference?: string | null
+          pending_payment_record_id?: string | null
+          periods_paid?: number
+          premium_item_id?: string | null
+          referral_address?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_per_period?: number
+          billing_period_days?: number
+          cancel_at_period_end?: boolean
+          cancelled_at?: string | null
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          email?: string
+          email_normalized?: string
+          email_subscriber_id?: string | null
+          grace_period_days?: number
+          id?: string
+          last_payment_record_id?: string | null
+          last_settled_at?: string | null
+          last_settlement_reference?: string | null
+          next_renewal_at?: string | null
+          payer_wallet?: string | null
+          pending_challenge_reference?: string | null
+          pending_payment_record_id?: string | null
+          periods_paid?: number
+          premium_item_id?: string | null
+          referral_address?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "x402_newsletter_subscriptions_email_subscriber_id_fkey"
+            columns: ["email_subscriber_id"]
+            isOneToOne: false
+            referencedRelation: "email_subscribers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "x402_newsletter_subscriptions_last_payment_record_id_fkey"
+            columns: ["last_payment_record_id"]
+            isOneToOne: false
+            referencedRelation: "payment_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "x402_newsletter_subscriptions_pending_payment_record_id_fkey"
+            columns: ["pending_payment_record_id"]
+            isOneToOne: false
+            referencedRelation: "payment_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "x402_newsletter_subscriptions_premium_item_id_fkey"
+            columns: ["premium_item_id"]
+            isOneToOne: false
+            referencedRelation: "premium_intelligence_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

@@ -23,6 +23,9 @@ import type {
   ExecutionLogRepository,
   LLMGenerationAttemptRepository,
   MonitoredEventRepository,
+  NewsletterSubscriptionRepository,
+  PaymentRecordRepository,
+  PremiumIntelligenceRepository,
   PublicAlertRepository,
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
@@ -31,6 +34,9 @@ import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
 import { createEventNormalizer } from "../monitoring/event-normalizer.ts";
 import { createOnChainBlockService } from "../monitoring/on-chain-block-service.ts";
 import { createPriceOracle } from "../monitoring/price-oracle-service.ts";
+import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
+import { createNewsletterSubscriptionService } from "../services/newsletter-subscription-service.ts";
+import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
 import { createTreasuryRegistryGate } from "../services/treasury-registry-gate.ts";
 import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
@@ -130,6 +136,10 @@ export interface US2Dependencies {
   subscriberRepo: EmailSubscriberRepository;
   /** Latest treasury snapshots for FR-026 treasury-gated registry writes. */
   treasuryRepo: TreasurySnapshotRepository;
+  /** Required for recurring x402 newsletter agreements + premium digest fan-out. */
+  newsletterRepo: NewsletterSubscriptionRepository;
+  premiumRepo: PremiumIntelligenceRepository;
+  paymentRecordRepo: PaymentRecordRepository;
 }
 
 export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependencies): void {
@@ -140,6 +150,61 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
     deps.treasuryRepo,
     createTreasuryStatusService(),
   );
+
+  // Recurring x402 monthly newsletter (agreement + renewals + paid digests)
+  const treasury = resolveTreasuryWallet(env);
+  const treasuryAddressHolder = { address: treasury.address };
+  if (web3Client?.isParaTreasuryBacked()) {
+    void web3Client
+      .getTreasuryAddress()
+      .then((address) => {
+        if (address) {
+          treasuryAddressHolder.address = address;
+        }
+      })
+      .catch(() => {
+        // Non-fatal: x402 challenges still use the static/fallback treasury address.
+      });
+  }
+
+  const x402Adapter = new X402PaymentAdapter({
+    facilitatorUrl: env.x402FacilitatorUrl ?? undefined,
+    treasuryWalletAddress: () => treasuryAddressHolder.address,
+    rpcUrl: env.rpcUrl ?? undefined,
+    settlementPrivateKey: treasury.privateKey ?? undefined,
+    chainId: env.x402ChainId,
+    usdcAddress: env.x402UsdcAddress,
+  });
+
+  const settlementService = new PaymentSettlementService({
+    paymentRecordRepo: deps.paymentRecordRepo,
+    execLogRepo: deps.execLogRepo,
+    adapters: new Map([["x402", x402Adapter]]),
+  });
+
+  const newsletterService = createNewsletterSubscriptionService({
+    newsletterRepo: deps.newsletterRepo,
+    premiumRepo: deps.premiumRepo,
+    paymentRecordRepo: deps.paymentRecordRepo,
+    subscriberRepo: deps.subscriberRepo,
+    execLogRepo: deps.execLogRepo,
+    x402Adapter,
+    settlementService,
+    config: {
+      monthlyPriceUsdc: env.newsletterMonthlyPriceUsdc,
+      billingPeriodDays: env.newsletterBillingPeriodDays,
+      gracePeriodDays: env.newsletterGracePeriodDays,
+    },
+  });
+
+  // Ensure catalog product exists so payment_records FK always has a target.
+  void newsletterService.ensureNewsletterProduct().catch((error) => {
+    console.warn(
+      "Failed to ensure monthly newsletter product:",
+      error instanceof Error ? error.message : error,
+    );
+  });
+
   const smtpService = createSmtpEmailService({
     host: env.smtpHost,
     port: env.smtpPort,
@@ -147,6 +212,11 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
     pass: env.smtpPass,
     fromAddress: env.smtpFromAddress,
     resolveRecipients: async (channel) => {
+      // Digests go to paid active x402 newsletter subscribers (IDEA Loop 2 step 6).
+      // Alerts continue to free email_subscribers opt-ins.
+      if (channel === "digest") {
+        return newsletterService.listPremiumDigestEmails();
+      }
       const result = await deps.subscriberRepo.listActiveEmails(channel);
       if (!result.ok) {
         throw new Error(result.error.message);
@@ -194,21 +264,33 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
   // Latest digest (no auth required)
   apiRouter.use(createDigestRoutes(deps.digestRepo));
 
-  // Email newsletter subscribe / unsubscribe (public)
-  apiRouter.use(createSubscriberRoutes(deps.subscriberRepo));
+  // Free email opt-in + recurring x402 newsletter subscribe / renew / settle
+  apiRouter.use(createSubscriberRoutes(deps.subscriberRepo, newsletterService));
+
+  // Billing cycle: active → past_due → expired without renewal
+  const NEWSLETTER_BILLING_SWEEP_MS = 5 * 60_000;
+  const runNewsletterBillingSweep = () => {
+    void newsletterService.processBillingCycle().then((result) => {
+      if (result.pastDue || result.expired || result.cancelledAtPeriodEnd) {
+        console.info(
+          `Newsletter billing sweep: pastDue=${result.pastDue} expired=${result.expired} cancelledAtPeriodEnd=${result.cancelledAtPeriodEnd}`,
+        );
+      }
+      if (result.errors.length > 0) {
+        console.warn("Newsletter billing sweep errors:", result.errors.join(" | "));
+      }
+    });
+  };
+  runNewsletterBillingSweep();
+  setInterval(runNewsletterBillingSweep, NEWSLETTER_BILLING_SWEEP_MS).unref?.();
 }
 
 // ── US3: Premium Access & Sponsored Watch Routes ────────
 
-import type {
-  PaymentRecordRepository,
-  PremiumIntelligenceRepository,
-  SponsoredWatchRepository,
-} from "@chronicleai/db";
+import type { SponsoredWatchRepository } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
 import { MppPaymentAdapter } from "../payments/mpp-payment-adapter.ts";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
-import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 import {
   PremiumAccessReceiptService,
   resolvePremiumAccessSecret,
