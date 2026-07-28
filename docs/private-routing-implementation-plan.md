@@ -131,12 +131,14 @@ Set in KeeperHub `CHAIN_RPC_CONFIG` (shape as used by KH seed):
 {
   "eth-sepolia": {
     "isPrivateMempoolRpcEnabled": true,
-    "privateMempoolRpcUrl": "https://rpc-sepolia.flashbots.net/"
+    "privateMempoolRpcUrl": "https://rpc-sepolia.flashbots.net/?url=https://YOUR_FAST_SEPOLIA_RPC"
   }
 }
 ```
 
-Verify with `GET /api/chains` on the KeeperHub instance: for chainId `11155111`, `usePrivateMempoolRpc === true`.
+**Why `?url=`:** KeeperHub swaps the **whole primary RPC** to the private URL when `usePrivateMempool` is set (reads + writes). Bare `https://rpc-sepolia.flashbots.net/` is slow on Sepolia and often yields ethers `TIMEOUT` / `RPC failed on primary endpoint` on multi-call desk paths (approve + Uniswap). Flashbots supports a [custom read RPC](https://docs.flashbots.net/flashbots-protect/settings-guide#custom-read-rpc): reads proxy to `url`, while `eth_sendRawTransaction` stays private. Use the same public Sepolia RPC you trust for KH primary (Alchemy/Infura/publicnode).
+
+Verify with `GET /api/chains` on the KeeperHub instance: for chainId `11155111`, `usePrivateMempoolRpc === true`. Chronicle boot should log capability OK.
 
 ### 6.2 Desk / org wallet gas
 
@@ -418,7 +420,8 @@ Only claim “applied” when KH response or operator-verified chain config allo
 
 | Risk | Mitigation |
 |------|------------|
-| Sepolia private RPC down / flaky | `strict: true` fails closed; monitor desk failures; optional non-strict only for non-critical registry |
+| Sepolia private RPC down / flaky | Prefer Protect `?url=` read proxy (see §6.1); `strict: true` fails closed; monitor desk failures; optional non-strict only for non-critical registry |
+| Protect RPC timeout on approve/swap (`code=TIMEOUT`) | Bare Protect used for all eth_calls; set `privateMempoolRpcUrl` to `https://rpc-sepolia.flashbots.net/?url=<fast public Sepolia RPC>`; re-run desk-oracle-arb |
 | Out of gas without sponsorship | Fund desk wallet with Sepolia ETH; low-balance banner; treasury check already exists |
 | Operator forgets KH chain config | README checklist; startup log warning if `DESK_USE_PRIVATE_MEMPOOL` but chains API reports no private capability |
 | Re-import changes workflow IDs | Document re-bind of all `KEEPERHUB_WORKFLOW_*` |

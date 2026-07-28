@@ -9,7 +9,11 @@ import {
 } from "@chronicleai/config";
 import type { DeskSignalFusionLabel, LLMProvider } from "@chronicleai/schemas";
 import {
-  LLM_PROVIDER_CALLERS,
+  createChatModelsInOrder,
+  invokeStructuredAgent,
+  signalFusionSchema,
+} from "../../agents/langchain/index.ts";
+import {
   extractJsonObject,
   type LLMProviderConfig,
   type LLMProviderMap,
@@ -210,14 +214,20 @@ function heuristicFusion(input: SignalFusionInput): DeskSignalFusionResult {
 }
 
 function parseFusion(
-  raw: string,
+  raw: string | Record<string, unknown>,
   model?: string,
   latencyMs?: number,
 ): DeskSignalFusionResult | null {
-  const json = extractJsonObject(raw);
-  if (!json) return null;
   try {
-    const obj = JSON.parse(json) as Record<string, unknown>;
+    const obj: Record<string, unknown> | null =
+      typeof raw === "string"
+        ? (() => {
+            const json = extractJsonObject(raw);
+            if (!json) return null;
+            return JSON.parse(json) as Record<string, unknown>;
+          })()
+        : raw;
+    if (!obj) return null;
     const label = typeof obj.label === "string" ? obj.label.trim().toLowerCase() : "";
     if (!LABEL_SET.has(label)) return null;
     const confidence =
@@ -292,31 +302,75 @@ export function createSignalFusionJudge(
         return { ...base, latencyMs: Date.now() - started };
       }
 
-      const order: LLMProvider[] = opts.preferredProvider
-        ? [opts.preferredProvider, "gemini", "openai", "groq"]
-        : ["gemini", "openai", "groq"];
+      const prompt = [
+        `Signal type: ${input.signalType}`,
+        `Severity: ${input.severity}`,
+        `Policy verdict: ${input.policyVerdict}`,
+        `Thresholds: basis=${input.basisBpsThreshold ?? 50} apyDelta=${input.apyDeltaBpsThreshold ?? 50} consecutive=${input.apyConsecutivePolls ?? 2}`,
+        `Features: ${JSON.stringify(input.features)}`,
+        "",
+        "Return fusion label JSON.",
+      ].join("\n");
 
-      for (const provider of order) {
-        const baseCfg = providerConfigs[provider];
-        if (!baseCfg?.apiKey?.trim()) continue;
+      if (opts.callLlm) {
+        const order: LLMProvider[] = opts.preferredProvider
+          ? [opts.preferredProvider, "gemini", "openai", "groq"]
+          : ["gemini", "openai", "groq"];
+        for (const provider of order) {
+          const baseCfg = providerConfigs[provider];
+          if (!baseCfg?.apiKey?.trim()) continue;
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const cfg: LLMProviderConfig = { ...baseCfg, temperature };
+            const raw = await opts.callLlm(
+              provider,
+              cfg,
+              prompt,
+              controller.signal,
+              SYSTEM,
+            );
+            const parsed = parseFusion(
+              raw,
+              `${provider}:${cfg.model}`,
+              Date.now() - started,
+            );
+            if (parsed) return parsed;
+          } catch {
+            // next
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+        return { ...base, latencyMs: Date.now() - started };
+      }
+
+      const models = createChatModelsInOrder(
+        providerConfigs,
+        ["gemini", "openai", "groq"] as const,
+        {
+          preferredProvider: opts.preferredProvider,
+          temperature,
+        },
+      );
+
+      for (const { provider, model, config } of models) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
-          const cfg: LLMProviderConfig = { ...baseCfg, temperature };
-          const prompt = [
-            `Signal type: ${input.signalType}`,
-            `Severity: ${input.severity}`,
-            `Policy verdict: ${input.policyVerdict}`,
-            `Thresholds: basis=${input.basisBpsThreshold ?? 50} apyDelta=${input.apyDeltaBpsThreshold ?? 50} consecutive=${input.apyConsecutivePolls ?? 2}`,
-            `Features: ${JSON.stringify(input.features)}`,
-            "",
-            "Return fusion label JSON.",
-          ].join("\n");
-          const call =
-            opts.callLlm ??
-            ((p, c, pr, signal, sys) => LLM_PROVIDER_CALLERS[p](c, pr, signal, sys));
-          const raw = await call(provider, cfg, prompt, controller.signal, SYSTEM);
-          const parsed = parseFusion(raw, `${provider}:${cfg.model}`, Date.now() - started);
+          const result = await invokeStructuredAgent({
+            model,
+            systemPrompt: SYSTEM,
+            userPrompt: prompt,
+            responseFormat: signalFusionSchema,
+            signal: controller.signal,
+            runLimit: 1,
+          });
+          const parsed = parseFusion(
+            result.structured,
+            `${provider}:${config.model}`,
+            Date.now() - started,
+          );
           if (parsed) return parsed;
         } catch {
           // next

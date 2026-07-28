@@ -1,10 +1,15 @@
-// Affiliate payout agent: real LLM with tool calling.
+// Affiliate payout agent: LangChain createAgent with tool calling.
 // Tools execute on-chain via KeeperHub (withdrawals are never automatic).
 // Provider order: Gemini → OpenAI → Groq. Deterministic fallback if no keys / LLM fails.
 
-import OpenAI from "openai";
+import { tool } from "langchain";
+import { z } from "zod";
 import type { LLMProvider } from "@chronicleai/schemas";
 import { LLM_FALLBACK_ORDER } from "@chronicleai/config";
+import {
+  createChatModelsInOrder,
+  invokeToolAgent,
+} from "../agents/langchain/index.ts";
 import type { LLMProviderMap } from "./llm-provider-client.ts";
 import type {
   AffiliateDashboardService,
@@ -58,90 +63,6 @@ const TOOL_NAMES = new Set<string>([
 const MAX_TOOL_ROUNDS = 5;
 const LLM_TIMEOUT_MS = 45_000;
 
-/** OpenAI-style tool definitions shared by OpenAI + Groq chat.completions. */
-const OPENAI_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  {
-    type: "function",
-    function: {
-      name: "get_affiliate_stats",
-      description:
-        "Load the affiliate dashboard: referred wallet count, total earned USDC, withdrawn USDC, available balance, referral link, and recent activity.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_available_balance",
-      description:
-        "Return only the available USDC balance plus earned/withdrawn totals for this affiliate.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "withdraw_usdc",
-      description:
-        "Execute a real on-chain USDC-denominated payout to the authenticated affiliate wallet through KeeperHub. Only call this when the user clearly wants to withdraw. Use amount \"all\" for full available balance, or a positive number for a partial amount.",
-      parameters: {
-        type: "object",
-        properties: {
-          amount: {
-            description: 'USDC amount as a number, or the string "all"',
-            anyOf: [{ type: "number", minimum: 0.01 }, { type: "string", enum: ["all"] }],
-          },
-        },
-        required: ["amount"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "help",
-      description: "Explain what the agent can do and how referral rewards work.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
-    },
-  },
-];
-
-const GEMINI_FUNCTION_DECLARATIONS = [
-  {
-    name: "get_affiliate_stats",
-    description:
-      "Load the affiliate dashboard: referred wallet count, total earned USDC, withdrawn USDC, available balance, referral link, and recent activity.",
-    parameters: { type: "OBJECT", properties: {} },
-  },
-  {
-    name: "get_available_balance",
-    description:
-      "Return only the available USDC balance plus earned/withdrawn totals for this affiliate.",
-    parameters: { type: "OBJECT", properties: {} },
-  },
-  {
-    name: "withdraw_usdc",
-    description:
-      "Execute a real on-chain USDC-denominated payout to the authenticated affiliate wallet through KeeperHub. Only call when the user clearly wants to withdraw. amount is a number or the string \"all\".",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        amount: {
-          type: "STRING",
-          description: 'USDC amount as a decimal string, or "all"',
-        },
-      },
-      required: ["amount"],
-    },
-  },
-  {
-    name: "help",
-    description: "Explain what the agent can do and how referral rewards work.",
-    parameters: { type: "OBJECT", properties: {} },
-  },
-];
-
 interface LlmToolRequest {
   id: string;
   name: ToolName;
@@ -152,11 +73,23 @@ type LlmTurn =
   | { kind: "message"; content: string }
   | { kind: "tool_calls"; calls: LlmToolRequest[] };
 
-/** Injectable LLM backend (production + tests). */
+/**
+ * Injectable LLM backend for unit tests (manual tool-call loop).
+ * Production uses LangChain createAgent when providerConfigs is set.
+ */
 export interface AffiliateAgentLlm {
   complete(params: {
     system: string;
-    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+    messages: Array<{
+      role: "user" | "assistant" | "system" | "tool";
+      content: string | null;
+      tool_calls?: Array<{
+        id: string;
+        type: "function";
+        function: { name: string; arguments: string };
+      }>;
+      tool_call_id?: string;
+    }>;
     signal: AbortSignal;
   }): Promise<LlmTurn & { provider: LLMProvider }>;
 }
@@ -197,271 +130,8 @@ function buildSystemPrompt(wallet: string): string {
   ].join("\n");
 }
 
-function parseToolArgs(raw: string | null | undefined): Record<string, unknown> {
-  if (!raw?.trim()) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // ignore
-  }
-  return {};
-}
-
 function asToolName(name: string): ToolName | null {
   return TOOL_NAMES.has(name) ? (name as ToolName) : null;
-}
-
-/**
- * OpenAI / Groq chat.completions tool-calling client.
- */
-async function completeOpenAICompatible(
-  provider: "openai" | "groq",
-  config: { apiKey: string; model: string; baseUrl?: string | undefined },
-  params: {
-    system: string;
-    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
-    signal: AbortSignal;
-  },
-): Promise<LlmTurn> {
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    baseURL:
-      config.baseUrl ||
-      (provider === "groq" ? "https://api.groq.com/openai/v1" : "https://api.openai.com/v1"),
-  });
-
-  const response = await client.chat.completions.create(
-    {
-      model: config.model,
-      temperature: 0.2,
-      messages: [{ role: "system", content: params.system }, ...params.messages],
-      tools: OPENAI_TOOLS,
-      tool_choice: "auto",
-    },
-    { signal: params.signal },
-  );
-
-  const choice = response.choices[0]?.message;
-  if (!choice) throw new Error(`${provider} returned empty completion`);
-
-  const toolCalls = choice.tool_calls ?? [];
-  if (toolCalls.length > 0) {
-    const calls: LlmToolRequest[] = [];
-    for (const tc of toolCalls) {
-      if (tc.type !== "function") continue;
-      const name = asToolName(tc.function.name);
-      if (!name) continue;
-      calls.push({
-        id: tc.id,
-        name,
-        arguments: parseToolArgs(tc.function.arguments),
-      });
-    }
-    if (calls.length > 0) {
-      return { kind: "tool_calls", calls };
-    }
-  }
-
-  const content = (choice.content ?? "").trim();
-  if (!content) throw new Error(`${provider} returned empty message`);
-  return { kind: "message", content };
-}
-
-/**
- * Gemini generateContent with function calling.
- */
-async function completeGemini(
-  config: { apiKey: string; model: string; baseUrl?: string | undefined },
-  params: {
-    system: string;
-    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
-    signal: AbortSignal;
-  },
-): Promise<LlmTurn> {
-  let host = config.baseUrl || "https://generativelanguage.googleapis.com";
-  if (host.endsWith("/")) host = host.slice(0, -1);
-  const path = host.includes("/v1")
-    ? `/models/${config.model}:generateContent?key=${config.apiKey}`
-    : `/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
-  const url = `${host}${path}`;
-
-  // Convert OpenAI-style transcript into Gemini contents.
-  type GeminiPart =
-    | { text: string }
-    | { functionCall: { name: string; args?: Record<string, unknown> } }
-    | { functionResponse: { name: string; response: Record<string, unknown> } };
-
-  type GeminiContent = { role: "user" | "model"; parts: GeminiPart[] };
-
-  const contents: GeminiContent[] = [];
-
-  for (const msg of params.messages) {
-    if (msg.role === "user") {
-      const text = typeof msg.content === "string" ? msg.content : "";
-      contents.push({ role: "user", parts: [{ text }] });
-      continue;
-    }
-    if (msg.role === "assistant") {
-      const assistant = msg as OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam;
-      const parts: GeminiPart[] = [];
-      if (typeof assistant.content === "string" && assistant.content.trim()) {
-        parts.push({ text: assistant.content });
-      }
-      if (assistant.tool_calls?.length) {
-        for (const tc of assistant.tool_calls) {
-          if (tc.type !== "function") continue;
-          parts.push({
-            functionCall: {
-              name: tc.function.name,
-              args: parseToolArgs(tc.function.arguments),
-            },
-          });
-        }
-      }
-      if (parts.length > 0) {
-        contents.push({ role: "model", parts });
-      }
-      continue;
-    }
-    if (msg.role === "tool") {
-      const toolMsg = msg as OpenAI.Chat.Completions.ChatCompletionToolMessageParam;
-      let responseObj: Record<string, unknown> = {};
-      try {
-        responseObj = JSON.parse(String(toolMsg.content)) as Record<string, unknown>;
-      } catch {
-        responseObj = { result: toolMsg.content };
-      }
-      // Gemini wants functionResponse on a user turn after model functionCall.
-      contents.push({
-        role: "user",
-        parts: [
-          {
-            functionResponse: {
-              name: toolMsg.tool_call_id?.startsWith("fn:")
-                ? toolMsg.tool_call_id.slice(3)
-                : // tool_call_id is our id; name is not on tool message in OpenAI format.
-                  // We encode name as tool_call_id when using Gemini path via "fn:name:uuid".
-                  extractGeminiToolName(toolMsg.tool_call_id) ?? "tool",
-              response: responseObj,
-            },
-          },
-        ],
-      });
-    }
-  }
-
-  if (contents.length === 0) {
-    contents.push({ role: "user", parts: [{ text: "Hello" }] });
-  }
-
-  const body = {
-    systemInstruction: { parts: [{ text: params.system }] },
-    contents,
-    tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
-    toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-    generationConfig: { temperature: 0.2 },
-  };
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: params.signal,
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Gemini API error: ${response.status} ${text.slice(0, 200)}`);
-  }
-
-  const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          text?: string;
-          functionCall?: { name?: string; args?: Record<string, unknown> };
-        }>;
-      };
-    }>;
-  };
-
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  const calls: LlmToolRequest[] = [];
-  const textParts: string[] = [];
-
-  for (const part of parts) {
-    if (part.functionCall?.name) {
-      const name = asToolName(part.functionCall.name);
-      if (name) {
-        const args = part.functionCall.args ?? {};
-        // Normalize amount if Gemini sent a string number
-        if (typeof args.amount === "string" && args.amount !== "all") {
-          const n = Number(args.amount);
-          if (Number.isFinite(n)) args.amount = n;
-        }
-        calls.push({
-          id: `fn:${name}:${crypto.randomUUID()}`,
-          name,
-          arguments: args,
-        });
-      }
-    } else if (part.text?.trim()) {
-      textParts.push(part.text.trim());
-    }
-  }
-
-  if (calls.length > 0) {
-    return { kind: "tool_calls", calls };
-  }
-
-  const content = textParts.join("\n").trim();
-  if (!content) throw new Error("Gemini returned empty response");
-  return { kind: "message", content };
-}
-
-function extractGeminiToolName(toolCallId: string | undefined): string | null {
-  if (!toolCallId) return null;
-  // format: fn:name:uuid
-  const m = /^fn:([a-z_]+):/.exec(toolCallId);
-  return m?.[1] ?? null;
-}
-
-/**
- * Create multi-provider LLM client with fallback order Gemini → OpenAI → Groq.
- */
-export function createAffiliateAgentLlm(providerConfigs: LLMProviderMap): AffiliateAgentLlm | null {
-  const configured = LLM_FALLBACK_ORDER.filter((p) => {
-    const cfg = providerConfigs[p];
-    return Boolean(cfg?.apiKey?.trim());
-  });
-  if (configured.length === 0) return null;
-
-  return {
-    async complete(params) {
-      const errors: string[] = [];
-      for (const provider of configured) {
-        const cfg = providerConfigs[provider];
-        try {
-          if (provider === "gemini") {
-            const turn = await completeGemini(cfg, params);
-            return { ...turn, provider };
-          }
-          if (provider === "openai" || provider === "groq") {
-            const turn = await completeOpenAICompatible(provider, cfg, params);
-            return { ...turn, provider };
-          }
-        } catch (error) {
-          errors.push(
-            `${provider}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }
-      throw new Error(`All LLM providers failed: ${errors.join(" | ")}`);
-    },
-  };
 }
 
 // ── Tool execution ──────────────────────────────────────
@@ -513,7 +183,6 @@ async function executeTool(
     };
   }
 
-  // withdraw_usdc
   const stats =
     statsRef.current ?? (await deps.dashboardService.getStats(wallet));
   statsRef.current = stats;
@@ -556,6 +225,75 @@ async function executeTool(
     keeperHubRunId: result.keeperHubRunId ?? null,
     availableUsdcAfter: statsRef.current?.availableUsdc ?? null,
   };
+}
+
+function buildLangChainTools(params: {
+  wallet: string;
+  userMessage: string;
+  deps: {
+    dashboardService: AffiliateDashboardService;
+    withdrawalService: AffiliateWithdrawalService;
+  };
+  statsRef: { current: AffiliateDashboardStats | null | undefined };
+  toolCalls: AffiliateAgentToolCall[];
+}) {
+  const run = async (name: ToolName, args: Record<string, unknown>) => {
+    const result = await executeTool(
+      name,
+      args,
+      params.wallet,
+      params.userMessage,
+      params.deps,
+      params.statsRef,
+    );
+    params.toolCalls.push({ name, arguments: args, result });
+    return JSON.stringify(result);
+  };
+
+  return [
+    tool(
+      async () => run("get_affiliate_stats", {}),
+      {
+        name: "get_affiliate_stats",
+        description:
+          "Load the affiliate dashboard: referred wallet count, total earned USDC, withdrawn USDC, available balance, referral link, and recent activity.",
+        schema: z.object({}),
+      },
+    ),
+    tool(
+      async () => run("get_available_balance", {}),
+      {
+        name: "get_available_balance",
+        description:
+          "Return only the available USDC balance plus earned/withdrawn totals for this affiliate.",
+        schema: z.object({}),
+      },
+    ),
+    tool(
+      async ({ amount }) => {
+        const args: Record<string, unknown> = { amount };
+        return run("withdraw_usdc", args);
+      },
+      {
+        name: "withdraw_usdc",
+        description:
+          'Execute a real on-chain USDC-denominated payout to the authenticated affiliate wallet through KeeperHub. Only call this when the user clearly wants to withdraw. Use amount "all" for full available balance, or a positive number for a partial amount.',
+        schema: z.object({
+          amount: z
+            .union([z.number().min(0.01), z.literal("all")])
+            .describe('USDC amount as a number, or the string "all"'),
+        }),
+      },
+    ),
+    tool(
+      async () => run("help", {}),
+      {
+        name: "help",
+        description: "Explain what the agent can do and how referral rewards work.",
+        schema: z.object({}),
+      },
+    ),
+  ];
 }
 
 // ── Deterministic fallback (no LLM keys / LLM outage) ───
@@ -651,21 +389,26 @@ async function runFallbackChat(
   };
   const replyParts: string[] = [];
 
-  for (const tool of planned) {
+  for (const plannedTool of planned) {
     const result = await executeTool(
-      tool.name,
-      tool.args,
+      plannedTool.name,
+      plannedTool.args,
       wallet,
       params.message,
       deps,
       statsRef,
     );
-    toolCalls.push({ name: tool.name, arguments: tool.args, result });
+    toolCalls.push({ name: plannedTool.name, arguments: plannedTool.args, result });
 
-    if (tool.name === "help") {
+    if (plannedTool.name === "help") {
       replyParts.push(helpText());
-    } else if (tool.name === "get_available_balance") {
-      const r = result as { error?: string; availableUsdc?: number; totalEarnedUsdc?: number; totalWithdrawnUsdc?: number };
+    } else if (plannedTool.name === "get_available_balance") {
+      const r = result as {
+        error?: string;
+        availableUsdc?: number;
+        totalEarnedUsdc?: number;
+        totalWithdrawnUsdc?: number;
+      };
       if (r.error) replyParts.push(r.error);
       else {
         replyParts.push(
@@ -673,10 +416,10 @@ async function runFallbackChat(
             `(earned ${formatUsdc(r.totalEarnedUsdc ?? 0)}, withdrawn ${formatUsdc(r.totalWithdrawnUsdc ?? 0)}).`,
         );
       }
-    } else if (tool.name === "get_affiliate_stats") {
+    } else if (plannedTool.name === "get_affiliate_stats") {
       if (statsRef.current) replyParts.push(formatStatsReply(statsRef.current));
       else replyParts.push(String((result as { error?: string }).error ?? "No stats"));
-    } else if (tool.name === "withdraw_usdc") {
+    } else if (plannedTool.name === "withdraw_usdc") {
       const r = result as {
         ok?: boolean;
         error?: string;
@@ -711,141 +454,258 @@ async function runFallbackChat(
   };
 }
 
+/** @deprecated Production path uses LangChain createAgent; retained for tests that inject complete(). */
+export function createAffiliateAgentLlm(
+  _providerConfigs: LLMProviderMap,
+): AffiliateAgentLlm | null {
+  // Production no longer uses this manual multi-provider loop.
+  // Returning null forces callers that only pass providerConfigs through
+  // createAffiliateAgentService to use the LangChain path below.
+  return null;
+}
+
+async function runLangChainChat(
+  params: { affiliateWallet: string; message: string; history?: AffiliateAgentMessage[] },
+  deps: {
+    dashboardService: AffiliateDashboardService;
+    withdrawalService: AffiliateWithdrawalService;
+  },
+  providerConfigs: LLMProviderMap,
+): Promise<AffiliateAgentChatResult> {
+  const wallet = params.affiliateWallet.trim().toLowerCase();
+  const models = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER, {
+    temperature: 0.2,
+  });
+  if (models.length === 0) {
+    return runFallbackChat(params, deps);
+  }
+
+  const statsRef: { current: AffiliateDashboardStats | null | undefined } = {
+    current: undefined,
+  };
+  const toolCalls: AffiliateAgentToolCall[] = [];
+  const tools = buildLangChainTools({
+    wallet,
+    userMessage: params.message,
+    deps,
+    statsRef,
+    toolCalls,
+  });
+
+  const historyMessages = (params.history ?? [])
+    .filter((h) => h.role === "user" || h.role === "assistant")
+    .map((h) => ({
+      role: h.role as "user" | "assistant",
+      content: h.content,
+    }));
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+  try {
+    const primary = models[0]!;
+    const fallbacks = models.slice(1).map((m) => m.model);
+    const result = await invokeToolAgent({
+      model: primary.model,
+      fallbackModels: fallbacks.length > 0 ? fallbacks : undefined,
+      tools,
+      systemPrompt: buildSystemPrompt(wallet),
+      messages: [
+        ...historyMessages,
+        { role: "user", content: params.message },
+      ],
+      runLimit: MAX_TOOL_ROUNDS,
+      signal: controller.signal,
+      providerLabels: models.map((m) => m.provider),
+    });
+
+    // Prefer toolCalls captured during tool execution (includes full results).
+    // Fall back to transcript extraction if tools somehow weren't invoked via our wrappers.
+    const captured =
+      toolCalls.length > 0
+        ? toolCalls
+        : result.toolCalls.map((tc) => ({
+            name: asToolName(tc.name) ?? tc.name,
+            arguments: tc.arguments,
+            result: tc.result,
+          }));
+
+    return {
+      reply:
+        result.reply.trim() ||
+        "I finished working on that. Ask me for your stats or to withdraw if you need a clearer answer.",
+      toolCalls: captured,
+      stats: statsRef.current ?? null,
+      mode: "llm",
+      provider: result.provider ?? primary.provider,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runInjectedLlmChat(
+  params: { affiliateWallet: string; message: string; history?: AffiliateAgentMessage[] },
+  deps: {
+    dashboardService: AffiliateDashboardService;
+    withdrawalService: AffiliateWithdrawalService;
+  },
+  llm: AffiliateAgentLlm,
+): Promise<AffiliateAgentChatResult> {
+  const wallet = params.affiliateWallet.trim().toLowerCase();
+  const system = buildSystemPrompt(wallet);
+  const messages: Array<{
+    role: "user" | "assistant" | "system" | "tool";
+    content: string | null;
+    tool_calls?: Array<{
+      id: string;
+      type: "function";
+      function: { name: string; arguments: string };
+    }>;
+    tool_call_id?: string;
+  }> = [];
+
+  for (const h of params.history ?? []) {
+    if (h.role === "user" || h.role === "assistant") {
+      messages.push({ role: h.role, content: h.content });
+    }
+  }
+  messages.push({ role: "user", content: params.message });
+
+  const toolCalls: AffiliateAgentToolCall[] = [];
+  const statsRef: { current: AffiliateDashboardStats | null | undefined } = {
+    current: undefined,
+  };
+  let providerUsed: LLMProvider | undefined;
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+    let turn: LlmTurn & { provider: LLMProvider };
+    try {
+      turn = await llm.complete({
+        system,
+        messages,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    providerUsed = turn.provider;
+
+    if (turn.kind === "message") {
+      return {
+        reply: turn.content,
+        toolCalls,
+        stats: statsRef.current ?? null,
+        mode: "llm",
+        provider: turn.provider,
+      };
+    }
+
+    messages.push({
+      role: "assistant",
+      content: null,
+      tool_calls: turn.calls.map((c) => ({
+        id: c.id,
+        type: "function" as const,
+        function: {
+          name: c.name,
+          arguments: JSON.stringify(c.arguments ?? {}),
+        },
+      })),
+    });
+
+    for (const call of turn.calls) {
+      const result = await executeTool(
+        call.name,
+        call.arguments,
+        wallet,
+        params.message,
+        deps,
+        statsRef,
+      );
+      toolCalls.push({
+        name: call.name,
+        arguments: call.arguments,
+        result,
+      });
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: JSON.stringify(result),
+      });
+    }
+  }
+
+  return {
+    reply:
+      'I hit the tool-call limit while working on that. Try a simpler request like "show my balance" or "withdraw all".',
+    toolCalls,
+    stats: statsRef.current ?? null,
+    mode: "llm",
+    ...(providerUsed !== undefined ? { provider: providerUsed } : {}),
+  };
+}
+
 // ── Public factory ──────────────────────────────────────
 
 export function createAffiliateAgentService(deps: {
   dashboardService: AffiliateDashboardService;
   withdrawalService: AffiliateWithdrawalService;
   /**
-   * Real LLM with tool calling. Pass provider map via createAffiliateAgentLlm,
-   * or inject a mock for tests. If null/omitted, uses deterministic fallback only
-   * unless providerConfigs is provided.
+   * Injectable LLM for unit tests (manual tool-call loop).
+   * Production: omit this and pass providerConfigs to use LangChain createAgent.
+   * Pass null to force deterministic fallback only.
    */
   llm?: AffiliateAgentLlm | null;
   providerConfigs?: LLMProviderMap;
 }): AffiliateAgentService {
-  const llm =
-    deps.llm === undefined
-      ? deps.providerConfigs
-        ? createAffiliateAgentLlm(deps.providerConfigs)
-        : null
-      : deps.llm;
-
   return {
     async chat(params) {
-      const wallet = params.affiliateWallet.trim().toLowerCase();
+      // Explicit test injection
+      if (deps.llm !== undefined && deps.llm !== null) {
+        try {
+          return await runInjectedLlmChat(params, deps, deps.llm);
+        } catch (error) {
+          console.warn(
+            "[affiliate-agent] Injected LLM path failed, using fallback:",
+            error instanceof Error ? error.message : error,
+          );
+          const fallback = await runFallbackChat(params, deps);
+          return {
+            ...fallback,
+            reply: `${fallback.reply}\n\n_(Responded with tool fallback after LLM error: ${
+              error instanceof Error ? error.message : "unknown"
+            })_`,
+          };
+        }
+      }
 
-      if (!llm) {
+      if (deps.llm === null) {
         return runFallbackChat(params, deps);
       }
 
-      const system = buildSystemPrompt(wallet);
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-
-      // Optional short history (user/assistant only)
-      for (const h of params.history ?? []) {
-        if (h.role === "user" || h.role === "assistant") {
-          messages.push({ role: h.role, content: h.content });
-        }
-      }
-      messages.push({ role: "user", content: params.message });
-
-      const toolCalls: AffiliateAgentToolCall[] = [];
-      const statsRef: { current: AffiliateDashboardStats | null | undefined } = {
-        current: undefined,
-      };
-      let providerUsed: LLMProvider | undefined;
-
-      try {
-        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
-          let turn: LlmTurn & { provider: LLMProvider };
-          try {
-            turn = await llm.complete({
-              system,
-              messages,
-              signal: controller.signal,
-            });
-          } finally {
-            clearTimeout(timer);
-          }
-
-          providerUsed = turn.provider;
-
-          if (turn.kind === "message") {
-            return {
-              reply: turn.content,
-              toolCalls,
-              stats: statsRef.current ?? null,
-              mode: "llm" as const,
-              provider: turn.provider,
-            };
-          }
-
-          // Execute each tool, append assistant tool_calls + tool results to transcript
-          const assistantToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] =
-            turn.calls.map((c) => ({
-              id: c.id,
-              type: "function" as const,
-              function: {
-                name: c.name,
-                arguments: JSON.stringify(c.arguments ?? {}),
-              },
-            }));
-
-          messages.push({
-            role: "assistant",
-            content: null,
-            tool_calls: assistantToolCalls,
-          });
-
-          for (const call of turn.calls) {
-            const result = await executeTool(
-              call.name,
-              call.arguments,
-              wallet,
-              params.message,
-              deps,
-              statsRef,
-            );
-            toolCalls.push({
-              name: call.name,
-              arguments: call.arguments,
-              result,
-            });
-            messages.push({
-              role: "tool",
-              tool_call_id: call.id,
-              content: JSON.stringify(result),
-            });
-          }
-        }
-
-        // Exceeded tool rounds — ask model one last time without tools by using fallback summary
-        return {
-          reply:
-            "I hit the tool-call limit while working on that. Try a simpler request like \"show my balance\" or \"withdraw all\".",
-          toolCalls,
-          stats: statsRef.current ?? null,
-          mode: "llm" as const,
-          ...(providerUsed !== undefined ? { provider: providerUsed } : {}),
-        };
-      } catch (error) {
-        // LLM path failed — deterministic tools still work for the demo.
-        console.warn(
-          "[affiliate-agent] LLM path failed, using fallback:",
-          error instanceof Error ? error.message : error,
-        );
-        const fallback = await runFallbackChat(params, deps);
-        return {
-          ...fallback,
-          reply:
-            `${fallback.reply}\n\n_(Responded with tool fallback after LLM error: ${
+      // Production: LangChain createAgent with Gemini → OpenAI → Groq fallback
+      if (deps.providerConfigs) {
+        try {
+          return await runLangChainChat(params, deps, deps.providerConfigs);
+        } catch (error) {
+          console.warn(
+            "[affiliate-agent] LangChain agent path failed, using fallback:",
+            error instanceof Error ? error.message : error,
+          );
+          const fallback = await runFallbackChat(params, deps);
+          return {
+            ...fallback,
+            reply: `${fallback.reply}\n\n_(Responded with tool fallback after LLM error: ${
               error instanceof Error ? error.message : "unknown"
             })_`,
-        };
+          };
+        }
       }
+
+      return runFallbackChat(params, deps);
     },
   };
 }

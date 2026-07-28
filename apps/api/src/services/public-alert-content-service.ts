@@ -11,8 +11,12 @@ import {
   directionPlainLanguage,
 } from "../monitoring/flow-enrichment.ts";
 import {
+  alertContentSchema,
+  createChatModel,
+  invokeStructuredAgent,
+} from "../agents/langchain/index.ts";
+import {
   extractJsonObject,
-  LLM_PROVIDER_CALLERS,
   type LLMProviderConfig,
   type LLMProviderMap,
 } from "./llm-provider-client.ts";
@@ -191,21 +195,45 @@ export function createPublicAlertContentService(
 
       for (const provider of LLM_FALLBACK_ORDER) {
         const config = providerConfigs[provider];
+        const attemptOrder = LLM_FALLBACK_ORDER.indexOf(provider) + 1;
+        const model = createChatModel(provider, config);
+        if (!model) {
+          attempts.push({
+            provider,
+            success: false,
+            latencyMs: 0,
+            failureReason: "API key not configured",
+          });
+          await llmAttemptRepo.create({
+            monitored_event_id: input.monitoredEventId,
+            provider,
+            attempt_order: attemptOrder,
+            status: "failed",
+            latency_ms: 0,
+            failure_reason: "API key not configured",
+          });
+          continue;
+        }
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
         const startTime = Date.now();
 
         try {
-          const raw = await LLM_PROVIDER_CALLERS[provider](
-            config,
-            prompt,
-            controller.signal,
-            ALERT_SYSTEM_INSTRUCTION,
-          );
+          const result = await invokeStructuredAgent({
+            model,
+            systemPrompt: ALERT_SYSTEM_INSTRUCTION,
+            userPrompt: prompt,
+            responseFormat: alertContentSchema,
+            signal: controller.signal,
+            runLimit: 1,
+          });
           const latencyMs = Date.now() - startTime;
           clearTimeout(timeoutId);
 
-          const content = validateResponse(raw, input);
+          const content =
+            validateResponse(JSON.stringify(result.structured), input) ??
+            validateResponse(result.rawText, input);
 
           if (content) {
             attempts.push({
@@ -215,11 +243,10 @@ export function createPublicAlertContentService(
               latencyMs,
             });
 
-            // Record successful attempt
             await llmAttemptRepo.create({
               monitored_event_id: input.monitoredEventId,
               provider,
-              attempt_order: LLM_FALLBACK_ORDER.indexOf(provider) + 1,
+              attempt_order: attemptOrder,
               status: "succeeded",
               latency_ms: latencyMs,
               response_metadata: { title: content.title },
@@ -233,7 +260,6 @@ export function createPublicAlertContentService(
             };
           }
 
-          // Invalid response
           attempts.push({
             provider,
             success: false,
@@ -244,7 +270,7 @@ export function createPublicAlertContentService(
           await llmAttemptRepo.create({
             monitored_event_id: input.monitoredEventId,
             provider,
-            attempt_order: LLM_FALLBACK_ORDER.indexOf(provider) + 1,
+            attempt_order: attemptOrder,
             status: "invalid_response",
             latency_ms: latencyMs,
             failure_reason:
@@ -265,7 +291,7 @@ export function createPublicAlertContentService(
           await llmAttemptRepo.create({
             monitored_event_id: input.monitoredEventId,
             provider,
-            attempt_order: LLM_FALLBACK_ORDER.indexOf(provider) + 1,
+            attempt_order: attemptOrder,
             status: "failed",
             latency_ms: latencyMs,
             failure_reason: failureReason,
@@ -273,7 +299,6 @@ export function createPublicAlertContentService(
         }
       }
 
-      // All providers failed
       return {
         success: false,
         attempts,

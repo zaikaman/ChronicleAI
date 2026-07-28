@@ -83,20 +83,42 @@ On every material write node (`web3/write-contract`, `web3/transfer-token`, `web
 
 Source: [Flashbots Protect quick start](https://docs.flashbots.net/flashbots-protect/quick-start).
 
-**Do not** hardcode this URL into ChronicleAI API. It belongs in **KeeperHub** chain config (`CHAIN_RPC_CONFIG` / seed):
+**How KeeperHub applies the flag (KEEP-137):** when `usePrivateMempool` is true, the chain’s **entire primary JSON-RPC URL** is swapped to the private endpoint (not only `eth_sendRawTransaction`). That means approve / Uniswap / Aave steps also run `eth_call`, gas estimate, nonce, and balance reads against Protect.
+
+**Ops failure mode (common on Sepolia):** bare Protect is much slower than a normal public Sepolia RPC. Desk workflows (e.g. `desk-oracle-arb`: approve + `uniswap/swap-exact-input`) issue many reads before send; under `strict: true` a Protect read timeout surfaces as:
+
+```text
+RPC failed on primary endpoint: timeout (operation="request.send", reason="timeout", code=TIMEOUT)
+```
+
+That is a **KeeperHub private RPC config / latency** issue, not a bad Chronicle workflow JSON.
+
+**Recommended private URL (Flashbots custom read RPC):** point Protect writes at Flashbots, and proxy **reads** to your fast public Sepolia RPC via the `url` query param ([settings guide](https://docs.flashbots.net/flashbots-protect/settings-guide#custom-read-rpc)):
 
 ```json
 {
   "eth-sepolia": {
     "isPrivateMempoolRpcEnabled": true,
-    "privateMempoolRpcUrl": "https://rpc-sepolia.flashbots.net/"
+    "privateMempoolRpcUrl": "https://rpc-sepolia.flashbots.net/?url=https://YOUR_FAST_SEPOLIA_RPC"
   }
 }
 ```
 
-Verify on the KeeperHub instance: `GET /api/chains` → chainId `11155111` has `usePrivateMempoolRpc === true` and a populated private RPC URL.
+Examples for `YOUR_FAST_SEPOLIA_RPC`: the same URL as KeeperHub’s public Sepolia primary (Alchemy/Infura/publicnode), URL-encoded if needed. Writes (`eth_sendRawTransaction`) still go private; reads go to the `url` backend.
+
+Bare Protect (no `url=`) can still work for dust tests but is more likely to time out under multi-call Uniswap paths.
+
+**Do not** hardcode this URL into ChronicleAI API. It belongs in **KeeperHub** chain config (`CHAIN_RPC_CONFIG` / seed).
+
+Verify on the KeeperHub instance: `GET /api/chains` → chainId `11155111` has `usePrivateMempoolRpc === true` and a populated private RPC URL. Chronicle boot log should show:
+
+```text
+[private-routing] KeeperHub chain 11155111 … usePrivateMempoolRpc=true
+```
 
 If the flag is set in workflow JSON but the chain is **not** configured, KeeperHub warns and may submit via the **public** mempool. Chronicle must not claim “protected” until capability is verified (see plan Phase 2/4).
+
+**Do not “fix” by setting `strict: false` on desk/kill nodes for production demos** — that re-opens public mempool fallback when Protect is flaky. Prefer the `url=` read proxy instead.
 
 ### Gas sponsorship trade-off
 

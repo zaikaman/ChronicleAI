@@ -191,7 +191,7 @@ export async function warnIfPrivateRoutingMisconfigured(
 
   if (!result.ok) {
     logWarn(
-      `[private-routing] Could not verify KeeperHub private mempool capability for chain ${chainId}: ${result.reason}. Demos must not claim private routing is applied until CHAIN_RPC_CONFIG enables usePrivateMempoolRpc on Sepolia (https://rpc-sepolia.flashbots.net/).`,
+      `[private-routing] Could not verify KeeperHub private mempool capability for chain ${chainId}: ${result.reason}. Demos must not claim private routing is applied until CHAIN_RPC_CONFIG enables usePrivateMempoolRpc on Sepolia with Flashbots Protect + custom read RPC (https://rpc-sepolia.flashbots.net/?url=<fast public Sepolia RPC>).`,
     );
     return result;
   }
@@ -200,7 +200,7 @@ export async function warnIfPrivateRoutingMisconfigured(
     logWarn(
       `[private-routing] Policy requests private mempool but KeeperHub chain ${chainId}${
         result.chainName ? ` (${result.chainName})` : ""
-      } has usePrivateMempoolRpc=false. Writes will fall back to the public mempool. Set CHAIN_RPC_CONFIG eth-sepolia isPrivateMempoolRpcEnabled=true and privateMempoolRpcUrl=https://rpc-sepolia.flashbots.net/ then re-check GET /api/chains.`,
+      } has usePrivateMempoolRpc=false. Writes will fall back to the public mempool. Set CHAIN_RPC_CONFIG eth-sepolia isPrivateMempoolRpcEnabled=true and privateMempoolRpcUrl=https://rpc-sepolia.flashbots.net/?url=<fast public Sepolia RPC> (custom read RPC — bare Protect often times out on approve/Uniswap multi-call paths) then re-check GET /api/chains.`,
     );
     return result;
   }

@@ -96,6 +96,7 @@ describe("keeperhub-private-capability", () => {
 
     expect(logWarn).toHaveBeenCalled();
     expect(String(logWarn.mock.calls[0]?.[0])).toMatch(/usePrivateMempoolRpc=false/);
+    expect(String(logWarn.mock.calls[0]?.[0])).toMatch(/\?url=/);
     expect(logInfo).not.toHaveBeenCalled();
   });
 

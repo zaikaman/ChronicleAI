@@ -1,6 +1,7 @@
 // Unit tests for digest generation service (LLM multi-provider, no template fallback)
 
 import { describe, expect, it, vi, afterEach } from "vitest";
+import * as langchainAgents from "../agents/langchain/index.ts";
 import {
   buildDigestPromptForTest,
   computeDigestStats,
@@ -236,20 +237,17 @@ describe("DigestGenerationService", () => {
   });
 
   it("throws DigestGenerationError when all LLM providers fail", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("Mock network failure");
-      }),
+    // Mock LangChain structured agent so unit tests do not hang on SDK network paths.
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockRejectedValue(
+      new Error("Mock network failure"),
     );
 
-    // Gemini uses fetch (mocked to fail). Leave OpenAI/Groq keys empty so the
-    // OpenAI SDK does not attempt real network calls during unit tests.
     const service = createDigestGenerationService(
       {
         gemini: { apiKey: "gemini-test-key", model: "gemini-2.0-flash" },
-        openai: { apiKey: "", model: "gpt-4o-mini" },
-        groq: { apiKey: "", model: "llama-3.3-70b-versatile" },
+        openai: { apiKey: "openai-test-key", model: "gpt-4o-mini" },
+        groq: { apiKey: "groq-test-key", model: "llama-3.3-70b-versatile" },
       },
       createMockLlmAttemptRepo(),
     );

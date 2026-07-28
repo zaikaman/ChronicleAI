@@ -16,14 +16,19 @@
     "@chronicleai/db": "workspace:*",
     "@chronicleai/schemas": "workspace:*",
     "@getpara/rest-sdk": "3.5.1",
+    "@langchain/core": "1.2.3",
+    "@langchain/google-genai": "2.2.0",
+    "@langchain/openai": "1.5.5",
     "@supabase/supabase-js": "^2.49.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "jose": "5.9.6",
+    "langchain": "1.5.3",
     "nodemailer": "^9.0.3",
     "openai": "^6.45.0",
-    "viem": "^2.55.0"
+    "viem": "^2.55.0",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

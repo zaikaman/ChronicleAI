@@ -10,8 +10,12 @@ import {
 import type { LLMGenerationAttemptRepository, MonitoredEventRow } from "@chronicleai/db";
 import type { Confidence, LLMProvider } from "@chronicleai/schemas";
 import {
+  createChatModel,
+  invokeStructuredAgent,
+  premiumNarrativeSchema,
+} from "../agents/langchain/index.ts";
+import {
   extractJsonObject,
-  LLM_PROVIDER_CALLERS,
   type LLMProviderMap,
 } from "./llm-provider-client.ts";
 
@@ -284,21 +288,38 @@ export function createPremiumDeepDiveGenerationService(
           continue;
         }
 
+        const model = createChatModel(provider, config);
+        if (!model) {
+          await recordAttempt(repo, {
+            monitoredEventId: logEventId,
+            provider,
+            attemptOrder,
+            status: "failed",
+            latencyMs: 0,
+            failureReason: "API key not configured",
+          });
+          continue;
+        }
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), PREMIUM_GENERATION_TIMEOUT_MS);
         const startTime = Date.now();
 
         try {
-          const raw = await LLM_PROVIDER_CALLERS[provider](
-            config,
-            prompt,
-            controller.signal,
-            SYSTEM_INSTRUCTION,
-          );
+          const agentResult = await invokeStructuredAgent({
+            model,
+            systemPrompt: SYSTEM_INSTRUCTION,
+            userPrompt: prompt,
+            responseFormat: premiumNarrativeSchema,
+            signal: controller.signal,
+            runLimit: 1,
+          });
           const latencyMs = Date.now() - startTime;
           clearTimeout(timeoutId);
 
-          const content = validateNarrative(raw, params);
+          const content =
+            validateNarrative(JSON.stringify(agentResult.structured), params) ??
+            validateNarrative(agentResult.rawText, params);
           if (content) {
             await recordAttempt(repo, {
               monitoredEventId: logEventId,

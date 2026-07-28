@@ -1,6 +1,6 @@
 import type { MonitoredEventRow } from "@chronicleai/db";
-import { describe, expect, it, vi } from "vitest";
-import * as llmClient from "../services/llm-provider-client.ts";
+import { describe, expect, it, vi, afterEach } from "vitest";
+import * as langchainAgents from "../agents/langchain/index.ts";
 import { createPremiumDeepDiveGenerationService } from "../services/premium-deep-dive-generation-service.ts";
 
 function makeEvent(id: string): MonitoredEventRow {
@@ -24,6 +24,10 @@ function makeEvent(id: string): MonitoredEventRow {
   };
 }
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("createPremiumDeepDiveGenerationService", () => {
   it("falls back to deterministic content when no provider configs", async () => {
     const service = createPremiumDeepDiveGenerationService(null);
@@ -45,17 +49,22 @@ describe("createPremiumDeepDiveGenerationService", () => {
   });
 
   it("uses first successful LLM provider response", async () => {
-    const geminiSpy = vi.spyOn(llmClient.LLM_PROVIDER_CALLERS, "gemini").mockResolvedValue(
-      JSON.stringify({
-        summaryPublic: "LLM teaser about Uniswap cluster",
-        sections: [
-          { title: "Executive Summary", body: "LLM executive" },
-          { title: "Key Findings", findings: ["Finding A", "Finding B"] },
-        ],
-        analysis: "LLM deep analysis of the cluster across three swaps.",
-        confidence: "high",
-      }),
-    );
+    const structured = {
+      summaryPublic: "LLM teaser about Uniswap cluster",
+      sections: [
+        { title: "Executive Summary", body: "LLM executive" },
+        { title: "Key Findings", findings: ["Finding A", "Finding B"] },
+      ],
+      analysis: "LLM deep analysis of the cluster across three swaps.",
+      confidence: "high",
+    };
+
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
+      structured,
+      rawText: JSON.stringify(structured),
+      toolCallCount: 0,
+    });
 
     const service = createPremiumDeepDiveGenerationService({
       gemini: { apiKey: "test-key", model: "gemini-test" },
@@ -79,17 +88,16 @@ describe("createPremiumDeepDiveGenerationService", () => {
     expect(result.summaryPublic).toContain("LLM teaser");
     expect(result.sections[0]?.body).toBe("LLM executive");
     expect(result.analysis).toContain("LLM deep analysis");
-    geminiSpy.mockRestore();
+    expect(langchainAgents.invokeStructuredAgent).toHaveBeenCalled();
   });
 
   it("falls back when all providers return invalid JSON", async () => {
-    const geminiSpy = vi
-      .spyOn(llmClient.LLM_PROVIDER_CALLERS, "gemini")
-      .mockResolvedValue("not json at all");
-    const openaiSpy = vi
-      .spyOn(llmClient.LLM_PROVIDER_CALLERS, "openai")
-      .mockResolvedValue("{ broken");
-    const groqSpy = vi.spyOn(llmClient.LLM_PROVIDER_CALLERS, "groq").mockResolvedValue("{}");
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
+      structured: { not: "valid" },
+      rawText: "not json at all",
+      toolCallCount: 0,
+    });
 
     const service = createPremiumDeepDiveGenerationService({
       gemini: { apiKey: "g", model: "m" },
@@ -111,9 +119,5 @@ describe("createPremiumDeepDiveGenerationService", () => {
     expect(result.usedLlm).toBe(false);
     expect(result.generationProvider).toBe("deterministic_fallback");
     expect(result.analysis).toBe("Det analysis");
-
-    geminiSpy.mockRestore();
-    openaiSpy.mockRestore();
-    groqSpy.mockRestore();
   });
 });

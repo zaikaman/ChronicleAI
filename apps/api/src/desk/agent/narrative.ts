@@ -1,6 +1,6 @@
 /**
  * Post-trade CIO / ticket narrative (Role B).
- * Uses real legs/fills only — never invents tx hashes.
+ * LangChain structured agent — uses real legs/fills only, never invents tx hashes.
  */
 
 import {
@@ -9,7 +9,11 @@ import {
 } from "@chronicleai/config";
 import type { LLMProvider } from "@chronicleai/schemas";
 import {
-  LLM_PROVIDER_CALLERS,
+  createChatModelsInOrder,
+  invokeStructuredAgent,
+  ticketNarrativeSchema,
+} from "../../agents/langchain/index.ts";
+import {
   extractJsonObject,
   type LLMProviderConfig,
   type LLMProviderMap,
@@ -69,23 +73,6 @@ function deterministicSummary(input: NarrativeInput): string {
   );
 }
 
-function firstKeyedProvider(
-  providers: LLMProviderMap,
-  preferred?: LLMProvider,
-): { provider: LLMProvider; config: LLMProviderConfig } | null {
-  const order: LLMProvider[] = preferred
-    ? [preferred, "gemini", "openai", "groq"]
-    : ["gemini", "openai", "groq"];
-  const seen = new Set<LLMProvider>();
-  for (const p of order) {
-    if (seen.has(p)) continue;
-    seen.add(p);
-    const cfg = providers[p];
-    if (cfg?.apiKey?.trim()) return { provider: p, config: cfg };
-  }
-  return null;
-}
-
 export interface NarrativeService {
   writeTicketNarrative(input: NarrativeInput): Promise<NarrativeResult>;
 }
@@ -115,15 +102,6 @@ export function createNarrativeService(
       const fallback = deterministicSummary(input);
 
       if (!providerConfigs) {
-        return {
-          summary: fallback,
-          usedLlm: false,
-          latencyMs: Date.now() - started,
-        };
-      }
-
-      const picked = firstKeyedProvider(providerConfigs, opts.preferredProvider);
-      if (!picked) {
         return {
           summary: fallback,
           usedLlm: false,
@@ -164,46 +142,95 @@ export function createNarrativeService(
         .filter(Boolean)
         .join("\n");
 
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const cfg: LLMProviderConfig = {
-          ...picked.config,
-          temperature,
+      if (opts.callLlm) {
+        const order: LLMProvider[] = opts.preferredProvider
+          ? [opts.preferredProvider, "gemini", "openai", "groq"]
+          : ["gemini", "openai", "groq"];
+        for (const provider of order) {
+          const base = providerConfigs[provider];
+          if (!base?.apiKey?.trim()) continue;
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const cfg: LLMProviderConfig = { ...base, temperature };
+            const raw = await opts.callLlm(
+              provider,
+              cfg,
+              prompt,
+              controller.signal,
+              NARRATIVE_SYSTEM,
+            );
+            const json = extractJsonObject(raw);
+            if (json) {
+              const parsed = JSON.parse(json) as {
+                summary?: string;
+                editorialBody?: string;
+              };
+              if (typeof parsed.summary === "string" && parsed.summary.trim()) {
+                return {
+                  summary: parsed.summary.trim().slice(0, 500),
+                  editorialBody:
+                    typeof parsed.editorialBody === "string"
+                      ? parsed.editorialBody.trim().slice(0, 1200)
+                      : undefined,
+                  provider,
+                  latencyMs: Date.now() - started,
+                  usedLlm: true,
+                };
+              }
+            }
+          } catch {
+            // next
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+        return {
+          summary: fallback,
+          usedLlm: false,
+          latencyMs: Date.now() - started,
         };
-        const call =
-          opts.callLlm ??
-          ((p, c, pr, signal, sys) => LLM_PROVIDER_CALLERS[p](c, pr, signal, sys));
-        const raw = await call(
-          picked.provider,
-          cfg,
-          prompt,
-          controller.signal,
-          NARRATIVE_SYSTEM,
-        );
-        const json = extractJsonObject(raw);
-        if (json) {
-          const parsed = JSON.parse(json) as {
-            summary?: string;
-            editorialBody?: string;
-          };
-          if (typeof parsed.summary === "string" && parsed.summary.trim()) {
+      }
+
+      const models = createChatModelsInOrder(
+        providerConfigs,
+        ["gemini", "openai", "groq"] as const,
+        {
+          preferredProvider: opts.preferredProvider,
+          temperature,
+        },
+      );
+
+      for (const { provider, model } of models) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const result = await invokeStructuredAgent({
+            model,
+            systemPrompt: NARRATIVE_SYSTEM,
+            userPrompt: prompt,
+            responseFormat: ticketNarrativeSchema,
+            signal: controller.signal,
+            runLimit: 1,
+          });
+          const summary = result.structured.summary;
+          if (typeof summary === "string" && summary.trim()) {
             return {
-              summary: parsed.summary.trim().slice(0, 500),
+              summary: summary.trim().slice(0, 500),
               editorialBody:
-                typeof parsed.editorialBody === "string"
-                  ? parsed.editorialBody.trim().slice(0, 1200)
+                typeof result.structured.editorialBody === "string"
+                  ? result.structured.editorialBody.trim().slice(0, 1200)
                   : undefined,
-              provider: picked.provider,
+              provider,
               latencyMs: Date.now() - started,
               usedLlm: true,
             };
           }
+        } catch {
+          // next
+        } finally {
+          clearTimeout(timer);
         }
-      } catch {
-        // fall through to deterministic
-      } finally {
-        clearTimeout(timer);
       }
 
       return {

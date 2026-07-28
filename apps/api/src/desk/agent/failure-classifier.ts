@@ -1,6 +1,6 @@
 /**
  * Failure recovery classifier (Role C).
- * Proposes next step from an allowlist only — never invents recovery paths.
+ * LangChain structured agent; proposes next step from an allowlist only.
  */
 
 import {
@@ -13,7 +13,11 @@ import {
   type LLMProvider,
 } from "@chronicleai/schemas";
 import {
-  LLM_PROVIDER_CALLERS,
+  createChatModelsInOrder,
+  failureClassificationSchema,
+  invokeStructuredAgent,
+} from "../../agents/langchain/index.ts";
+import {
   extractJsonObject,
   type LLMProviderConfig,
   type LLMProviderMap,
@@ -117,14 +121,20 @@ function heuristicClassify(input: FailureClassifyInput): DeskFailureClassificati
 }
 
 function parseClassification(
-  raw: string,
+  raw: string | Record<string, unknown>,
   model?: string,
   latencyMs?: number,
 ): DeskFailureClassification | null {
-  const json = extractJsonObject(raw);
-  if (!json) return null;
   try {
-    const obj = JSON.parse(json) as Record<string, unknown>;
+    let obj: Record<string, unknown> | null;
+    if (typeof raw === "string") {
+      const json = extractJsonObject(raw);
+      if (!json) return null;
+      obj = JSON.parse(json) as Record<string, unknown>;
+    } else {
+      obj = raw;
+    }
+    if (!obj) return null;
     const next = typeof obj.nextStep === "string" ? obj.nextStep.trim().toLowerCase() : "";
     if (!ACTION_SET.has(next)) return null;
     const confidence =
@@ -179,41 +189,80 @@ export function createFailureClassifier(
         return { ...fallback, latencyMs: Date.now() - started };
       }
 
-      const order: LLMProvider[] = opts.preferredProvider
-        ? [opts.preferredProvider, "gemini", "openai", "groq"]
-        : ["gemini", "openai", "groq"];
+      const prompt = [
+        `Strategy: ${input.strategy}`,
+        `Notional USDC: ${input.notionalUsdc}`,
+        `Error: ${input.errorMessage ?? "(none)"}`,
+        `Health factor: ${input.healthFactor ?? "n/a"}`,
+        `Kill armed: ${Boolean(input.killSwitchArmed)}`,
+        `Consecutive failures: ${input.consecutiveFailures ?? 1}`,
+        `Reason codes: ${(input.reasonCodes ?? []).join(", ") || "(none)"}`,
+        "",
+        "Classify nextStep JSON.",
+      ].join("\n");
 
-      for (const provider of order) {
-        const base = providerConfigs[provider];
-        if (!base?.apiKey?.trim()) continue;
+      if (opts.callLlm) {
+        const order: LLMProvider[] = opts.preferredProvider
+          ? [opts.preferredProvider, "gemini", "openai", "groq"]
+          : ["gemini", "openai", "groq"];
+        for (const provider of order) {
+          const base = providerConfigs[provider];
+          if (!base?.apiKey?.trim()) continue;
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const cfg: LLMProviderConfig = { ...base, temperature };
+            const raw = await opts.callLlm(
+              provider,
+              cfg,
+              prompt,
+              controller.signal,
+              SYSTEM,
+            );
+            const parsed = parseClassification(
+              raw,
+              `${provider}:${cfg.model}`,
+              Date.now() - started,
+            );
+            if (parsed) return parsed;
+          } catch {
+            // try next
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+        return { ...fallback, latencyMs: Date.now() - started };
+      }
+
+      const models = createChatModelsInOrder(
+        providerConfigs,
+        ["gemini", "openai", "groq"] as const,
+        {
+          preferredProvider: opts.preferredProvider,
+          temperature,
+        },
+      );
+
+      for (const { provider, model, config } of models) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
-          const cfg: LLMProviderConfig = { ...base, temperature };
-          const prompt = [
-            `Strategy: ${input.strategy}`,
-            `Notional USDC: ${input.notionalUsdc}`,
-            `Error: ${input.errorMessage ?? "(none)"}`,
-            `Health factor: ${input.healthFactor ?? "n/a"}`,
-            `Kill armed: ${Boolean(input.killSwitchArmed)}`,
-            `Consecutive failures: ${input.consecutiveFailures ?? 1}`,
-            `Reason codes: ${(input.reasonCodes ?? []).join(", ") || "(none)"}`,
-            "",
-            "Classify nextStep JSON.",
-          ].join("\n");
-
-          const call =
-            opts.callLlm ??
-            ((p, c, pr, signal, sys) => LLM_PROVIDER_CALLERS[p](c, pr, signal, sys));
-          const raw = await call(provider, cfg, prompt, controller.signal, SYSTEM);
+          const result = await invokeStructuredAgent({
+            model,
+            systemPrompt: SYSTEM,
+            userPrompt: prompt,
+            responseFormat: failureClassificationSchema,
+            signal: controller.signal,
+            runLimit: 1,
+          });
           const parsed = parseClassification(
-            raw,
-            `${provider}:${cfg.model}`,
+            result.structured,
+            `${provider}:${config.model}`,
             Date.now() - started,
           );
           if (parsed) return parsed;
         } catch {
-          // try next / fall back
+          // try next
         } finally {
           clearTimeout(timer);
         }
@@ -223,3 +272,4 @@ export function createFailureClassifier(
     },
   };
 }
+

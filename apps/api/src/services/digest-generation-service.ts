@@ -11,8 +11,12 @@ import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
 import type { Confidence, DigestSections, FlowContext, LLMProvider } from "@chronicleai/schemas";
 import { extractFlowContext } from "../monitoring/flow-enrichment.ts";
 import {
+  createChatModel,
+  digestContentSchema,
+  invokeStructuredAgent,
+} from "../agents/langchain/index.ts";
+import {
   extractJsonObject,
-  LLM_PROVIDER_CALLERS,
   type LLMProviderMap,
 } from "./llm-provider-client.ts";
 
@@ -601,21 +605,44 @@ export function createDigestGenerationService(
           continue;
         }
 
+        const model = createChatModel(provider, config);
+        if (!model) {
+          attempts.push({
+            provider,
+            success: false,
+            latencyMs: 0,
+            failureReason: "API key not configured",
+          });
+          await recordDigestAttempt(repo, {
+            monitoredEventId: logEventId,
+            provider,
+            attemptOrder,
+            status: "failed",
+            latencyMs: 0,
+            failureReason: "API key not configured",
+          });
+          continue;
+        }
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), DIGEST_GENERATION_TIMEOUT_MS);
         const startTime = Date.now();
 
         try {
-          const raw = await LLM_PROVIDER_CALLERS[provider](
-            config,
-            prompt,
-            controller.signal,
-            DIGEST_SYSTEM_INSTRUCTION,
-          );
+          const agentResult = await invokeStructuredAgent({
+            model,
+            systemPrompt: DIGEST_SYSTEM_INSTRUCTION,
+            userPrompt: prompt,
+            responseFormat: digestContentSchema,
+            signal: controller.signal,
+            runLimit: 1,
+          });
           const latencyMs = Date.now() - startTime;
           clearTimeout(timeoutId);
 
-          const content = validateDigestResponse(raw, params, stats);
+          const content =
+            validateDigestResponse(JSON.stringify(agentResult.structured), params, stats) ??
+            validateDigestResponse(agentResult.rawText, params, stats);
 
           if (content) {
             attempts.push({ provider, success: true, latencyMs });
