@@ -12,6 +12,7 @@ import { createAlertDedupeService, type AlertDedupeService } from "../services/a
 import { createPublicAlertContentService, type LLMProviderMap, type PublicAlertContentService } from "../services/public-alert-content-service.ts";
 import { createAlertPublicationService, type AlertPublicationService } from "../services/alert-publication-service.ts";
 import type { ChronicleRegistryService } from "../services/chronicle-registry-service.ts";
+import type { NotificationService } from "../services/notification-service.ts";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
 
 export interface IngestionResult {
@@ -40,6 +41,8 @@ export class EventIngestionHandler {
     registryService?: ChronicleRegistryService | null;
     /** Public SPA origin (FRONTEND_ORIGIN) for HTTPS alert content URIs. */
     frontendOrigin?: string;
+    /** Community channels (Discord / Telegram) for post-registry alert fan-out. */
+    notificationService?: NotificationService | null;
   }) {
     this.eventRepo = deps.eventRepo;
     this.alertRepo = deps.alertRepo;
@@ -52,6 +55,7 @@ export class EventIngestionHandler {
       deps.alertRepo,
       deps.registryService ?? null,
       deps.frontendOrigin,
+      deps.notificationService ?? null,
     );
   }
 
@@ -259,6 +263,13 @@ export class EventIngestionHandler {
         keeper_hub_run_id: publicationResult.keeperHubRunId,
         explorer_url: publicationResult.explorerUrl,
         executedViaKeeperHub: Boolean(publicationResult.keeperHubRunId),
+        community_broadcast: publicationResult.communityBroadcast
+          ? {
+              destinations: publicationResult.communityBroadcast.destinations,
+              failures: publicationResult.communityBroadcast.failures,
+              delivered: publicationResult.communityBroadcast.delivered,
+            }
+          : null,
       },
     });
 

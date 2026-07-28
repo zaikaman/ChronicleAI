@@ -83,6 +83,15 @@ export interface ServerEnv {
   smtpUser: string | undefined;
   smtpPass: string | undefined;
   smtpFromAddress: string | undefined;
+  /**
+   * Discord incoming webhook URL for community alert/bulletin broadcasts.
+   * Must be https://discord.com|discordapp.com/api/webhooks/...
+   */
+  discordWebhookUrl: string | undefined;
+  /** Telegram Bot API token from @BotFather. */
+  telegramBotToken: string | undefined;
+  /** Telegram chat/channel ID that receives alert broadcasts. */
+  telegramChatId: string | undefined;
   frontendOrigin: string;
   port: number;
   nodeEnv: string;
@@ -184,6 +193,9 @@ export function loadServerEnv(): ServerEnv {
     smtpUser: optionalEnv("SMTP_USER"),
     smtpPass: optionalEnv("SMTP_PASS"),
     smtpFromAddress: optionalEnv("SMTP_FROM_ADDRESS"),
+    discordWebhookUrl: optionalEnv("DISCORD_WEBHOOK_URL"),
+    telegramBotToken: optionalEnv("TELEGRAM_BOT_TOKEN"),
+    telegramChatId: optionalEnv("TELEGRAM_CHAT_ID"),
     frontendOrigin: requireEnv("FRONTEND_ORIGIN"),
     port: Number(optionalEnv("PORT", "4000")),
     nodeEnv,

@@ -47,6 +47,21 @@ export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependenci
   const web3Client = createWeb3Client(env);
   const registryService = createChronicleRegistryService(web3Client);
 
+  // Community channels: Discord + Telegram post-registry alert fan-out (IDEA Loop 1 step 5)
+  const notificationService = createNotificationService(deps.execLogRepo, {
+    community: {
+      discordWebhookUrl: env.discordWebhookUrl,
+      telegramBotToken: env.telegramBotToken,
+      telegramChatId: env.telegramChatId,
+    },
+  });
+  const channels = notificationService.getConfiguredChannels();
+  if (!channels.discord && !channels.telegram) {
+    console.warn(
+      "DISCORD_WEBHOOK_URL / TELEGRAM_BOT_TOKEN+TELEGRAM_CHAT_ID not set — alert community broadcasts will log only",
+    );
+  }
+
   // Event ingestion handler
   const handler = new EventIngestionHandler({
     eventRepo: deps.eventRepo,
@@ -60,6 +75,7 @@ export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependenci
     },
     registryService,
     frontendOrigin: env.frontendOrigin,
+    notificationService,
   });
 
   const priceOracle = createPriceOracle(env.rpcUrl);
@@ -86,6 +102,9 @@ import { createDigestEventSelectionService } from "../services/digest-event-sele
 import { createDigestGenerationService } from "../services/digest-generation-service.ts";
 import { createDigestPublicationService } from "../services/digest-publication-service.ts";
 import { createDigestWindowService } from "../services/digest-window-service.ts";
+import {
+  createNotificationService,
+} from "../services/notification-service.ts";
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
 import { resolveTreasuryWallet } from "../services/treasury-wallet.ts";
 import { createWeb3Client } from "../services/web3-client-service.ts";
@@ -118,6 +137,13 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
       return result.value;
     },
   });
+  const notificationService = createNotificationService(deps.execLogRepo, {
+    community: {
+      discordWebhookUrl: env.discordWebhookUrl,
+      telegramBotToken: env.telegramBotToken,
+      telegramChatId: env.telegramChatId,
+    },
+  });
 
   const windowService = createDigestWindowService(deps.digestRepo);
   const eventSelectionService = createDigestEventSelectionService(deps.eventRepo);
@@ -127,6 +153,7 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
     registryService,
     env.frontendOrigin,
     smtpService,
+    notificationService,
   );
 
   const handler = new DigestRunHandler({
@@ -242,7 +269,6 @@ import type {
 import { RevenueRoutingHandler } from "../keeperhub/revenue-routing-handler.ts";
 import { TreasuryCheckHandler } from "../keeperhub/treasury-check-handler.ts";
 import { createAgentActivityService } from "../services/agent-activity-service.ts";
-import { createNotificationService } from "../services/notification-service.ts";
 import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
 import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 import { createActivityRoutes } from "./activity-routes.ts";
@@ -261,7 +287,13 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
   const web3Client = createWeb3Client(env);
   const registryService = createChronicleRegistryService(web3Client);
   const treasuryService = createTreasuryStatusService();
-  const notificationService = createNotificationService(deps.execLogRepo);
+  const notificationService = createNotificationService(deps.execLogRepo, {
+    community: {
+      discordWebhookUrl: env.discordWebhookUrl,
+      telegramBotToken: env.telegramBotToken,
+      telegramChatId: env.telegramChatId,
+    },
+  });
   const treasury = resolveTreasuryWallet(env);
 
   if (!treasury.privateKey) {
