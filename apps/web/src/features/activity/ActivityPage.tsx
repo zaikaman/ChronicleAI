@@ -17,9 +17,10 @@ function ProofLink({
   label?: string;
   explorerUrl?: string;
 }): ReactElement {
+  const href = explorerUrl ?? baseSepoliaTxUrl(txHash);
   return (
     <a
-      href={explorerUrl ?? baseSepoliaTxUrl(txHash)}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       className="font-mono text-xs text-accent hover:underline break-all"
@@ -30,15 +31,14 @@ function ProofLink({
   );
 }
 
-function KeeperHubBadge({
-  runId,
-  txHash,
-  explorerUrl,
-}: {
+function KeeperHubBadge(props: {
   runId?: string;
   txHash?: string;
   explorerUrl?: string;
 }): ReactElement | null {
+  const runId = props.runId;
+  const txHash = props.txHash;
+  const explorerUrl = props.explorerUrl;
   if (!runId && !txHash) return null;
   return (
     <div
@@ -53,7 +53,13 @@ function KeeperHubBadge({
           run {runId.length > 16 ? `${runId.slice(0, 10)}…${runId.slice(-4)}` : runId}
         </code>
       ) : null}
-      {txHash ? <ProofLink txHash={txHash} explorerUrl={explorerUrl} /> : null}
+      {txHash ? (
+        explorerUrl ? (
+          <ProofLink txHash={txHash} explorerUrl={explorerUrl} />
+        ) : (
+          <ProofLink txHash={txHash} />
+        )
+      ) : null}
     </div>
   );
 }
@@ -107,7 +113,19 @@ export function ActivityPage(): ReactElement {
       const executedViaKeeperHub =
         details?.executedViaKeeperHub === true || Boolean(keeperHubRunId);
 
-      return {
+      const entry: {
+        id: string;
+        actionType: string;
+        entityType: string | null;
+        entityId: string | null;
+        status: string;
+        message: string | null;
+        createdAt: string;
+        keeperHubRunId?: string;
+        txHash?: string;
+        explorerUrl?: string;
+        executedViaKeeperHub: boolean;
+      } = {
         id: log.id,
         actionType: log.actionType,
         entityType: log.entityType,
@@ -115,11 +133,12 @@ export function ActivityPage(): ReactElement {
         status: log.status,
         message: log.message,
         createdAt: log.createdAt,
-        keeperHubRunId,
-        txHash,
-        explorerUrl,
         executedViaKeeperHub,
       };
+      if (keeperHubRunId) entry.keeperHubRunId = keeperHubRunId;
+      if (txHash) entry.txHash = txHash;
+      if (explorerUrl) entry.explorerUrl = explorerUrl;
+      return entry;
     });
   }, [data]);
 
@@ -258,7 +277,12 @@ export function ActivityPage(): ReactElement {
                     className="rounded-2xl border border-border bg-frame p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                   >
                     <div className="min-w-0">
-                      <p className="font-medium text-foreground truncate">{digest.title}</p>
+                      <Link
+                        to={`/digests/${digest.id}`}
+                        className="font-medium text-foreground hover:text-accent transition-colors truncate block"
+                      >
+                        {digest.title}
+                      </Link>
                       <p className="text-xs text-muted-foreground mt-1">
                         Report date {digest.reportDate}
                         {digest.publishedAt ? (
@@ -282,19 +306,23 @@ export function ActivityPage(): ReactElement {
                           }
                         />
                         {digest.registryTxHash && !digest.keeperHubRunId ? (
-                          <ProofLink
-                            txHash={digest.registryTxHash}
-                            explorerUrl={digest.explorerUrl}
-                          />
+                          digest.explorerUrl ? (
+                            <ProofLink
+                              txHash={digest.registryTxHash}
+                              explorerUrl={digest.explorerUrl}
+                            />
+                          ) : (
+                            <ProofLink txHash={digest.registryTxHash} />
+                          )
                         ) : null}
                         {!digest.registryTxHash ? (
                           <span className="text-xs text-muted-foreground">No tx yet</span>
                         ) : null}
                       </div>
                       <KeeperHubBadge
-                        runId={digest.keeperHubRunId}
-                        txHash={digest.registryTxHash}
-                        explorerUrl={digest.explorerUrl}
+                        {...(digest.keeperHubRunId ? { runId: digest.keeperHubRunId } : {})}
+                        {...(digest.registryTxHash ? { txHash: digest.registryTxHash } : {})}
+                        {...(digest.explorerUrl ? { explorerUrl: digest.explorerUrl } : {})}
                       />
                     </div>
                   </article>
@@ -322,7 +350,12 @@ export function ActivityPage(): ReactElement {
                     className="rounded-2xl border border-border bg-frame p-4"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                      <h3 className="font-medium text-foreground">{alert.title}</h3>
+                      <Link
+                        to={`/alerts/${alert.id}`}
+                        className="font-medium text-foreground hover:text-accent transition-colors"
+                      >
+                        {alert.title}
+                      </Link>
                       <div className="flex items-center gap-2">
                         <StatusBadge label={alert.deliveryStatus} variant="info" />
                         <TimestampDisplay timestamp={alert.publishedAt} />
@@ -343,10 +376,16 @@ export function ActivityPage(): ReactElement {
                         </p>
                       ) : null}
                       <KeeperHubBadge
-                        runId={alert.keeperHubRunId}
-                        txHash={alert.registryTxHash}
-                        explorerUrl={alert.explorerUrl}
+                        {...(alert.keeperHubRunId ? { runId: alert.keeperHubRunId } : {})}
+                        {...(alert.registryTxHash ? { txHash: alert.registryTxHash } : {})}
+                        {...(alert.explorerUrl ? { explorerUrl: alert.explorerUrl } : {})}
                       />
+                      <Link
+                        to={`/alerts/${alert.id}`}
+                        className="text-xs font-semibold text-accent hover:underline ml-auto"
+                      >
+                        View alert →
+                      </Link>
                     </div>
                   </article>
                 ))}

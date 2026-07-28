@@ -5,32 +5,24 @@ export interface AlertFiltersState {
   chainId: string;
 }
 
+export interface AlertFilterOption {
+  value: string;
+  label: string;
+}
+
 interface AlertFiltersProps {
   filters: AlertFiltersState;
   onChange: (filters: AlertFiltersState) => void;
+  eventTypeOptions: AlertFilterOption[];
+  chainOptions: AlertFilterOption[];
   "data-testid"?: string;
 }
-
-const EVENT_TYPES = [
-  { value: "", label: "All Events" },
-  { value: "large_swap", label: "Large Swaps" },
-  { value: "liquidation", label: "Liquidations" },
-  { value: "gas_spike", label: "Gas Spikes" },
-  { value: "volume_anomaly", label: "Volume Anomalies" },
-  { value: "contract_deployment", label: "Contract Deployments" },
-] as const;
-
-const CHAINS = [
-  { value: "", label: "All Chains" },
-  { value: "1", label: "Ethereum" },
-  { value: "137", label: "Polygon" },
-  { value: "56", label: "BSC" },
-  { value: "42161", label: "Arbitrum" },
-] as const;
 
 export function AlertFilters({
   filters,
   onChange,
+  eventTypeOptions,
+  chainOptions,
   "data-testid": dataTestId = "alert-filters",
 }: AlertFiltersProps): React.ReactElement {
   return (
@@ -52,7 +44,10 @@ export function AlertFilters({
           onChange={(e) => onChange({ ...filters, eventType: e.target.value })}
           className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-accent"
         >
-          {EVENT_TYPES.map((type) => (
+          <option value="" className="bg-frame text-foreground">
+            All Events
+          </option>
+          {eventTypeOptions.map((type) => (
             <option key={type.value} value={type.value} className="bg-frame text-foreground">
               {type.label}
             </option>
@@ -74,7 +69,10 @@ export function AlertFilters({
           onChange={(e) => onChange({ ...filters, chainId: e.target.value })}
           className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-accent"
         >
-          {CHAINS.map((chain) => (
+          <option value="" className="bg-frame text-foreground">
+            All Chains
+          </option>
+          {chainOptions.map((chain) => (
             <option key={chain.value} value={chain.value} className="bg-frame text-foreground">
               {chain.label}
             </option>

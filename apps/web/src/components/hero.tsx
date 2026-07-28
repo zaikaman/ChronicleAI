@@ -1,8 +1,11 @@
 import { LogoLoop, type LogoItem } from "./logo-loop";
 import { ArrowDownRight, Activity, ShieldCheck, Rss, Check } from "lucide-react";
 import { motion, useMotionValue, useSpring } from "motion/react";
-import { useRef, type ReactNode, type MouseEvent } from "react";
+import { useMemo, useRef, type ReactNode, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
+import { useAgentActivity } from "../features/activity/use-agent-activity.ts";
+import { useAlerts } from "../features/alerts/use-alerts.ts";
+import { truncateHash } from "../lib/explorer.ts";
 
 const ease = [0.23, 1, 0.32, 1] as const;
 
@@ -29,15 +32,54 @@ const logos: LogoItem[] = [
 
 const PARALLAX_INTENSITY = 20;
 
+const CHAIN_LABELS: Record<number, string> = {
+  1: "Ethereum",
+  8453: "Base",
+  84532: "Base Sepolia",
+  11155111: "Sepolia",
+};
+
 function HeroDashboard(): ReactNode {
-  const signals = [
-    { name: "Uniswap V3 Swap", details: "$2.4M volume threshold crossed", tag: "USDC/ETH" },
-    { name: "Aave V3 Liquidation", details: "Health factor breached. Liquidation: $450k", tag: "AAVE-EVM" },
-    { name: "Base Sepolia Gas Spike", details: "Gas price spike to 182 gwei", tag: "Network" },
-  ];
+  const { alerts, isLoading: alertsLoading } = useAlerts(5);
+  const { data: activity, isLoading: activityLoading } = useAgentActivity();
+
+  const isLoading = alertsLoading || activityLoading;
+
+  const signals = useMemo(() => {
+    return alerts.slice(0, 3).map((alert) => {
+      const chainLabel =
+        typeof alert.chainId === "number"
+          ? (CHAIN_LABELS[alert.chainId] ?? `Chain ${alert.chainId}`)
+          : undefined;
+      const tag =
+        chainLabel ??
+        (alert.protocol ? alert.protocol : alert.confidence ? `${alert.confidence} conf` : "Live");
+
+      return {
+        id: alert.id,
+        name: alert.title,
+        details:
+          alert.summary.length > 90 ? `${alert.summary.slice(0, 90)}…` : alert.summary,
+        tag,
+        href: `/alerts/${alert.id}`,
+      };
+    });
+  }, [alerts]);
+
+  const settledPayments = useMemo(
+    () => activity?.payments.filter((p) => p.status === "settled").length ?? 0,
+    [activity],
+  );
+
+  const latestAnchoredDigest = useMemo(() => {
+    if (!activity?.digests?.length) return null;
+    return (
+      activity.digests.find((d) => Boolean(d.registryTxHash)) ?? activity.digests[0] ?? null
+    );
+  }, [activity]);
 
   return (
-    <div className="aspect-[16/9] w-full bg-neutral-950 p-5 text-white sm:p-8">
+    <div className="aspect-[16/9] w-full bg-neutral-950 p-5 text-white sm:p-8" data-testid="hero-live-dashboard">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">ChronicleAI Agent</p>
@@ -51,19 +93,33 @@ function HeroDashboard(): ReactNode {
       <div className="grid gap-4 sm:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="mb-4 flex items-center justify-between">
-            <span className="text-sm text-white/60">Monitored signals</span>
+            <span className="text-sm text-white/60">
+              {isLoading ? "Loading signals…" : "Latest published alerts"}
+            </span>
             <span className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-black">KeeperHub</span>
           </div>
           <div className="space-y-3">
-            {signals.map((s) => (
-              <div key={s.name} className="flex items-center justify-between rounded-xl bg-black/30 p-3">
-                <div>
-                  <p className="text-sm font-medium">{s.name}</p>
-                  <p className="mt-1 text-xs text-white/45">{s.details} · target.{s.tag.toLowerCase()}()</p>
-                </div>
-                <span className="font-mono text-xs font-semibold text-accent bg-accent/10 px-2 py-1 rounded-lg">active</span>
+            {signals.length === 0 && !isLoading ? (
+              <div className="rounded-xl bg-black/30 p-4 text-sm text-white/50">
+                No published alerts yet. Signals appear here when ChronicleAI detects significant on-chain events.
               </div>
-            ))}
+            ) : (
+              signals.map((s) => (
+                <Link
+                  key={s.id}
+                  to={s.href}
+                  className="flex items-center justify-between rounded-xl bg-black/30 p-3 hover:bg-black/45 transition-colors"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-sm font-medium truncate">{s.name}</p>
+                    <p className="mt-1 text-xs text-white/45 line-clamp-2">{s.details}</p>
+                  </div>
+                  <span className="font-mono text-xs font-semibold text-accent bg-accent/10 px-2 py-1 rounded-lg flex-shrink-0">
+                    {s.tag}
+                  </span>
+                </Link>
+              ))
+            )}
           </div>
         </div>
 
@@ -71,19 +127,46 @@ function HeroDashboard(): ReactNode {
           <div className="rounded-2xl bg-accent p-4 text-black">
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Rss className="h-4 w-4" />
-              Micropayments processed
+              Settled micropayments
             </div>
-            <p className="mt-4 text-5xl font-semibold tracking-tight">1,482</p>
-            <p className="mt-2 text-sm text-black/60">Settled via x402 & MPP. Operating funds secured.</p>
+            <p className="mt-4 text-5xl font-semibold tracking-tight" data-testid="hero-settled-payments">
+              {isLoading ? "—" : settledPayments.toLocaleString()}
+            </p>
+            <p className="mt-2 text-sm text-black/60">
+              From live x402 &amp; MPP settlements recorded by the agent.
+            </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
               <ShieldCheck className="h-4 w-4 text-accent" />
-              On-Chain Anchor
+              On-chain anchor
             </div>
-            <p className="text-sm leading-relaxed text-white/60 flex items-center gap-1">
-              Digest #482 &rarr; Anchored <Check className="h-3.5 w-3.5 text-accent inline-block" /> Block #6,482,910
-            </p>
+            {latestAnchoredDigest ? (
+              <Link
+                to={`/digests/${latestAnchoredDigest.id}`}
+                className="text-sm leading-relaxed text-white/70 hover:text-white transition-colors flex flex-col gap-1"
+              >
+                <span className="flex items-center gap-1.5 font-medium text-white">
+                  {latestAnchoredDigest.title.length > 48
+                    ? `${latestAnchoredDigest.title.slice(0, 48)}…`
+                    : latestAnchoredDigest.title}
+                  {latestAnchoredDigest.registryTxHash ? (
+                    <Check className="h-3.5 w-3.5 text-accent inline-block" />
+                  ) : null}
+                </span>
+                <span className="font-mono text-xs text-white/45">
+                  {latestAnchoredDigest.registryTxHash
+                    ? truncateHash(latestAnchoredDigest.registryTxHash)
+                    : "Awaiting registry receipt"}
+                </span>
+              </Link>
+            ) : (
+              <p className="text-sm leading-relaxed text-white/50">
+                {isLoading
+                  ? "Loading digest anchors…"
+                  : "No digests anchored yet. Daily digests appear here after publication."}
+              </p>
+            )}
           </div>
         </div>
       </div>

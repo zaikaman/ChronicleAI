@@ -20,6 +20,10 @@ function formatAlertResponse(alert: PublicAlertRow): Record<string, unknown> {
     sourceEventHash: alert.source_event_hash ?? undefined,
     contentUri: alert.content_uri ?? undefined,
     explorerUrl: alert.explorer_url ?? undefined,
+    keeperHubRunId: alert.keeper_hub_run_id ?? undefined,
+    eventType: alert.event_type ?? undefined,
+    chainId: alert.chain_id ?? undefined,
+    protocol: alert.protocol ?? undefined,
   };
 }
 

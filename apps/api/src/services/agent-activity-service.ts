@@ -2,7 +2,11 @@
 // Aggregates public dashboard data under one typed response
 
 import type { AgentActivityRepository } from "@chronicleai/db";
-import type { AgentActivityResponse, TreasuryStatus } from "@chronicleai/schemas";
+import type {
+  AgentActivityResponse,
+  PublicAlertResponse,
+  TreasuryStatus,
+} from "@chronicleai/schemas";
 
 export interface AgentActivityService {
   getActivity(): Promise<{
@@ -36,18 +40,13 @@ export function createAgentActivityService(
           status: (latestSnapshot?.status ?? "unknown") as TreasuryStatus,
         };
 
-        const alerts = data.recentAlerts.map((a) => {
-          const alert: any = {
+        const alerts: PublicAlertResponse[] = data.recentAlerts.map((a) => {
+          const alert: PublicAlertResponse = {
             id: a.id,
             title: a.title,
             summary: a.summary,
             sourceReferences: a.source_references,
-            deliveryStatus: a.delivery_status as
-              | "draft"
-              | "queued"
-              | "published"
-              | "partial_failure"
-              | "failed",
+            deliveryStatus: a.delivery_status as PublicAlertResponse["deliveryStatus"],
             publishedAt: a.published_at ?? a.created_at,
           };
           if (a.confidence) {
@@ -59,6 +58,9 @@ export function createAgentActivityService(
           if (a.registry_tx_hash) alert.registryTxHash = a.registry_tx_hash;
           if (a.keeper_hub_run_id) alert.keeperHubRunId = a.keeper_hub_run_id;
           if (a.explorer_url) alert.explorerUrl = a.explorer_url;
+          if (a.event_type) alert.eventType = a.event_type;
+          if (typeof a.chain_id === "number") alert.chainId = a.chain_id;
+          if (a.protocol) alert.protocol = a.protocol;
           return alert;
         });
 

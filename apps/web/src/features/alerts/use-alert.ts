@@ -9,6 +9,38 @@ export type AlertDetailState =
   | { status: "error"; error: string }
   | { status: "success"; data: PublicAlertResponse };
 
+function mapAlert(raw: Record<string, unknown>): PublicAlertResponse {
+  const alert: PublicAlertResponse = {
+    id: String(raw.id),
+    title: String(raw.title),
+    summary: String(raw.summary),
+    sourceReferences: Array.isArray(raw.sourceReferences)
+      ? (raw.sourceReferences as string[])
+      : [],
+    deliveryStatus: String(raw.deliveryStatus) as PublicAlertResponse["deliveryStatus"],
+    publishedAt: String(raw.publishedAt ?? ""),
+  };
+
+  if (typeof raw.confidence === "string") {
+    alert.confidence = raw.confidence as NonNullable<PublicAlertResponse["confidence"]>;
+  }
+  if (typeof raw.generationProvider === "string") {
+    alert.generationProvider = raw.generationProvider;
+  }
+  if (typeof raw.registryTxHash === "string") alert.registryTxHash = raw.registryTxHash;
+  if (typeof raw.sourceEventHash === "string") alert.sourceEventHash = raw.sourceEventHash;
+  if (typeof raw.contentUri === "string") alert.contentUri = raw.contentUri;
+  if (typeof raw.explorerUrl === "string") alert.explorerUrl = raw.explorerUrl;
+  if (typeof raw.keeperHubRunId === "string") alert.keeperHubRunId = raw.keeperHubRunId;
+  if (typeof raw.eventType === "string") {
+    alert.eventType = raw.eventType as NonNullable<PublicAlertResponse["eventType"]>;
+  }
+  if (typeof raw.chainId === "number") alert.chainId = raw.chainId;
+  if (typeof raw.protocol === "string") alert.protocol = raw.protocol;
+
+  return alert;
+}
+
 export function useAlert(alertId: string | undefined): {
   state: AlertDetailState;
   refetch: () => void;
@@ -38,28 +70,7 @@ export function useAlert(alertId: string | undefined): {
       }
 
       const raw = (await response.json()) as Record<string, unknown>;
-      const data: PublicAlertResponse = {
-        id: String(raw.id),
-        title: String(raw.title),
-        summary: String(raw.summary),
-        sourceReferences: Array.isArray(raw.sourceReferences)
-          ? (raw.sourceReferences as string[])
-          : [],
-        deliveryStatus: String(raw.deliveryStatus) as PublicAlertResponse["deliveryStatus"],
-        publishedAt: String(raw.publishedAt ?? ""),
-        confidence: raw.confidence
-          ? (String(raw.confidence) as PublicAlertResponse["confidence"])
-          : undefined,
-        generationProvider: raw.generationProvider
-          ? String(raw.generationProvider)
-          : undefined,
-        registryTxHash: raw.registryTxHash ? String(raw.registryTxHash) : undefined,
-        sourceEventHash: raw.sourceEventHash ? String(raw.sourceEventHash) : undefined,
-        contentUri: raw.contentUri ? String(raw.contentUri) : undefined,
-        explorerUrl: raw.explorerUrl ? String(raw.explorerUrl) : undefined,
-      };
-
-      setState({ status: "success", data });
+      setState({ status: "success", data: mapAlert(raw) });
     } catch (error) {
       setState({
         status: "error",

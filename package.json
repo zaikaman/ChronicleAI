@@ -14,8 +14,6 @@
     "fix": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:migrate": "echo 'TODO: Supabase migration command'",
-    "db:seed": "echo 'TODO: Supabase seed command'",
     "db:types": "supabase gen types typescript --project-id luhrtrmizufucvrxnzbs > packages/db/src/database.types.ts"
   },
   "devDependencies": {

@@ -25,6 +25,10 @@ export interface PublicAlertResponse {
   contentUri?: string;
   keeperHubRunId?: string;
   explorerUrl?: string;
+  /** From joined monitored_events when available */
+  eventType?: EventType;
+  chainId?: number;
+  protocol?: string;
 }
 
 // ── LLM Generation Attempt (response) ───────────────────

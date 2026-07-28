@@ -49,7 +49,7 @@ export function AlertDetailPage(): ReactElement {
           ← All alerts
         </Link>
       </div>
-      <AlertCard alert={state.data} data-testid="alert-detail-card" />
+      <AlertCard alert={state.data} linkable={false} data-testid="alert-detail-card" />
       {state.data.contentUri && (
         <div className="mt-6 text-center">
           <span className="inline-flex items-center gap-2 px-4 py-2.5 bg-muted/30 border border-border text-muted-foreground rounded-xl text-sm font-mono break-all">

@@ -77,6 +77,10 @@ export interface PublicAlertRow {
   explorer_url: string | null;
   created_at: string;
   updated_at: string;
+  /** Populated when list/find joins monitored_events */
+  event_type?: EventType | null;
+  chain_id?: number | null;
+  protocol?: string | null;
 }
 
 export interface PublicAlertInsert {

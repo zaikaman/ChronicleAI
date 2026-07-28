@@ -4,6 +4,20 @@ import { AlertCard } from "./AlertCard.tsx";
 import { AlertFilters, type AlertFiltersState } from "./AlertFilters.tsx";
 import { useAlerts } from "./use-alerts.ts";
 
+const CHAIN_LABELS: Record<number, string> = {
+  1: "Ethereum",
+  8453: "Base",
+  84532: "Base Sepolia",
+  11155111: "Sepolia",
+};
+
+function formatEventTypeLabel(eventType: string): string {
+  return eventType
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function AlertsPage(): ReactElement {
   const { alerts, isLoading, error, refetch } = useAlerts(100);
   const [filters, setFilters] = useState<AlertFiltersState>({
@@ -11,16 +25,40 @@ export function AlertsPage(): ReactElement {
     chainId: "",
   });
 
+  const eventTypeOptions = useMemo(() => {
+    const types = new Set<string>();
+    for (const alert of alerts) {
+      if (alert.eventType) types.add(alert.eventType);
+    }
+    return [...types]
+      .sort()
+      .map((value) => ({ value, label: formatEventTypeLabel(value) }));
+  }, [alerts]);
+
+  const chainOptions = useMemo(() => {
+    const chains = new Set<number>();
+    for (const alert of alerts) {
+      if (typeof alert.chainId === "number") chains.add(alert.chainId);
+    }
+    return [...chains]
+      .sort((a, b) => a - b)
+      .map((id) => ({
+        value: String(id),
+        label: CHAIN_LABELS[id] ?? `Chain ${id}`,
+      }));
+  }, [alerts]);
+
   const filteredAlerts = useMemo(() => {
-    if (!filters.eventType) return alerts;
-    return alerts.filter((a) => {
-      const titleLower = a.title.toLowerCase();
-      const typeLabel = filters.eventType.replace(/_/g, " ");
-      return (
-        titleLower.includes(typeLabel) || titleLower.includes(filters.eventType.replace(/_/g, " "))
-      );
+    return alerts.filter((alert) => {
+      if (filters.eventType && alert.eventType !== filters.eventType) {
+        return false;
+      }
+      if (filters.chainId && String(alert.chainId ?? "") !== filters.chainId) {
+        return false;
+      }
+      return true;
     });
-  }, [alerts, filters.eventType]);
+  }, [alerts, filters.eventType, filters.chainId]);
 
   if (isLoading) {
     return <LoadingState message="Loading alerts..." data-testid="alerts-loading" />;
@@ -52,20 +90,7 @@ export function AlertsPage(): ReactElement {
     );
   }
 
-  if (filters.eventType && filteredAlerts.length === 0) {
-    return (
-      <div data-testid="alerts-filtered-empty" className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-6" style={{ fontFamily: "var(--font-space-grotesk)" }}>
-          Public Alerts
-        </h1>
-        <AlertFilters filters={filters} onChange={setFilters} />
-        <EmptyState
-          title="No matching alerts"
-          description={`No alerts found for event type: ${filters.eventType}. Try a different filter.`}
-        />
-      </div>
-    );
-  }
+  const hasActiveFilters = Boolean(filters.eventType || filters.chainId);
 
   return (
     <div data-testid="alerts-list" className="max-w-4xl mx-auto">
@@ -78,13 +103,28 @@ export function AlertsPage(): ReactElement {
         </span>
       </div>
 
-      <AlertFilters filters={filters} onChange={setFilters} />
+      {(eventTypeOptions.length > 0 || chainOptions.length > 0) && (
+        <AlertFilters
+          filters={filters}
+          onChange={setFilters}
+          eventTypeOptions={eventTypeOptions}
+          chainOptions={chainOptions}
+        />
+      )}
 
-      <div className="flex flex-col gap-4 mt-6">
-        {filteredAlerts.map((alert) => (
-          <AlertCard key={alert.id} alert={alert} data-testid={`alert-${alert.id}`} />
-        ))}
-      </div>
+      {hasActiveFilters && filteredAlerts.length === 0 ? (
+        <EmptyState
+          title="No matching alerts"
+          description="No alerts match the selected filters. Try a different event type or chain."
+          data-testid="alerts-filtered-empty"
+        />
+      ) : (
+        <div className="flex flex-col gap-4 mt-6">
+          {filteredAlerts.map((alert) => (
+            <AlertCard key={alert.id} alert={alert} data-testid={`alert-${alert.id}`} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

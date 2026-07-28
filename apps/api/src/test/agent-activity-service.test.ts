@@ -69,6 +69,7 @@ describe("AgentActivityService", () => {
           settlement_reference: "settlement-001",
           requested_at: new Date().toISOString(),
           settled_at: new Date().toISOString(),
+          expires_at: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },

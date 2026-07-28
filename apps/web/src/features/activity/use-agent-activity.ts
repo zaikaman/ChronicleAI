@@ -15,6 +15,9 @@ export interface AgentActivityData {
     registryTxHash?: string;
     keeperHubRunId?: string;
     explorerUrl?: string;
+    eventType?: string;
+    chainId?: number;
+    protocol?: string;
   }>;
   digests: Array<{
     id: string;

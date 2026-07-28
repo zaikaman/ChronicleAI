@@ -8,7 +8,38 @@ import {
   expectRow,
   mapPostgrestError,
 } from "./repository-utils.ts";
+import type { EventType } from "@chronicleai/schemas";
 import type { PublicAlertInsert, PublicAlertRow, PublicAlertUpdate } from "./types.ts";
+
+/** Select alert columns plus joined monitored event metadata for public feeds. */
+const ALERT_WITH_EVENT_SELECT = `
+  *,
+  monitored_events (
+    event_type,
+    chain_id,
+    protocol
+  )
+`;
+
+interface MonitoredEventJoin {
+  event_type?: string | null;
+  chain_id?: number | null;
+  protocol?: string | null;
+}
+
+function mapAlertWithEvent(row: Record<string, unknown>): PublicAlertRow {
+  const joined = row.monitored_events as MonitoredEventJoin | MonitoredEventJoin[] | null | undefined;
+  const event = Array.isArray(joined) ? joined[0] : joined;
+
+  const { monitored_events: _ignored, ...rest } = row;
+
+  return {
+    ...(rest as unknown as PublicAlertRow),
+    event_type: (event?.event_type as EventType | null | undefined) ?? null,
+    chain_id: typeof event?.chain_id === "number" ? event.chain_id : null,
+    protocol: event?.protocol ?? null,
+  };
+}
 
 export interface PublicAlertRepository {
   create(data: PublicAlertInsert): Promise<Result<PublicAlertRow>>;
@@ -55,13 +86,16 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
     },
 
     async findById(id) {
-      const { data: rows, error } = await table().select("*").eq("id", id);
+      const { data: rows, error } = await table()
+        .select(ALERT_WITH_EVENT_SELECT)
+        .eq("id", id);
 
       if (error) {
         return failure(mapPostgrestError(error));
       }
 
-      return expectRow(rows as unknown as PublicAlertRow[], "PublicAlert", id);
+      const mapped = (rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>));
+      return expectRow(mapped, "PublicAlert", id);
     },
 
     async findByDedupeKey(dedupeKey) {
@@ -78,7 +112,7 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       const limit = Math.min(100, Math.max(1, limitParam));
 
       const { data: rows, error } = await table()
-        .select("*")
+        .select(ALERT_WITH_EVENT_SELECT)
         .order("published_at", { ascending: false })
         .limit(limit);
 
@@ -86,7 +120,9 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
         return failure(mapPostgrestError(error));
       }
 
-      return success(rows as unknown as PublicAlertRow[]);
+      return success(
+        (rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>)),
+      );
     },
 
     async updateDeliveryStatus(id, status, publishedAt?) {

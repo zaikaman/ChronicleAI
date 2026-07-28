@@ -38,11 +38,36 @@ export function createAgentActivityRepository(supabase: SupabaseClient): AgentAc
       try {
         const { data: alerts, error: alertsError } = await supabase
           .from("public_alerts")
-          .select("*")
+          .select(
+            `
+            *,
+            monitored_events (
+              event_type,
+              chain_id,
+              protocol
+            )
+          `,
+          )
           .order("created_at", { ascending: false })
           .limit(limit);
 
         if (alertsError) return failure(mapPostgrestError(alertsError));
+
+        const mappedAlerts = ((alerts ?? []) as Array<Record<string, unknown>>).map((row) => {
+          const joined = row.monitored_events as
+            | { event_type?: string; chain_id?: number; protocol?: string | null }
+            | Array<{ event_type?: string; chain_id?: number; protocol?: string | null }>
+            | null
+            | undefined;
+          const event = Array.isArray(joined) ? joined[0] : joined;
+          const { monitored_events: _ignored, ...rest } = row;
+          return {
+            ...(rest as unknown as PublicAlertRow),
+            event_type: event?.event_type ?? null,
+            chain_id: typeof event?.chain_id === "number" ? event.chain_id : null,
+            protocol: event?.protocol ?? null,
+          } as PublicAlertRow;
+        });
 
         const { data: digests, error: digestsError } = await supabase
           .from("daily_digests")
@@ -106,7 +131,7 @@ export function createAgentActivityRepository(supabase: SupabaseClient): AgentAc
         if (qualifiedError) return failure(mapPostgrestError(qualifiedError));
 
         return success({
-          recentAlerts: (alerts ?? []) as unknown as PublicAlertRow[],
+          recentAlerts: mappedAlerts,
           recentDigests: (digests ?? []) as unknown as DailyDigestRow[],
           recentPayments: (payments ?? []) as unknown as PaymentRecordRow[],
           treasurySnapshots: (snapshots ?? []) as unknown as TreasurySnapshotRow[],
