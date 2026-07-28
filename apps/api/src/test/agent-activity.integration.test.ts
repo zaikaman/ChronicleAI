@@ -2,6 +2,7 @@
 // Tests treasury check webhook, activity data, and revenue routing
 
 import type {
+  AffiliateRepository,
   AgentActivityRepository,
   ExecutionLogRepository,
   PaymentRecordRepository,
@@ -161,7 +162,20 @@ describe("Agent Activity Integration", () => {
       expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
       listByPremiumItem: vi.fn(),
       list: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
+      listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
       findSettledByPayer: vi.fn(),
+    };
+
+    const affiliateRepo: AffiliateRepository = {
+      findById: vi.fn(),
+      findByWallet: vi.fn(),
+      findByReferralCode: vi.fn(),
+      findApprovedByWalletOrCode: vi.fn(),
+      listApprovedWallets: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
+      listApproved: vi.fn(),
+      register: vi.fn(),
+      update: vi.fn(),
+      setStatus: vi.fn(),
     };
 
     const treasuryRepo: TreasurySnapshotRepository = {
@@ -264,12 +278,14 @@ describe("Agent Activity Integration", () => {
         paymentRepo,
         payoutRepo,
         execLogRepo,
+        affiliateRepo,
         treasuryService,
         registryService: mockRegistryService,
         web3Client: mockWeb3Client as never,
       },
       {
         creatorRecoveryWallet: "0x90F8bf6A479f320ced073E570619A864489a3000",
+        referralRewardShare: 0.2,
         referralRewardCap: 1000,
         maxPayoutShare: 0.5,
         routingIntervalMs: 99999999,

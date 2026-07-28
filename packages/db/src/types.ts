@@ -1,6 +1,7 @@
 // TypeScript database row, insert, and update types matching migration column names
 
 import type {
+  AffiliateStatus,
   AlertDeliveryStatus,
   Confidence,
   DigestPublicationStatus,
@@ -74,6 +75,9 @@ export interface PublicAlertRow {
   registry_tx_hash: string | null;
   source_event_hash: string | null;
   content_uri: string | null;
+  content_hash: string | null;
+  gas_used: string | null;
+  gas_used_wei: string | null;
   keeper_hub_run_id: string | null;
   explorer_url: string | null;
   created_at: string;
@@ -100,6 +104,9 @@ export interface PublicAlertInsert {
   registry_tx_hash?: string | null;
   source_event_hash?: string | null;
   content_uri?: string | null;
+  content_hash?: string | null;
+  gas_used?: string | null;
+  gas_used_wei?: string | null;
   keeper_hub_run_id?: string | null;
   explorer_url?: string | null;
 }
@@ -123,6 +130,9 @@ export interface DailyDigestRow {
   registry_tx_hash: string | null;
   source_event_root: string | null;
   content_uri: string | null;
+  content_hash: string | null;
+  gas_used: string | null;
+  gas_used_wei: string | null;
   keeper_hub_run_id: string | null;
   explorer_url: string | null;
   created_at: string;
@@ -144,6 +154,9 @@ export interface DailyDigestInsert {
   registry_tx_hash?: string | null;
   source_event_root?: string | null;
   content_uri?: string | null;
+  content_hash?: string | null;
+  gas_used?: string | null;
+  gas_used_wei?: string | null;
   keeper_hub_run_id?: string | null;
   explorer_url?: string | null;
 }
@@ -279,6 +292,11 @@ export interface PaymentRecordRow {
   premium_item_id: string;
   payment_route: PaymentRoute;
   payer_reference: string | null;
+  /**
+   * Optional affiliate / referral partner wallet from subscription or payment intent.
+   * Distinct from payer_reference — never the subscriber who paid.
+   */
+  referral_address: string | null;
   amount_requested: number | null;
   amount_settled: number | null;
   currency: string | null;
@@ -297,6 +315,7 @@ export interface PaymentRecordInsert {
   premium_item_id: string;
   payment_route: PaymentRoute;
   payer_reference?: string | null;
+  referral_address?: string | null;
   amount_requested?: number | null;
   amount_settled?: number | null;
   currency?: string | null;
@@ -490,3 +509,31 @@ export interface NewsletterSubscriptionInsert {
 }
 
 export type NewsletterSubscriptionUpdate = Partial<NewsletterSubscriptionInsert>;
+
+// ── Referral Affiliates ─────────────────────────────────
+export interface AffiliateRow {
+  id: string;
+  wallet_address: string;
+  display_name: string | null;
+  referral_code: string | null;
+  status: AffiliateStatus;
+  metadata: Record<string, unknown>;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AffiliateInsert {
+  wallet_address: string;
+  display_name?: string | null;
+  referral_code?: string | null;
+  status?: AffiliateStatus;
+  metadata?: Record<string, unknown>;
+  approved_at?: string | null;
+}
+
+export type AffiliateUpdate = Partial<
+  Omit<AffiliateInsert, "wallet_address">
+> & {
+  wallet_address?: string;
+};

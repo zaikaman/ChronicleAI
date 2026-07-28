@@ -47,6 +47,15 @@ export interface ServerEnv {
   /** Creator recovery payout recipient (required for revenue routing). */
   creatorRecoveryWallet: string | undefined;
   /**
+   * Max fraction of distributable revenue for affiliates combined (0–1). Default 0.2.
+   * Eligible wallets come from the `affiliates` product registry (not env).
+   */
+  referralRewardShare: number;
+  /**
+   * Absolute currency-unit cap on total affiliate rewards per routing period. Default 1000.
+   */
+  referralRewardCap: number;
+  /**
    * Converts currency-unit payout amounts to native ETH for transfers.
    * Defaults to 1e-6 when unset (1_000 units → 0.001 ETH).
    */
@@ -203,6 +212,34 @@ function parseEvmAddressEnv(name: string, fallback: string): string {
   return address;
 }
 
+function parseUnitIntervalEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error(
+      `Invalid ${name}: expected a number in [0, 1], got ${JSON.stringify(raw)}`,
+    );
+  }
+  return parsed;
+}
+
+function parseNonNegativeNumberEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(
+      `Invalid ${name}: expected a non-negative number, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return parsed;
+}
+
 function parseParaEnvironment(raw: string | undefined): "BETA" | "PROD" | "SANDBOX" {
   const value = (raw ?? "BETA").trim().toUpperCase();
   if (value === "PROD" || value === "PRODUCTION") {
@@ -238,6 +275,8 @@ export function loadServerEnv(): ServerEnv {
     treasuryWalletAddress: optionalEnv("TREASURY_WALLET_ADDRESS"),
     treasuryWalletPrivateKey: optionalEnv("TREASURY_WALLET_PRIVATE_KEY"),
     creatorRecoveryWallet: optionalEnv("CREATOR_RECOVERY_WALLET"),
+    referralRewardShare: parseUnitIntervalEnv("REFERRAL_REWARD_SHARE", 0.2),
+    referralRewardCap: parseNonNegativeNumberEnv("REFERRAL_REWARD_CAP", 1000),
     revenueEthPerCurrencyUnit: Number(
       optionalEnv("REVENUE_ETH_PER_CURRENCY_UNIT", "0.000001"),
     ),

@@ -99,10 +99,8 @@ describe("X402PaymentAdapter", () => {
       expect(result.currency).toBe("USDC");
       expect(result.expiresAt).toBeTruthy();
       expect(result.challengeData).toHaveProperty("expectedAmount", 5);
-      expect(result.challengeData).toHaveProperty(
-        "referralAddress",
-        "0x1111111111111111111111111111111111111111",
-      );
+      // Payer is not a referral partner — referralAddress only from intent metadata.
+      expect(result.challengeData.referralAddress).toBeNull();
       expect((result.challengeData.message as { to: string }).to).toBe(TREASURY);
       expect(result.challengeData.network).toBe("eip155:84532");
       expect(result.challengeData.asset).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
@@ -137,6 +135,19 @@ describe("X402PaymentAdapter", () => {
       expect(result.challengeData.referralAddress).toBe(
         "0x2222222222222222222222222222222222222222",
       );
+    });
+
+    it("should accept top-level referralAddress without treating payer as affiliate", async () => {
+      const affiliate = "0x2222222222222222222222222222222222222222";
+      const result = await adapter.createChallenge({
+        premiumItemId: "premium-001",
+        amount: 5,
+        currency: "USDC",
+        payerReference: "0x1111111111111111111111111111111111111111",
+        referralAddress: affiliate,
+      });
+
+      expect(result.challengeData.referralAddress).toBe(affiliate.toLowerCase());
     });
 
     it("should use configured chainId and USDC address in EIP-712 domain", async () => {

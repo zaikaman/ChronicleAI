@@ -1,7 +1,11 @@
 // Payment Challenge Service
 // Handles route validation, pricing, challenge expiry, and record creation.
 
-import type { PaymentRecordRepository, PremiumIntelligenceItemRow } from "@chronicleai/db";
+import type {
+  AffiliateRepository,
+  PaymentRecordRepository,
+  PremiumIntelligenceItemRow,
+} from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
 import { PAYMENT_ROUTES } from "@chronicleai/schemas";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
@@ -15,13 +19,17 @@ export interface ChallengeServiceResult {
 export class PaymentChallengeService {
   private readonly paymentRecordRepo: PaymentRecordRepository;
   private readonly adapters: Map<PaymentRoute, PaymentAdapter>;
+  private readonly affiliateRepo: AffiliateRepository | null;
 
   constructor(params: {
     paymentRecordRepo: PaymentRecordRepository;
     adapters: Map<PaymentRoute, PaymentAdapter>;
+    /** When set, referralAddress must resolve to an approved affiliate. */
+    affiliateRepo?: AffiliateRepository | null;
   }) {
     this.paymentRecordRepo = params.paymentRecordRepo;
     this.adapters = params.adapters;
+    this.affiliateRepo = params.affiliateRepo ?? null;
   }
 
   /**
@@ -53,10 +61,29 @@ export class PaymentChallengeService {
     premiumItem: PremiumIntelligenceItemRow;
     paymentRoute: PaymentRoute;
     payerReference?: string | undefined;
+    /** Optional affiliate wallet from intent (not the payer). */
+    referralAddress?: string | null | undefined;
   }): Promise<ChallengeServiceResult> {
     const adapter = this.adapters.get(params.paymentRoute);
     if (!adapter) {
       throw new Error(`Unsupported payment route: ${params.paymentRoute}`);
+    }
+
+    let resolvedReferral: string | null = params.referralAddress?.trim()
+      ? params.referralAddress.trim()
+      : null;
+
+    if (resolvedReferral && this.affiliateRepo) {
+      const approved = await this.affiliateRepo.findApprovedByWalletOrCode(resolvedReferral);
+      if (!approved.ok) {
+        throw new Error(approved.error.message);
+      }
+      if (!approved.value) {
+        throw new Error(
+          "referralAddress must be an approved affiliate (register via POST /affiliates)",
+        );
+      }
+      resolvedReferral = approved.value.wallet_address;
     }
 
     // Generate challenge via adapter
@@ -65,13 +92,20 @@ export class PaymentChallengeService {
       amount: params.premiumItem.price_amount,
       currency: params.premiumItem.price_currency,
       payerReference: params.payerReference ?? undefined,
+      referralAddress: resolvedReferral,
     });
+
+    const challengeReferral =
+      typeof challenge.challengeData.referralAddress === "string"
+        ? challenge.challengeData.referralAddress
+        : resolvedReferral;
 
     // Record the challenge in the database (including expiry from the adapter)
     const result = await this.paymentRecordRepo.createChallenge({
       premium_item_id: params.premiumItem.id,
       payment_route: params.paymentRoute,
       payer_reference: params.payerReference ?? null,
+      referral_address: challengeReferral,
       amount_requested: params.premiumItem.price_amount,
       currency: params.premiumItem.price_currency,
       status: "challenge_issued",

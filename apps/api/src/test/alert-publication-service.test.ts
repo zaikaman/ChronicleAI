@@ -32,6 +32,9 @@ function baseAlert(overrides: Partial<PublicAlertRow> = {}): PublicAlertRow {
     registry_tx_hash: null,
     source_event_hash: null,
     content_uri: null,
+    content_hash: null,
+    gas_used: null,
+    gas_used_wei: null,
     keeper_hub_run_id: null,
     explorer_url: null,
     event_type: "large_swap",
@@ -152,7 +155,7 @@ describe("AlertPublicationService community broadcast", () => {
     const published = baseAlert();
     const alertRepo: PublicAlertRepository = {
       create: vi.fn(),
-      findById: vi.fn(),
+      findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
       findByDedupeKey: vi.fn(),
       list: vi.fn(),
       updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
@@ -165,6 +168,57 @@ describe("AlertPublicationService community broadcast", () => {
 
     expect(result.success).toBe(true);
     expect(result.communityBroadcast).toBeUndefined();
+  });
+
+  it("persists content hash and gas used after successful registry write", async () => {
+    const published = baseAlert({ registry_tx_hash: "0xgas" });
+    const alertRepo: PublicAlertRepository = {
+      create: vi.fn(),
+      findById: vi.fn().mockResolvedValue({ ok: true, value: published }),
+      findByDedupeKey: vi.fn(),
+      list: vi.fn(),
+      updateDeliveryStatus: vi.fn().mockResolvedValue({ ok: true, value: published }),
+      updateGenerationMetadata: vi.fn(),
+      updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: published }),
+    };
+
+    const contentHash = "0x" + "cd".repeat(32);
+    const registryService: ChronicleRegistryService = {
+      publishAlert: vi.fn().mockResolvedValue({
+        success: true,
+        txHash: "0xgas",
+        keeperHubRunId: "run-gas",
+        explorerUrl: "https://sepolia.basescan.org/tx/0xgas",
+        contentHash,
+        gasUsed: "91234",
+        gasUsedWei: "91234000000000",
+      }),
+      publishDigest: vi.fn(),
+      recordPayout: vi.fn(),
+    };
+
+    const service = createAlertPublicationService(
+      alertRepo,
+      registryService,
+      "https://chronicle.example",
+    );
+
+    const result = await service.publishAlert("alert-1", "0xsource");
+
+    expect(result.success).toBe(true);
+    expect(result.contentHash).toBe(contentHash);
+    expect(result.gasUsed).toBe("91234");
+    expect(result.gasUsedWei).toBe("91234000000000");
+    expect(alertRepo.updateRegistryMetadata).toHaveBeenCalledWith(
+      "alert-1",
+      expect.objectContaining({
+        registryTxHash: "0xgas",
+        contentHash,
+        gasUsed: "91234",
+        gasUsedWei: "91234000000000",
+        keeperHubRunId: "run-gas",
+      }),
+    );
   });
 
   it("suspends registry write when treasury gate denies and still publishes locally", async () => {

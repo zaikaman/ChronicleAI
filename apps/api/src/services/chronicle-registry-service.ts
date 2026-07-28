@@ -8,6 +8,7 @@
 //   recordPayout(...)
 
 import type { OnChainWriteReceipt } from "./on-chain-write-receipt.ts";
+import { toBytes32Hash } from "./keeperhub-write-client.ts";
 import type { Web3Client } from "./web3-client-service.ts";
 
 export interface RegistryPublishResult {
@@ -19,6 +20,12 @@ export interface RegistryPublishResult {
   explorerUrl?: string;
   /** HTTPS content URI written on-chain (when applicable). */
   contentUri?: string;
+  /** Gas units consumed by the registry write (decimal string). */
+  gasUsed?: string;
+  /** Total gas cost in wei when reported (decimal string). */
+  gasUsedWei?: string;
+  /** Normalized bytes32 content hash that was written on-chain. */
+  contentHash?: string;
 }
 
 export interface ChronicleRegistryService {
@@ -75,7 +82,7 @@ function requireHttpsContentUri(contentUri: string, kind: "alert" | "digest"): s
 
 function fromReceipt(
   receipt: OnChainWriteReceipt,
-  contentUri?: string,
+  extras?: { contentUri?: string; contentHash?: string },
 ): RegistryPublishResult {
   const result: RegistryPublishResult = {
     success: true,
@@ -87,8 +94,17 @@ function fromReceipt(
   if (receipt.explorerUrl !== undefined) {
     result.explorerUrl = receipt.explorerUrl;
   }
-  if (contentUri !== undefined) {
-    result.contentUri = contentUri;
+  if (receipt.gasUsed !== undefined) {
+    result.gasUsed = receipt.gasUsed;
+  }
+  if (receipt.gasUsedWei !== undefined) {
+    result.gasUsedWei = receipt.gasUsedWei;
+  }
+  if (extras?.contentUri !== undefined) {
+    result.contentUri = extras.contentUri;
+  }
+  if (extras?.contentHash !== undefined) {
+    result.contentHash = extras.contentHash;
   }
   return result;
 }
@@ -104,9 +120,10 @@ export function createChronicleRegistryService(
 
       try {
         const uri = requireHttpsContentUri(contentUri, "alert");
+        const normalizedHash = toBytes32Hash(contentHash);
         // Pass sourceEventHash on-chain — no longer dropped as _sourceEventHash.
-        const receipt = await web3Client.publishAlert(contentHash, sourceEventHash, uri);
-        return fromReceipt(receipt, uri);
+        const receipt = await web3Client.publishAlert(normalizedHash, sourceEventHash, uri);
+        return fromReceipt(receipt, { contentUri: uri, contentHash: normalizedHash });
       } catch (error) {
         return {
           success: false,
@@ -122,8 +139,9 @@ export function createChronicleRegistryService(
 
       try {
         const uri = requireHttpsContentUri(contentUri, "digest");
-        const receipt = await web3Client.publishDigest(contentHash, sourceEventRoot, uri);
-        return fromReceipt(receipt, uri);
+        const normalizedHash = toBytes32Hash(contentHash);
+        const receipt = await web3Client.publishDigest(normalizedHash, sourceEventRoot, uri);
+        return fromReceipt(receipt, { contentUri: uri, contentHash: normalizedHash });
       } catch (error) {
         return {
           success: false,

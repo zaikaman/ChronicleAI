@@ -72,6 +72,8 @@ export class MppPaymentAdapter implements PaymentAdapter {
     amount: number;
     currency: string;
     payerReference?: string | undefined;
+    /** Affiliate wallet from intent metadata — never the machine payer id. */
+    referralAddress?: string | null | undefined;
     agreement?:
       | {
           type: "recurring_newsletter";
@@ -82,7 +84,8 @@ export class MppPaymentAdapter implements PaymentAdapter {
         }
       | undefined;
   }): Promise<ChallengeResult> {
-    // MPP is one-shot micro-billing; agreement metadata is ignored when present.
+    // MPP is one-shot micro-billing; agreement product fields are ignored.
+    // Referral intent is still accepted for affiliate attribution on settle.
     const secret = this.resolveSecret();
     if (!secret) {
       throw new Error("MPP secret key is not configured on the server (MPP_SECRET)");
@@ -99,6 +102,18 @@ export class MppPaymentAdapter implements PaymentAdapter {
 
     const resolvedPayer = resolveMppPayerReference(params.payerReference);
 
+    const referralCandidates = [
+      params.agreement?.referralAddress,
+      params.referralAddress,
+    ];
+    const referralFromIntent = referralCandidates.find(
+      (addr): addr is string =>
+        typeof addr === "string" && EVM_ADDRESS_RE.test(addr.trim()),
+    );
+    const referralAddress = referralFromIntent
+      ? referralFromIntent.trim().toLowerCase()
+      : null;
+
     const challengeData: Record<string, unknown> = {
       route: "mpp",
       premiumItemId: params.premiumItemId,
@@ -111,6 +126,7 @@ export class MppPaymentAdapter implements PaymentAdapter {
       expiresAt,
       verificationType: "hmac_sha256",
       ...(resolvedPayer ? { payerReference: resolvedPayer } : {}),
+      referralAddress,
     };
 
     // Keep expectedHmac available only in test mode so unit tests can assert shape

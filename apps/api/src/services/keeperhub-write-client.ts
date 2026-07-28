@@ -11,8 +11,12 @@
 //   publishPremiumReceipt(...) — reportType PremiumReceipt
 
 import { ethers } from "ethers";
+import {
+  extractGasFromKeeperHubPayload,
+  type OnChainWriteReceipt,
+} from "./on-chain-write-receipt.ts";
 
-export interface KeeperHubWriteReceipt {
+export interface KeeperHubWriteReceipt extends OnChainWriteReceipt {
   keeperHubRunId: string;
   txHash: string;
   explorerUrl: string;
@@ -137,6 +141,9 @@ interface ExecuteStatusResponse {
   error?: string | null;
   completed?: boolean;
   output?: unknown;
+  gasUsed?: string | number;
+  gasUsedUnits?: string | number;
+  gasUsedWei?: string | number;
 }
 
 function extractTx(status: ExecuteStatusResponse): { txHash?: string; explorerUrl?: string } {
@@ -237,11 +244,14 @@ export function createKeeperHubWriteClient(
               `KeeperHub execution ${executionId} completed without a transaction hash`,
             );
           }
+          const gas = extractGasFromKeeperHubPayload(body);
           return {
             keeperHubRunId: executionId,
             txHash,
             explorerUrl: explorerUrl ?? buildFallbackExplorerUrl(txHash, config.network),
             result: body.result ?? body.output,
+            ...(gas.gasUsed ? { gasUsed: gas.gasUsed } : {}),
+            ...(gas.gasUsedWei ? { gasUsedWei: gas.gasUsedWei } : {}),
           };
         }
         if (body.status === "error" || body.status === "failed" || body.status === "cancelled") {
@@ -266,11 +276,14 @@ export function createKeeperHubWriteClient(
               `KeeperHub execution ${executionId} completed without a transaction hash`,
             );
           }
+          const gas = extractGasFromKeeperHubPayload(body);
           return {
             keeperHubRunId: executionId,
             txHash,
             explorerUrl: explorerUrl ?? buildFallbackExplorerUrl(txHash, config.network),
             result: body.result,
+            ...(gas.gasUsed ? { gasUsed: gas.gasUsed } : {}),
+            ...(gas.gasUsedWei ? { gasUsedWei: gas.gasUsedWei } : {}),
           };
         }
         if (status === "failed" || status === "error" || status === "cancelled") {

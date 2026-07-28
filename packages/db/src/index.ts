@@ -16,3 +16,4 @@ export * from "./payout-record-repository.ts";
 export * from "./agent-activity-repository.ts";
 export * from "./email-subscriber-repository.ts";
 export * from "./newsletter-subscription-repository.ts";
+export * from "./affiliate-repository.ts";

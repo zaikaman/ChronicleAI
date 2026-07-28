@@ -54,6 +54,7 @@ describe("PaymentSettlementService", () => {
       expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
       listByPremiumItem: vi.fn(),
       list: vi.fn(),
+      listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
       findSettledByPayer: vi.fn(),
     };
 

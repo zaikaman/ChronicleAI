@@ -1,5 +1,6 @@
 import { loadServerEnv } from "@chronicleai/config";
 import {
+  createAffiliateRepository,
   createDailyDigestRepository,
   createEmailSubscriberRepository,
   createExecutionLogRepository,
@@ -67,6 +68,7 @@ try {
   const treasuryRepo = createTreasurySnapshotRepository(supabase);
   const payoutRepo = createPayoutRecordRepository(supabase);
   const activityRepo = createAgentActivityRepository(supabase);
+  const affiliateRepo = createAffiliateRepository(supabase);
 
   // US1: Public Alerts (treasury-gated registry writes)
   setupUS1Routes(app, env, {
@@ -88,6 +90,7 @@ try {
     newsletterRepo,
     premiumRepo,
     paymentRecordRepo,
+    affiliateRepo,
   });
 
   // US3: Premium Access & Sponsored Watch (Loop 4: create → monitor → report)
@@ -97,15 +100,17 @@ try {
     execLogRepo,
     watchRepo,
     eventRepo,
+    affiliateRepo,
   });
 
-  // US4: Public agent activity, treasury & revenue payouts
+  // US4: Public agent activity, treasury & revenue payouts + affiliate registry
   setupUS4Routes(app, env, {
     treasuryRepo,
     payoutRepo,
     paymentRecordRepo,
     execLogRepo,
     activityRepo,
+    affiliateRepo,
   });
 
   // Periodically reap open payment challenges past expires_at.

@@ -198,6 +198,9 @@ export class DigestRunHandler {
       details: {
         registry_tx_hash: publicationResult.registryTxHash ?? null,
         keeper_hub_run_id: publicationResult.keeperHubRunId ?? null,
+        content_hash: publicationResult.contentHash ?? null,
+        gas_used: publicationResult.gasUsed ?? null,
+        gas_used_wei: publicationResult.gasUsedWei ?? null,
         explorer_url: publicationResult.explorerUrl ?? null,
         contentUri: publicationResult.contentUri ?? null,
         smtpRecipients: publicationResult.smtpResult?.recipientsReached ?? null,

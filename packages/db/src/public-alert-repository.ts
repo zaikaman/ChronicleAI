@@ -64,6 +64,9 @@ export interface PublicAlertRepository {
       registryTxHash?: string;
       sourceEventHash?: string;
       contentUri?: string;
+      contentHash?: string;
+      gasUsed?: string;
+      gasUsedWei?: string;
       keeperHubRunId?: string;
       explorerUrl?: string;
     },
@@ -175,6 +178,15 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       }
       if (metadata.contentUri) {
         update.content_uri = metadata.contentUri;
+      }
+      if (metadata.contentHash) {
+        update.content_hash = metadata.contentHash;
+      }
+      if (metadata.gasUsed) {
+        update.gas_used = metadata.gasUsed;
+      }
+      if (metadata.gasUsedWei) {
+        update.gas_used_wei = metadata.gasUsedWei;
       }
       if (metadata.keeperHubRunId) {
         update.keeper_hub_run_id = metadata.keeperHubRunId;

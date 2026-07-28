@@ -88,6 +88,11 @@ function formatDigestResponse(digest: DailyDigestRow): Record<string, unknown> {
     publishedAt: digest.published_at,
     registryTxHash: digest.registry_tx_hash ?? undefined,
     sourceEventRoot: digest.source_event_root ?? undefined,
+    contentHash: digest.content_hash ?? undefined,
     contentUri: digest.content_uri ?? undefined,
+    gasUsed: digest.gas_used ?? undefined,
+    gasUsedWei: digest.gas_used_wei ?? undefined,
+    keeperHubRunId: digest.keeper_hub_run_id ?? undefined,
+    explorerUrl: digest.explorer_url ?? undefined,
   };
 }

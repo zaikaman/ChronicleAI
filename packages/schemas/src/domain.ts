@@ -213,6 +213,16 @@ export const DEFAULT_NEWSLETTER_BILLING_PERIOD_DAYS = 30;
 /** Default grace window after period end before status becomes expired (days). */
 export const DEFAULT_NEWSLETTER_GRACE_PERIOD_DAYS = 3;
 
+// ── Referral Affiliates ─────────────────────────────────
+/** Partner status for revenue-routing eligibility. Only `approved` receives payouts. */
+export type AffiliateStatus = "pending" | "approved" | "suspended";
+
+export const AFFILIATE_STATUSES: readonly AffiliateStatus[] = [
+  "pending",
+  "approved",
+  "suspended",
+] as const;
+
 // ── Branded ID Types ────────────────────────────────────
 declare const brand: unique symbol;
 

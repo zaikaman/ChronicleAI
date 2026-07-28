@@ -19,3 +19,14 @@ export function truncateHash(value: string, head = 10, tail = 6): string {
   if (value.length <= head + tail + 3) return value;
   return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
+
+/** Format gas units (decimal string) for display, e.g. "91,234 gas". */
+export function formatGasUsed(gasUsed: string | number | undefined | null): string | null {
+  if (gasUsed === undefined || gasUsed === null || gasUsed === "") return null;
+  try {
+    const asBig = typeof gasUsed === "number" ? BigInt(Math.trunc(gasUsed)) : BigInt(gasUsed);
+    return `${asBig.toLocaleString("en-US")} gas`;
+  } catch {
+    return `${String(gasUsed)} gas`;
+  }
+}

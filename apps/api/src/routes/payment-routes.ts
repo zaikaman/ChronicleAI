@@ -3,6 +3,7 @@
 // POST /payments/settlements - Settle a payment challenge
 
 import type {
+  AffiliateRepository,
   ExecutionLogRepository,
   PaymentRecordRepository,
   PremiumIntelligenceRepository,
@@ -40,6 +41,8 @@ export function createPaymentRoutes(params: {
   web3Client?: Web3Client | null;
   /** Shared Loop 4 service when provided (preferred — includes event monitoring). */
   watchService?: SponsoredWatchService | null;
+  /** Product affiliate registry for referral intent validation. */
+  affiliateRepo?: AffiliateRepository | null;
   /** When true, Set-Cookie includes Secure (production / HTTPS). */
   secureCookies?: boolean;
   /** Public SPA origin for HTTPS sponsored-report content URIs. */
@@ -50,6 +53,7 @@ export function createPaymentRoutes(params: {
   const challengeService = new PaymentChallengeService({
     paymentRecordRepo: params.paymentRecordRepo,
     adapters: params.adapters,
+    affiliateRepo: params.affiliateRepo ?? null,
   });
 
   const settlementService = new PaymentSettlementService({
@@ -112,10 +116,12 @@ export function createPaymentRoutes(params: {
    */
   router.post("/payments/challenges", async (req, res, next) => {
     try {
-      const { premiumItemId, paymentRoute, payerReference } = req.body as {
+      const { premiumItemId, paymentRoute, payerReference, referralAddress } = req.body as {
         premiumItemId?: string;
         paymentRoute?: string;
         payerReference: string | undefined;
+        /** Optional affiliate wallet for capped revenue attribution (not the payer). */
+        referralAddress?: string | undefined;
       };
 
       if (!premiumItemId) {
@@ -163,6 +169,7 @@ export function createPaymentRoutes(params: {
         premiumItem: itemResult.value,
         paymentRoute,
         payerReference: payerReference ?? undefined,
+        referralAddress: referralAddress ?? null,
       });
 
       const logEntry: ExecutionLogInsert = {
@@ -177,6 +184,7 @@ export function createPaymentRoutes(params: {
           amountRequested: result.challenge.amountRequested,
           currency: result.challenge.currency,
           premiumItemId,
+          referralAddress: referralAddress ?? null,
         },
       };
 

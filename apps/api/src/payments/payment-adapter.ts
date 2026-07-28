@@ -44,6 +44,11 @@ export interface PaymentAdapter {
     amount: number;
     currency: string;
     payerReference?: string | undefined;
+    /**
+     * Optional affiliate / referral partner wallet (not the payer).
+     * Stored on the payment record and used for capped revenue routing.
+     */
+    referralAddress?: string | null | undefined;
     agreement?:
       | {
           type: "recurring_newsletter";

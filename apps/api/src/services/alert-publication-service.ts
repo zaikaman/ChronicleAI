@@ -7,10 +7,13 @@
 // FR-026 / IDEA Loop 3: registry writes are treasury-gated — suspended when
 // the agent treasury balance is below the safety buffer; local publish still
 // proceeds and a public low-balance warning is emitted.
+//
+// IDEA demo packaging: content hash, gas used, registry tx, KeeperHub status.
 
 import type { ExecutionLogRepository, PublicAlertRepository } from "@chronicleai/db";
 import type { AlertDeliveryStatus } from "@chronicleai/schemas";
 import type { ChronicleRegistryService } from "./chronicle-registry-service.ts";
+import { hashAlertContent } from "./content-hash.ts";
 import { buildAlertContentUri } from "./content-uri.ts";
 import type {
   ChannelDeliveryResult,
@@ -27,6 +30,9 @@ export interface PublicationResult {
   keeperHubRunId?: string | undefined;
   explorerUrl?: string | undefined;
   contentUri?: string | undefined;
+  contentHash?: string | undefined;
+  gasUsed?: string | undefined;
+  gasUsedWei?: string | undefined;
   /** True when on-chain registry write was skipped due to treasury gate. */
   registrySuspended?: boolean | undefined;
   /** Community channel delivery outcome (Discord / Telegram / log). */
@@ -54,15 +60,38 @@ export function createAlertPublicationService(
     async publishAlert(alertId, sourceEventHash) {
       const now = new Date().toISOString();
 
+      // Load alert early so we can hash real title/summary for on-chain contentHash.
+      const existingResult = await alertRepo.findById(alertId);
+      if (!existingResult.ok) {
+        return {
+          success: false,
+          deliveryStatus: "failed",
+          message: `Failed to load alert for publication: ${existingResult.error.message}`,
+        };
+      }
+      const existing = existingResult.value;
+
       let registryTxHash: string | undefined;
       let keeperHubRunId: string | undefined;
       let explorerUrl: string | undefined;
       let contentUri: string | undefined;
+      let contentHash: string | undefined;
+      let gasUsed: string | undefined;
+      let gasUsedWei: string | undefined;
       let registrySuspended = false;
 
       if (frontendOrigin) {
         contentUri = buildAlertContentUri(frontendOrigin, alertId);
       }
+
+      contentHash = hashAlertContent({
+        alertId,
+        title: existing.title,
+        summary: existing.summary,
+        contentUri,
+      });
+
+      const resolvedSourceEventHash = sourceEventHash ?? alertId;
 
       // FR-026: consult treasury before any on-chain registry write.
       let allowRegistryWrite = true;
@@ -86,7 +115,8 @@ export function createAlertPublicationService(
                 treasury_status: decision.status,
                 deficit_percentage: decision.deficitPercentage,
                 snapshot_id: decision.snapshotId,
-                source_event_hash: sourceEventHash ?? alertId,
+                source_event_hash: resolvedSourceEventHash,
+                content_hash: contentHash,
                 content_uri: contentUri,
               },
               started_at: now,
@@ -118,22 +148,30 @@ export function createAlertPublicationService(
         if (!contentUri) {
           // Soft-fail registry only: still publish to the public feed.
           await alertRepo.updateRegistryMetadata(alertId, {
-            sourceEventHash: sourceEventHash ?? alertId,
+            sourceEventHash: resolvedSourceEventHash,
+            contentHash,
           });
         } else {
           const registryResult = await registryService.publishAlert(
-            alertId,
-            sourceEventHash ?? alertId,
+            contentHash,
+            resolvedSourceEventHash,
             contentUri,
           );
           if (registryResult.success && registryResult.txHash) {
             registryTxHash = registryResult.txHash;
             keeperHubRunId = registryResult.keeperHubRunId;
             explorerUrl = registryResult.explorerUrl;
+            gasUsed = registryResult.gasUsed;
+            gasUsedWei = registryResult.gasUsedWei;
+            // Prefer normalized bytes32 from registry service when present.
+            contentHash = registryResult.contentHash ?? contentHash;
             await alertRepo.updateRegistryMetadata(alertId, {
               registryTxHash,
-              sourceEventHash: sourceEventHash ?? alertId,
+              sourceEventHash: resolvedSourceEventHash,
               contentUri,
+              contentHash,
+              ...(gasUsed ? { gasUsed } : {}),
+              ...(gasUsedWei ? { gasUsedWei } : {}),
               ...(keeperHubRunId ? { keeperHubRunId } : {}),
               ...(explorerUrl ? { explorerUrl } : {}),
             });
@@ -141,16 +179,18 @@ export function createAlertPublicationService(
             // Soft-fail local publish still proceeds so readers get the alert;
             // execution log upstream records the registry failure.
             await alertRepo.updateRegistryMetadata(alertId, {
-              sourceEventHash: sourceEventHash ?? alertId,
+              sourceEventHash: resolvedSourceEventHash,
               contentUri,
+              contentHash,
             });
           }
         }
       } else {
         // No registry service, or treasury-gated suspension: local metadata only.
-        if (contentUri || sourceEventHash || registrySuspended) {
+        if (contentUri || sourceEventHash || contentHash || registrySuspended) {
           await alertRepo.updateRegistryMetadata(alertId, {
-            sourceEventHash: sourceEventHash ?? alertId,
+            sourceEventHash: resolvedSourceEventHash,
+            contentHash,
             ...(contentUri ? { contentUri } : {}),
           });
         }
@@ -220,6 +260,9 @@ export function createAlertPublicationService(
         keeperHubRunId,
         explorerUrl,
         contentUri,
+        contentHash,
+        gasUsed,
+        gasUsedWei,
         registrySuspended: registrySuspended || undefined,
         communityBroadcast,
       };

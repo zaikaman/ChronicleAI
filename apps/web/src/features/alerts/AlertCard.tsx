@@ -6,6 +6,7 @@ import {
   StatusBadge,
   TimestampDisplay,
 } from "../../components/data-primitives.tsx";
+import { PublicationProof } from "../../components/publication-proof.tsx";
 
 interface AlertCardProps {
   alert: PublicAlertResponse;
@@ -114,7 +115,19 @@ export function AlertCard({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-4 items-center text-xs text-muted-foreground border-t border-border/20 pt-4">
+      <PublicationProof
+        registryTxHash={alert.registryTxHash}
+        contentHash={alert.contentHash}
+        sourceEventHash={alert.sourceEventHash}
+        gasUsed={alert.gasUsed}
+        gasUsedWei={alert.gasUsedWei}
+        keeperHubRunId={alert.keeperHubRunId}
+        explorerUrl={alert.explorerUrl}
+        compact={linkable}
+        data-testid="alert-publication-proof"
+      />
+
+      <div className="flex flex-wrap gap-4 items-center text-xs text-muted-foreground border-t border-border/20 pt-4 mt-4">
         {alert.publishedAt ? (
           <TimestampDisplay timestamp={alert.publishedAt} data-testid="alert-timestamp" />
         ) : null}

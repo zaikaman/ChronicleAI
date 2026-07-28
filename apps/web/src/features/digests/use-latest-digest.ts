@@ -12,7 +12,13 @@ export interface LatestDigestData {
   publicationStatus: string;
   publishedAt: string | undefined;
   registryTxHash: string | undefined;
+  contentHash?: string | undefined;
   contentUri: string | undefined;
+  gasUsed?: string | undefined;
+  gasUsedWei?: string | undefined;
+  keeperHubRunId?: string | undefined;
+  explorerUrl?: string | undefined;
+  sourceEventRoot?: string | undefined;
 }
 
 export type DigestState =
@@ -57,7 +63,13 @@ export function useLatestDigest(): UseLatestDigestReturn {
         publicationStatus: String(raw.publicationStatus),
         publishedAt: raw.publishedAt ? String(raw.publishedAt) : undefined,
         registryTxHash: raw.registryTxHash ? String(raw.registryTxHash) : undefined,
+        contentHash: raw.contentHash ? String(raw.contentHash) : undefined,
         contentUri: raw.contentUri ? String(raw.contentUri) : undefined,
+        gasUsed: raw.gasUsed ? String(raw.gasUsed) : undefined,
+        gasUsedWei: raw.gasUsedWei ? String(raw.gasUsedWei) : undefined,
+        keeperHubRunId: raw.keeperHubRunId ? String(raw.keeperHubRunId) : undefined,
+        explorerUrl: raw.explorerUrl ? String(raw.explorerUrl) : undefined,
+        sourceEventRoot: raw.sourceEventRoot ? String(raw.sourceEventRoot) : undefined,
       };
 
       setState({ status: "success", data });

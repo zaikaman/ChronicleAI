@@ -1,14 +1,26 @@
 import type { ReactElement } from "react";
-import { baseSepoliaTxUrl } from "../../lib/explorer.ts";
+import { PublicationProof } from "../../components/publication-proof.tsx";
 
 export interface DigestHighlightsProps {
   highlights: string[];
   registryTxHash: string | undefined;
+  contentHash?: string | undefined;
+  sourceEventRoot?: string | undefined;
+  gasUsed?: string | undefined;
+  gasUsedWei?: string | undefined;
+  keeperHubRunId?: string | undefined;
+  explorerUrl?: string | undefined;
 }
 
 export function DigestHighlights({
   highlights,
   registryTxHash,
+  contentHash,
+  sourceEventRoot,
+  gasUsed,
+  gasUsedWei,
+  keeperHubRunId,
+  explorerUrl,
 }: DigestHighlightsProps): ReactElement {
   return (
     <div className="mb-8 font-sans" data-testid="digest-highlights">
@@ -34,23 +46,16 @@ export function DigestHighlights({
         </ul>
       )}
 
-      {registryTxHash && (
-        <div
-          className="mt-4 p-4 bg-muted/20 border border-accent/20 rounded-2xl text-xs flex items-center flex-wrap gap-2"
-          data-testid="registry-tx-link"
-        >
-          <span className="text-muted-foreground">On-chain proof: </span>
-          <a
-            href={baseSepoliaTxUrl(registryTxHash)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-accent font-semibold font-mono hover:underline break-all"
-            title={`View transaction ${registryTxHash} on BaseScan`}
-          >
-            {registryTxHash}
-          </a>
-        </div>
-      )}
+      <PublicationProof
+        registryTxHash={registryTxHash}
+        contentHash={contentHash}
+        sourceEventRoot={sourceEventRoot}
+        gasUsed={gasUsed}
+        gasUsedWei={gasUsedWei}
+        keeperHubRunId={keeperHubRunId}
+        explorerUrl={explorerUrl}
+        data-testid="registry-tx-link"
+      />
     </div>
   );
 }

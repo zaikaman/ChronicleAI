@@ -20,7 +20,11 @@ import {
   toBytes32Hash,
   toUint64Seconds,
 } from "./keeperhub-write-client.ts";
-import type { OnChainWriteReceipt, SponsoredWatchWriteReceipt } from "./on-chain-write-receipt.ts";
+import {
+  normalizeGasValue,
+  type OnChainWriteReceipt,
+  type SponsoredWatchWriteReceipt,
+} from "./on-chain-write-receipt.ts";
 import {
   createParaTreasuryClientFromEnv,
   isParaTreasuryConfigured,
@@ -124,11 +128,17 @@ const ETHERS_REGISTRY_ABI = [
   "function owner() external view returns (address)",
 ] as const;
 
+interface EthersTxReceipt {
+  hash: string;
+  logs: Array<{ topics?: string[]; data?: string }>;
+  gasUsed?: bigint | number | string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ContractMethod = (
   ...args: any[]
 ) => Promise<{
-  wait: () => Promise<{ hash: string; logs: Array<{ topics?: string[]; data?: string }> }>;
+  wait: () => Promise<EthersTxReceipt | null>;
 }>;
 
 interface EthersContract {
@@ -139,6 +149,20 @@ interface EthersContract {
   publishPremiumReceipt: ContractMethod;
   recordPayout: ContractMethod;
   owner: () => Promise<string>;
+}
+
+function receiptWithGas(
+  receipt: EthersTxReceipt,
+  network?: string,
+  extra?: Partial<OnChainWriteReceipt>,
+): OnChainWriteReceipt {
+  const gasUsed = normalizeGasValue(receipt.gasUsed);
+  return {
+    txHash: receipt.hash,
+    explorerUrl: explorerUrlFor(receipt.hash, network),
+    ...(gasUsed ? { gasUsed } : {}),
+    ...extra,
+  };
 }
 
 function explorerUrlFor(txHash: string, network?: string): string {
@@ -291,8 +315,8 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
   }
 
   async function waitReceipt(
-    tx: { wait: () => Promise<{ hash: string; logs: Array<{ topics?: string[]; data?: string }> } | null> },
-  ): Promise<{ hash: string; logs: Array<{ topics?: string[]; data?: string }> }> {
+    tx: { wait: () => Promise<EthersTxReceipt | null> },
+  ): Promise<EthersTxReceipt> {
     const receipt = await tx.wait();
     if (!receipt || typeof receipt.hash !== "string") {
       throw new Error("Transaction failed or returned no hash");
@@ -331,11 +355,7 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
         toBytes32Hash(sourceEventHash),
         contentUri,
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async publishDigest(contentHash, sourceEventRoot, contentUri) {
@@ -345,11 +365,7 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
         toBytes32Hash(sourceEventRoot),
         contentUri,
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt) {
@@ -380,9 +396,8 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
         }
       }
       return {
+        ...receiptWithGas(receipt, network),
         watchId,
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
       };
     },
 
@@ -394,11 +409,7 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
         toBytes32Hash(sourceEventRoot),
         contentUri,
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async publishPremiumReceipt(contentHash, sourceEventHash, contentUri) {
@@ -408,11 +419,7 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
         toBytes32Hash(sourceEventHash),
         contentUri,
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async recordPayout(payoutPeriodHash, recipient, amount, reasonHash) {
@@ -423,11 +430,7 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
         ethers.parseEther(String(amount)),
         toBytes32Hash(reasonHash),
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     sendTransfer: (to, amountEth) => paraClient.sendTransfer(to, amountEth),
@@ -509,8 +512,8 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
   const network = env.keeperhubNetwork;
 
   async function waitReceipt(
-    tx: { wait: () => Promise<{ hash: string; logs: Array<{ topics?: string[]; data?: string }> } | null> },
-  ): Promise<{ hash: string; logs: Array<{ topics?: string[]; data?: string }> }> {
+    tx: { wait: () => Promise<EthersTxReceipt | null> },
+  ): Promise<EthersTxReceipt> {
     const receipt = await tx.wait();
     if (!receipt || typeof receipt.hash !== "string") {
       throw new Error("Transaction failed or returned no hash");
@@ -548,11 +551,7 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
         toBytes32Hash(sourceEventHash),
         contentUri,
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async publishDigest(contentHash, sourceEventRoot, contentUri) {
@@ -561,11 +560,7 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
         toBytes32Hash(sourceEventRoot),
         contentUri,
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt) {
@@ -595,9 +590,8 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
         }
       }
       return {
+        ...receiptWithGas(receipt, network),
         watchId,
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
       };
     },
 
@@ -608,11 +602,7 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
         toBytes32Hash(sourceEventRoot),
         contentUri,
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async publishPremiumReceipt(contentHash, sourceEventHash, contentUri) {
@@ -621,11 +611,7 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
         toBytes32Hash(sourceEventHash),
         contentUri,
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async recordPayout(payoutPeriodHash, recipient, amount, reasonHash) {
@@ -635,11 +621,7 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
         ethers.parseEther(String(amount)),
         toBytes32Hash(reasonHash),
       );
-      const receipt = await waitReceipt(tx);
-      return {
-        txHash: receipt.hash,
-        explorerUrl: explorerUrlFor(receipt.hash, network),
-      };
+      return receiptWithGas(await waitReceipt(tx), network);
     },
 
     async sendTransfer(to, amountEth) {

@@ -23,7 +23,13 @@ export interface PublicAlertResponse {
   generationProvider?: string;
   registryTxHash?: string;
   sourceEventHash?: string;
+  /** bytes32 content hash written on-chain (IDEA proof field). */
+  contentHash?: string;
   contentUri?: string;
+  /** Gas units consumed by the registry write (decimal string). */
+  gasUsed?: string;
+  /** Total gas cost in wei when reported by KeeperHub. */
+  gasUsedWei?: string;
   keeperHubRunId?: string;
   explorerUrl?: string;
   /** From joined monitored_events when available */
@@ -53,7 +59,13 @@ export interface DailyDigestResponse {
   publishedAt?: string;
   registryTxHash?: string;
   sourceEventRoot?: string;
+  /** bytes32 content hash written on-chain (IDEA proof field). */
+  contentHash?: string;
   contentUri?: string;
+  /** Gas units consumed by the registry write (decimal string). */
+  gasUsed?: string;
+  /** Total gas cost in wei when reported by KeeperHub. */
+  gasUsedWei?: string;
   keeperHubRunId?: string;
   explorerUrl?: string;
 }
@@ -135,6 +147,11 @@ export interface PaymentChallengeRequest {
   premiumItemId: string;
   paymentRoute: PaymentRoute;
   payerReference?: string;
+  /**
+   * Optional affiliate / referral partner wallet from intent metadata.
+   * Distinct from payerReference — used for capped revenue-routing attribution.
+   */
+  referralAddress?: string;
 }
 
 // ── Payment Settlement Request ──────────────────────────
@@ -227,8 +244,30 @@ export interface NewsletterSubscribeRequest {
   email: string;
   /** EVM wallet that will sign the x402 TransferWithAuthorization. */
   payerReference?: string;
-  /** Optional referral / affiliate wallet for revenue attribution. */
+  /**
+   * Optional referral partner wallet (must be an approved affiliate in the registry).
+   * Prefer resolving via referral code on the site, then pass the wallet here.
+   */
   referralAddress?: string;
+}
+
+// ── Referral Affiliates ─────────────────────────────────
+export interface AffiliateRegisterRequest {
+  /** EVM payout wallet for referral rewards. */
+  walletAddress: string;
+  displayName?: string;
+  /** Optional short code for ?ref= links (unique). */
+  referralCode?: string;
+}
+
+export interface AffiliateResponse {
+  id: string;
+  walletAddress: string;
+  displayName: string | null;
+  referralCode: string | null;
+  status: "pending" | "approved" | "suspended";
+  approvedAt: string | null;
+  createdAt: string;
 }
 
 export interface NewsletterRenewRequest {

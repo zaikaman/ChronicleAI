@@ -14,13 +14,52 @@ export type Database = {
   }
   public: {
     Tables: {
+      affiliates: {
+        Row: {
+          approved_at: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          metadata: Json
+          referral_code: string | null
+          status: string
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          approved_at?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          metadata?: Json
+          referral_code?: string | null
+          status?: string
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          approved_at?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          metadata?: Json
+          referral_code?: string | null
+          status?: string
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       daily_digests: {
         Row: {
           analysis: string | null
           audience: string
+          content_hash: string | null
           content_uri: string | null
           created_at: string
           explorer_url: string | null
+          gas_used: string | null
+          gas_used_wei: string | null
           highlights: Json
           id: string
           keeper_hub_run_id: string | null
@@ -39,9 +78,12 @@ export type Database = {
         Insert: {
           analysis?: string | null
           audience?: string
+          content_hash?: string | null
           content_uri?: string | null
           created_at?: string
           explorer_url?: string | null
+          gas_used?: string | null
+          gas_used_wei?: string | null
           highlights?: Json
           id?: string
           keeper_hub_run_id?: string | null
@@ -60,9 +102,12 @@ export type Database = {
         Update: {
           analysis?: string | null
           audience?: string
+          content_hash?: string | null
           content_uri?: string | null
           created_at?: string
           explorer_url?: string | null
+          gas_used?: string | null
+          gas_used_wei?: string | null
           highlights?: Json
           id?: string
           keeper_hub_run_id?: string | null
@@ -293,6 +338,7 @@ export type Database = {
           payer_reference: string | null
           payment_route: string
           premium_item_id: string
+          referral_address: string | null
           requested_at: string
           settled_at: string | null
           settlement_reference: string | null
@@ -310,6 +356,7 @@ export type Database = {
           payer_reference?: string | null
           payment_route: string
           premium_item_id: string
+          referral_address?: string | null
           requested_at?: string
           settled_at?: string | null
           settlement_reference?: string | null
@@ -327,6 +374,7 @@ export type Database = {
           payer_reference?: string | null
           payment_route?: string
           premium_item_id?: string
+          referral_address?: string | null
           requested_at?: string
           settled_at?: string | null
           settlement_reference?: string | null
@@ -446,12 +494,15 @@ export type Database = {
         Row: {
           audience: string
           confidence: string | null
+          content_hash: string | null
           content_uri: string | null
           created_at: string
           dedupe_key: string | null
           delivery_status: string
           destinations: Json | null
           explorer_url: string | null
+          gas_used: string | null
+          gas_used_wei: string | null
           generation_attempt_ids: string[]
           generation_provider: string | null
           id: string
@@ -468,12 +519,15 @@ export type Database = {
         Insert: {
           audience?: string
           confidence?: string | null
+          content_hash?: string | null
           content_uri?: string | null
           created_at?: string
           dedupe_key?: string | null
           delivery_status?: string
           destinations?: Json | null
           explorer_url?: string | null
+          gas_used?: string | null
+          gas_used_wei?: string | null
           generation_attempt_ids?: string[]
           generation_provider?: string | null
           id?: string
@@ -490,12 +544,15 @@ export type Database = {
         Update: {
           audience?: string
           confidence?: string | null
+          content_hash?: string | null
           content_uri?: string | null
           created_at?: string
           dedupe_key?: string | null
           delivery_status?: string
           destinations?: Json | null
           explorer_url?: string | null
+          gas_used?: string | null
+          gas_used_wei?: string | null
           generation_attempt_ids?: string[]
           generation_provider?: string | null
           id?: string

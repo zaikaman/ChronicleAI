@@ -18,6 +18,7 @@ export { apiRouter };
 // Lazy setup function to avoid circular dependencies
 import type { ServerEnv } from "@chronicleai/config";
 import type {
+  AffiliateRepository,
   DailyDigestRepository,
   EmailSubscriberRepository,
   ExecutionLogRepository,
@@ -142,6 +143,8 @@ export interface US2Dependencies {
   newsletterRepo: NewsletterSubscriptionRepository;
   premiumRepo: PremiumIntelligenceRepository;
   paymentRecordRepo: PaymentRecordRepository;
+  /** Validates referralAddress on newsletter subscribe against approved partners. */
+  affiliateRepo: AffiliateRepository;
 }
 
 export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependencies): void {
@@ -192,6 +195,7 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
     execLogRepo: deps.execLogRepo,
     x402Adapter,
     settlementService,
+    affiliateRepo: deps.affiliateRepo,
     config: {
       monthlyPriceUsdc: env.newsletterMonthlyPriceUsdc,
       billingPeriodDays: env.newsletterBillingPeriodDays,
@@ -316,6 +320,8 @@ export interface US3Dependencies {
   watchRepo: SponsoredWatchRepository;
   /** Required for Loop 4 campaign-window event correlation. */
   eventRepo: MonitoredEventRepository;
+  /** Validates referralAddress on premium payment challenges. */
+  affiliateRepo: AffiliateRepository;
 }
 
 /** Interval for automated sponsored-watch activate / monitor / complete (Loop 4). */
@@ -401,6 +407,7 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
       receiptService,
       web3Client,
       watchService,
+      affiliateRepo: deps.affiliateRepo,
       secureCookies: env.nodeEnv === "production",
       frontendOrigin: env.frontendOrigin,
     }),
@@ -440,6 +447,7 @@ import { TreasuryCheckHandler } from "../keeperhub/treasury-check-handler.ts";
 import { createAgentActivityService } from "../services/agent-activity-service.ts";
 import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
 import { createActivityRoutes } from "./activity-routes.ts";
+import { createAffiliateRoutes } from "./affiliate-routes.ts";
 import { createKeeperhubRevenueRoutes } from "./keeperhub-revenue-routes.ts";
 import { createKeeperhubTreasuryRoutes } from "./keeperhub-treasury-routes.ts";
 
@@ -449,6 +457,8 @@ export interface US4Dependencies {
   paymentRecordRepo: PaymentRecordRepository;
   execLogRepo: ExecutionLogRepository;
   activityRepo: AgentActivityRepository;
+  /** Product registry of approved referral partners. */
+  affiliateRepo: AffiliateRepository;
 }
 
 export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependencies): void {
@@ -505,13 +515,15 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
           paymentRepo: deps.paymentRecordRepo,
           payoutRepo: deps.payoutRepo,
           execLogRepo: deps.execLogRepo,
+          affiliateRepo: deps.affiliateRepo,
           treasuryService,
           registryService,
           web3Client,
         },
         {
           creatorRecoveryWallet: env.creatorRecoveryWallet,
-          referralRewardCap: 1000,
+          referralRewardShare: env.referralRewardShare,
+          referralRewardCap: env.referralRewardCap,
           maxPayoutShare: 0.5,
           routingIntervalMs: 7 * 24 * 60 * 60 * 1000,
           ethPerCurrencyUnit: env.revenueEthPerCurrencyUnit,
@@ -567,4 +579,7 @@ export function setupUS4Routes(app: Express, env: ServerEnv, deps: US4Dependenci
 
   // Public agent activity (no auth)
   apiRouter.use(createActivityRoutes(activityService));
+
+  // Affiliate registry: website registers partners; routing pays only approved wallets
+  apiRouter.use(createAffiliateRoutes(deps.affiliateRepo));
 }

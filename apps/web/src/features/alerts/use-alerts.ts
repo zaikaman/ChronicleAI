@@ -30,7 +30,10 @@ function mapAlert(raw: Record<string, unknown>): PublicAlertResponse {
   }
   if (typeof raw.registryTxHash === "string") alert.registryTxHash = raw.registryTxHash;
   if (typeof raw.sourceEventHash === "string") alert.sourceEventHash = raw.sourceEventHash;
+  if (typeof raw.contentHash === "string") alert.contentHash = raw.contentHash;
   if (typeof raw.contentUri === "string") alert.contentUri = raw.contentUri;
+  if (typeof raw.gasUsed === "string") alert.gasUsed = raw.gasUsed;
+  if (typeof raw.gasUsedWei === "string") alert.gasUsedWei = raw.gasUsedWei;
   if (typeof raw.explorerUrl === "string") alert.explorerUrl = raw.explorerUrl;
   if (typeof raw.keeperHubRunId === "string") alert.keeperHubRunId = raw.keeperHubRunId;
   if (typeof raw.eventType === "string") {

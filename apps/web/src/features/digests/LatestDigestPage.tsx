@@ -73,7 +73,16 @@ export function LatestDigestPage(): ReactElement {
       </div>
 
       {/* Highlights with Registry Transaction Link */}
-      <DigestHighlights highlights={digest.highlights} registryTxHash={digest.registryTxHash} />
+      <DigestHighlights
+        highlights={digest.highlights}
+        registryTxHash={digest.registryTxHash}
+        contentHash={digest.contentHash}
+        sourceEventRoot={digest.sourceEventRoot}
+        gasUsed={digest.gasUsed}
+        gasUsedWei={digest.gasUsedWei}
+        keeperHubRunId={digest.keeperHubRunId}
+        explorerUrl={digest.explorerUrl}
+      />
 
       {/* Analysis Sections (facts vs interpretation) */}
       <DigestAnalysisSections

@@ -28,6 +28,20 @@ export function normalizePayerReference(
   return trimmed;
 }
 
+/**
+ * Normalize affiliate referral wallets. Only valid EVM addresses are stored;
+ * non-address identifiers cannot receive on-chain referral transfers.
+ */
+export function normalizeReferralAddress(
+  referralAddress: string | null | undefined,
+): string | null {
+  if (referralAddress == null) return null;
+  const trimmed = referralAddress.trim();
+  if (!trimmed) return null;
+  if (!EVM_ADDRESS_RE.test(trimmed)) return null;
+  return trimmed.toLowerCase();
+}
+
 export interface PaymentRecordRepository {
   createChallenge(record: PaymentRecordInsert): Promise<Result<PaymentRecordRow>>;
   findById(id: string): Promise<Result<PaymentRecordRow | null>>;
@@ -49,6 +63,10 @@ export interface PaymentRecordRepository {
   expireOpenChallenges(asOf?: string): Promise<Result<number>>;
   listByPremiumItem(premiumItemId: string): Promise<Result<PaymentRecordRow[]>>;
   list(limit?: number): Promise<Result<PaymentRecordRow[]>>;
+  /**
+   * Settled payments that carry an affiliate referral_address for revenue routing.
+   */
+  listSettledWithReferral(limit?: number): Promise<Result<PaymentRecordRow[]>>;
   findSettledByPayer(
     premiumItemId: string,
     payerReference: string,
@@ -73,6 +91,9 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       const insert: PaymentRecordInsert = { ...record };
       if (record.payer_reference !== undefined) {
         insert.payer_reference = normalizePayerReference(record.payer_reference);
+      }
+      if (record.referral_address !== undefined) {
+        insert.referral_address = normalizeReferralAddress(record.referral_address);
       }
 
       const { data, error } = await table().insert(insert).select().single();
@@ -171,6 +192,19 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
 
       if (error) return failure(mapPostgrestError(error));
       return success(data ?? []);
+    },
+
+    async listSettledWithReferral(limit = 500) {
+      const safeLimit = Math.min(Math.max(limit, 1), 2000);
+      const { data, error } = await table()
+        .select("*")
+        .eq("status", "settled")
+        .not("referral_address", "is", null)
+        .order("settled_at", { ascending: false })
+        .limit(safeLimit);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success((data ?? []) as PaymentRecordRow[]);
     },
 
     async findSettledByPayer(premiumItemId, payerReference) {

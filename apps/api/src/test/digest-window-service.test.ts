@@ -33,6 +33,9 @@ function createMockDigestRepo(existingWindow?: {
           explorer_url: null,
           source_event_root: null,
           content_uri: null,
+          content_hash: null,
+          gas_used: null,
+          gas_used_wei: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };

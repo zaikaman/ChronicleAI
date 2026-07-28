@@ -13,6 +13,11 @@ export interface AgentActivityData {
     confidence?: string;
     generationProvider?: string;
     registryTxHash?: string;
+    sourceEventHash?: string;
+    contentHash?: string;
+    contentUri?: string;
+    gasUsed?: string;
+    gasUsedWei?: string;
     keeperHubRunId?: string;
     explorerUrl?: string;
     eventType?: string;
@@ -29,6 +34,11 @@ export interface AgentActivityData {
     publicationStatus: string;
     publishedAt?: string;
     registryTxHash?: string;
+    sourceEventRoot?: string;
+    contentHash?: string;
+    contentUri?: string;
+    gasUsed?: string;
+    gasUsedWei?: string;
     keeperHubRunId?: string;
     explorerUrl?: string;
   }>;

@@ -25,6 +25,12 @@ describe("createKeeperHubWriteClient", () => {
             status: "completed",
             transactionHash: "0x" + "ab".repeat(32),
             transactionLink: "https://sepolia.basescan.org/tx/0x" + "ab".repeat(32),
+            gasUsedUnits: "91234",
+            gasUsed: "91234000000000",
+            result: {
+              gasUsedUnits: "91234",
+              gasUsed: "91234000000000",
+            },
           }),
           {
             status: 200,
@@ -55,6 +61,8 @@ describe("createKeeperHubWriteClient", () => {
     expect(receipt.keeperHubRunId).toBe("direct_alert_1");
     expect(receipt.txHash).toBe("0x" + "ab".repeat(32));
     expect(receipt.explorerUrl).toContain("basescan.org");
+    expect(receipt.gasUsed).toBe("91234");
+    expect(receipt.gasUsedWei).toBe("91234000000000");
 
     const contractCall = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("/api/execute/contract-call"),

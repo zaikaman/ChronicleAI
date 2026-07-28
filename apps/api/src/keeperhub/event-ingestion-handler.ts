@@ -267,6 +267,9 @@ export class EventIngestionHandler {
         registry_tx_hash: publicationResult.registryTxHash,
         keeper_hub_run_id: publicationResult.keeperHubRunId,
         explorer_url: publicationResult.explorerUrl,
+        content_hash: publicationResult.contentHash,
+        gas_used: publicationResult.gasUsed,
+        gas_used_wei: publicationResult.gasUsedWei,
         executedViaKeeperHub: Boolean(publicationResult.keeperHubRunId),
         community_broadcast: publicationResult.communityBroadcast
           ? {

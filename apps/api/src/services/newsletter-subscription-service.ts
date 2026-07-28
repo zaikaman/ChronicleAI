@@ -2,6 +2,7 @@
 // Manages agreements, billing periods, renewals, and premium digest entitlement.
 
 import type {
+  AffiliateRepository,
   EmailSubscriberRepository,
   ExecutionLogRepository,
   NewsletterSubscriptionRepository,
@@ -91,6 +92,7 @@ export class NewsletterSubscriptionService {
   private readonly execLogRepo: ExecutionLogRepository;
   private readonly x402Adapter: PaymentAdapter;
   private readonly settlementService: PaymentSettlementService;
+  private readonly affiliateRepo: AffiliateRepository | null;
   private readonly config: NewsletterSubscriptionConfig;
 
   constructor(params: {
@@ -101,6 +103,8 @@ export class NewsletterSubscriptionService {
     execLogRepo: ExecutionLogRepository;
     x402Adapter: PaymentAdapter;
     settlementService: PaymentSettlementService;
+    /** When set, referralAddress must resolve to an approved affiliate. */
+    affiliateRepo?: AffiliateRepository | null;
     config: NewsletterSubscriptionConfig;
   }) {
     this.newsletterRepo = params.newsletterRepo;
@@ -110,6 +114,7 @@ export class NewsletterSubscriptionService {
     this.execLogRepo = params.execLogRepo;
     this.x402Adapter = params.x402Adapter;
     this.settlementService = params.settlementService;
+    this.affiliateRepo = params.affiliateRepo ?? null;
     this.config = {
       monthlyPriceUsdc: params.config.monthlyPriceUsdc,
       billingPeriodDays: Math.max(
@@ -121,6 +126,29 @@ export class NewsletterSubscriptionService {
         params.config.gracePeriodDays ?? DEFAULT_NEWSLETTER_GRACE_PERIOD_DAYS,
       ),
     };
+  }
+
+  /**
+   * Ensure a referral wallet is an approved product affiliate (not an arbitrary 0x).
+   */
+  private async requireApprovedReferral(
+    referralAddress: string | null,
+  ): Promise<string | null> {
+    if (!referralAddress) return null;
+    if (!this.affiliateRepo) {
+      // Without registry wiring, accept valid wallets (tests / legacy).
+      return referralAddress;
+    }
+    const found = await this.affiliateRepo.findApprovedByWalletOrCode(referralAddress);
+    if (!found.ok) {
+      throw badRequest(found.error.message);
+    }
+    if (!found.value) {
+      throw badRequest(
+        "referralAddress must be an approved affiliate (register via POST /affiliates)",
+      );
+    }
+    return found.value.wallet_address;
   }
 
   /**
@@ -200,13 +228,14 @@ export class NewsletterSubscriptionService {
     }
 
     const payerWallet = normalizeWalletAddress(params.payerReference);
-    const referralAddress = normalizeWalletAddress(params.referralAddress);
+    let referralAddress = normalizeWalletAddress(params.referralAddress);
     if (params.payerReference?.trim() && !payerWallet) {
       throw badRequest("payerReference must be a valid 0x EVM address when provided");
     }
     if (params.referralAddress?.trim() && !referralAddress) {
       throw badRequest("referralAddress must be a valid 0x EVM address when provided");
     }
+    referralAddress = await this.requireApprovedReferral(referralAddress);
 
     const product = await this.ensureNewsletterProduct();
     const existingResult = await this.newsletterRepo.findByEmail(email);
@@ -662,6 +691,8 @@ export class NewsletterSubscriptionService {
       premium_item_id: params.product.id,
       payment_route: "x402",
       payer_reference: params.payerReference ?? null,
+      // Affiliate from subscription intent — never the subscriber payer wallet.
+      referral_address: params.referralAddress ?? null,
       amount_requested: this.config.monthlyPriceUsdc,
       currency: "USDC",
       status: "challenge_issued",
@@ -762,6 +793,7 @@ export function createNewsletterSubscriptionService(params: {
   execLogRepo: ExecutionLogRepository;
   x402Adapter: PaymentAdapter;
   settlementService: PaymentSettlementService;
+  affiliateRepo?: AffiliateRepository | null;
   config: NewsletterSubscriptionConfig;
 }): NewsletterSubscriptionService {
   return new NewsletterSubscriptionService(params);

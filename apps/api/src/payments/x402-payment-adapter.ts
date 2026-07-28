@@ -201,6 +201,8 @@ export class X402PaymentAdapter implements PaymentAdapter {
     amount: number;
     currency: string;
     payerReference?: string | undefined;
+    /** Affiliate wallet from intent metadata — never the payer. */
+    referralAddress?: string | null | undefined;
     /**
      * Optional recurring-agreement metadata for monthly newsletter (and similar)
      * x402 subscription intents. Embedded in challengeData so clients and
@@ -262,11 +264,19 @@ export class X402PaymentAdapter implements PaymentAdapter {
       nonce,
     };
 
-    const referralFromAgreement =
-      params.agreement?.referralAddress &&
-      ADDRESS_RE.test(params.agreement.referralAddress)
-        ? params.agreement.referralAddress
-        : null;
+    // Affiliate referral is intent metadata only — never fall back to the payer.
+    const referralCandidates = [
+      params.agreement?.referralAddress,
+      params.referralAddress,
+    ];
+    const referralFromIntent =
+      referralCandidates.find(
+        (addr): addr is string =>
+          typeof addr === "string" && ADDRESS_RE.test(addr.trim()),
+      ) ?? null;
+    const referralAddress = referralFromIntent
+      ? referralFromIntent.trim().toLowerCase()
+      : null;
 
     const challengeData: Record<string, unknown> = {
       route: "x402",
@@ -274,8 +284,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
       expectedAmount: params.amount,
       expectedCurrency: params.currency,
       facilitatorUrl: this.facilitatorUrl ?? null,
-      // Prefer explicit referral from agreement; else challenge-time payer ref.
-      referralAddress: referralFromAgreement ?? params.payerReference ?? null,
+      referralAddress,
       challengeType: "permit",
       network: this.networkCaip2,
       asset: this.usdcAddress,

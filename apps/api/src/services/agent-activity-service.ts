@@ -56,6 +56,11 @@ export function createAgentActivityService(
             alert.generationProvider = a.generation_provider;
           }
           if (a.registry_tx_hash) alert.registryTxHash = a.registry_tx_hash;
+          if (a.source_event_hash) alert.sourceEventHash = a.source_event_hash;
+          if (a.content_hash) alert.contentHash = a.content_hash;
+          if (a.content_uri) alert.contentUri = a.content_uri;
+          if (a.gas_used) alert.gasUsed = a.gas_used;
+          if (a.gas_used_wei) alert.gasUsedWei = a.gas_used_wei;
           if (a.keeper_hub_run_id) alert.keeperHubRunId = a.keeper_hub_run_id;
           if (a.explorer_url) alert.explorerUrl = a.explorer_url;
           if (a.event_type) alert.eventType = a.event_type;
@@ -77,7 +82,10 @@ export function createAgentActivityService(
           if (d.published_at) digest.publishedAt = d.published_at;
           if (d.registry_tx_hash) digest.registryTxHash = d.registry_tx_hash;
           if (d.source_event_root) digest.sourceEventRoot = d.source_event_root;
+          if (d.content_hash) digest.contentHash = d.content_hash;
           if (d.content_uri) digest.contentUri = d.content_uri;
+          if (d.gas_used) digest.gasUsed = d.gas_used;
+          if (d.gas_used_wei) digest.gasUsedWei = d.gas_used_wei;
           if (d.keeper_hub_run_id) digest.keeperHubRunId = d.keeper_hub_run_id;
           if (d.explorer_url) digest.explorerUrl = d.explorer_url;
           return digest;

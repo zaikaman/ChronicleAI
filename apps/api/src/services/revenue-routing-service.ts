@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+  AffiliateRepository,
   ExecutionLogRepository,
   PaymentRecordRepository,
   PayoutRecordRepository,
@@ -9,9 +10,19 @@ import type { ChronicleRegistryService } from "./chronicle-registry-service.ts";
 import type { TreasuryStatusService } from "./treasury-status-service.ts";
 import type { Web3Client } from "./web3-client-service.ts";
 
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
 export interface RevenueRoutingConfig {
   /** Required payout recipient for creator recovery (EIP-55 address). */
   creatorRecoveryWallet: string;
+  /**
+   * Max fraction of distributable revenue that may go to affiliates combined (0–1).
+   * Default product policy: 0.2 (20%).
+   */
+  referralRewardShare: number;
+  /**
+   * Absolute currency-unit cap on total affiliate rewards for a routing period.
+   */
   referralRewardCap: number;
   maxPayoutShare: number; // 0-1, max fraction of excess balance to distribute
   routingIntervalMs: number;
@@ -39,8 +50,8 @@ export interface RevenueRoutingService {
    * Execute autonomous revenue routing.
    * 1. Aggregate revenue since last routing
    * 2. Subtract reserve buffer
-   * 3. Calculate creator recovery share
-   * 4. Calculate referral rewards
+   * 3. Attribute capped referral rewards to allowlisted affiliates (intent metadata)
+   * 4. Send remaining distributable to creator recovery
    * 5. Execute real native transfers from the Para MPC treasury (or KeeperHub / test EOA)
    * 6. Call recordPayout on the registry (KeeperHub / Para / test EOA) with real hashes only
    */
@@ -61,12 +72,91 @@ const ZERO_RESULT = (
   errorMessage,
 });
 
+/**
+ * Normalize and de-dupe approved affiliate wallets (lowercase EVM addresses only).
+ * Used with wallets loaded from the `affiliates` registry (not env).
+ */
+export function normalizeApprovedReferralWallets(
+  wallets: readonly string[] | undefined | null,
+): Set<string> {
+  const approved = new Set<string>();
+  if (!wallets) return approved;
+  for (const raw of wallets) {
+    if (typeof raw !== "string") continue;
+    const trimmed = raw.trim();
+    if (!EVM_ADDRESS_RE.test(trimmed)) continue;
+    approved.add(trimmed.toLowerCase());
+  }
+  return approved;
+}
+
+/**
+ * Attribute settled payment revenue to approved affiliates via referral_address.
+ * Does not use payer_reference — payers are never treated as referral partners.
+ * Approval set comes from the affiliates table (product registry).
+ */
+export function attributeReferralRewards(params: {
+  payments: ReadonlyArray<{
+    status?: string | null;
+    amount_settled?: number | null;
+    referral_address?: string | null;
+  }>;
+  approvedReferralWallets: Set<string>;
+  /** Max total affiliate pool for this period (currency units). */
+  referralPool: number;
+}): Map<string, number> {
+  const attributedVolume = new Map<string, number>();
+
+  if (params.referralPool <= 0 || params.approvedReferralWallets.size === 0) {
+    return new Map();
+  }
+
+  for (const payment of params.payments) {
+    if (payment.status != null && payment.status !== "settled") continue;
+    const referral = payment.referral_address?.trim().toLowerCase();
+    if (!referral || !EVM_ADDRESS_RE.test(referral)) continue;
+    if (!params.approvedReferralWallets.has(referral)) continue;
+
+    const settled = payment.amount_settled ?? 0;
+    if (!(settled > 0) || !Number.isFinite(settled)) continue;
+
+    attributedVolume.set(referral, (attributedVolume.get(referral) ?? 0) + settled);
+  }
+
+  const totalAttributed = [...attributedVolume.values()].reduce((a, b) => a + b, 0);
+  if (totalAttributed <= 0) {
+    return new Map();
+  }
+
+  // Pro-rata share of the capped referral pool by attributed settled volume.
+  const rewards = new Map<string, number>();
+  let allocated = 0;
+  const entries = [...attributedVolume.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  for (let i = 0; i < entries.length; i++) {
+    const [wallet, volume] = entries[i]!;
+    const isLast = i === entries.length - 1;
+    const share = volume / totalAttributed;
+    const amount = isLast
+      ? Math.max(0, params.referralPool - allocated)
+      : Math.floor(params.referralPool * share);
+    if (amount > 0) {
+      rewards.set(wallet, amount);
+      allocated += amount;
+    }
+  }
+
+  return rewards;
+}
+
 export function createRevenueRoutingService(
   deps: {
     treasuryRepo: TreasurySnapshotRepository;
     paymentRepo: PaymentRecordRepository;
     payoutRepo: PayoutRecordRepository;
     execLogRepo: ExecutionLogRepository;
+    /** Product registry of approved referral partners (website/API). */
+    affiliateRepo: AffiliateRepository;
     treasuryService: TreasuryStatusService;
     registryService: ChronicleRegistryService;
     web3Client?: Web3Client | null;
@@ -75,7 +165,7 @@ export function createRevenueRoutingService(
 ): RevenueRoutingService {
   const cfg = config;
 
-  if (!cfg.creatorRecoveryWallet || !/^0x[a-fA-F0-9]{40}$/.test(cfg.creatorRecoveryWallet)) {
+  if (!cfg.creatorRecoveryWallet || !EVM_ADDRESS_RE.test(cfg.creatorRecoveryWallet)) {
     throw new Error(
       "Revenue routing requires a valid creatorRecoveryWallet (CREATOR_RECOVERY_WALLET)",
     );
@@ -86,6 +176,24 @@ export function createRevenueRoutingService(
       "Revenue routing requires ethPerCurrencyUnit > 0 (REVENUE_ETH_PER_CURRENCY_UNIT)",
     );
   }
+
+  if (
+    !(cfg.referralRewardShare >= 0) ||
+    !(cfg.referralRewardShare <= 1) ||
+    !Number.isFinite(cfg.referralRewardShare)
+  ) {
+    throw new Error(
+      "Revenue routing requires referralRewardShare in [0, 1] (REFERRAL_REWARD_SHARE)",
+    );
+  }
+
+  if (!(cfg.referralRewardCap >= 0) || !Number.isFinite(cfg.referralRewardCap)) {
+    throw new Error(
+      "Revenue routing requires referralRewardCap >= 0 (REFERRAL_REWARD_CAP)",
+    );
+  }
+
+  const creatorWalletNormalized = cfg.creatorRecoveryWallet.toLowerCase();
 
   return {
     async routeRevenue(periodHashParam?: string) {
@@ -147,68 +255,89 @@ export function createRevenueRoutingService(
         );
       }
 
-      // 4. Split between creator recovery and referral rewards
-      const creatorRecoveryAmount = Math.floor(distributable * 0.8); // 80% to creator
-      const referralRewardsAmount = Math.min(
-        Math.floor(distributable * 0.2), // 20% to referrals
+      // 4. Load approved affiliates from product registry (not env)
+      const approvedResult = await deps.affiliateRepo.listApprovedWallets();
+      if (!approvedResult.ok) {
+        return ZERO_RESULT(
+          payoutPeriodHash,
+          totalRevenue,
+          `Failed to load approved affiliates: ${approvedResult.error.message}`,
+        );
+      }
+      const approvedReferralWallets = normalizeApprovedReferralWallets(approvedResult.value);
+
+      // 5. Affiliate rewards from intent metadata (referral_address), registry-approved only
+      const referralPool = Math.min(
+        Math.floor(distributable * cfg.referralRewardShare),
         cfg.referralRewardCap,
       );
+
+      let affiliateRewards = new Map<string, number>();
+      if (referralPool > 0 && approvedReferralWallets.size > 0) {
+        const referredPaymentsResult =
+          typeof deps.paymentRepo.listSettledWithReferral === "function"
+            ? await deps.paymentRepo.listSettledWithReferral(500)
+            : await deps.paymentRepo.list(500);
+
+        if (referredPaymentsResult.ok) {
+          const payments = referredPaymentsResult.value.filter(
+            (p) => p.status === "settled" && p.referral_address,
+          );
+          affiliateRewards = attributeReferralRewards({
+            payments,
+            approvedReferralWallets,
+            referralPool,
+          });
+        }
+      }
+
+      // Never pay the creator wallet as an "affiliate" — that is recovery, not referral.
+      if (affiliateRewards.has(creatorWalletNormalized)) {
+        affiliateRewards.delete(creatorWalletNormalized);
+      }
+
+      const referralRewardsAmount = [...affiliateRewards.values()].reduce((a, b) => a + b, 0);
+      const creatorRecoveryAmount = Math.max(0, Math.floor(distributable - referralRewardsAmount));
 
       const payoutIds: string[] = [];
       const payoutAmounts = new Map<string, number>();
 
-      // 5. Create payer payout record
-      const creatorResult = await deps.payoutRepo.create({
-        payout_period_hash: payoutPeriodHash,
-        recipient: cfg.creatorRecoveryWallet,
-        amount: creatorRecoveryAmount,
-        reason_hash: simpleHash(`creator_recovery:${payoutPeriodHash}:${creatorRecoveryAmount}`),
-        status: "pending",
-      });
+      // 5. Creator recovery payout
+      if (creatorRecoveryAmount > 0) {
+        const creatorResult = await deps.payoutRepo.create({
+          payout_period_hash: payoutPeriodHash,
+          recipient: cfg.creatorRecoveryWallet,
+          amount: creatorRecoveryAmount,
+          reason_hash: simpleHash(
+            `creator_recovery:${payoutPeriodHash}:${creatorRecoveryAmount}`,
+          ),
+          status: "pending",
+        });
 
-      if (creatorResult.ok) {
-        payoutIds.push(creatorResult.value.id);
-        payoutAmounts.set(creatorResult.value.id, creatorRecoveryAmount);
+        if (creatorResult.ok) {
+          payoutIds.push(creatorResult.value.id);
+          payoutAmounts.set(creatorResult.value.id, creatorRecoveryAmount);
+        }
       }
 
-      // Create referral payout records based on settled payments
-      const recentPaymentsResult = await deps.paymentRepo.list(50);
-      if (recentPaymentsResult.ok) {
-        const settledPayments = recentPaymentsResult.value.filter(
-          (p) => p.status === "settled" && p.payer_reference,
-        );
+      // Affiliate payouts — approved referral partners only
+      for (const [affiliateWallet, rewardAmount] of affiliateRewards) {
+        if (rewardAmount <= 0) continue;
+        if (!EVM_ADDRESS_RE.test(affiliateWallet)) continue;
 
-        const payerRewards = new Map<string, number>();
-        for (const payment of settledPayments) {
-          if (payment.payer_reference) {
-            const current = payerRewards.get(payment.payer_reference) ?? 0;
-            const reward = Math.min(
-              Math.floor((payment.amount_settled ?? 0) * 0.1), // 10% referral reward
-              cfg.referralRewardCap / Math.max(settledPayments.length, 1),
-            );
-            payerRewards.set(payment.payer_reference, current + reward);
-          }
-        }
+        const refResult = await deps.payoutRepo.create({
+          payout_period_hash: payoutPeriodHash,
+          recipient: affiliateWallet,
+          amount: rewardAmount,
+          reason_hash: simpleHash(
+            `referral_reward:${affiliateWallet}:${payoutPeriodHash}:${rewardAmount}`,
+          ),
+          status: "pending",
+        });
 
-        for (const [payerRef, rewardAmount] of payerRewards) {
-          if (rewardAmount > 0) {
-            if (!/^0x[a-fA-F0-9]{40}$/.test(payerRef)) {
-              // Skip non-address payer references (e.g. mpp-client-*) — cannot transfer on-chain
-              continue;
-            }
-            const refResult = await deps.payoutRepo.create({
-              payout_period_hash: payoutPeriodHash,
-              recipient: payerRef,
-              amount: rewardAmount,
-              reason_hash: simpleHash(`referral_reward:${payerRef}:${payoutPeriodHash}`),
-              status: "pending",
-            });
-
-            if (refResult.ok) {
-              payoutIds.push(refResult.value.id);
-              payoutAmounts.set(refResult.value.id, rewardAmount);
-            }
-          }
+        if (refResult.ok) {
+          payoutIds.push(refResult.value.id);
+          payoutAmounts.set(refResult.value.id, rewardAmount);
         }
       }
 

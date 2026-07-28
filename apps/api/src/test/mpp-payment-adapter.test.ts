@@ -246,7 +246,7 @@ describe("MppPaymentAdapter", () => {
       expect(result.payerReference).toBeUndefined();
     });
 
-    it("should map challenge-time EVM payerReference for referral payouts", async () => {
+    it("should map challenge-time EVM payerReference for access scoping (not affiliate payouts)", async () => {
       const secret = "my-real-secret";
       const customAdapter = new MppPaymentAdapter({ mppSecret: secret });
       const amount = 5;

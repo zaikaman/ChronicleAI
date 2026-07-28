@@ -10,6 +10,7 @@ import type {
   ChronicleRegistryService,
   RegistryPublishResult,
 } from "./chronicle-registry-service.ts";
+import { hashDigestContent } from "./content-hash.ts";
 import { buildDigestContentUri } from "./content-uri.ts";
 import type {
   ChannelDeliveryResult,
@@ -25,6 +26,9 @@ export interface DigestPublicationResult {
   keeperHubRunId?: string | undefined;
   explorerUrl?: string | undefined;
   contentUri?: string | undefined;
+  contentHash?: string | undefined;
+  gasUsed?: string | undefined;
+  gasUsedWei?: string | undefined;
   smtpResult?: SmtpSendResult | undefined;
   communityBroadcast?: ChannelDeliveryResult | undefined;
   errorMessage?: string | undefined;
@@ -66,9 +70,18 @@ export function createDigestPublicationService(
 
       let keeperHubRunId: string | undefined;
       let explorerUrl: string | undefined;
+      let gasUsed: string | undefined;
+      let gasUsedWei: string | undefined;
 
       // Self-hosted HTTPS content URI — stable per-digest public page (Vercel SPA).
       const contentUri = buildDigestContentUri(frontendOrigin, digest.id);
+      let contentHash = hashDigestContent({
+        digestId: digest.id,
+        title: digest.title,
+        summary: digest.summary,
+        reportDate: digest.reportDate,
+        contentUri,
+      });
 
       // FR-026: consult treasury before any on-chain registry write.
       let allowRegistryWrite = true;
@@ -94,6 +107,7 @@ export function createDigestPublicationService(
                 deficit_percentage: decision.deficitPercentage,
                 snapshot_id: decision.snapshotId,
                 source_event_root: digest.sourceEventRoot ?? digest.id,
+                content_hash: contentHash,
                 content_uri: contentUri,
               },
               started_at: publishedAt,
@@ -118,14 +132,14 @@ export function createDigestPublicationService(
             }
           }
 
-          await digestRepo.updateRegistryMetadata(digest.id, { contentUri });
+          await digestRepo.updateRegistryMetadata(digest.id, { contentUri, contentHash });
         }
       }
 
       // Step 1: Chronicle Registry on-chain publish with the same resolvable URI
       if (allowRegistryWrite) {
         const registryResult: RegistryPublishResult = await registryService.publishDigest(
-          digest.id,
+          contentHash,
           digest.sourceEventRoot ?? digest.id,
           contentUri,
         );
@@ -133,15 +147,21 @@ export function createDigestPublicationService(
           registryTxHash = registryResult.txHash;
           keeperHubRunId = registryResult.keeperHubRunId;
           explorerUrl = registryResult.explorerUrl;
+          gasUsed = registryResult.gasUsed;
+          gasUsedWei = registryResult.gasUsedWei;
+          contentHash = registryResult.contentHash ?? contentHash;
           await digestRepo.updateRegistryMetadata(digest.id, {
             registryTxHash,
             contentUri,
+            contentHash,
+            ...(gasUsed ? { gasUsed } : {}),
+            ...(gasUsedWei ? { gasUsedWei } : {}),
             ...(keeperHubRunId ? { keeperHubRunId } : {}),
             ...(explorerUrl ? { explorerUrl } : {}),
           });
         } else {
           failures.push(`Registry: ${registryResult.errorMessage ?? "unknown error"}`);
-          await digestRepo.updateRegistryMetadata(digest.id, { contentUri });
+          await digestRepo.updateRegistryMetadata(digest.id, { contentUri, contentHash });
         }
       }
 
@@ -206,6 +226,9 @@ export function createDigestPublicationService(
         keeperHubRunId: keeperHubRunId ?? undefined,
         explorerUrl: explorerUrl ?? undefined,
         contentUri,
+        contentHash,
+        gasUsed: gasUsed ?? undefined,
+        gasUsedWei: gasUsedWei ?? undefined,
         smtpResult: smtpResult ?? undefined,
         communityBroadcast,
         errorMessage: failures.length > 0 ? failures.join("; ") : undefined,
