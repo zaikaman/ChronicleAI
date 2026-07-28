@@ -44,13 +44,27 @@ function stringifyResult(payload: unknown): string {
 /**
  * Build LangChain tools bound to a live KeeperHub MCP client session.
  * Optional `onToolCall` captures every invocation for audit / tests.
+ *
+ * `singleExecute: true` (default for publication agents) ensures the ReAct
+ * loop can only fire `execute_workflow` once per session — ChronicleRegistry
+ * reverts duplicate contentHash with "alert already published".
  */
 export function createKeeperHubMcpLangChainTools(
   client: KeeperHubMcpClient,
   options?: {
     onToolCall?: (record: KeeperHubMcpToolCallRecord) => void;
+    /**
+     * When true (default), only the first execute_workflow call hits MCP;
+     * later calls return the cached first result so the LLM cannot double-submit.
+     */
+    singleExecute?: boolean;
   },
 ): StructuredToolInterface[] {
+  const singleExecute = options?.singleExecute !== false;
+  let executeCache:
+    | { args: Record<string, unknown>; resultText: string; data: unknown; isError: boolean }
+    | null = null;
+
   const track = (
     name: string,
     args: Record<string, unknown>,
@@ -69,8 +83,38 @@ export function createKeeperHubMcpLangChainTools(
     name: string,
     args: Record<string, unknown>,
   ): Promise<string> => {
+    if (name === "execute_workflow" && singleExecute && executeCache) {
+      const cached = {
+        ok: !executeCache.isError,
+        reused: true,
+        message:
+          "execute_workflow was already called in this publication session. " +
+          "Reuse this executionId and poll get_execution — do not submit again " +
+          "(ChronicleRegistry rejects duplicate contentHash).",
+        data: executeCache.data,
+      };
+      track(name, args, cached, false);
+      return stringifyResult(cached);
+    }
+
     const res = await client.callTool(name, args);
     track(name, args, res.data, res.isError);
+
+    if (name === "execute_workflow" && singleExecute) {
+      executeCache = {
+        args,
+        data: res.data,
+        isError: res.isError,
+        resultText: res.isError
+          ? stringifyResult({
+              ok: false,
+              error: res.text || "MCP tool error",
+              data: res.data,
+            })
+          : stringifyResult(res.data ?? res.text),
+      };
+    }
+
     if (res.isError) {
       return stringifyResult({
         ok: false,
@@ -137,9 +181,9 @@ export function createKeeperHubMcpLangChainTools(
         name: "execute_workflow",
         description:
           "Trigger a manual KeeperHub workflow execution (on-chain registry write). " +
-          "Returns an execution ID for status polling via get_execution / get_execution_status. " +
-          "Pass workflow input fields such as contentHash, sourceEventHash/sourceEventRoot, contentUri, " +
-          "contractAddress, and network.",
+          "Call EXACTLY ONCE per publication. Returns an execution ID for status polling. " +
+          "Calling again with the same contentHash reverts: ChronicleRegistry alert/digest already published. " +
+          "Pass contentHash, sourceEventHash/sourceEventRoot, contentUri, contractAddress, network.",
         schema: z.object({
           workflowId: z.string().describe("The workflow ID to execute"),
           input: z

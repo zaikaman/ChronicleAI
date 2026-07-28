@@ -43,6 +43,7 @@ export {
   buildMcpPublicationConfig,
   extractExecutionId,
   extractTxFromExecutionPayload,
+  isAlreadyPublishedError,
   type McpPublicationAction,
   type KeeperHubMcpPublicationReceipt,
   type PublishViaKeeperHubMcpParams,

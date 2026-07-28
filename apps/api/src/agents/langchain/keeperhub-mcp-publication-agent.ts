@@ -326,9 +326,13 @@ function buildSystemPrompt(action: McpPublicationAction, preferredWorkflowId?: s
     "Required tool sequence:",
     "1. Call list_workflows to discover available execution routes (unless a preferred workflow ID is already known).",
     "2. Optionally call get_workflow on the chosen workflow to confirm it is the publish route.",
-    "3. Call execute_workflow with the provided input (content hashes, contentUri, network, contractAddress).",
+    "3. Call execute_workflow EXACTLY ONCE with the provided input (content hashes, contentUri, network, contractAddress).",
     "4. Poll get_execution (or get_execution_status) until status is success/completed or failed.",
     "5. Optionally call get_execution_logs once for step detail after success.",
+    "",
+    "CRITICAL: Never call execute_workflow more than once for the same contentHash.",
+    "ChronicleRegistry reverts duplicates with 'alert already published' / 'digest already published'.",
+    "If execute_workflow already returned an executionId, only poll get_execution.",
     "",
     preferredWorkflowId
       ? `Preferred workflow ID (use this if present in the org): ${preferredWorkflowId}`
@@ -336,6 +340,52 @@ function buildSystemPrompt(action: McpPublicationAction, preferredWorkflowId?: s
     "",
     "When finished, reply with a short summary including executionId and transactionHash.",
   ].join("\n");
+}
+
+/** True when the registry (or KH) reported a duplicate contentHash publish. */
+export function isAlreadyPublishedError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("already published") ||
+    m.includes("alert already published") ||
+    m.includes("digest already published") ||
+    m.includes("premium receipt already published")
+  );
+}
+
+function collectExecutionIds(toolCalls: KeeperHubMcpToolCallRecord[]): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const tc of toolCalls) {
+    if (tc.name !== "execute_workflow") continue;
+    const id = extractExecutionId(tc.result);
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+function errorTextFromUnknown(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+class McpPublicationError extends Error {
+  readonly toolCalls: KeeperHubMcpToolCallRecord[];
+  readonly executionIds: string[];
+
+  constructor(
+    message: string,
+    toolCalls: KeeperHubMcpToolCallRecord[],
+    options?: { cause?: unknown },
+  ) {
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
+    this.name = "McpPublicationError";
+    this.toolCalls = toolCalls;
+    this.executionIds = collectExecutionIds(toolCalls);
+  }
 }
 
 function buildUserPrompt(params: PublishViaKeeperHubMcpParams): string {
@@ -623,21 +673,32 @@ async function publishViaLangChainMcpAgent(
   const captured: KeeperHubMcpToolCallRecord[] = [];
   const tools = createKeeperHubMcpLangChainTools(client, {
     onToolCall: (record) => captured.push(record),
+    // Prevent the ReAct loop from double-submitting the same contentHash.
+    singleExecute: true,
   });
 
   const primary = models[0]!;
   const fallbacks = models.slice(1).map((m) => m.model);
 
-  const result = await invokeToolAgent({
-    model: primary.model,
-    fallbackModels: fallbacks.length > 0 ? fallbacks : undefined,
-    tools,
-    systemPrompt: buildSystemPrompt(params.action, params.preferredWorkflowId),
-    messages: [{ role: "user", content: buildUserPrompt(params) }],
-    runLimit: params.agentRunLimit ?? 8,
-    ...(params.signal ? { signal: params.signal } : {}),
-    providerLabels: models.map((m) => m.provider),
-  });
+  let result: Awaited<ReturnType<typeof invokeToolAgent>>;
+  try {
+    result = await invokeToolAgent({
+      model: primary.model,
+      fallbackModels: fallbacks.length > 0 ? fallbacks : undefined,
+      tools,
+      systemPrompt: buildSystemPrompt(params.action, params.preferredWorkflowId),
+      messages: [{ role: "user", content: buildUserPrompt(params) }],
+      runLimit: params.agentRunLimit ?? 8,
+      ...(params.signal ? { signal: params.signal } : {}),
+      providerLabels: models.map((m) => m.provider),
+    });
+  } catch (agentInvokeError) {
+    throw new McpPublicationError(
+      errorTextFromUnknown(agentInvokeError),
+      captured,
+      { cause: agentInvokeError },
+    );
+  }
 
   const toolCalls =
     captured.length > 0 ? captured : toolCallsFromAgent(result.toolCalls);
@@ -652,39 +713,57 @@ async function publishViaLangChainMcpAgent(
     return fromHistory;
   }
 
-  // Agent may have started execution but not finished polling — complete deterministically.
-  let executionId: string | undefined;
-  for (const tc of toolCalls) {
-    if (tc.name === "execute_workflow") {
-      executionId = extractExecutionId(tc.result) ?? executionId;
+  // Agent may have started execution but not finished polling — complete by
+  // polling only (never re-call execute_workflow).
+  const executionIds = collectExecutionIds(toolCalls);
+  if (executionIds.length > 0) {
+    let lastPollError: unknown;
+    for (const executionId of executionIds) {
+      try {
+        return await pollExecutionViaMcp(client, executionId, toolCalls, {
+          network: params.network,
+          pollIntervalMs: params.pollIntervalMs ?? 2_000,
+          pollTimeoutMs: params.pollTimeoutMs ?? 120_000,
+          mode: "langchain-mcp-agent",
+          provider: result.provider ?? primary.provider,
+          ...(params.signal ? { signal: params.signal } : {}),
+        });
+      } catch (pollError) {
+        lastPollError = pollError;
+        // Try earlier execution ids if a later duplicate failed.
+        continue;
+      }
     }
+    throw new McpPublicationError(
+      errorTextFromUnknown(lastPollError ?? "MCP execution poll failed"),
+      toolCalls,
+      lastPollError !== undefined ? { cause: lastPollError } : undefined,
+    );
   }
 
-  if (executionId) {
-    return pollExecutionViaMcp(client, executionId, toolCalls, {
-      network: params.network,
-      pollIntervalMs: params.pollIntervalMs ?? 2_000,
-      pollTimeoutMs: params.pollTimeoutMs ?? 120_000,
+  // Agent never called execute_workflow — full deterministic path is safe.
+  try {
+    const deterministic = await publishViaDeterministicMcp(client, params);
+    return {
+      ...deterministic,
       mode: "langchain-mcp-agent",
+      toolCalls: [...toolCalls, ...deterministic.toolCalls],
       provider: result.provider ?? primary.provider,
-      ...(params.signal ? { signal: params.signal } : {}),
+    };
+  } catch (detError) {
+    throw new McpPublicationError(errorTextFromUnknown(detError), toolCalls, {
+      cause: detError,
     });
   }
-
-  // Agent never called execute_workflow — fall through to full deterministic path
-  // reusing the same MCP session (toolCalls already has discovery attempts).
-  const deterministic = await publishViaDeterministicMcp(client, params);
-  return {
-    ...deterministic,
-    mode: "langchain-mcp-agent",
-    toolCalls: [...toolCalls, ...deterministic.toolCalls],
-    provider: result.provider ?? primary.provider,
-  };
 }
 
 /**
  * Publish an alert or digest registry write via KeeperHub MCP.
  * Prefers LangChain ReAct agent when LLM keys exist; always stays on MCP tools.
+ *
+ * Important: if execute_workflow already ran (even on a failing agent path),
+ * we never re-submit — ChronicleRegistry reverts duplicate contentHash with
+ * "alert already published". We only poll existing execution IDs.
  */
 export async function publishViaKeeperHubMcp(
   params: PublishViaKeeperHubMcpParams,
@@ -708,11 +787,70 @@ export async function publishViaKeeperHubMcp(
       try {
         return await publishViaLangChainMcpAgent(client, params);
       } catch (agentError) {
-        const message =
-          agentError instanceof Error ? agentError.message : String(agentError);
+        const message = errorTextFromUnknown(agentError);
+        const toolCalls =
+          agentError instanceof McpPublicationError ? agentError.toolCalls : [];
+        const executionIds =
+          agentError instanceof McpPublicationError
+            ? agentError.executionIds
+            : collectExecutionIds(toolCalls);
+
+        // Already executed once — never call execute_workflow again.
+        if (executionIds.length > 0) {
+          console.warn(
+            `[keeperhub-mcp] LangChain agent path failed for ${params.action} ` +
+              `after execute_workflow (${executionIds.join(",")}): ${message}. ` +
+              `Polling existing execution(s) only — will not re-submit ` +
+              `(avoids ChronicleRegistry "already published").`,
+          );
+
+          let lastPollError: unknown = agentError;
+          for (const executionId of executionIds) {
+            try {
+              return await pollExecutionViaMcp(
+                client,
+                executionId,
+                [...toolCalls],
+                {
+                  network: params.network,
+                  pollIntervalMs: params.pollIntervalMs ?? 2_000,
+                  pollTimeoutMs: params.pollTimeoutMs ?? 120_000,
+                  mode: "langchain-mcp-agent",
+                  ...(params.signal ? { signal: params.signal } : {}),
+                },
+              );
+            } catch (pollError) {
+              lastPollError = pollError;
+            }
+          }
+
+          const pollMsg = errorTextFromUnknown(lastPollError);
+          // Surface already-published clearly; caller must not REST re-submit.
+          if (isAlreadyPublishedError(message) || isAlreadyPublishedError(pollMsg)) {
+            throw new Error(
+              `KeeperHub MCP ${params.action}: contentHash already on-chain ` +
+                `(ChronicleRegistry duplicate). First execution id(s): ${executionIds.join(", ")}. ` +
+                `Original error: ${pollMsg}`,
+            );
+          }
+          throw lastPollError instanceof Error
+            ? lastPollError
+            : new Error(pollMsg);
+        }
+
+        // No execute yet — safe to run deterministic MCP (single execute).
+        if (isAlreadyPublishedError(message)) {
+          // Agent failed before we captured an execution id, but registry says
+          // duplicate — re-submit would only fail again.
+          throw new Error(
+            `KeeperHub MCP ${params.action}: ${message} ` +
+              `(refusing deterministic re-submit of the same contentHash)`,
+          );
+        }
+
         console.warn(
-          `[keeperhub-mcp] LangChain agent path failed for ${params.action}, ` +
-            `falling back to deterministic MCP: ${message}`,
+          `[keeperhub-mcp] LangChain agent path failed for ${params.action} ` +
+            `before execute_workflow, falling back to deterministic MCP: ${message}`,
         );
         return await publishViaDeterministicMcp(client, params);
       }

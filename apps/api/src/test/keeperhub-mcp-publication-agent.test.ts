@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { KeeperHubMcpClient } from "../services/keeperhub-mcp-client.ts";
-import { publishViaDeterministicMcp } from "../agents/langchain/keeperhub-mcp-publication-agent.ts";
+import {
+  isAlreadyPublishedError,
+  publishViaDeterministicMcp,
+} from "../agents/langchain/keeperhub-mcp-publication-agent.ts";
 import { createKeeperHubMcpLangChainTools } from "../agents/langchain/keeperhub-mcp-tools.ts";
 
 function mockMcpClient(
@@ -185,6 +188,20 @@ describe("publishViaDeterministicMcp", () => {
   });
 });
 
+describe("isAlreadyPublishedError", () => {
+  it("detects ChronicleRegistry duplicate reverts", () => {
+    expect(
+      isAlreadyPublishedError(
+        "Contract call failed: Error(ChronicleRegistry: alert already published)",
+      ),
+    ).toBe(true);
+    expect(isAlreadyPublishedError("digest already published")).toBe(true);
+    expect(isAlreadyPublishedError("Timed out waiting for execution")).toBe(
+      false,
+    );
+  });
+});
+
 describe("createKeeperHubMcpLangChainTools", () => {
   it("exposes list/get/execute/status tool names for the ReAct agent", () => {
     const client = mockMcpClient({});
@@ -221,5 +238,38 @@ describe("createKeeperHubMcpLangChainTools", () => {
       { name: "get_execution", args: { executionId: "exec_x", includeData: false } },
     ]);
     expect(String(raw)).toContain("exec_x");
+  });
+
+  it("singleExecute caches execute_workflow so the agent cannot double-submit", async () => {
+    let executeCount = 0;
+    const client = mockMcpClient({
+      execute_workflow: async () => {
+        executeCount += 1;
+        return { data: { executionId: `exec_${executeCount}` } };
+      },
+    });
+
+    const tools = createKeeperHubMcpLangChainTools(client, {
+      singleExecute: true,
+    });
+    const execTool = tools.find((t) => t.name === "execute_workflow")!;
+
+    const first = String(
+      await execTool.invoke({
+        workflowId: "wf_1",
+        input: { contentHash: "0x" + "aa".repeat(32) },
+      }),
+    );
+    const second = String(
+      await execTool.invoke({
+        workflowId: "wf_1",
+        input: { contentHash: "0x" + "aa".repeat(32) },
+      }),
+    );
+
+    expect(executeCount).toBe(1);
+    expect(first).toContain("exec_1");
+    expect(second).toContain("reused");
+    expect(second).toContain("exec_1");
   });
 });

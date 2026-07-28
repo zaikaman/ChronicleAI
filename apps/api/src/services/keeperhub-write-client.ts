@@ -15,7 +15,10 @@
 
 import { keccak256, parseUnits, stringToBytes } from "viem";
 import type { ExecutionLogRepository } from "@chronicleai/db";
-import { publishViaKeeperHubMcp } from "../agents/langchain/keeperhub-mcp-publication-agent.ts";
+import {
+  isAlreadyPublishedError,
+  publishViaKeeperHubMcp,
+} from "../agents/langchain/keeperhub-mcp-publication-agent.ts";
 import { resolveKeeperHubMcpUrl } from "./keeperhub-mcp-client.ts";
 import type { LLMProviderMap } from "./llm-provider-client.ts";
 import {
@@ -442,6 +445,19 @@ export function createKeeperHubWriteClient(
         } catch (mcpError) {
           const message =
             mcpError instanceof Error ? mcpError.message : String(mcpError);
+
+          // Registry already has this contentHash. REST re-submit will only
+          // burn gas and fail again with the same revert.
+          if (isAlreadyPublishedError(message)) {
+            console.warn(
+              `[keeperhub-mcp] ${action} refused REST fallback — contentHash ` +
+                `already published on-chain: ${message}`,
+            );
+            throw mcpError instanceof Error
+              ? mcpError
+              : new Error(`KeeperHub MCP ${action} failed: ${message}`);
+          }
+
           if (!mcpRestFallback) {
             throw mcpError instanceof Error
               ? mcpError
