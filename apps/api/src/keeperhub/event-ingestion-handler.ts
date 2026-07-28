@@ -13,6 +13,7 @@ import { createPublicAlertContentService, type LLMProviderMap, type PublicAlertC
 import { createAlertPublicationService, type AlertPublicationService } from "../services/alert-publication-service.ts";
 import type { ChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import type { NotificationService } from "../services/notification-service.ts";
+import type { TreasuryRegistryGate } from "../services/treasury-registry-gate.ts";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
 
 export interface IngestionResult {
@@ -43,6 +44,8 @@ export class EventIngestionHandler {
     frontendOrigin?: string;
     /** Community channels (Discord / Telegram) for post-registry alert fan-out. */
     notificationService?: NotificationService | null;
+    /** Treasury gate for FR-026 registry write suspension. */
+    treasuryGate?: TreasuryRegistryGate | null;
   }) {
     this.eventRepo = deps.eventRepo;
     this.alertRepo = deps.alertRepo;
@@ -56,6 +59,8 @@ export class EventIngestionHandler {
       deps.registryService ?? null,
       deps.frontendOrigin,
       deps.notificationService ?? null,
+      deps.treasuryGate ?? null,
+      deps.execLogRepo,
     );
   }
 

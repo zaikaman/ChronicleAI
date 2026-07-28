@@ -1,7 +1,11 @@
 // Digest publication service: orchestrates Chronicle Registry -> SMTP dispatch
 // + community channel bulletins (Discord / Telegram) with self-hosted content
+//
+// FR-026 / IDEA Loop 3: registry writes are treasury-gated — suspended when
+// the Para wallet balance is below the safety buffer; SMTP/community still
+// proceed and a public low-balance warning is emitted.
 
-import type { DailyDigestRepository } from "@chronicleai/db";
+import type { DailyDigestRepository, ExecutionLogRepository } from "@chronicleai/db";
 import type {
   ChronicleRegistryService,
   RegistryPublishResult,
@@ -12,6 +16,7 @@ import type {
   NotificationService,
 } from "./notification-service.ts";
 import type { SmtpEmailService, SmtpSendResult } from "./smtp-email-service.ts";
+import type { TreasuryRegistryGate } from "./treasury-registry-gate.ts";
 
 export interface DigestPublicationResult {
   success: boolean;
@@ -24,6 +29,8 @@ export interface DigestPublicationResult {
   communityBroadcast?: ChannelDeliveryResult | undefined;
   errorMessage?: string | undefined;
   publicationStatus: "published" | "partial_failure" | "failed";
+  /** True when on-chain registry write was skipped due to treasury gate. */
+  registrySuspended?: boolean | undefined;
 }
 
 export interface DigestPublicationService {
@@ -45,6 +52,8 @@ export function createDigestPublicationService(
   frontendOrigin: string,
   smtpService: SmtpEmailService,
   notificationService?: NotificationService | null,
+  treasuryGate?: TreasuryRegistryGate | null,
+  execLogRepo?: ExecutionLogRepository | null,
 ): DigestPublicationService {
   return {
     async publishDigest(digest) {
@@ -53,6 +62,7 @@ export function createDigestPublicationService(
       let smtpResult: SmtpSendResult | undefined;
       let communityBroadcast: ChannelDeliveryResult | undefined;
       const failures: string[] = [];
+      let registrySuspended = false;
 
       let keeperHubRunId: string | undefined;
       let explorerUrl: string | undefined;
@@ -60,25 +70,79 @@ export function createDigestPublicationService(
       // Self-hosted HTTPS content URI — stable per-digest public page (Vercel SPA).
       const contentUri = buildDigestContentUri(frontendOrigin, digest.id);
 
+      // FR-026: consult treasury before any on-chain registry write.
+      let allowRegistryWrite = true;
+      if (treasuryGate) {
+        const decision = await treasuryGate.evaluate();
+        if (!decision.allowRegistryWrite) {
+          allowRegistryWrite = false;
+          registrySuspended = true;
+          failures.push(`Registry: suspended — ${decision.reason}`);
+
+          if (execLogRepo) {
+            await execLogRepo.append({
+              action_type: "registry_write",
+              entity_type: "daily_digest",
+              entity_id: digest.id,
+              status: "failed",
+              message: `Registry write suspended: ${decision.reason}`,
+              details: {
+                reason: "treasury_gate",
+                available_balance: decision.availableBalance,
+                safety_buffer: decision.safetyBuffer,
+                treasury_status: decision.status,
+                deficit_percentage: decision.deficitPercentage,
+                snapshot_id: decision.snapshotId,
+                source_event_root: digest.sourceEventRoot ?? digest.id,
+                content_uri: contentUri,
+              },
+              started_at: publishedAt,
+              completed_at: publishedAt,
+            });
+          }
+
+          if (
+            notificationService &&
+            decision.availableBalance !== undefined &&
+            decision.safetyBuffer !== undefined
+          ) {
+            try {
+              await notificationService.sendLowBalanceWarning({
+                availableBalance: decision.availableBalance,
+                safetyBuffer: decision.safetyBuffer,
+                deficitPercentage: decision.deficitPercentage ?? 0,
+                status: decision.status ?? "warning",
+              });
+            } catch {
+              // Soft-fail: warning delivery must not block digest publication.
+            }
+          }
+
+          await digestRepo.updateRegistryMetadata(digest.id, { contentUri });
+        }
+      }
+
       // Step 1: Chronicle Registry on-chain publish with the same resolvable URI
-      const registryResult: RegistryPublishResult = await registryService.publishDigest(
-        digest.id,
-        digest.sourceEventRoot ?? digest.id,
-        contentUri,
-      );
-      if (registryResult.success && registryResult.txHash) {
-        registryTxHash = registryResult.txHash;
-        keeperHubRunId = registryResult.keeperHubRunId;
-        explorerUrl = registryResult.explorerUrl;
-        await digestRepo.updateRegistryMetadata(digest.id, {
-          registryTxHash,
+      if (allowRegistryWrite) {
+        const registryResult: RegistryPublishResult = await registryService.publishDigest(
+          digest.id,
+          digest.sourceEventRoot ?? digest.id,
           contentUri,
-          ...(keeperHubRunId ? { keeperHubRunId } : {}),
-          ...(explorerUrl ? { explorerUrl } : {}),
-        });
-      } else {
-        failures.push(`Registry: ${registryResult.errorMessage ?? "unknown error"}`);
-        await digestRepo.updateRegistryMetadata(digest.id, { contentUri });
+        );
+        if (registryResult.success && registryResult.txHash) {
+          registryTxHash = registryResult.txHash;
+          keeperHubRunId = registryResult.keeperHubRunId;
+          explorerUrl = registryResult.explorerUrl;
+          await digestRepo.updateRegistryMetadata(digest.id, {
+            registryTxHash,
+            contentUri,
+            ...(keeperHubRunId ? { keeperHubRunId } : {}),
+            ...(explorerUrl ? { explorerUrl } : {}),
+          });
+        } else {
+          failures.push(`Registry: ${registryResult.errorMessage ?? "unknown error"}`);
+          await digestRepo.updateRegistryMetadata(digest.id, { contentUri });
+        }
       }
 
       // Step 2: SMTP email broadcast (link readers to the public digest page)
@@ -125,7 +189,7 @@ export function createDigestPublicationService(
 
       // publicationStatus: registry+smtp+community are soft channels; treat as
       // failed only when every configured delivery path failed hard enough that
-      // nothing reached readers (registry always attempted; SMTP always attempted).
+      // nothing reached readers. Treasury-gated registry skip alone is partial.
       const publicationStatus =
         failures.length === 0
           ? "published"
@@ -146,6 +210,7 @@ export function createDigestPublicationService(
         communityBroadcast,
         errorMessage: failures.length > 0 ? failures.join("; ") : undefined,
         publicationStatus,
+        registrySuspended: registrySuspended || undefined,
       };
     },
   };

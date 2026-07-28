@@ -66,20 +66,22 @@ try {
   const payoutRepo = createPayoutRecordRepository(supabase);
   const activityRepo = createAgentActivityRepository(supabase);
 
-  // US1: Public Alerts
+  // US1: Public Alerts (treasury-gated registry writes)
   setupUS1Routes(app, env, {
     eventRepo,
     alertRepo,
     execLogRepo,
     llmAttemptRepo,
+    treasuryRepo,
   });
 
-  // US2: Daily Digests + email subscribers
+  // US2: Daily Digests + email subscribers (treasury-gated registry writes)
   setupUS2Routes(app, env, {
     eventRepo,
     digestRepo,
     execLogRepo,
     subscriberRepo,
+    treasuryRepo,
   });
 
   // US3: Premium Access & Sponsored Watch (Loop 4: create → monitor → report)

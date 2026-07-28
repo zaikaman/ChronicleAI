@@ -24,12 +24,15 @@ import type {
   LLMGenerationAttemptRepository,
   MonitoredEventRepository,
   PublicAlertRepository,
+  TreasurySnapshotRepository,
 } from "@chronicleai/db";
 import { BlockIngestionHandler } from "../keeperhub/block-ingestion-handler.ts";
 import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
 import { createEventNormalizer } from "../monitoring/event-normalizer.ts";
 import { createOnChainBlockService } from "../monitoring/on-chain-block-service.ts";
 import { createPriceOracle } from "../monitoring/price-oracle-service.ts";
+import { createTreasuryRegistryGate } from "../services/treasury-registry-gate.ts";
+import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
 import { createAlertRoutes } from "./alert-routes.ts";
 import { createKeeperhubBlockRoutes } from "./keeperhub-block-routes.ts";
@@ -40,12 +43,18 @@ export interface US1Dependencies {
   alertRepo: PublicAlertRepository;
   execLogRepo: ExecutionLogRepository;
   llmAttemptRepo: LLMGenerationAttemptRepository;
+  /** Latest Para wallet snapshots for FR-026 treasury-gated registry writes. */
+  treasuryRepo: TreasurySnapshotRepository;
 }
 
 export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependencies): void {
   // KeeperHub-backed registry writes for publishAlert (null if not configured)
   const web3Client = createWeb3Client(env);
   const registryService = createChronicleRegistryService(web3Client);
+  const treasuryGate = createTreasuryRegistryGate(
+    deps.treasuryRepo,
+    createTreasuryStatusService(),
+  );
 
   // Community channels: Discord + Telegram post-registry alert fan-out (IDEA Loop 1 step 5)
   const notificationService = createNotificationService(deps.execLogRepo, {
@@ -76,6 +85,7 @@ export function setupUS1Routes(app: Express, env: ServerEnv, deps: US1Dependenci
     registryService,
     frontendOrigin: env.frontendOrigin,
     notificationService,
+    treasuryGate,
   });
 
   const priceOracle = createPriceOracle(env.rpcUrl);
@@ -117,12 +127,18 @@ export interface US2Dependencies {
   digestRepo: DailyDigestRepository;
   execLogRepo: ExecutionLogRepository;
   subscriberRepo: EmailSubscriberRepository;
+  /** Latest Para wallet snapshots for FR-026 treasury-gated registry writes. */
+  treasuryRepo: TreasurySnapshotRepository;
 }
 
 export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependencies): void {
   // Initialize services
   const web3Client = createWeb3Client(env);
   const registryService = createChronicleRegistryService(web3Client);
+  const treasuryGate = createTreasuryRegistryGate(
+    deps.treasuryRepo,
+    createTreasuryStatusService(),
+  );
   const smtpService = createSmtpEmailService({
     host: env.smtpHost,
     port: env.smtpPort,
@@ -154,6 +170,8 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
     env.frontendOrigin,
     smtpService,
     notificationService,
+    treasuryGate,
+    deps.execLogRepo,
   );
 
   const handler = new DigestRunHandler({
@@ -304,13 +322,11 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
 import type {
   AgentActivityRepository,
   PayoutRecordRepository,
-  TreasurySnapshotRepository,
 } from "@chronicleai/db";
 import { RevenueRoutingHandler } from "../keeperhub/revenue-routing-handler.ts";
 import { TreasuryCheckHandler } from "../keeperhub/treasury-check-handler.ts";
 import { createAgentActivityService } from "../services/agent-activity-service.ts";
 import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
-import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 import { createActivityRoutes } from "./activity-routes.ts";
 import { createKeeperhubRevenueRoutes } from "./keeperhub-revenue-routes.ts";
 import { createKeeperhubTreasuryRoutes } from "./keeperhub-treasury-routes.ts";
