@@ -110,8 +110,13 @@ export class PremiumAccessService {
     }
 
     // If the receipt carries a payer claim, it must match the settled record
-    if (claims.pay && payment.payer_reference && claims.pay !== payment.payer_reference) {
-      throw new PaymentRequiredError(item, paymentRoute);
+    // (EVM addresses compared case-insensitively to match normalizePayerReference storage).
+    if (claims.pay && payment.payer_reference) {
+      const claimPay = claims.pay.trim().toLowerCase();
+      const storedPay = payment.payer_reference.trim().toLowerCase();
+      if (claimPay !== storedPay) {
+        throw new PaymentRequiredError(item, paymentRoute);
+      }
     }
 
     return {

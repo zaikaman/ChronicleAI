@@ -7,6 +7,27 @@ import { type Result, failure, success } from "./errors.ts";
 import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
 import type { PaymentRecordInsert, PaymentRecordRow, PaymentRecordUpdate } from "./types.ts";
 
+/** EVM address pattern (case-insensitive). */
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
+/**
+ * Normalize payer references for consistent storage and lookup.
+ * - Trims whitespace
+ * - Lowercases EVM addresses so checksum vs lowercase never miss matches
+ * - Returns null for empty/missing values
+ */
+export function normalizePayerReference(
+  payerReference: string | null | undefined,
+): string | null {
+  if (payerReference == null) return null;
+  const trimmed = payerReference.trim();
+  if (!trimmed) return null;
+  if (EVM_ADDRESS_RE.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  return trimmed;
+}
+
 export interface PaymentRecordRepository {
   createChallenge(record: PaymentRecordInsert): Promise<Result<PaymentRecordRow>>;
   findById(id: string): Promise<Result<PaymentRecordRow | null>>;
@@ -44,7 +65,12 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
 
   return {
     async createChallenge(record) {
-      const { data, error } = await table().insert(record).select().single();
+      const insert: PaymentRecordInsert = { ...record };
+      if (record.payer_reference !== undefined) {
+        insert.payer_reference = normalizePayerReference(record.payer_reference);
+      }
+
+      const { data, error } = await table().insert(insert).select().single();
 
       if (error) return failure(mapPostgrestError(error));
       return success(data as unknown as PaymentRecordRow);
@@ -71,8 +97,14 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       return success(maybeRow(data ?? []));
     },
 
+    /**
+     * Mark a payment as settled and persist settlement metadata.
+     * Always stores `payer_reference` when a verified (or challenge-time) payer is provided
+     * so `findSettledByPayer` and payer-scoped access checks work.
+     */
     async markSettled(id, settlementReference, amountSettled, currency, payerReference?) {
       const now = new Date().toISOString();
+      const normalizedPayer = normalizePayerReference(payerReference);
       const updates: PaymentRecordUpdate = {
         status: "settled" as PaymentStatus,
         settlement_reference: settlementReference,
@@ -81,8 +113,8 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
         settled_at: now,
       };
       // Persist verified payer so access checks can scope entitlement to this payer only.
-      if (payerReference != null && payerReference !== "") {
-        updates.payer_reference = payerReference;
+      if (normalizedPayer != null) {
+        updates.payer_reference = normalizedPayer;
       }
       return update(id, updates);
     },
@@ -128,10 +160,14 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       if (!uuidRegex.test(premiumItemId)) {
         return success(null);
       }
+      const normalizedPayer = normalizePayerReference(payerReference);
+      if (!normalizedPayer) {
+        return success(null);
+      }
       const { data, error } = await table()
         .select("*")
         .eq("premium_item_id", premiumItemId)
-        .eq("payer_reference", payerReference)
+        .eq("payer_reference", normalizedPayer)
         .eq("status", "settled")
         .limit(1);
 

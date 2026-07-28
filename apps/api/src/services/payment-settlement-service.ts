@@ -146,14 +146,24 @@ export class PaymentSettlementService {
       };
     }
 
-    // Record successful settlement, including verified payer for access gating
-    await this.paymentRecordRepo.markSettled(
+    // Prefer the on-chain / adapter-verified payer; fall back to challenge-time payer.
+    // Persisting this is required for findSettledByPayer and payer-scoped access receipts.
+    const payerReference =
+      verification.payerReference ?? record.payer_reference ?? null;
+
+    const settleWrite = await this.paymentRecordRepo.markSettled(
       record.id,
       verification.settlementReference,
       verification.amountSettled,
       verification.currency,
-      verification.payerReference ?? record.payer_reference ?? null,
+      payerReference,
     );
+
+    if (!settleWrite.ok) {
+      throw badRequest(
+        `Failed to record payment settlement: ${settleWrite.error.message}`,
+      );
+    }
 
     // Log the successful settlement
     await this.execLogRepo.append({
@@ -167,7 +177,7 @@ export class PaymentSettlementService {
         settlementReference: params.settlementReference,
         amountSettled: verification.amountSettled,
         currency: verification.currency,
-        payerReference: verification.payerReference,
+        payerReference: settleWrite.value.payer_reference ?? payerReference,
       },
       started_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
@@ -176,10 +186,22 @@ export class PaymentSettlementService {
     // Check if this is a sponsored_monitor item (will trigger sponsored watch creation)
     // The caller (route handler) will check the premium item content type and create the watch
 
+    // Surface the stored payer on the verification result so receipt issuance
+    // and clients see the same value that was written to payment_records.
+    const storedPayer = settleWrite.value.payer_reference;
+    const verificationWithPayer: SettlementVerificationResult = {
+      ...verification,
+      ...(storedPayer
+        ? { payerReference: storedPayer }
+        : payerReference
+          ? { payerReference }
+          : {}),
+    };
+
     return {
       settled: true,
       paymentRecordId: record.id,
-      verification,
+      verification: verificationWithPayer,
       isSponsoredWatch: false, // Caller determines this from the premium item type
     };
   }
