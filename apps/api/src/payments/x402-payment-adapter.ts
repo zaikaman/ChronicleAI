@@ -32,6 +32,8 @@ const USDC_EIP3009_ABI = [
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
+/** EIP-712 placeholder when the payer wallet is not known at challenge time. */
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 export interface X402AuthorizationPayload {
   signature: string;
@@ -209,12 +211,16 @@ export class X402PaymentAdapter implements PaymentAdapter {
     }
 
     const treasuryTo = this.treasuryWalletAddress;
-    // `from` is filled by the payer wallet at sign time when not pre-bound
+    // When the payer is not pre-bound, `from` is the zero-address placeholder.
+    // Clients overwrite `from` with the connected wallet at sign time (see
+    // PaymentChallengePanel). Settlement MUST reject zero-address `from`,
+    // require recovered signer === `from`, and confirm Transfer to treasury.
+    const boundFrom =
+      params.payerReference && ADDRESS_RE.test(params.payerReference)
+        ? params.payerReference
+        : ZERO_ADDRESS;
     const message = {
-      from:
-        params.payerReference && ADDRESS_RE.test(params.payerReference)
-          ? params.payerReference
-          : "0x0000000000000000000000000000000000000000",
+      from: boundFrom,
       to: treasuryTo,
       value: Math.round(params.amount * 1_000_000), // Scale USDC to 6 decimals
       validAfter: 0,
@@ -390,6 +396,19 @@ export class X402PaymentAdapter implements PaymentAdapter {
         currency: params.currency,
         settlementReference: params.settlementReference,
         errorMessage: "Invalid payer (from) address in authorization",
+      };
+    }
+
+    // Zero-address `from` is only a challenge-time placeholder — never accept
+    // settlement authorizations that leave the payer unbound.
+    if (from.toLowerCase() === ZERO_ADDRESS) {
+      return {
+        verified: false,
+        amountSettled: 0,
+        currency: params.currency,
+        settlementReference: params.settlementReference,
+        errorMessage:
+          "Invalid payer (from) address: zero address is not allowed at settlement; client must set from to the signing wallet",
       };
     }
 

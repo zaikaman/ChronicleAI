@@ -534,6 +534,222 @@ describe("X402PaymentAdapter", () => {
         expect(result.errorMessage).toContain("Insufficient payment value");
         expect(railAdapter).toBeTruthy();
       });
+
+      it("should accept unbound challenge (zero from) when client overwrites from at sign time", async () => {
+        // Audit #6: challenge may use zero-address from when payer is not pre-bound.
+        // Client sets from to the signing wallet; server enforces signer === from + treasury to.
+        const wallet = ethers.Wallet.createRandom();
+        const amount = 5;
+        const txHash =
+          "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
+        const settleAuthorization = vi.fn().mockResolvedValue({
+          success: true,
+          transactionHash: txHash,
+        });
+        const verifyTransactionReceipt = vi.fn().mockResolvedValue({
+          confirmed: true,
+          from: wallet.address,
+          to: TREASURY,
+          value: BigInt(Math.round(amount * 1_000_000)),
+        });
+
+        const railAdapter = new X402PaymentAdapter({
+          treasuryWalletAddress: TREASURY,
+          settleAuthorization,
+          verifyTransactionReceipt,
+        });
+
+        // No payerReference → challenge message.from is zero address
+        const challenge = await railAdapter.createChallenge({
+          premiumItemId: "premium-001",
+          amount,
+          currency: "USDC",
+        });
+
+        const challengeData = challenge.challengeData as {
+          domain: ethers.TypedDataDomain;
+          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
+          message: {
+            from: string;
+            to: string;
+            value: number;
+            validAfter: number;
+            validBefore: number;
+            nonce: string;
+          };
+        };
+
+        expect(challengeData.message.from).toBe(
+          "0x0000000000000000000000000000000000000000",
+        );
+        expect(challengeData.message.to).toBe(TREASURY);
+
+        // Client overwrites from at sign time (matches PaymentChallengePanel)
+        const messageToSign = {
+          ...challengeData.message,
+          from: wallet.address,
+        };
+
+        const signature = await wallet.signTypedData(
+          challengeData.domain,
+          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          messageToSign,
+        );
+
+        const result = await railAdapter.verifySettlement({
+          challengeReference: challenge.challengeReference,
+          settlementReference: JSON.stringify({
+            signature,
+            from: wallet.address,
+            to: TREASURY,
+            value: messageToSign.value,
+            validAfter: messageToSign.validAfter,
+            validBefore: messageToSign.validBefore,
+            nonce: messageToSign.nonce,
+          }),
+          amountRequested: amount,
+          currency: "USDC",
+          paymentRoute: "x402",
+        });
+
+        expect(result.verified).toBe(true);
+        expect(result.payerReference?.toLowerCase()).toBe(wallet.address.toLowerCase());
+        expect(result.settlementReference).toBe(txHash);
+        expect(verifyTransactionReceipt).toHaveBeenCalledWith(
+          txHash,
+          expect.objectContaining({
+            to: TREASURY,
+            from: wallet.address,
+          }),
+        );
+      });
+
+      it("should reject settlement when authorization from remains the zero address", async () => {
+        const wallet = ethers.Wallet.createRandom();
+        const amount = 5;
+        const zero = "0x0000000000000000000000000000000000000000";
+
+        const railAdapter = new X402PaymentAdapter({
+          treasuryWalletAddress: TREASURY,
+          settleAuthorization: vi.fn(),
+          verifyTransactionReceipt: vi.fn(),
+        });
+
+        const challenge = await railAdapter.createChallenge({
+          premiumItemId: "premium-001",
+          amount,
+          currency: "USDC",
+        });
+
+        const challengeData = challenge.challengeData as {
+          domain: ethers.TypedDataDomain;
+          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
+          message: {
+            from: string;
+            to: string;
+            value: number;
+            validAfter: number;
+            validBefore: number;
+            nonce: string;
+          };
+        };
+
+        // Sign with real wallet but claim from=zero (should fail closed before rail)
+        const messageToSign = {
+          ...challengeData.message,
+          from: zero,
+          to: TREASURY,
+        };
+
+        const signature = await wallet.signTypedData(
+          challengeData.domain,
+          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          messageToSign,
+        );
+
+        const result = await railAdapter.verifySettlement({
+          challengeReference: challenge.challengeReference,
+          settlementReference: JSON.stringify({
+            signature,
+            from: zero,
+            to: TREASURY,
+            value: messageToSign.value,
+            validAfter: messageToSign.validAfter,
+            validBefore: messageToSign.validBefore,
+            nonce: messageToSign.nonce,
+          }),
+          amountRequested: amount,
+          currency: "USDC",
+          paymentRoute: "x402",
+        });
+
+        expect(result.verified).toBe(false);
+        expect(result.errorMessage).toMatch(/zero address/i);
+      });
+
+      it("should reject when recovered signer does not match authorization from", async () => {
+        const signer = ethers.Wallet.createRandom();
+        const claimedFrom = "0xcccccccccccccccccccccccccccccccccccccccc";
+        const amount = 5;
+
+        const railAdapter = new X402PaymentAdapter({
+          treasuryWalletAddress: TREASURY,
+          settleAuthorization: vi.fn(),
+          verifyTransactionReceipt: vi.fn(),
+        });
+
+        const challenge = await railAdapter.createChallenge({
+          premiumItemId: "premium-001",
+          amount,
+          currency: "USDC",
+        });
+
+        const challengeData = challenge.challengeData as {
+          domain: ethers.TypedDataDomain;
+          types: { TransferWithAuthorization: Array<{ name: string; type: string }> };
+          message: {
+            from: string;
+            to: string;
+            value: number;
+            validAfter: number;
+            validBefore: number;
+            nonce: string;
+          };
+        };
+
+        // Sign typed data where from is claimedFrom, but with a different key
+        const messageToSign = {
+          ...challengeData.message,
+          from: claimedFrom,
+          to: TREASURY,
+        };
+
+        const signature = await signer.signTypedData(
+          challengeData.domain,
+          { TransferWithAuthorization: challengeData.types.TransferWithAuthorization },
+          messageToSign,
+        );
+
+        const result = await railAdapter.verifySettlement({
+          challengeReference: challenge.challengeReference,
+          settlementReference: JSON.stringify({
+            signature,
+            from: claimedFrom,
+            to: TREASURY,
+            value: messageToSign.value,
+            validAfter: messageToSign.validAfter,
+            validBefore: messageToSign.validBefore,
+            nonce: messageToSign.nonce,
+          }),
+          amountRequested: amount,
+          currency: "USDC",
+          paymentRoute: "x402",
+        });
+
+        expect(result.verified).toBe(false);
+        expect(result.errorMessage).toMatch(/recovered address does not match from/i);
+      });
     });
   });
 });
