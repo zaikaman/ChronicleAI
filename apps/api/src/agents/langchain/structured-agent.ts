@@ -227,7 +227,7 @@ export async function invokeStructuredAgent<TSchema extends InteropZodObject>(
     return invokeGroqJsonObjectStructuredAgent(params);
   }
 
-  const effectiveSignal = params.provider === "openai" ? undefined : params.signal;
+  const effectiveSignal = params.signal;
   const runLimit = params.runLimit ?? 1;
 
   const agent = createAgent({
@@ -354,11 +354,8 @@ export async function invokeStructuredAgentWithFallback<TSchema extends InteropZ
   const attempts: ProviderStructuredAttempt[] = [];
 
   for (const { provider, model } of params.models) {
-    const controller = provider === "openai" ? undefined : new AbortController();
-    const timer =
-      provider === "openai" || !controller
-        ? undefined
-        : setTimeout(() => controller.abort(), params.timeoutMs);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), params.timeoutMs);
     const started = Date.now();
     try {
       const result = await invokeStructuredAgent({

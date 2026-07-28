@@ -258,11 +258,8 @@ async function tryLlmNarrative(
     if (!config?.apiKey) continue;
 
     const caller = LLM_PROVIDER_CALLERS[provider];
-    const controller = provider === "openai" ? undefined : new AbortController();
-    const timer =
-      provider === "openai" || !controller
-        ? undefined
-        : setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
     try {
       const raw = await caller(
         config,

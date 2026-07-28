@@ -301,11 +301,8 @@ export function createPremiumDeepDiveGenerationService(
           continue;
         }
 
-        const controller = provider === "openai" ? undefined : new AbortController();
-        const timeoutId =
-          provider === "openai" || !controller
-            ? undefined
-            : setTimeout(() => controller.abort(), PREMIUM_GENERATION_TIMEOUT_MS);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), PREMIUM_GENERATION_TIMEOUT_MS);
         const startTime = Date.now();
 
         try {

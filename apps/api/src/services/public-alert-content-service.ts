@@ -215,11 +215,8 @@ export function createPublicAlertContentService(
           continue;
         }
 
-        const controller = provider === "openai" ? undefined : new AbortController();
-        const timeoutId =
-          provider === "openai" || !controller
-            ? undefined
-            : setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
         const startTime = Date.now();
 
         try {

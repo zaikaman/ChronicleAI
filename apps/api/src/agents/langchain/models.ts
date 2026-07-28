@@ -69,10 +69,10 @@ export function createChatModel(
     return new ChatOpenAI({
       apiKey: config.apiKey,
       model,
-      timeout: undefined,
+      timeout: 600000,
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(config.baseUrl
-        ? { configuration: { baseURL: config.baseUrl, timeout: undefined } }
+        ? { configuration: { baseURL: config.baseUrl, timeout: 600000 } }
         : {}),
     });
   }

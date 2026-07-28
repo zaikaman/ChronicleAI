@@ -224,11 +224,8 @@ export function createDeskTradingAgent(
           const baseCfg = providerConfigs[provider];
           if (!baseCfg?.apiKey?.trim()) continue;
           const cfg = withModel(baseCfg, config.modelOverride, temperature);
-          const controller = provider === "openai" ? undefined : new AbortController();
-          const timer =
-            provider === "openai" || !controller
-              ? undefined
-              : setTimeout(() => controller.abort(), timeoutMs);
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
           const callStarted = Date.now();
           try {
             const raw = await config.callLlm(
@@ -290,11 +287,8 @@ export function createDeskTradingAgent(
         );
 
         for (const { provider, model, config: baseCfg } of models) {
-          const controller = provider === "openai" ? undefined : new AbortController();
-          const timer =
-            provider === "openai" || !controller
-              ? undefined
-              : setTimeout(() => controller.abort(), timeoutMs);
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
           const callStarted = Date.now();
           try {
             const result = await invokeStructuredAgent({

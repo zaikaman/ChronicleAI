@@ -256,7 +256,7 @@ export const DESK_EVENT_MICROTRADE_LOOKBACK_MS = 3_600_000;
 // ── Chronicle Desk LLM agent defaults ───────────────────
 // LLM is the only strategy decision path (no DESK_AGENT_ENABLED off-switch).
 /** Hard timeout for a single agent LLM completion (ms). */
-export const DESK_AGENT_TIMEOUT_MS = 25_000;
+export const DESK_AGENT_TIMEOUT_MS = 600_000;
 /** Decision temperature (low for structured JSON). */
 export const DESK_AGENT_TEMPERATURE = 0.2;
 /** Slightly higher temperature for post-trade narrative only. */

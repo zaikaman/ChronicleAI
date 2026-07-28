@@ -500,11 +500,8 @@ async function runLangChainChat(
     }));
 
   const primary = models[0]!;
-  const controller = primary.provider === "openai" ? undefined : new AbortController();
-  const timer =
-    primary.provider === "openai" || !controller
-      ? undefined
-      : setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
   try {
     const fallbacks = models.slice(1).map((m) => m.model);
     const result = await invokeToolAgent({
