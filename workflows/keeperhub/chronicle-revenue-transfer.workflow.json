@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "exportedAt": "2026-07-11T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Revenue Transfer (USDC Payout)",
     "description": "Material write: ERC-20 USDC transfer for autonomous revenue routing and affiliate withdrawals on the ops rail. Triggered with recipientAddress + amount (human USDC units). Uses Ethereum Sepolia Circle USDC (desk/treasury after CCTP). x402 revenue lands on Base Sepolia and is rebalanced via CCTP before payouts — do not point this workflow at Base USDC."
@@ -36,7 +36,9 @@
           "network": "11155111",
           "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238\",\"symbol\":\"USDC\"}}",
           "amount": "{{@trigger-manual:Trigger.amount}}",
-          "recipientAddress": "{{@trigger-manual:Trigger.recipientAddress}}"
+          "recipientAddress": "{{@trigger-manual:Trigger.recipientAddress}}",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     }

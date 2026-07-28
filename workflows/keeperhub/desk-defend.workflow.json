@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "exportedAt": "2026-07-13T00:00:00.000Z",
   "workflow": {
     "name": "Chronicle Desk — Risk Defend (Aave)",
     "description": "Execute risk_defend legs on Ethereum Sepolia: read Aave HF, then repay debt (prefer USDC/LINK inventory) or withdraw collateral. Triggered by Chronicle execution bridge with asset/amount/mode. Signer = KH desk wallet."
@@ -9,17 +9,25 @@
     {
       "id": "trigger-manual",
       "type": "trigger",
-      "position": { "x": 80, "y": 260 },
+      "position": {
+        "x": 80,
+        "y": 260
+      },
       "data": {
         "type": "trigger",
         "label": "Manual / API Trigger",
-        "config": { "triggerType": "Manual" }
+        "config": {
+          "triggerType": "Manual"
+        }
       }
     },
     {
       "id": "read-hf",
       "type": "action",
-      "position": { "x": 320, "y": 260 },
+      "position": {
+        "x": 320,
+        "y": 260
+      },
       "data": {
         "type": "action",
         "label": "Read Aave User Account Data",
@@ -33,7 +41,10 @@
     {
       "id": "mode-is-repay",
       "type": "action",
-      "position": { "x": 560, "y": 260 },
+      "position": {
+        "x": 560,
+        "y": 260
+      },
       "data": {
         "type": "action",
         "label": "Mode Is Repay",
@@ -60,7 +71,10 @@
     {
       "id": "approve-repay-asset",
       "type": "action",
-      "position": { "x": 820, "y": 120 },
+      "position": {
+        "x": 820,
+        "y": 120
+      },
       "data": {
         "type": "action",
         "label": "Approve Asset for Aave Repay",
@@ -69,14 +83,19 @@
           "network": "11155111",
           "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"{{@trigger-manual:Trigger.asset}}\",\"symbol\":\"ASSET\"}}",
           "spenderAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
-          "amount": "max"
+          "amount": "max",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     },
     {
       "id": "aave-repay",
       "type": "action",
-      "position": { "x": 1080, "y": 120 },
+      "position": {
+        "x": 1080,
+        "y": 120
+      },
       "data": {
         "type": "action",
         "label": "Aave V3 Repay",
@@ -86,14 +105,19 @@
           "asset": "{{@trigger-manual:Trigger.asset}}",
           "amount": "{{@trigger-manual:Trigger.amount}}",
           "interestRateMode": "2",
-          "onBehalfOf": "{{@trigger-manual:Trigger.deskAddress}}"
+          "onBehalfOf": "{{@trigger-manual:Trigger.deskAddress}}",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     },
     {
       "id": "aave-withdraw",
       "type": "action",
-      "position": { "x": 820, "y": 400 },
+      "position": {
+        "x": 820,
+        "y": 400
+      },
       "data": {
         "type": "action",
         "label": "Aave V3 Withdraw",
@@ -102,14 +126,24 @@
           "network": "11155111",
           "asset": "{{@trigger-manual:Trigger.asset}}",
           "amount": "{{@trigger-manual:Trigger.amount}}",
-          "to": "{{@trigger-manual:Trigger.deskAddress}}"
+          "to": "{{@trigger-manual:Trigger.deskAddress}}",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-manual", "target": "read-hf" },
-    { "id": "e2", "source": "read-hf", "target": "mode-is-repay" },
+    {
+      "id": "e1",
+      "source": "trigger-manual",
+      "target": "read-hf"
+    },
+    {
+      "id": "e2",
+      "source": "read-hf",
+      "target": "mode-is-repay"
+    },
     {
       "id": "e3",
       "type": "animated",
@@ -117,7 +151,11 @@
       "target": "approve-repay-asset",
       "sourceHandle": "true"
     },
-    { "id": "e4", "source": "approve-repay-asset", "target": "aave-repay" },
+    {
+      "id": "e4",
+      "source": "approve-repay-asset",
+      "target": "aave-repay"
+    },
     {
       "id": "e5",
       "type": "animated",

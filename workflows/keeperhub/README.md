@@ -191,10 +191,18 @@ These drive the desk signal engine (`policy_verdict`). All use `network: "111551
 | `desk-gas-poll.workflow.json` | every **150th** Sepolia block (~30m) | ~1.4k | `gas_regime` | policy gas defer |
 | `desk-capital-tick.workflow.json` | Schedule **hourly** | ~720 | `capital_tick` | capital manager |
 
-**Placeholders (import-safe):**
+**Placeholders (import-safe templates under `workflows/keeperhub/`):**
 
-- Desk wallet address fields must be a real `0x` + 40 hex chars at import time (KeeperHub rejects non-address strings like `YOUR_DESK_…` with `INVALID_ACTION_CONFIG`). JSON ships with `0x0000000000000000000000000000000000000001` — **replace with your real `DESK_WALLET_ADDRESS` after import** before enabling.
+- Desk wallet address fields must be a real `0x` + 40 hex chars at import time (KeeperHub rejects non-address strings like `YOUR_DESK_…` with `INVALID_ACTION_CONFIG`). Templates ship with `0x0000000000000000000000000000000000000001` — replace with your real `DESK_WALLET_ADDRESS` before enabling.
 - Telegram: `YOUR_TELEGRAM_INGEST_CHAT_ID` is fine for chatId (not an address field); still replace with the real group id before enable.
+
+**Import-ready copies (`workflows/keeperhub-ready/`):** regenerate from templates + `apps/api/.env` so every placeholder is filled:
+
+```bash
+node scripts/prepare-keeperhub-ready.mjs
+```
+
+Substitutions: `YOUR_TELEGRAM_INGEST_CHAT_ID` → `TELEGRAM_INGEST_CHAT_ID`, desk `0x0000…0001` → `DESK_WALLET_ADDRESS`, registry write `contractAddress` → `CHRONICLE_REGISTRY_ADDRESS`. Prefer importing from `keeperhub-ready/` for local/demo deploys.
 
 ### Free-tier multi-account split (≤5k runs/mo each)
 

@@ -37,7 +37,9 @@
           "contractAddress": "0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F",
           "abiFunction": "recordPayout",
           "functionArgs": "[\"{{@trigger-manual:Trigger.payoutPeriodHash}}\",\"{{@trigger-manual:Trigger.recipient}}\",\"{{@trigger-manual:Trigger.amount}}\",\"{{@trigger-manual:Trigger.reasonHash}}\"]",
-          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"payoutPeriodHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordPayout\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"payoutPeriodHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordPayout\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     }

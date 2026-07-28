@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "exportedAt": "2026-07-13T00:00:00.000Z",
   "workflow": {
     "name": "Chronicle Desk — Yield Rotation",
     "description": "Multi-leg yield_rotation on Ethereum Sepolia. direction=into_aave_link: USDC→LINK (Uniswap) then Aave supply LINK. direction=out_of_aave_link: Aave withdraw LINK then LINK→USDC. Pre-trade amounts are min(policy, balance) from Chronicle. Prefer LINK supply (Aave Sepolia USDC/DAI often capped). Signer = KH desk wallet."
@@ -9,17 +9,25 @@
     {
       "id": "trigger-manual",
       "type": "trigger",
-      "position": { "x": 60, "y": 280 },
+      "position": {
+        "x": 60,
+        "y": 280
+      },
       "data": {
         "type": "trigger",
         "label": "Manual / API Trigger",
-        "config": { "triggerType": "Manual" }
+        "config": {
+          "triggerType": "Manual"
+        }
       }
     },
     {
       "id": "dir-into",
       "type": "action",
-      "position": { "x": 300, "y": 280 },
+      "position": {
+        "x": 300,
+        "y": 280
+      },
       "data": {
         "type": "action",
         "label": "Direction Into Aave LINK",
@@ -46,7 +54,10 @@
     {
       "id": "approve-usdc-router",
       "type": "action",
-      "position": { "x": 560, "y": 80 },
+      "position": {
+        "x": 560,
+        "y": 80
+      },
       "data": {
         "type": "action",
         "label": "Approve USDC for Uniswap",
@@ -55,14 +66,19 @@
           "network": "11155111",
           "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238\",\"symbol\":\"USDC\"}}",
           "spenderAddress": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E",
-          "amount": "max"
+          "amount": "max",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     },
     {
       "id": "swap-usdc-link",
       "type": "action",
-      "position": { "x": 820, "y": 80 },
+      "position": {
+        "x": 820,
+        "y": 80
+      },
       "data": {
         "type": "action",
         "label": "Swap USDC to LINK",
@@ -75,14 +91,19 @@
           "recipient": "{{@trigger-manual:Trigger.deskAddress}}",
           "amountIn": "{{@trigger-manual:Trigger.amountIn}}",
           "amountOutMinimum": "{{@trigger-manual:Trigger.amountOutMinimum}}",
-          "sqrtPriceLimitX96": "0"
+          "sqrtPriceLimitX96": "0",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     },
     {
       "id": "approve-link-aave",
       "type": "action",
-      "position": { "x": 1080, "y": 80 },
+      "position": {
+        "x": 1080,
+        "y": 80
+      },
       "data": {
         "type": "action",
         "label": "Approve LINK for Aave",
@@ -91,14 +112,19 @@
           "network": "11155111",
           "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5\",\"symbol\":\"LINK\"}}",
           "spenderAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
-          "amount": "max"
+          "amount": "max",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     },
     {
       "id": "aave-supply-link",
       "type": "action",
-      "position": { "x": 1340, "y": 80 },
+      "position": {
+        "x": 1340,
+        "y": 80
+      },
       "data": {
         "type": "action",
         "label": "Supply LINK to Aave",
@@ -108,14 +134,19 @@
           "asset": "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5",
           "amount": "{{@trigger-manual:Trigger.amountLink}}",
           "onBehalfOf": "{{@trigger-manual:Trigger.deskAddress}}",
-          "referralCode": "0"
+          "referralCode": "0",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     },
     {
       "id": "aave-withdraw-link",
       "type": "action",
-      "position": { "x": 560, "y": 480 },
+      "position": {
+        "x": 560,
+        "y": 480
+      },
       "data": {
         "type": "action",
         "label": "Withdraw LINK from Aave",
@@ -124,14 +155,19 @@
           "network": "11155111",
           "asset": "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5",
           "amount": "{{@trigger-manual:Trigger.amountLink}}",
-          "to": "{{@trigger-manual:Trigger.deskAddress}}"
+          "to": "{{@trigger-manual:Trigger.deskAddress}}",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     },
     {
       "id": "approve-link-router",
       "type": "action",
-      "position": { "x": 820, "y": 480 },
+      "position": {
+        "x": 820,
+        "y": 480
+      },
       "data": {
         "type": "action",
         "label": "Approve LINK for Uniswap",
@@ -140,14 +176,19 @@
           "network": "11155111",
           "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5\",\"symbol\":\"LINK\"}}",
           "spenderAddress": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E",
-          "amount": "max"
+          "amount": "max",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     },
     {
       "id": "swap-link-usdc",
       "type": "action",
-      "position": { "x": 1080, "y": 480 },
+      "position": {
+        "x": 1080,
+        "y": 480
+      },
       "data": {
         "type": "action",
         "label": "Swap LINK to USDC",
@@ -160,13 +201,19 @@
           "recipient": "{{@trigger-manual:Trigger.deskAddress}}",
           "amountIn": "{{@trigger-manual:Trigger.amountIn}}",
           "amountOutMinimum": "{{@trigger-manual:Trigger.amountOutMinimum}}",
-          "sqrtPriceLimitX96": "0"
+          "sqrtPriceLimitX96": "0",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     }
   ],
   "edges": [
-    { "id": "e1", "source": "trigger-manual", "target": "dir-into" },
+    {
+      "id": "e1",
+      "source": "trigger-manual",
+      "target": "dir-into"
+    },
     {
       "id": "e2",
       "type": "animated",
@@ -174,9 +221,21 @@
       "target": "approve-usdc-router",
       "sourceHandle": "true"
     },
-    { "id": "e3", "source": "approve-usdc-router", "target": "swap-usdc-link" },
-    { "id": "e4", "source": "swap-usdc-link", "target": "approve-link-aave" },
-    { "id": "e5", "source": "approve-link-aave", "target": "aave-supply-link" },
+    {
+      "id": "e3",
+      "source": "approve-usdc-router",
+      "target": "swap-usdc-link"
+    },
+    {
+      "id": "e4",
+      "source": "swap-usdc-link",
+      "target": "approve-link-aave"
+    },
+    {
+      "id": "e5",
+      "source": "approve-link-aave",
+      "target": "aave-supply-link"
+    },
     {
       "id": "e6",
       "type": "animated",
@@ -184,8 +243,16 @@
       "target": "aave-withdraw-link",
       "sourceHandle": "false"
     },
-    { "id": "e7", "source": "aave-withdraw-link", "target": "approve-link-router" },
-    { "id": "e8", "source": "approve-link-router", "target": "swap-link-usdc" }
+    {
+      "id": "e7",
+      "source": "aave-withdraw-link",
+      "target": "approve-link-router"
+    },
+    {
+      "id": "e8",
+      "source": "approve-link-router",
+      "target": "swap-link-usdc"
+    }
   ],
   "integrationBindings": []
 }

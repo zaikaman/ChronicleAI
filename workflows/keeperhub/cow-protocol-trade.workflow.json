@@ -1,6 +1,6 @@
-﻿{
+{
   "version": 1,
-  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "exportedAt": "2026-07-11T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI CoW Protocol Large Trade Monitor (Telegram bridge)",
     "description": "NEWSPAPER ONLY (not a desk execution input). FREE TIER: Schedule hourly (~720 schedule fires/mo; For Each can add more) → Query Trade events → size filter → Telegram CHRONICLE_INGEST. Prefer a separate vanity account or leave disabled. CoW is not a v1 Sepolia desk venue."

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-28T00:00:00.000Z",
+  "exportedAt": "2026-07-13T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Record Capital Move (Registry Write)",
     "description": "Material write: recordCapitalMove(moveId, from, to, amount, reasonHash) on Chronicle Registry. Audits desk top-up / sweep / emergency-return capital flows (USDC base units)."
@@ -37,7 +37,9 @@
           "contractAddress": "0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F",
           "abiFunction": "recordCapitalMove",
           "functionArgs": "[\"{{@trigger-manual:Trigger.moveId}}\",\"{{@trigger-manual:Trigger.from}}\",\"{{@trigger-manual:Trigger.to}}\",\"{{@trigger-manual:Trigger.amount}}\",\"{{@trigger-manual:Trigger.reasonHash}}\"]",
-          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"moveId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordCapitalMove\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"moveId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordCapitalMove\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+          "usePrivateMempool": true,
+          "strict": true
         }
       }
     }
