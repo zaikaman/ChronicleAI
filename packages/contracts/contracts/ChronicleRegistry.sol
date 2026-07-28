@@ -13,6 +13,9 @@ pragma solidity ^0.8.20;
  *
  * Each record stores a content hash and emits an event so off-chain indexers
  * and the ChronicleAI dashboard can display the on-chain receipt.
+ *
+ * Loop 4 (sponsored watch): `publishSponsoredReport` anchors the final report
+ * hash together with a Merkle-style `sourceEventRoot` of monitored events.
  */
 contract ChronicleRegistry {
     // ── State ──────────────────────────────────────────────
@@ -39,13 +42,20 @@ contract ChronicleRegistry {
         uint256 endsAt;
         uint256 createdAt;
         string reportUri; // empty until report is published
+        bytes32 reportContentHash; // zero until report is published
+        bytes32 sourceEventRoot; // zero until report is published
     }
 
     // ── Events ─────────────────────────────────────────────
     event AlertPublished(bytes32 indexed alertHash, string ipfsUri, uint256 timestamp);
     event DigestPublished(bytes32 indexed digestHash, bytes32 sourceEventRoot, string ipfsUri, uint256 timestamp);
     event SponsoredWatchCreated(uint256 indexed watchId, address indexed targetContract, bytes32 watchSpecHash, uint256 startsAt, uint256 endsAt);
-    event SponsoredReportPublished(uint256 indexed watchId, bytes32 reportContentHash, string reportUri);
+    event SponsoredReportPublished(
+        uint256 indexed watchId,
+        bytes32 reportContentHash,
+        bytes32 sourceEventRoot,
+        string reportUri
+    );
     event PayoutRecorded(bytes32 indexed payoutPeriodHash, address indexed recipient, uint256 amount, bytes32 reasonHash);
 
     // ── Modifiers ──────────────────────────────────────────
@@ -94,24 +104,40 @@ contract ChronicleRegistry {
             startsAt: startsAt,
             endsAt: endsAt,
             createdAt: block.timestamp,
-            reportUri: ""
+            reportUri: "",
+            reportContentHash: bytes32(0),
+            sourceEventRoot: bytes32(0)
         });
         nextWatchId++;
         emit SponsoredWatchCreated(watchId, targetContract, watchSpecHash, startsAt, endsAt);
     }
 
     // ── Publish Sponsored Report ──────────────────────────
+    /**
+     * @notice Anchors the final sponsored-watch report with its source-event root.
+     * @param watchId On-chain campaign id returned by createSponsoredWatch
+     * @param reportContentHash Hash of the generated report body
+     * @param sourceEventRoot Merkle / commitment root of source events observed in-window
+     * @param reportUri Resolvable HTTPS content URI for the published report
+     */
     function publishSponsoredReport(
         uint256 watchId,
         bytes32 reportContentHash,
+        bytes32 sourceEventRoot,
         string calldata reportUri
     ) external onlyOwner {
         require(watchId < nextWatchId, "ChronicleRegistry: watch does not exist");
         WatchCampaign storage campaign = sponsoredWatches[watchId];
         require(campaign.targetContract != address(0), "ChronicleRegistry: watch does not exist");
         require(bytes(campaign.reportUri).length == 0, "ChronicleRegistry: report already published");
+        require(reportContentHash != bytes32(0), "ChronicleRegistry: report hash required");
+        require(bytes(reportUri).length > 0, "ChronicleRegistry: report URI required");
+
         campaign.reportUri = reportUri;
-        emit SponsoredReportPublished(watchId, reportContentHash, reportUri);
+        campaign.reportContentHash = reportContentHash;
+        campaign.sourceEventRoot = sourceEventRoot;
+
+        emit SponsoredReportPublished(watchId, reportContentHash, sourceEventRoot, reportUri);
     }
 
     // ── Record Payout ──────────────────────────────────────

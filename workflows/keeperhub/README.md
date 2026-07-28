@@ -9,7 +9,7 @@ These are the **only** production write path for Chronicle Registry and revenue 
 | `chronicle-publish-alert.workflow.json` | `publishAlert` | `alertHash`, `ipfsUri` |
 | `chronicle-publish-digest.workflow.json` | `publishDigest` | `digestHash`, `sourceEventRoot`, `ipfsUri` |
 | `chronicle-create-sponsored-watch.workflow.json` | `createSponsoredWatch` | `targetContract`, `watchSpecHash`, `startsAt`, `endsAt` |
-| `chronicle-publish-sponsored-report.workflow.json` | `publishSponsoredReport` | `watchId`, `reportContentHash`, `reportUri` |
+| `chronicle-publish-sponsored-report.workflow.json` | `publishSponsoredReport` | `watchId`, `reportContentHash`, `sourceEventRoot`, `reportUri` |
 | `chronicle-record-payout.workflow.json` | `recordPayout` | `payoutPeriodHash`, `recipient`, `amount`, `reasonHash` |
 | `chronicle-revenue-transfer.workflow.json` | native transfer | `recipientAddress`, `amount` |
 
@@ -21,6 +21,19 @@ These are the **only** production write path for Chronicle Registry and revenue 
 4. Direct ethers `sendTransaction` is disabled unless `ALLOW_DIRECT_ETHERS_WRITES=true` (local tests only; never production).
 
 Each successful write stores `keeper_hub_run_id`, `tx_hash`, and `explorer_url`. Activity page shows **Executed via KeeperHub** with run id + tx.
+
+## Loop 4 — Sponsored watch campaign cycle
+
+After payment settlement creates a watch (`createSponsoredWatch`), ChronicleAI runs the campaign loop automatically every 60s and via KeeperHub:
+
+```bash
+curl -X POST "https://YOUR_HOST/keeperhub/sponsored-watches/run" \
+  -H "Content-Type: application/json" \
+  -H "X-ChronicleAI-Signature: $KEEPERHUB_WEBHOOK_SECRET" \
+  -d '{}'
+```
+
+Cycle steps: activate accepted watches → correlate Event Tracker events to `target_contract` during the window → at `ends_at` generate report → `publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri)` → dashboard shows both create + report tx hashes.
 
 ## Monitoring workflows
 

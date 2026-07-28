@@ -194,6 +194,8 @@ import {
   PremiumAccessReceiptService,
   resolvePremiumAccessSecret,
 } from "../services/premium-access-receipt-service.ts";
+import { createSponsoredWatchService } from "../services/sponsored-watch-service.ts";
+import { createKeeperhubSponsoredWatchRoutes } from "./keeperhub-sponsored-watch-routes.ts";
 import { createPaymentRoutes } from "./payment-routes.ts";
 import { createPremiumRoutes } from "./premium-routes.ts";
 
@@ -202,7 +204,13 @@ export interface US3Dependencies {
   paymentRecordRepo: PaymentRecordRepository;
   execLogRepo: ExecutionLogRepository;
   watchRepo: SponsoredWatchRepository;
+  /** Required for Loop 4 campaign-window event correlation. */
+  eventRepo: MonitoredEventRepository;
 }
+
+/** Interval for automated sponsored-watch activate / monitor / complete (Loop 4). */
+const SPONSORED_WATCH_CYCLE_MS = 60_000;
+
 export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependencies): void {
   const web3Client = createWeb3Client(env);
   const treasury = resolveTreasuryWallet(env);
@@ -232,6 +240,15 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
     }),
   });
 
+  // Shared Loop 4 service: create on payment, monitor window, auto-publish report
+  const watchService = createSponsoredWatchService({
+    watchRepo: deps.watchRepo,
+    execLogRepo: deps.execLogRepo,
+    web3Client,
+    eventRepo: deps.eventRepo,
+    frontendOrigin: env.frontendOrigin,
+  });
+
   // Premium routes
   apiRouter.use(
     createPremiumRoutes({
@@ -253,10 +270,33 @@ export function setupUS3Routes(app: Express, env: ServerEnv, deps: US3Dependenci
       adapters,
       receiptService,
       web3Client,
+      watchService,
       secureCookies: env.nodeEnv === "production",
       frontendOrigin: env.frontendOrigin,
     }),
   );
+
+  // KeeperHub-triggered campaign cycle (scheduled workflow) + signed webhook
+  const keeperhubRouter = Router();
+  keeperhubRouter.use("/keeperhub", keeperhubSignatureMiddleware(env.keeperhubWebhookSecret));
+  keeperhubRouter.use(createKeeperhubSponsoredWatchRoutes(watchService));
+  apiRouter.use(keeperhubRouter);
+
+  // In-process Loop 4 driver: activate / monitor / complete ended campaigns
+  const runSponsoredWatchCycle = () => {
+    void watchService.processCampaignCycle().then((result) => {
+      if (result.activated || result.monitored || result.completed || result.failed) {
+        console.info(
+          `Sponsored watch cycle: activated=${result.activated} monitored=${result.monitored} completed=${result.completed} failed=${result.failed}`,
+        );
+      }
+      if (result.errors.length > 0) {
+        console.warn("Sponsored watch cycle errors:", result.errors.join(" | "));
+      }
+    });
+  };
+  runSponsoredWatchCycle();
+  setInterval(runSponsoredWatchCycle, SPONSORED_WATCH_CYCLE_MS).unref?.();
 }
 
 // ── US4: Public Agent Activity, Treasury & Revenue Payouts ─

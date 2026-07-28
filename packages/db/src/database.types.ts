@@ -528,10 +528,19 @@ export type Database = {
           created_at: string
           ends_at: string
           id: string
+          last_monitored_at: string | null
+          monitored_event_count: number
+          on_chain_watch_id: number | null
+          report_analysis: string | null
           report_content_hash: string | null
           report_explorer_url: string | null
+          report_highlights: Json
           report_keeper_hub_run_id: string | null
+          report_summary: string | null
+          report_title: string | null
           report_tx_hash: string | null
+          source_event_ids: string[]
+          source_event_root: string | null
           starts_at: string
           status: string
           target_contract: string
@@ -546,10 +555,19 @@ export type Database = {
           created_at?: string
           ends_at: string
           id?: string
+          last_monitored_at?: string | null
+          monitored_event_count?: number
+          on_chain_watch_id?: number | null
+          report_analysis?: string | null
           report_content_hash?: string | null
           report_explorer_url?: string | null
+          report_highlights?: Json
           report_keeper_hub_run_id?: string | null
+          report_summary?: string | null
+          report_title?: string | null
           report_tx_hash?: string | null
+          source_event_ids?: string[]
+          source_event_root?: string | null
           starts_at: string
           status?: string
           target_contract: string
@@ -564,10 +582,19 @@ export type Database = {
           created_at?: string
           ends_at?: string
           id?: string
+          last_monitored_at?: string | null
+          monitored_event_count?: number
+          on_chain_watch_id?: number | null
+          report_analysis?: string | null
           report_content_hash?: string | null
           report_explorer_url?: string | null
+          report_highlights?: Json
           report_keeper_hub_run_id?: string | null
+          report_summary?: string | null
+          report_title?: string | null
           report_tx_hash?: string | null
+          source_event_ids?: string[]
+          source_event_root?: string | null
           starts_at?: string
           status?: string
           target_contract?: string

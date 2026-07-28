@@ -44,7 +44,32 @@ export function createPremiumRoutes(params: {
         res.status(500).json({ error: result.error.message });
         return;
       }
-      res.json({ watches: result.value });
+      res.json({
+        watches: result.value.map((watch) => ({
+          id: watch.id,
+          targetContract: watch.target_contract,
+          watchSpecHash: watch.watch_spec_hash,
+          startsAt: watch.starts_at,
+          endsAt: watch.ends_at,
+          status: watch.status,
+          onChainWatchId: watch.on_chain_watch_id ?? undefined,
+          createTxHash: watch.create_tx_hash ?? undefined,
+          reportTxHash: watch.report_tx_hash ?? undefined,
+          createExplorerUrl: watch.create_explorer_url ?? undefined,
+          reportExplorerUrl: watch.report_explorer_url ?? undefined,
+          sourceEventRoot: watch.source_event_root ?? undefined,
+          reportContentHash: watch.report_content_hash ?? undefined,
+          monitoredEventCount: watch.monitored_event_count ?? 0,
+          lastMonitoredAt: watch.last_monitored_at ?? undefined,
+          auditTrail: {
+            createTxHash: watch.create_tx_hash ?? null,
+            createExplorerUrl: watch.create_explorer_url ?? null,
+            reportTxHash: watch.report_tx_hash ?? null,
+            reportExplorerUrl: watch.report_explorer_url ?? null,
+            sourceEventRoot: watch.source_event_root ?? null,
+          },
+        })),
+      });
     } catch (error) {
       next(error);
     }
@@ -83,12 +108,32 @@ export function createPremiumRoutes(params: {
         startsAt: watch.starts_at,
         endsAt: watch.ends_at,
         status: watch.status,
+        onChainWatchId: watch.on_chain_watch_id ?? undefined,
         createTxHash: watch.create_tx_hash ?? undefined,
         reportTxHash: watch.report_tx_hash ?? undefined,
         reportContentHash: watch.report_content_hash ?? undefined,
+        sourceEventRoot: watch.source_event_root ?? undefined,
+        sourceEventIds: watch.source_event_ids ?? [],
         contentUri: watch.content_uri ?? undefined,
         createExplorerUrl: watch.create_explorer_url ?? undefined,
         reportExplorerUrl: watch.report_explorer_url ?? undefined,
+        createKeeperHubRunId: watch.create_keeper_hub_run_id ?? undefined,
+        reportKeeperHubRunId: watch.report_keeper_hub_run_id ?? undefined,
+        reportTitle: watch.report_title ?? undefined,
+        reportSummary: watch.report_summary ?? undefined,
+        reportHighlights: watch.report_highlights ?? [],
+        reportAnalysis: watch.report_analysis ?? undefined,
+        monitoredEventCount: watch.monitored_event_count ?? 0,
+        lastMonitoredAt: watch.last_monitored_at ?? undefined,
+        // Dual on-chain audit trail for the paid campaign
+        auditTrail: {
+          createTxHash: watch.create_tx_hash ?? null,
+          createExplorerUrl: watch.create_explorer_url ?? null,
+          reportTxHash: watch.report_tx_hash ?? null,
+          reportExplorerUrl: watch.report_explorer_url ?? null,
+          sourceEventRoot: watch.source_event_root ?? null,
+          reportContentHash: watch.report_content_hash ?? null,
+        },
       });
     } catch (error) {
       next(error);

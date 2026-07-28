@@ -23,6 +23,16 @@ export interface MonitoredEventRepository {
       eventType?: string;
     },
   ): Promise<Result<MonitoredEventRow[]>>;
+  /**
+   * List events whose captured_at falls inside [periodStart, periodEnd].
+   * Used by sponsored-watch campaign matching and digest selection.
+   */
+  listInWindow(params: {
+    periodStart: string;
+    periodEnd: string;
+    status?: string;
+    limit?: number;
+  }): Promise<Result<MonitoredEventRow[]>>;
 }
 
 export function createMonitoredEventRepository(supabase: SupabaseClient): MonitoredEventRepository {
@@ -102,6 +112,27 @@ export function createMonitoredEventRepository(supabase: SupabaseClient): Monito
       }
 
       return success(rows as unknown as MonitoredEventRow[]);
+    },
+
+    async listInWindow({ periodStart, periodEnd, status, limit = 500 }) {
+      let query = table()
+        .select("*")
+        .gte("captured_at", periodStart)
+        .lte("captured_at", periodEnd)
+        .order("captured_at", { ascending: true })
+        .limit(Math.min(Math.max(limit, 1), 2000));
+
+      if (status) {
+        query = query.eq("status", status);
+      }
+
+      const { data: rows, error } = await query;
+
+      if (error) {
+        return failure(mapPostgrestError(error));
+      }
+
+      return success((rows ?? []) as unknown as MonitoredEventRow[]);
     },
   };
 }

@@ -31,6 +31,8 @@ export declare namespace ChronicleRegistry {
     endsAt: BigNumberish;
     createdAt: BigNumberish;
     reportUri: string;
+    reportContentHash: BytesLike;
+    sourceEventRoot: BytesLike;
   };
 
   export type WatchCampaignStructOutput = [
@@ -39,7 +41,9 @@ export declare namespace ChronicleRegistry {
     startsAt: bigint,
     endsAt: bigint,
     createdAt: bigint,
-    reportUri: string
+    reportUri: string,
+    reportContentHash: string,
+    sourceEventRoot: string
   ] & {
     targetContract: string;
     watchSpecHash: string;
@@ -47,6 +51,8 @@ export declare namespace ChronicleRegistry {
     endsAt: bigint;
     createdAt: bigint;
     reportUri: string;
+    reportContentHash: string;
+    sourceEventRoot: string;
   };
 }
 
@@ -118,7 +124,7 @@ export interface ChronicleRegistryInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "publishSponsoredReport",
-    values: [BigNumberish, BytesLike, string]
+    values: [BigNumberish, BytesLike, BytesLike, string]
   ): string;
   encodeFunctionData(
     functionFragment: "recordPayout",
@@ -260,16 +266,19 @@ export namespace SponsoredReportPublishedEvent {
   export type InputTuple = [
     watchId: BigNumberish,
     reportContentHash: BytesLike,
+    sourceEventRoot: BytesLike,
     reportUri: string
   ];
   export type OutputTuple = [
     watchId: bigint,
     reportContentHash: string,
+    sourceEventRoot: string,
     reportUri: string
   ];
   export interface OutputObject {
     watchId: bigint;
     reportContentHash: string;
+    sourceEventRoot: string;
     reportUri: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -407,7 +416,12 @@ export interface ChronicleRegistry extends BaseContract {
   >;
 
   publishSponsoredReport: TypedContractMethod<
-    [watchId: BigNumberish, reportContentHash: BytesLike, reportUri: string],
+    [
+      watchId: BigNumberish,
+      reportContentHash: BytesLike,
+      sourceEventRoot: BytesLike,
+      reportUri: string
+    ],
     [void],
     "nonpayable"
   >;
@@ -426,13 +440,15 @@ export interface ChronicleRegistry extends BaseContract {
   sponsoredWatches: TypedContractMethod<
     [arg0: BigNumberish],
     [
-      [string, string, bigint, bigint, bigint, string] & {
+      [string, string, bigint, bigint, bigint, string, string, string] & {
         targetContract: string;
         watchSpecHash: string;
         startsAt: bigint;
         endsAt: bigint;
         createdAt: bigint;
         reportUri: string;
+        reportContentHash: string;
+        sourceEventRoot: string;
       }
     ],
     "view"
@@ -508,7 +524,12 @@ export interface ChronicleRegistry extends BaseContract {
   getFunction(
     nameOrSignature: "publishSponsoredReport"
   ): TypedContractMethod<
-    [watchId: BigNumberish, reportContentHash: BytesLike, reportUri: string],
+    [
+      watchId: BigNumberish,
+      reportContentHash: BytesLike,
+      sourceEventRoot: BytesLike,
+      reportUri: string
+    ],
     [void],
     "nonpayable"
   >;
@@ -529,13 +550,15 @@ export interface ChronicleRegistry extends BaseContract {
   ): TypedContractMethod<
     [arg0: BigNumberish],
     [
-      [string, string, bigint, bigint, bigint, string] & {
+      [string, string, bigint, bigint, bigint, string, string, string] & {
         targetContract: string;
         watchSpecHash: string;
         startsAt: bigint;
         endsAt: bigint;
         createdAt: bigint;
         reportUri: string;
+        reportContentHash: string;
+        sourceEventRoot: string;
       }
     ],
     "view"
@@ -614,7 +637,7 @@ export interface ChronicleRegistry extends BaseContract {
       PayoutRecordedEvent.OutputObject
     >;
 
-    "SponsoredReportPublished(uint256,bytes32,string)": TypedContractEvent<
+    "SponsoredReportPublished(uint256,bytes32,bytes32,string)": TypedContractEvent<
       SponsoredReportPublishedEvent.InputTuple,
       SponsoredReportPublishedEvent.OutputTuple,
       SponsoredReportPublishedEvent.OutputObject

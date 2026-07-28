@@ -164,6 +164,16 @@ export interface SponsoredWatchRow {
   create_explorer_url: string | null;
   report_keeper_hub_run_id: string | null;
   report_explorer_url: string | null;
+  /** Numeric watch id returned by on-chain createSponsoredWatch. */
+  on_chain_watch_id: number | null;
+  source_event_ids: string[];
+  source_event_root: string | null;
+  report_title: string | null;
+  report_summary: string | null;
+  report_highlights: string[];
+  report_analysis: string | null;
+  last_monitored_at: string | null;
+  monitored_event_count: number;
   status: string;
   created_at: string;
   updated_at: string;
@@ -182,6 +192,15 @@ export interface SponsoredWatchInsert {
   create_explorer_url?: string | null;
   report_keeper_hub_run_id?: string | null;
   report_explorer_url?: string | null;
+  on_chain_watch_id?: number | null;
+  source_event_ids?: string[];
+  source_event_root?: string | null;
+  report_title?: string | null;
+  report_summary?: string | null;
+  report_highlights?: string[];
+  report_analysis?: string | null;
+  last_monitored_at?: string | null;
+  monitored_event_count?: number;
   status?: string;
 }
 

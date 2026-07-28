@@ -82,12 +82,13 @@ try {
     subscriberRepo,
   });
 
-  // US3: Premium Access & Sponsored Watch
+  // US3: Premium Access & Sponsored Watch (Loop 4: create → monitor → report)
   setupUS3Routes(app, env, {
     premiumRepo,
     paymentRecordRepo,
     execLogRepo,
     watchRepo,
+    eventRepo,
   });
 
   // US4: Public agent activity, treasury & revenue payouts

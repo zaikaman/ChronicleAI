@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "exportedAt": "2026-07-28T18:00:00.000Z",
+  "exportedAt": "2026-07-28T20:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Publish Sponsored Report (Registry Write)",
-    "description": "Material write: publishSponsoredReport on Chronicle Registry. Triggered with watchId, reportContentHash, reportUri."
+    "description": "Material write: publishSponsoredReport on Chronicle Registry with report hash, source-event root, and content URI. Triggered with watchId, reportContentHash, sourceEventRoot, reportUri."
   },
   "nodes": [
     {
@@ -30,8 +30,8 @@
           "network": "84532",
           "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
           "abiFunction": "publishSponsoredReport",
-          "functionArgs": "[\"{{@trigger-manual:Trigger.watchId}}\",\"{{@trigger-manual:Trigger.reportContentHash}}\",\"{{@trigger-manual:Trigger.reportUri}}\"]",
-          "abi": "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reportContentHash\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"reportUri\",\"type\":\"string\"}],\"name\":\"publishSponsoredReport\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+          "functionArgs": "[\"{{@trigger-manual:Trigger.watchId}}\",\"{{@trigger-manual:Trigger.reportContentHash}}\",\"{{@trigger-manual:Trigger.sourceEventRoot}}\",\"{{@trigger-manual:Trigger.reportUri}}\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reportContentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventRoot\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"reportUri\",\"type\":\"string\"}],\"name\":\"publishSponsoredReport\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
         }
       }
     }

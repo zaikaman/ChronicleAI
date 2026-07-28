@@ -47,6 +47,7 @@ export interface KeeperHubWriteClient {
   publishSponsoredReport(
     watchId: number,
     reportContentHash: string,
+    sourceEventRoot: string,
     reportUri: string,
   ): Promise<KeeperHubWriteReceipt>;
   recordPayout(
@@ -62,7 +63,7 @@ const REGISTRY_ABI = [
   "function publishAlert(bytes32 alertHash, string calldata ipfsUri) external",
   "function publishDigest(bytes32 digestHash, bytes32 sourceEventRoot, string calldata ipfsUri) external",
   "function createSponsoredWatch(address targetContract, bytes32 watchSpecHash, uint256 startsAt, uint256 endsAt) external returns (uint256 watchId)",
-  "function publishSponsoredReport(uint256 watchId, bytes32 reportContentHash, string calldata reportUri) external",
+  "function publishSponsoredReport(uint256 watchId, bytes32 reportContentHash, bytes32 sourceEventRoot, string calldata reportUri) external",
   "function recordPayout(bytes32 payoutPeriodHash, address recipient, uint256 amount, bytes32 reasonHash) external",
 ] as const;
 
@@ -432,20 +433,22 @@ export function createKeeperHubWriteClient(
       return { ...receipt, watchId };
     },
 
-    async publishSponsoredReport(watchId, reportContentHash, reportUri) {
+    async publishSponsoredReport(watchId, reportContentHash, sourceEventRoot, reportUri) {
       const contentBytes = hashString(reportContentHash);
+      const rootBytes = hashString(sourceEventRoot);
       return runContract({
         functionName: "publishSponsoredReport",
-        functionArgs: [watchId, contentBytes, reportUri],
+        functionArgs: [watchId, contentBytes, rootBytes, reportUri],
         workflowId: workflowIds.publishSponsoredReport,
         workflowInput: {
           watchId,
           reportContentHash: contentBytes,
+          sourceEventRoot: rootBytes,
           reportUri,
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-publishSponsoredReport-${watchId}-${reportContentHash}`,
+        idempotencyKey: `chronicle-publishSponsoredReport-${watchId}-${reportContentHash}-${sourceEventRoot}`,
       });
     },
 

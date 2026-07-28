@@ -19,7 +19,10 @@ import {
 } from "../services/premium-access-receipt-service.ts";
 import { PaymentChallengeService } from "../services/payment-challenge-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
-import { createSponsoredWatchService } from "../services/sponsored-watch-service.ts";
+import {
+  createSponsoredWatchService,
+  type SponsoredWatchService,
+} from "../services/sponsored-watch-service.ts";
 import {
   parseSponsoredMonitorContentPrivate,
   resolveTargetContract,
@@ -35,6 +38,8 @@ export function createPaymentRoutes(params: {
   adapters: Map<PaymentRoute, PaymentAdapter>;
   receiptService: PremiumAccessReceiptService;
   web3Client?: Web3Client | null;
+  /** Shared Loop 4 service when provided (preferred — includes event monitoring). */
+  watchService?: SponsoredWatchService | null;
   /** When true, Set-Cookie includes Secure (production / HTTPS). */
   secureCookies?: boolean;
   /** Public SPA origin for HTTPS sponsored-report content URIs. */
@@ -53,12 +58,14 @@ export function createPaymentRoutes(params: {
     adapters: params.adapters,
   });
 
-  const watchService = createSponsoredWatchService({
-    watchRepo: params.watchRepo,
-    execLogRepo: params.execLogRepo,
-    web3Client: params.web3Client ?? null,
-    frontendOrigin: params.frontendOrigin,
-  });
+  const watchService =
+    params.watchService ??
+    createSponsoredWatchService({
+      watchRepo: params.watchRepo,
+      execLogRepo: params.execLogRepo,
+      web3Client: params.web3Client ?? null,
+      frontendOrigin: params.frontendOrigin,
+    });
 
   function issueAccessReceipt(args: {
     paymentRecordId: string;
@@ -324,6 +331,14 @@ export function createPaymentRoutes(params: {
               targetContract: watch.target_contract,
               status: watch.status,
               createTxHash: watch.create_tx_hash,
+              createExplorerUrl: watch.create_explorer_url,
+              onChainWatchId: watch.on_chain_watch_id,
+              startsAt: watch.starts_at,
+              endsAt: watch.ends_at,
+              // Report fields are null until end-of-campaign publishSponsoredReport
+              reportTxHash: watch.report_tx_hash,
+              reportExplorerUrl: watch.report_explorer_url,
+              sourceEventRoot: watch.source_event_root,
             },
           });
           return;

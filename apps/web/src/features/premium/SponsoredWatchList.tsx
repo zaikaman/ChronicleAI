@@ -10,6 +10,9 @@ export interface SponsoredWatchModel {
   status: string;
   createTxHash?: string;
   reportTxHash?: string;
+  createExplorerUrl?: string;
+  reportExplorerUrl?: string;
+  sourceEventRoot?: string;
   startsAt: string;
   endsAt: string;
 }
@@ -134,29 +137,58 @@ export function SponsoredWatchList({
               </div>
             </div>
 
-            {watch.createTxHash && (
+            {(watch.createTxHash || watch.reportTxHash) && (
               <div
                 style={{
                   marginTop: "0.5rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.25rem",
                   fontSize: "var(--font-size-xs)",
                   color: "var(--fg-tertiary)",
                   fontFamily: "var(--font-mono)",
                 }}
+                data-testid={`watch-audit-${watch.id}`}
               >
-                Create Tx: {watch.createTxHash.slice(0, 16)}...
-              </div>
-            )}
-
-            {watch.reportTxHash && (
-              <div
-                style={{
-                  marginTop: "0.25rem",
-                  fontSize: "var(--font-size-xs)",
-                  color: "var(--fg-tertiary)",
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                Report Tx: {watch.reportTxHash.slice(0, 16)}...
+                {watch.createTxHash && (
+                  <div>
+                    Create Tx:{" "}
+                    {watch.createExplorerUrl ? (
+                      <a
+                        href={watch.createExplorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        {watch.createTxHash.slice(0, 16)}...
+                      </a>
+                    ) : (
+                      `${watch.createTxHash.slice(0, 16)}...`
+                    )}
+                  </div>
+                )}
+                {watch.reportTxHash ? (
+                  <div>
+                    Report Tx:{" "}
+                    {watch.reportExplorerUrl ? (
+                      <a
+                        href={watch.reportExplorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        {watch.reportTxHash.slice(0, 16)}...
+                      </a>
+                    ) : (
+                      `${watch.reportTxHash.slice(0, 16)}...`
+                    )}
+                  </div>
+                ) : (
+                  <div>Report Tx: pending end of campaign</div>
+                )}
+                {watch.sourceEventRoot && (
+                  <div>Source root: {watch.sourceEventRoot.slice(0, 16)}...</div>
+                )}
               </div>
             )}
           </div>

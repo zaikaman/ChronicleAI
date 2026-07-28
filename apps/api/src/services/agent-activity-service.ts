@@ -137,15 +137,27 @@ export function createAgentActivityService(
             endsAt: w.ends_at,
             status: w.status,
             createdAt: w.created_at,
+            monitoredEventCount: w.monitored_event_count ?? 0,
           };
+          if (w.on_chain_watch_id != null) watch.onChainWatchId = w.on_chain_watch_id;
           if (w.create_tx_hash) watch.createTxHash = w.create_tx_hash;
           if (w.report_tx_hash) watch.reportTxHash = w.report_tx_hash;
           if (w.report_content_hash) watch.reportContentHash = w.report_content_hash;
+          if (w.source_event_root) watch.sourceEventRoot = w.source_event_root;
           if (w.content_uri) watch.contentUri = w.content_uri;
           if (w.create_keeper_hub_run_id) watch.createKeeperHubRunId = w.create_keeper_hub_run_id;
           if (w.create_explorer_url) watch.createExplorerUrl = w.create_explorer_url;
           if (w.report_keeper_hub_run_id) watch.reportKeeperHubRunId = w.report_keeper_hub_run_id;
           if (w.report_explorer_url) watch.reportExplorerUrl = w.report_explorer_url;
+          if (w.last_monitored_at) watch.lastMonitoredAt = w.last_monitored_at;
+          // Dual audit trail surface for the dashboard
+          watch.auditTrail = {
+            createTxHash: w.create_tx_hash ?? null,
+            createExplorerUrl: w.create_explorer_url ?? null,
+            reportTxHash: w.report_tx_hash ?? null,
+            reportExplorerUrl: w.report_explorer_url ?? null,
+            sourceEventRoot: w.source_event_root ?? null,
+          };
           return watch;
         });
 

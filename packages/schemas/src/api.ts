@@ -168,6 +168,13 @@ export interface PaymentSettlementResponse {
     targetContract: string;
     status: string;
     createTxHash?: string | null;
+    createExplorerUrl?: string | null;
+    onChainWatchId?: number | null;
+    startsAt?: string;
+    endsAt?: string;
+    reportTxHash?: string | null;
+    reportExplorerUrl?: string | null;
+    sourceEventRoot?: string | null;
   };
 }
 

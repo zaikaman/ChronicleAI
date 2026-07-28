@@ -46,6 +46,7 @@ export interface Web3Client {
   publishSponsoredReport(
     watchId: number,
     reportContentHash: string,
+    sourceEventRoot: string,
     reportUri: string,
   ): Promise<OnChainWriteReceipt>;
 
@@ -67,7 +68,7 @@ const REGISTRY_ABI = [
   "function publishAlert(bytes32 alertHash, string calldata ipfsUri) external",
   "function publishDigest(bytes32 digestHash, bytes32 sourceEventRoot, string calldata ipfsUri) external",
   "function createSponsoredWatch(address targetContract, bytes32 watchSpecHash, uint256 startsAt, uint256 endsAt) external returns (uint256 watchId)",
-  "function publishSponsoredReport(uint256 watchId, bytes32 reportContentHash, string calldata reportUri) external",
+  "function publishSponsoredReport(uint256 watchId, bytes32 reportContentHash, bytes32 sourceEventRoot, string calldata reportUri) external",
   "function recordPayout(bytes32 payoutPeriodHash, address recipient, uint256 amount, bytes32 reasonHash) external",
   "function owner() external view returns (address)",
 ] as const;
@@ -150,8 +151,8 @@ function createKeeperHubBackedWeb3Client(env: ServerEnv): Web3Client {
       kh.publishDigest(digestHash, sourceEventRoot, ipfsUri),
     createSponsoredWatch: (targetContract, watchSpecHash, startsAt, endsAt) =>
       kh.createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt),
-    publishSponsoredReport: (watchId, reportContentHash, reportUri) =>
-      kh.publishSponsoredReport(watchId, reportContentHash, reportUri),
+    publishSponsoredReport: (watchId, reportContentHash, sourceEventRoot, reportUri) =>
+      kh.publishSponsoredReport(watchId, reportContentHash, sourceEventRoot, reportUri),
     recordPayout: (payoutPeriodHash, recipient, amount, reasonHash) =>
       kh.recordPayout(payoutPeriodHash, recipient, amount, reasonHash),
     sendTransfer: (to, amountEth) => kh.sendTransfer(to, amountEth),
@@ -266,10 +267,11 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
       };
     },
 
-    async publishSponsoredReport(watchId, reportContentHash, reportUri) {
+    async publishSponsoredReport(watchId, reportContentHash, sourceEventRoot, reportUri) {
       const tx = await registryContract.publishSponsoredReport(
         watchId,
         hashString(reportContentHash),
+        hashString(sourceEventRoot),
         reportUri,
       );
       const receipt = await waitReceipt(tx);
