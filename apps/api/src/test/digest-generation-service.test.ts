@@ -124,19 +124,21 @@ describe("DigestGenerationService", () => {
       analysis:
         "Liquidity concentration and elevated gas suggest competitive MEV and risk-off liquidations across major venues.",
       confidence: "high",
+      sections: {
+        capitalDirection: "Risk-off liquidations with concentrated ETH/USDC flow.",
+        exchangeAndProtocolFlows: "Uniswap led venue flow; CEX quiet.",
+        stressBoard: "Aave liquidations exceeded $1.2M.",
+        storyOfTheDay: "Competitive MEV and risk-off liquidations dominated.",
+        coverageNote: "Gas spikes noted but secondary to liquidations.",
+      },
     };
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: async () => ({
-          candidates: [{ content: { parts: [{ text: JSON.stringify(llmBody) }] } }],
-        }),
-      })),
-    );
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
+      structured: llmBody,
+      rawText: JSON.stringify(llmBody),
+      toolCallCount: 0,
+    });
 
     const attempts: Array<{
       entity_type?: string;
@@ -187,7 +189,7 @@ describe("DigestGenerationService", () => {
     expect(result.title).toBe(llmBody.title);
     expect(result.summary).toContain("DeFi activity");
     expect(result.highlights).toHaveLength(3);
-    expect(result.analysis).toContain("MEV");
+    expect(result.analysis).toContain("Capital direction");
     expect(result.sourceEventIds).toEqual(["evt-001", "evt-002", "evt-003"]);
     expect(result.confidence).toBe("high");
 
@@ -210,19 +212,21 @@ describe("DigestGenerationService", () => {
       ],
       analysis: "The absence of threshold breaches suggests orderly market conditions.",
       confidence: "high",
+      sections: {
+        capitalDirection: "No qualifying directional flow today.",
+        exchangeAndProtocolFlows: "No qualifying CEX or protocol flow today.",
+        stressBoard: "No material stress signals today.",
+        storyOfTheDay: "Quiet day — no single multi-event narrative.",
+        coverageNote: "Thresholds held; monitoring nominal.",
+      },
     };
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: async () => ({
-          candidates: [{ content: { parts: [{ text: JSON.stringify(llmBody) }] } }],
-        }),
-      })),
-    );
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
+      structured: llmBody,
+      rawText: JSON.stringify(llmBody),
+      toolCallCount: 0,
+    });
 
     const service = createDigestGenerationService(configuredProviders, createMockLlmAttemptRepo());
     const result = await service.generateDigest({
@@ -291,22 +295,12 @@ describe("DigestGenerationService", () => {
   });
 
   it("falls through invalid Gemini JSON and throws when later keys are empty", async () => {
-    let callCount = 0;
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        callCount += 1;
-        return {
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: async () => ({
-            candidates: [{ content: { parts: [{ text: "not-json-at-all" }] } }],
-          }),
-        };
-      }),
-    );
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    const invokeSpy = vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
+      structured: { not: "a-digest" },
+      rawText: "not-json-at-all",
+      toolCallCount: 0,
+    });
 
     const service = createDigestGenerationService(
       {
@@ -324,7 +318,7 @@ describe("DigestGenerationService", () => {
       }),
     ).rejects.toBeInstanceOf(DigestGenerationError);
 
-    expect(callCount).toBe(1);
+    expect(invokeSpy).toHaveBeenCalledTimes(1);
   });
 
   it("includes source event ids from input when LLM succeeds", async () => {
@@ -334,19 +328,21 @@ describe("DigestGenerationService", () => {
       highlights: ["Swap", "Liquidation", "Gas"],
       analysis: "Cross-venue risk signals concentrated around ETH collateral.",
       confidence: "medium",
+      sections: {
+        capitalDirection: "Cross-venue risk around ETH collateral.",
+        exchangeAndProtocolFlows: "Multiple venues printed large flow.",
+        stressBoard: "Liquidation and gas co-moved with swaps.",
+        storyOfTheDay: "ETH collateral stress dominated the session.",
+        coverageNote: "Three source events included.",
+      },
     };
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: async () => ({
-          candidates: [{ content: { parts: [{ text: JSON.stringify(llmBody) }] } }],
-        }),
-      })),
-    );
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
+      structured: llmBody,
+      rawText: JSON.stringify(llmBody),
+      toolCallCount: 0,
+    });
 
     const service = createDigestGenerationService(configuredProviders, createMockLlmAttemptRepo());
     const result = await service.generateDigest({
@@ -481,17 +477,12 @@ describe("DigestGenerationService", () => {
       confidence: "high",
     };
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: async () => ({
-          candidates: [{ content: { parts: [{ text: JSON.stringify(llmBody) }] } }],
-        }),
-      })),
-    );
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
+      structured: llmBody,
+      rawText: JSON.stringify(llmBody),
+      toolCallCount: 0,
+    });
 
     const service = createDigestGenerationService(configuredProviders, createMockLlmAttemptRepo());
     const result = await service.generateDigest({

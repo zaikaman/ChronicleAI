@@ -1,5 +1,9 @@
 /**
  * Shared Zod response schemas for LangChain structured agents.
+ *
+ * OpenAI/Azure strict `json_schema` requires every key in `properties` to also
+ * appear in `required`. Prefer `.nullable()` over `.optional()` so fields stay
+ * required but may be null; use empty arrays/strings when a value is absent.
  */
 
 import { z } from "zod";
@@ -12,21 +16,21 @@ export const alertContentSchema = z.object({
   confidence: confidenceSchema,
 });
 
+export const digestSectionsSchema = z.object({
+  capitalDirection: z.string(),
+  exchangeAndProtocolFlows: z.string(),
+  stressBoard: z.string(),
+  storyOfTheDay: z.string(),
+  coverageNote: z.string(),
+});
+
 export const digestContentSchema = z.object({
   title: z.string(),
   summary: z.string(),
   highlights: z.array(z.string()),
-  analysis: z.string().optional(),
+  analysis: z.string(),
   confidence: confidenceSchema,
-  sections: z
-    .object({
-      capitalDirection: z.string().optional(),
-      exchangeAndProtocolFlows: z.string().optional(),
-      stressBoard: z.string().optional(),
-      storyOfTheDay: z.string().optional(),
-      coverageNote: z.string().optional(),
-    })
-    .optional(),
+  sections: digestSectionsSchema,
 });
 
 export const premiumNarrativeSchema = z.object({
@@ -34,8 +38,8 @@ export const premiumNarrativeSchema = z.object({
   sections: z.array(
     z.object({
       title: z.string(),
-      body: z.string().optional(),
-      findings: z.array(z.string()).optional(),
+      body: z.string(),
+      findings: z.array(z.string()),
     }),
   ),
   analysis: z.string(),
@@ -44,17 +48,14 @@ export const premiumNarrativeSchema = z.object({
 
 export const deskProposalSchema = z.object({
   action: z.enum(["propose", "hold", "defer", "defend"]),
-  strategy: z
-    .enum(["risk_defend", "yield_rotation", "oracle_amm"])
-    .nullable()
-    .optional(),
+  strategy: z.enum(["risk_defend", "yield_rotation", "oracle_amm"]).nullable(),
   notionalUsdc: z.number(),
-  priority: z.number().optional(),
+  priority: z.number(),
   confidence: z.number(),
   thesis: z.string(),
-  riskNotes: z.array(z.string()).optional(),
-  legsHint: z.array(z.string()).optional(),
-  declineReasons: z.array(z.string()).optional(),
+  riskNotes: z.array(z.string()),
+  legsHint: z.array(z.string()),
+  declineReasons: z.array(z.string()),
 });
 
 export const failureClassificationSchema = z.object({
@@ -71,5 +72,5 @@ export const signalFusionSchema = z.object({
 
 export const ticketNarrativeSchema = z.object({
   summary: z.string(),
-  editorialBody: z.string().optional(),
+  editorialBody: z.string(),
 });

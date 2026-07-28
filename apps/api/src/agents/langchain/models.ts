@@ -18,6 +18,23 @@ export interface CreateChatModelOptions {
 }
 
 /**
+ * Google Generative AI SDK builds `${baseUrl}/${apiVersion}/models/...` with
+ * apiVersion defaulting to `v1beta`. Env values often include `/v1beta`
+ * already (e.g. https://v98store.com/v1beta), which produces a double path
+ * and 404. Strip trailing API-version segments so the host alone is passed.
+ */
+export function normalizeGeminiBaseUrl(
+  baseUrl: string | undefined,
+): string | undefined {
+  const trimmed = baseUrl?.trim();
+  if (!trimmed) return undefined;
+  return trimmed
+    .replace(/\/+$/, "")
+    .replace(/\/v1beta$/i, "")
+    .replace(/\/v1$/i, "");
+}
+
+/**
  * Build a LangChain chat model for a single Chronicle provider config.
  * Returns null when the API key is missing/blank.
  */
@@ -38,12 +55,13 @@ export function createChatModel(
   const maxTokens = options.maxTokens ?? config.maxTokens;
 
   if (provider === "gemini") {
+    const geminiBaseUrl = normalizeGeminiBaseUrl(config.baseUrl);
     return new ChatGoogleGenerativeAI({
       apiKey: config.apiKey,
       model,
       temperature,
       ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
-      ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
+      ...(geminiBaseUrl ? { baseUrl: geminiBaseUrl } : {}),
     });
   }
 

@@ -47,7 +47,7 @@ const NARRATIVE_SYSTEM = [
   "- Use only the provided strategy, notional, legs, fills, and agent thesis.",
   "- Never invent transaction hashes, prices, or protocols not listed.",
   "- 1–3 sentences. Calm, editorial, proof-first tone.",
-  '- Respond as JSON: { "summary": string, "editorialBody"?: string }',
+  '- Respond as JSON: { "summary": string, "editorialBody": string } (use "" when no editorial body)',
 ].join("\n");
 
 function deterministicSummary(input: NarrativeInput): string {

@@ -8,6 +8,7 @@ export {
   createChatModelsInOrder,
   orderedProviders,
   messageContentToText,
+  normalizeGeminiBaseUrl,
   type ChronicleChatModel,
   type CreateChatModelOptions,
 } from "./models.ts";
@@ -32,6 +33,7 @@ export {
 export {
   alertContentSchema,
   digestContentSchema,
+  digestSectionsSchema,
   premiumNarrativeSchema,
   deskProposalSchema,
   failureClassificationSchema,
