@@ -47,6 +47,22 @@ ChronicleAI is an autonomous on-chain newspaper, paid intelligence feed, and pol
 
 Operator and workflow setup: `workflows/keeperhub/README.md` (Private routing section) and `docs/private-routing-implementation-plan.md`.
 
+## Execution audit (product note)
+
+Desk trade tickets may include a continuous **execution audit** story: **policy preflight → workflow submit → outcome** (gas, txs, terminal status). Optional later: KeeperHub dry-run on preflight and per-node run steps from KeeperHub logs.
+
+| Prefer | Avoid |
+|--------|--------|
+| Execution audit | “MEV-proof log” |
+| Policy preflight | “KeeperHub simulation” for HF-only policy checks |
+| KeeperHub dry-run | Bare “we simulated” without naming the dry-run path |
+| Workflow run / KeeperHub run | “Job id” alone |
+| Private submission path | “MEV-protected” as an absolute claim |
+| Gas used (when real) | Invented estimates presented as fact |
+| Outcome filled / failed | “Probably landed” |
+
+Tone stays calm, editorial, proof-first — same as the rest of the desk ticket. Spec: `docs/execution-audit-narrative-implementation-plan.md`.
+
 ## Accessibility & Inclusion
 
 Target **WCAG 2.2 AA**. Body text contrast ≥4.5:1 (large text ≥3:1); placeholders meet body contrast. Full keyboard access and visible focus rings. Skip-to-content and semantic landmarks remain standard. Honor `prefers-reduced-motion` for all motion (crossfade or instant alternatives). Do not rely on color alone for status (execution success/failure, confidence, payment state).
