@@ -1,5 +1,10 @@
 // Payment challenge panel component
-// Shows payment route selection and real settlement (wallet EIP-712 / MPP HMAC)
+// Shows payment route selection and real settlement (wallet EIP-712 / MPP paste)
+//
+// Security: MPP_SECRET never ships to the browser. MPP is machine-to-machine;
+// the browser only accepts a pre-computed settlement reference (expiresAt:hmac)
+// produced by a server-side machine client that holds MPP_SECRET. Humans should
+// use x402 (wallet signature).
 
 import { type ReactElement, useMemo, useState } from "react";
 import { StatusBadge } from "../../components/data-primitives.tsx";
@@ -84,32 +89,6 @@ async function signX402Settlement(
   });
 }
 
-/**
- * Compute MPP settlement reference using the shared client secret.
- * Machine clients set VITE_MPP_CLIENT_SECRET to the same value as server MPP_SECRET.
- */
-async function buildMppSettlement(
-  challengeReference: string,
-  amountRequested: number,
-  currency: string,
-  expiresAt: string,
-  clientSecret: string,
-): Promise<string> {
-  const payload = `${challengeReference}|${amountRequested}|${currency}|${expiresAt}`;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(clientSecret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
-  const hmac = Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return `${expiresAt}:${hmac}`;
-}
-
 export function PaymentChallengePanel({
   premiumItemId,
   priceAmount,
@@ -123,9 +102,6 @@ export function PaymentChallengePanel({
   const [challengeData, setChallengeData] = useState<Record<string, unknown> | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [manualSettlement, setManualSettlement] = useState("");
-  const [mppClientSecret, setMppClientSecret] = useState(
-    () => import.meta.env.VITE_MPP_CLIENT_SECRET ?? "",
-  );
 
   const hasWallet = useMemo(() => typeof window !== "undefined" && !!getEthereum(), []);
 
@@ -172,20 +148,10 @@ export function PaymentChallengePanel({
       return signX402Settlement(nested);
     }
 
-    // MPP: compute HMAC with shared client secret
-    const secret = mppClientSecret.trim();
-    if (!secret) {
-      throw new Error(
-        "MPP requires a client secret (VITE_MPP_CLIENT_SECRET) or a pasted settlement reference (expiresAt:hmac).",
-      );
-    }
-
-    return buildMppSettlement(
-      challengeData.challengeReference as string,
-      (challengeData.amountRequested as number) ?? priceAmount,
-      (challengeData.currency as string) ?? priceCurrency,
-      challengeData.expiresAt as string,
-      secret,
+    // MPP: browser never holds MPP_SECRET. Machine clients compute HMAC server-side
+    // and paste expiresAt:hmac here (or call POST /payments/settlements directly).
+    throw new Error(
+      "MPP is machine-to-machine: paste a settlement reference (expiresAt:hmac) from a server-side client that holds MPP_SECRET. Humans should use x402 with a wallet.",
     );
   };
 
@@ -334,7 +300,7 @@ export function PaymentChallengePanel({
           >
             <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>MPP (Tempo)</div>
             <div style={{ fontSize: "var(--font-size-xs)", opacity: 0.8 }}>
-              Machine-to-machine HMAC micro-billing
+              Machine-to-machine HMAC (paste settlement from server-side client)
             </div>
           </button>
 
@@ -398,34 +364,20 @@ export function PaymentChallengePanel({
           </div>
 
           {selectedRoute === "mpp" && (
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "var(--font-size-xs)",
-                  color: "var(--fg-tertiary)",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                MPP client secret (same as server MPP_SECRET)
-              </label>
-              <input
-                type="password"
-                value={mppClientSecret}
-                onChange={(e) => setMppClientSecret(e.target.value)}
-                placeholder="Shared HMAC secret"
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  borderRadius: "6px",
-                  border: "1px solid var(--border-primary)",
-                  background: "var(--bg-glass)",
-                  color: "var(--fg-primary)",
-                  fontSize: "var(--font-size-sm)",
-                  marginBottom: "0.5rem",
-                }}
-              />
-            </div>
+            <p
+              style={{
+                marginBottom: "0.75rem",
+                fontSize: "var(--font-size-xs)",
+                color: "var(--fg-secondary)",
+                lineHeight: 1.45,
+              }}
+            >
+              MPP uses a server-only shared secret (<code>MPP_SECRET</code>). The browser never
+              receives it. Compute{" "}
+              <code>HMAC-SHA256(challengeRef|amount|currency|expiresAt)</code> in a machine
+              client and paste <code>expiresAt:hmac</code> below, or call{" "}
+              <code>POST /payments/settlements</code> from that client directly.
+            </p>
           )}
 
           <div style={{ marginBottom: "0.75rem" }}>
@@ -439,7 +391,7 @@ export function PaymentChallengePanel({
             >
               {selectedRoute === "x402"
                 ? "Or paste signed EIP-712 JSON settlement"
-                : "Or paste settlement reference (expiresAt:hmac)"}
+                : "Settlement reference (expiresAt:hmac) — required"}
             </label>
             <textarea
               value={manualSettlement}
@@ -448,7 +400,7 @@ export function PaymentChallengePanel({
               placeholder={
                 selectedRoute === "x402"
                   ? '{"signature":"0x...","from":"0x...","to":"0x...","value":...,"validAfter":0,"validBefore":...,"nonce":"0x..."}'
-                  : "2026-07-27T12:00:00.000Z:abcdef..."
+                  : "2026-07-28T12:00:00.000Z:abcdef..."
               }
               style={{
                 width: "100%",
@@ -467,22 +419,37 @@ export function PaymentChallengePanel({
           <button
             type="button"
             onClick={handleSettle}
+            disabled={selectedRoute === "mpp" && !manualSettlement.trim()}
             style={{
               padding: "0.75rem",
               width: "100%",
-              background: "var(--accent-primary)",
-              color: "white",
+              background:
+                selectedRoute === "mpp" && !manualSettlement.trim()
+                  ? "var(--bg-glass)"
+                  : "var(--accent-primary)",
+              color:
+                selectedRoute === "mpp" && !manualSettlement.trim()
+                  ? "var(--fg-tertiary)"
+                  : "white",
               border: "none",
               borderRadius: "8px",
               fontWeight: 600,
               fontSize: "var(--font-size-sm)",
-              cursor: "pointer",
+              cursor:
+                selectedRoute === "mpp" && !manualSettlement.trim()
+                  ? "not-allowed"
+                  : "pointer",
               transition: "background 0.15s ease",
             }}
             onMouseOver={(e) => {
+              if (selectedRoute === "mpp" && !manualSettlement.trim()) return;
               e.currentTarget.style.background = "var(--accent-primary-hover)";
             }}
             onMouseOut={(e) => {
+              if (selectedRoute === "mpp" && !manualSettlement.trim()) {
+                e.currentTarget.style.background = "var(--bg-glass)";
+                return;
+              }
               e.currentTarget.style.background = "var(--accent-primary)";
             }}
           >
@@ -492,7 +459,7 @@ export function PaymentChallengePanel({
                 ? hasWallet
                   ? "Sign & Settle with Wallet"
                   : "Submit Settlement (paste required)"
-                : "Settle with HMAC Secret"}
+                : "Paste MPP Settlement to Continue"}
           </button>
 
           {selectedRoute === "x402" && !hasWallet && !manualSettlement.trim() && (
@@ -505,6 +472,19 @@ export function PaymentChallengePanel({
             >
               No wallet detected. Paste a signed EIP-712 settlement JSON above, or install a
               browser wallet.
+            </p>
+          )}
+
+          {selectedRoute === "mpp" && !manualSettlement.trim() && (
+            <p
+              style={{
+                marginTop: "0.5rem",
+                fontSize: "var(--font-size-xs)",
+                color: "var(--fg-tertiary)",
+              }}
+            >
+              Prefer x402 for human wallet payments. MPP settlements are produced by machine
+              clients that hold the server-side <code>MPP_SECRET</code>.
             </p>
           )}
         </div>
