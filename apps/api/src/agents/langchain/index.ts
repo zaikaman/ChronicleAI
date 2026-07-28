@@ -31,6 +31,24 @@ export {
 } from "./tool-agent.ts";
 
 export {
+  createKeeperHubMcpLangChainTools,
+  KEEPERHUB_MCP_TOOL_NAMES,
+  type KeeperHubMcpToolName,
+  type KeeperHubMcpToolCallRecord,
+} from "./keeperhub-mcp-tools.ts";
+
+export {
+  publishViaKeeperHubMcp,
+  publishViaDeterministicMcp,
+  buildMcpPublicationConfig,
+  extractExecutionId,
+  extractTxFromExecutionPayload,
+  type McpPublicationAction,
+  type KeeperHubMcpPublicationReceipt,
+  type PublishViaKeeperHubMcpParams,
+} from "./keeperhub-mcp-publication-agent.ts";
+
+export {
   alertContentSchema,
   digestContentSchema,
   digestSectionsSchema,

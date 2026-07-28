@@ -15,6 +15,9 @@
 
 import { keccak256, parseUnits, stringToBytes } from "viem";
 import type { ExecutionLogRepository } from "@chronicleai/db";
+import { publishViaKeeperHubMcp } from "../agents/langchain/keeperhub-mcp-publication-agent.ts";
+import { resolveKeeperHubMcpUrl } from "./keeperhub-mcp-client.ts";
+import type { LLMProviderMap } from "./llm-provider-client.ts";
 import {
   extractGasFromKeeperHubPayload,
   type OnChainWriteReceipt,
@@ -54,6 +57,24 @@ export interface KeeperHubWorkflowIds {
   transfer?: string;
 }
 
+export interface KeeperHubMcpWriteOptions {
+  /**
+   * When true, Loop 1 publishAlert and Loop 2 publishDigest go through
+   * LangChain ReAct + KeeperHub MCP tools (list_workflows → execute_workflow →
+   * get_execution). Default true when mcpUrl + apiKey are present.
+   */
+  enabled?: boolean;
+  /** Full MCP URL; defaults to `${apiBaseUrl}/mcp`. */
+  mcpUrl?: string;
+  /**
+   * LLM providers for the native LangChain agent path.
+   * When empty/missing, still uses MCP tools via deterministic orchestration.
+   */
+  llmProviders?: LLMProviderMap | null;
+  /** Fall back to REST workflow execute if MCP fails. Default true. */
+  restFallback?: boolean;
+}
+
 export interface KeeperHubWriteClientConfig {
   apiBaseUrl: string;
   apiKey: string;
@@ -83,6 +104,11 @@ export interface KeeperHubWriteClientConfig {
   routingPolicy?: PrivateRoutingPolicy | null;
   /** Override routing for sendTransfer / recordPayout (KH transfer path). */
   transferRoutingPolicy?: PrivateRoutingPolicy | null;
+  /**
+   * Native LangChain Agent MCP Execution for alert/digest registry writes.
+   * Core hackathon integration surface — agent discovers and executes via MCP.
+   */
+  mcp?: KeeperHubMcpWriteOptions | null;
 }
 
 export interface KeeperHubWriteClient {
@@ -312,6 +338,20 @@ function parseWatchId(result: unknown): number | undefined {
   return parseOnChainWatchId(result);
 }
 
+function mcpReceiptToWriteReceipt(
+  receipt: Awaited<ReturnType<typeof publishViaKeeperHubMcp>>,
+): KeeperHubWriteReceipt {
+  const out: KeeperHubWriteReceipt = {
+    keeperHubRunId: receipt.keeperHubRunId,
+    txHash: receipt.txHash,
+    explorerUrl: receipt.explorerUrl,
+  };
+  if (receipt.gasUsed) out.gasUsed = receipt.gasUsed;
+  if (receipt.gasUsedWei) out.gasUsedWei = receipt.gasUsedWei;
+  if (receipt.result !== undefined) out.result = receipt.result;
+  return out;
+}
+
 export function createKeeperHubWriteClient(
   config: KeeperHubWriteClientConfig,
 ): KeeperHubWriteClient {
@@ -320,6 +360,15 @@ export function createKeeperHubWriteClient(
   const pollTimeoutMs = config.pollTimeoutMs ?? 120_000;
   const workflowIds = config.workflowIds ?? {};
   const execLogRepo = config.execLogRepo ?? null;
+  // MCP is opt-in via config.mcp (web3 client passes this from env when enabled).
+  // Existing REST-only unit tests omit mcp and keep the pure workflow execute path.
+  const mcpOpts = config.mcp ?? null;
+  const mcpEnabled =
+    mcpOpts != null &&
+    mcpOpts.enabled !== false &&
+    Boolean(config.apiKey?.trim());
+  const mcpUrl = resolveKeeperHubMcpUrl(baseUrl, mcpOpts?.mcpUrl);
+  const mcpRestFallback = mcpOpts?.restFallback !== false;
 
   function routingDetailsForMethod(
     method: keyof typeof WORKFLOW_ACTION_ENV,
@@ -331,6 +380,91 @@ export function createKeeperHubWriteClient(
     return config.routingPolicy
       ? buildPrivateRoutingDetails(config.routingPolicy)
       : null;
+  }
+
+  /**
+   * Loop 1 / Loop 2 core path: LangChain ReAct agent + KeeperHub MCP tools.
+   * Falls back to REST workflow execute when MCP is disabled or fails (if allowed).
+   */
+  async function runPublicationViaMcpOrRest(
+    action: "publishAlert" | "publishDigest",
+    workflowId: string,
+    input: Record<string, unknown>,
+    idempotencyKey: string,
+    logDetails?: Record<string, unknown>,
+  ): Promise<KeeperHubWriteReceipt> {
+    const runRest = () =>
+      runWorkflowLogged(action, workflowId, input, idempotencyKey, logDetails);
+
+    if (!mcpEnabled) {
+      return runRest();
+    }
+
+    const routing = routingDetailsForMethod(action);
+    return withKeeperHubLog(
+      execLogRepo,
+      {
+        actionType: actionTypeForWriteMethod(action),
+        entityType: "keeperhub_workflow",
+        entityId: null,
+        method: action,
+        details: {
+          workflowId,
+          network: config.network,
+          execution_surface: "langchain_mcp",
+          mcp_url: mcpUrl,
+          ...(routing ?? {}),
+          ...(logDetails ?? {}),
+        },
+      },
+      async () => {
+        try {
+          const mcpReceipt = await publishViaKeeperHubMcp({
+            action,
+            input,
+            preferredWorkflowId: workflowId,
+            mcp: {
+              mcpUrl,
+              apiKey: config.apiKey,
+            },
+            llmProviders: mcpOpts?.llmProviders ?? null,
+            network: config.network,
+            pollIntervalMs,
+            pollTimeoutMs,
+            idempotencyKey,
+          });
+          console.info(
+            `[keeperhub-mcp] ${action} succeeded via ${mcpReceipt.mode}` +
+              (mcpReceipt.provider ? ` (provider=${mcpReceipt.provider})` : "") +
+              ` run=${mcpReceipt.keeperHubRunId} tx=${mcpReceipt.txHash}`,
+          );
+          return mcpReceiptToWriteReceipt(mcpReceipt);
+        } catch (mcpError) {
+          const message =
+            mcpError instanceof Error ? mcpError.message : String(mcpError);
+          if (!mcpRestFallback) {
+            throw mcpError instanceof Error
+              ? mcpError
+              : new Error(`KeeperHub MCP ${action} failed: ${message}`);
+          }
+          console.warn(
+            `[keeperhub-mcp] ${action} MCP path failed, falling back to REST workflow execute: ${message}`,
+          );
+          // REST path already logs via runWorkflowLogged — but we're inside
+          // withKeeperHubLog. Call raw runWorkflow to avoid double-log rows.
+          return runWorkflow(workflowId, input, idempotencyKey);
+        }
+      },
+      {
+        receiptFromResult: (receipt) => ({
+          keeperHubRunId: receipt.keeperHubRunId,
+          txHash: receipt.txHash,
+          explorerUrl: receipt.explorerUrl,
+          gasUsed: receipt.gasUsed,
+          gasUsedWei: receipt.gasUsedWei,
+        }),
+      },
+    );
   }
 
   async function authorizedFetch(
@@ -486,19 +620,20 @@ export function createKeeperHubWriteClient(
       const contentBytes = toBytes32Hash(contentHash);
       const sourceBytes = toBytes32Hash(sourceEventHash);
       const workflowId = requireWorkflowId(workflowIds, "publishAlert");
-      return runWorkflowLogged(
+      const input = {
+        contentHash: contentBytes,
+        sourceEventHash: sourceBytes,
+        contentUri,
+        // legacy workflow key aliases
+        alertHash: contentBytes,
+        ipfsUri: contentUri,
+        contractAddress: config.registryAddress,
+        network: config.network,
+      };
+      return runPublicationViaMcpOrRest(
         "publishAlert",
         workflowId,
-        {
-          contentHash: contentBytes,
-          sourceEventHash: sourceBytes,
-          contentUri,
-          // legacy workflow key aliases
-          alertHash: contentBytes,
-          ipfsUri: contentUri,
-          contractAddress: config.registryAddress,
-          network: config.network,
-        },
+        input,
         `chronicle-publishAlert-${contentHash}-${sourceEventHash}`,
         { contentUri },
       );
@@ -508,19 +643,20 @@ export function createKeeperHubWriteClient(
       const contentBytes = toBytes32Hash(contentHash);
       const rootBytes = toBytes32Hash(sourceEventRoot);
       const workflowId = requireWorkflowId(workflowIds, "publishDigest");
-      return runWorkflowLogged(
+      const input = {
+        contentHash: contentBytes,
+        sourceEventRoot: rootBytes,
+        contentUri,
+        // legacy workflow key aliases
+        digestHash: contentBytes,
+        ipfsUri: contentUri,
+        contractAddress: config.registryAddress,
+        network: config.network,
+      };
+      return runPublicationViaMcpOrRest(
         "publishDigest",
         workflowId,
-        {
-          contentHash: contentBytes,
-          sourceEventRoot: rootBytes,
-          contentUri,
-          // legacy workflow key aliases
-          digestHash: contentBytes,
-          ipfsUri: contentUri,
-          contractAddress: config.registryAddress,
-          network: config.network,
-        },
+        input,
         `chronicle-publishDigest-${contentHash}`,
         { contentUri },
       );

@@ -29,9 +29,11 @@ import { chainFromId } from "../lib/viem-chain.ts";
 import {
   createKeeperHubWriteClient,
   isKeeperHubWriteConfigured,
+  type KeeperHubMcpWriteOptions,
   toBytes32Hash,
   toUint64Seconds,
 } from "./keeperhub-write-client.ts";
+import type { LLMProviderMap } from "./llm-provider-client.ts";
 import {
   PRIVATE_ROUTING_CHAIN_ID,
   type PrivateRoutingPolicy,
@@ -282,6 +284,39 @@ function routingPoliciesFromEnv(env: ServerEnv): {
   };
 }
 
+/** LLM map for LangChain MCP publication agent (Loop 1/2). */
+function llmProvidersFromEnv(env: ServerEnv): LLMProviderMap {
+  return {
+    gemini: {
+      apiKey: env.geminiApiKey,
+      model: env.geminiModel,
+      baseUrl: env.geminiBaseUrl,
+    },
+    openai: {
+      apiKey: env.openaiApiKey,
+      model: env.openaiModel,
+      baseUrl: env.openaiBaseUrl,
+    },
+    groq: {
+      apiKey: env.groqApiKey,
+      model: env.groqModel,
+      baseUrl: env.groqBaseUrl,
+    },
+  };
+}
+
+/** Native LangChain + KeeperHub MCP options for alert/digest writes. */
+function keeperHubMcpOptionsFromEnv(env: ServerEnv): KeeperHubMcpWriteOptions {
+  return {
+    enabled: env.keeperhubMcpEnabled !== false,
+    ...(env.keeperhubMcpUrl?.trim()
+      ? { mcpUrl: env.keeperhubMcpUrl.trim() }
+      : {}),
+    llmProviders: llmProvidersFromEnv(env),
+    restFallback: true,
+  };
+}
+
 /** True when KH transfer workflow + USDC address are ready for private path. */
 export function isKeeperHubTransferConfigured(env: ServerEnv): boolean {
   const workflow = env.keeperhubWorkflowTransfer?.trim();
@@ -317,6 +352,13 @@ function createHybridParaKeeperHubWeb3Client(
   options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
 ): Web3Client {
   const routing = routingPoliciesFromEnv(env);
+  const mcp = keeperHubMcpOptionsFromEnv(env);
+  if (mcp.enabled) {
+    console.info(
+      "[web3] Loop 1/2 registry writes: LangChain ReAct agent + KeeperHub MCP " +
+        "(list_workflows → execute_workflow → get_execution); REST fallback on MCP failure",
+    );
+  }
   const kh = createKeeperHubWriteClient({
     apiBaseUrl: env.keeperhubApiBaseUrl as string,
     apiKey: env.keeperhubApiKey as string,
@@ -327,6 +369,7 @@ function createHybridParaKeeperHubWeb3Client(
     execLogRepo: options?.execLogRepo ?? null,
     routingPolicy: routing.routingPolicy,
     transferRoutingPolicy: routing.transferRoutingPolicy,
+    mcp,
   });
 
   return {
@@ -584,6 +627,13 @@ function createKeeperHubBackedWeb3Client(
   options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
 ): Web3Client {
   const routing = routingPoliciesFromEnv(env);
+  const mcp = keeperHubMcpOptionsFromEnv(env);
+  if (mcp.enabled) {
+    console.info(
+      "[web3] Loop 1/2 registry writes: LangChain ReAct agent + KeeperHub MCP " +
+        "(list_workflows → execute_workflow → get_execution); REST fallback on MCP failure",
+    );
+  }
   const kh = createKeeperHubWriteClient({
     apiBaseUrl: env.keeperhubApiBaseUrl as string,
     apiKey: env.keeperhubApiKey as string,
@@ -594,6 +644,7 @@ function createKeeperHubBackedWeb3Client(
     execLogRepo: options?.execLogRepo ?? null,
     routingPolicy: routing.routingPolicy,
     transferRoutingPolicy: routing.transferRoutingPolicy,
+    mcp,
   });
 
   const treasury = resolveTreasuryWallet(env, { keeperHubBacked: true });

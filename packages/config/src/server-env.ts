@@ -277,6 +277,17 @@ export interface ServerEnv {
   /** KeeperHub network slug / chain id for writes (default sepolia). */
   keeperhubNetwork: string;
   /**
+   * Prefer native LangChain + KeeperHub MCP for Loop 1/2 registry writes
+   * (publishAlert / publishDigest). Default true when KeeperHub is configured.
+   * Set KEEPERHUB_MCP_ENABLED=false to force REST workflow execute only.
+   */
+  keeperhubMcpEnabled: boolean;
+  /**
+   * Explicit MCP endpoint (e.g. https://app.keeperhub.com/mcp).
+   * When unset, derived as `${KEEPERHUB_API_BASE_URL}/mcp`.
+   */
+  keeperhubMcpUrl: string | undefined;
+  /**
    * Pre-imported KeeperHub workflow IDs (maps 1:1 to workflows/keeperhub/*.workflow.json).
    * Required for each write action — Direct Execution is disabled; missing IDs fail hard.
    */
@@ -1107,6 +1118,12 @@ export function loadServerEnv(): ServerEnv {
     keeperhubApiBaseUrl: optionalEnv("KEEPERHUB_API_BASE_URL"),
     keeperhubApiKey: optionalEnv("KEEPERHUB_API_KEY"),
     keeperhubNetwork: optionalEnv("KEEPERHUB_NETWORK", "sepolia") as string,
+    // Default ON: Loop 1/2 use LangChain ReAct + KeeperHub MCP when KH is configured.
+    // Opt out with KEEPERHUB_MCP_ENABLED=false for REST-only workflow execute.
+    keeperhubMcpEnabled:
+      (optionalEnv("KEEPERHUB_MCP_ENABLED", "true") ?? "true").toLowerCase() !==
+      "false",
+    keeperhubMcpUrl: optionalEnv("KEEPERHUB_MCP_URL"),
     keeperhubWorkflowPublishAlert: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_ALERT"),
     keeperhubWorkflowPublishDigest: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_DIGEST"),
     keeperhubWorkflowCreateSponsoredWatch: optionalEnv(

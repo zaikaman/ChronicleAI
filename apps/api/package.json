@@ -19,6 +19,7 @@
     "@langchain/core": "1.2.3",
     "@langchain/google-genai": "2.2.0",
     "@langchain/openai": "1.5.5",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@supabase/supabase-js": "^2.49.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
