@@ -48,6 +48,7 @@ describe("createKeeperHubWriteClient", () => {
 
     const receipt = await client.publishAlert(
       "alert-id-1",
+      "source-event-hash-1",
       "https://chronicle.example/alerts/alert-id-1",
     );
 
@@ -62,6 +63,12 @@ describe("createKeeperHubWriteClient", () => {
     const body = JSON.parse(String((contractCall?.[1] as RequestInit).body));
     expect(body.functionName).toBe("publishAlert");
     expect(body.network).toBe("base-sepolia");
+    const args = JSON.parse(body.functionArgs as string) as unknown[];
+    // IDEA: publishAlert(contentHash, sourceEventHash, contentUri)
+    expect(args).toHaveLength(3);
+    expect(typeof args[0]).toBe("string"); // contentHash bytes32
+    expect(typeof args[1]).toBe("string"); // sourceEventHash bytes32
+    expect(args[2]).toBe("https://chronicle.example/alerts/alert-id-1");
   });
 
   it("sends native transfer via KeeperHub transfer API", async () => {
@@ -141,7 +148,7 @@ describe("createKeeperHubWriteClient", () => {
       pollTimeoutMs: 5_000,
     });
 
-    const receipt = await client.publishAlert("a1", "uri");
+    const receipt = await client.publishAlert("a1", "source-1", "uri");
     expect(receipt.keeperHubRunId).toBe("exec_wf_1");
     expect(receipt.txHash).toBe("0x" + "ef".repeat(32));
     expect(

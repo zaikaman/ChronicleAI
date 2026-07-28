@@ -82,6 +82,7 @@ try {
     eventRepo,
     digestRepo,
     execLogRepo,
+    llmAttemptRepo,
     subscriberRepo,
     treasuryRepo,
     newsletterRepo,

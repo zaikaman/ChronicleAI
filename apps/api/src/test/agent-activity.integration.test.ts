@@ -233,6 +233,7 @@ describe("Agent Activity Integration", () => {
       publishDigest: vi.fn(),
       createSponsoredWatch: vi.fn(),
       publishSponsoredReport: vi.fn(),
+      publishPremiumReceipt: vi.fn(),
       recordPayout: vi.fn(),
       sendTransfer: vi.fn().mockResolvedValue({
         txHash: "0x" + "c".repeat(64),

@@ -39,5 +39,9 @@ export const LLM_FALLBACK_ORDER = ["gemini", "openai", "groq"] as const;
 // ── Alert Generation Defaults ───────────────────────────
 export const ALERT_GENERATION_TIMEOUT_MS = 30_000; // 30 seconds per provider
 
+// ── Digest Generation Defaults ──────────────────────────
+/** Longer timeout: digests synthesize many events into a full report. */
+export const DIGEST_GENERATION_TIMEOUT_MS = 60_000; // 60 seconds per provider
+
 // ── Digest Reporting Window Defaults ────────────────────
 export const DIGEST_REPORTING_WINDOW_HOURS = 24;

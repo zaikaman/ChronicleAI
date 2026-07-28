@@ -157,7 +157,11 @@ export class DigestRunHandler {
       message: noMajorEvents
         ? "No-major-events digest generated"
         : `Digest generated with ${digestContent.highlights.length} highlights`,
-      details: { eventCount: eventSelection.qualifiedEvents },
+      details: {
+        eventCount: eventSelection.qualifiedEvents,
+        generationProvider: digestContent.generationProvider ?? null,
+        confidence: digestContent.confidence,
+      },
     });
 
     // 6. Publish through all channels

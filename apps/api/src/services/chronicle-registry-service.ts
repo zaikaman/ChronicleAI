@@ -1,6 +1,11 @@
 // Chronicle Registry publish service
 // Handles on-chain registry writes for alerts, digests, and payout records
 // via KeeperHub (production) or gated direct ethers (local tests only).
+//
+// IDEA signatures:
+//   publishAlert(contentHash, sourceEventHash, contentUri)
+//   publishDigest(contentHash, sourceEventRoot, contentUri)
+//   recordPayout(...)
 
 import type { OnChainWriteReceipt } from "./on-chain-write-receipt.ts";
 import type { Web3Client } from "./web3-client-service.ts";
@@ -18,21 +23,21 @@ export interface RegistryPublishResult {
 
 export interface ChronicleRegistryService {
   /**
-   * Publish an alert on-chain with a resolvable HTTPS content URI.
-   * `contentUri` must be an absolute http(s) URL pointing at the public alert page.
+   * Publish an alert on-chain with source-event hash and resolvable HTTPS content URI.
+   * Maps to IDEA `publishAlert(contentHash, sourceEventHash, contentUri)`.
    */
   publishAlert(
-    alertId: string,
+    contentHash: string,
     sourceEventHash: string,
     contentUri: string,
   ): Promise<RegistryPublishResult>;
 
   /**
-   * Publish a digest on-chain with a resolvable HTTPS content URI.
-   * `contentUri` must be an absolute http(s) URL pointing at the public digest page.
+   * Publish a digest on-chain with source-event root and resolvable HTTPS content URI.
+   * Maps to IDEA `publishDigest(contentHash, sourceEventRoot, contentUri)`.
    */
   publishDigest(
-    digestId: string,
+    contentHash: string,
     sourceEventRoot: string,
     contentUri: string,
   ): Promise<RegistryPublishResult>;
@@ -72,27 +77,35 @@ function fromReceipt(
   receipt: OnChainWriteReceipt,
   contentUri?: string,
 ): RegistryPublishResult {
-  return {
+  const result: RegistryPublishResult = {
     success: true,
     txHash: receipt.txHash,
-    keeperHubRunId: receipt.keeperHubRunId,
-    explorerUrl: receipt.explorerUrl,
-    contentUri,
   };
+  if (receipt.keeperHubRunId !== undefined) {
+    result.keeperHubRunId = receipt.keeperHubRunId;
+  }
+  if (receipt.explorerUrl !== undefined) {
+    result.explorerUrl = receipt.explorerUrl;
+  }
+  if (contentUri !== undefined) {
+    result.contentUri = contentUri;
+  }
+  return result;
 }
 
 export function createChronicleRegistryService(
   web3Client: Web3Client | null,
 ): ChronicleRegistryService {
   return {
-    async publishAlert(alertId, _sourceEventHash, contentUri) {
+    async publishAlert(contentHash, sourceEventHash, contentUri) {
       if (!web3Client) {
         return notConfigured();
       }
 
       try {
         const uri = requireHttpsContentUri(contentUri, "alert");
-        const receipt = await web3Client.publishAlert(alertId, uri);
+        // Pass sourceEventHash on-chain — no longer dropped as _sourceEventHash.
+        const receipt = await web3Client.publishAlert(contentHash, sourceEventHash, uri);
         return fromReceipt(receipt, uri);
       } catch (error) {
         return {
@@ -102,14 +115,14 @@ export function createChronicleRegistryService(
       }
     },
 
-    async publishDigest(digestId, sourceEventRoot, contentUri) {
+    async publishDigest(contentHash, sourceEventRoot, contentUri) {
       if (!web3Client) {
         return notConfigured();
       }
 
       try {
         const uri = requireHttpsContentUri(contentUri, "digest");
-        const receipt = await web3Client.publishDigest(digestId, sourceEventRoot, uri);
+        const receipt = await web3Client.publishDigest(contentHash, sourceEventRoot, uri);
         return fromReceipt(receipt, uri);
       } catch (error) {
         return {

@@ -1,23 +1,18 @@
 // LLM-backed public alert content generator with Gemini -> OpenAI -> Groq fallback
 
-import OpenAI from "openai";
 import { ALERT_GENERATION_TIMEOUT_MS, LLM_FALLBACK_ORDER } from "@chronicleai/config";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
 import type { Confidence, EventType, LLMProvider } from "@chronicleai/schemas";
+import {
+  extractJsonObject,
+  LLM_PROVIDER_CALLERS,
+  type LLMProviderConfig,
+  type LLMProviderMap,
+} from "./llm-provider-client.ts";
+
+export type { LLMProviderConfig, LLMProviderMap };
 
 // ── Types ───────────────────────────────────────────────
-
-export interface LLMProviderConfig {
-  apiKey: string;
-  model: string;
-  baseUrl?: string | undefined;
-}
-
-export interface LLMProviderMap {
-  gemini: LLMProviderConfig;
-  openai: LLMProviderConfig;
-  groq: LLMProviderConfig;
-}
 
 export interface AlertGenerationInput {
   monitoredEventId: string;
@@ -61,6 +56,9 @@ export interface PublicAlertContentService {
   }>;
 }
 
+const ALERT_SYSTEM_INSTRUCTION =
+  "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.";
+
 // ── Prompt Template ────────────────────────────────────
 
 function buildPrompt(input: AlertGenerationInput): string {
@@ -95,9 +93,7 @@ function buildPrompt(input: AlertGenerationInput): string {
 
 function validateResponse(raw: string, input: AlertGenerationInput): GeneratedAlertContent | null {
   try {
-    // Try to extract JSON from the response (it may be wrapped in markdown code blocks)
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch?.[0] ?? raw;
+    const jsonStr = extractJsonObject(raw) ?? raw;
     const parsed = JSON.parse(jsonStr);
 
     if (!parsed.title || !parsed.summary || !parsed.confidence) {
@@ -128,118 +124,12 @@ function generateSourceReferences(input: AlertGenerationInput): string[] {
   return refs;
 }
 
-// ── Provider Adapters ──────────────────────────────────
-
-async function callGemini(
-  config: LLMProviderConfig,
-  prompt: string,
-  signal: AbortSignal,
-): Promise<string> {
-  let host = config.baseUrl || "https://generativelanguage.googleapis.com";
-  if (host.endsWith("/")) host = host.slice(0, -1);
-  const path = host.includes("/v1")
-    ? `/models/${config.model}:generateContent?key=${config.apiKey}`
-    : `/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
-  const url = `${host}${path}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [
-          {
-            text:
-              "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
-          },
-        ],
-      },
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        topP: 1,
-      },
-    }),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
-  }
-
-  const data = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini returned empty response");
-  return text;
-}
-
-async function callOpenAI(
-  config: LLMProviderConfig,
-  prompt: string,
-  signal: AbortSignal,
-): Promise<string> {
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseUrl || "https://api.openai.com/v1",
-  });
-
-  const response = await client.responses.create(
-    {
-      model: config.model,
-      instructions:
-        "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
-      input: prompt,
-    },
-    { signal },
-  );
-
-  const text = response.output_text;
-  if (!text) throw new Error("OpenAI returned empty response");
-  return text;
-}
-
-async function callGroq(
-  config: LLMProviderConfig,
-  prompt: string,
-  signal: AbortSignal,
-): Promise<string> {
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseUrl || "https://api.groq.com/openai/v1",
-  });
-
-  const response = await client.responses.create(
-    {
-      model: config.model,
-      instructions:
-        "You are ChronicleAI, an on-chain intelligence monitor. Generate concise public alerts for blockchain events.",
-      input: prompt,
-    },
-    { signal },
-  );
-
-  const text = response.output_text;
-  if (!text) throw new Error("Groq returned empty response");
-  return text;
-}
-
 // ── Factory ─────────────────────────────────────────────
 
 export function createPublicAlertContentService(
   providerConfigs: LLMProviderMap,
   llmAttemptRepo: LLMGenerationAttemptRepository,
 ): PublicAlertContentService {
-  const providerCallers: Record<
-    LLMProvider,
-    (config: LLMProviderConfig, prompt: string, signal: AbortSignal) => Promise<string>
-  > = {
-    gemini: callGemini,
-    openai: callOpenAI,
-    groq: callGroq,
-  };
-
   return {
     async generateAlert(input) {
       const prompt = buildPrompt(input);
@@ -252,7 +142,12 @@ export function createPublicAlertContentService(
         const startTime = Date.now();
 
         try {
-          const raw = await providerCallers[provider](config, prompt, controller.signal);
+          const raw = await LLM_PROVIDER_CALLERS[provider](
+            config,
+            prompt,
+            controller.signal,
+            ALERT_SYSTEM_INSTRUCTION,
+          );
           const latencyMs = Date.now() - startTime;
           clearTimeout(timeoutId);
 

@@ -98,6 +98,7 @@ export interface ServerEnv {
   keeperhubWorkflowPublishDigest: string | undefined;
   keeperhubWorkflowCreateSponsoredWatch: string | undefined;
   keeperhubWorkflowPublishSponsoredReport: string | undefined;
+  keeperhubWorkflowPublishPremiumReceipt: string | undefined;
   keeperhubWorkflowRecordPayout: string | undefined;
   keeperhubWorkflowTransfer: string | undefined;
   smtpHost: string | undefined;
@@ -262,6 +263,9 @@ export function loadServerEnv(): ServerEnv {
     ),
     keeperhubWorkflowPublishSponsoredReport: optionalEnv(
       "KEEPERHUB_WORKFLOW_PUBLISH_SPONSORED_REPORT",
+    ),
+    keeperhubWorkflowPublishPremiumReceipt: optionalEnv(
+      "KEEPERHUB_WORKFLOW_PUBLISH_PREMIUM_RECEIPT",
     ),
     keeperhubWorkflowRecordPayout: optionalEnv("KEEPERHUB_WORKFLOW_RECORD_PAYOUT"),
     keeperhubWorkflowTransfer: optionalEnv("KEEPERHUB_WORKFLOW_TRANSFER"),

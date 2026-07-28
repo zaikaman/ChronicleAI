@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-28T20:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Publish Premium Receipt (Registry Write)",
+    "description": "Material write: publishPremiumReceipt(contentHash, sourceEventHash, contentUri) — IDEA reportType PremiumReceipt."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": {
+          "triggerType": "Manual"
+        }
+      }
+    },
+    {
+      "id": "write-publish-premium",
+      "type": "action",
+      "position": { "x": 420, "y": 200 },
+      "data": {
+        "type": "action",
+        "label": "publishPremiumReceipt on Chronicle Registry",
+        "config": {
+          "actionType": "web3/write-contract",
+          "network": "84532",
+          "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
+          "abiFunction": "publishPremiumReceipt",
+          "functionArgs": "[\"{{@trigger-manual:Trigger.contentHash}}\",\"{{@trigger-manual:Trigger.sourceEventHash}}\",\"{{@trigger-manual:Trigger.contentUri}}\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"contentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventHash\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishPremiumReceipt\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-manual", "target": "write-publish-premium" }
+  ],
+  "integrationBindings": []
+}

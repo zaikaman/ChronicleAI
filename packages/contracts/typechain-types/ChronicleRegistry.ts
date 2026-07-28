@@ -30,8 +30,8 @@ export declare namespace ChronicleRegistry {
     startsAt: BigNumberish;
     endsAt: BigNumberish;
     createdAt: BigNumberish;
-    reportUri: string;
-    reportContentHash: BytesLike;
+    contentUri: string;
+    reportHash: BytesLike;
     sourceEventRoot: BytesLike;
   };
 
@@ -41,8 +41,8 @@ export declare namespace ChronicleRegistry {
     startsAt: bigint,
     endsAt: bigint,
     createdAt: bigint,
-    reportUri: string,
-    reportContentHash: string,
+    contentUri: string,
+    reportHash: string,
     sourceEventRoot: string
   ] & {
     targetContract: string;
@@ -50,8 +50,8 @@ export declare namespace ChronicleRegistry {
     startsAt: bigint;
     endsAt: bigint;
     createdAt: bigint;
-    reportUri: string;
-    reportContentHash: string;
+    contentUri: string;
+    reportHash: string;
     sourceEventRoot: string;
   };
 }
@@ -59,20 +59,31 @@ export declare namespace ChronicleRegistry {
 export interface ChronicleRegistryInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "alertSourceEventHashes"
       | "alerts"
       | "createSponsoredWatch"
+      | "digestSourceEventRoots"
       | "digests"
+      | "getAlertSourceEventHash"
       | "getAlertTimestamp"
+      | "getDigestSourceEventRoot"
       | "getDigestTimestamp"
       | "getPayoutTimestamp"
+      | "getPremiumReceiptTimestamp"
+      | "getReportType"
       | "getWatch"
+      | "hasReportType"
       | "nextWatchId"
       | "owner"
       | "payouts"
+      | "premiumReceipts"
+      | "premiumSourceEventHashes"
       | "publishAlert"
       | "publishDigest"
+      | "publishPremiumReceipt"
       | "publishSponsoredReport"
       | "recordPayout"
+      | "reportTypes"
       | "sponsoredWatches"
       | "transferOwnership"
   ): FunctionFragment;
@@ -82,18 +93,35 @@ export interface ChronicleRegistryInterface extends Interface {
       | "AlertPublished"
       | "DigestPublished"
       | "PayoutRecorded"
+      | "PremiumReceiptPublished"
       | "SponsoredReportPublished"
       | "SponsoredWatchCreated"
   ): EventFragment;
 
+  encodeFunctionData(
+    functionFragment: "alertSourceEventHashes",
+    values: [BytesLike]
+  ): string;
   encodeFunctionData(functionFragment: "alerts", values: [BytesLike]): string;
   encodeFunctionData(
     functionFragment: "createSponsoredWatch",
     values: [AddressLike, BytesLike, BigNumberish, BigNumberish]
   ): string;
+  encodeFunctionData(
+    functionFragment: "digestSourceEventRoots",
+    values: [BytesLike]
+  ): string;
   encodeFunctionData(functionFragment: "digests", values: [BytesLike]): string;
   encodeFunctionData(
+    functionFragment: "getAlertSourceEventHash",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "getAlertTimestamp",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getDigestSourceEventRoot",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
@@ -105,8 +133,20 @@ export interface ChronicleRegistryInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "getPremiumReceiptTimestamp",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getReportType",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "getWatch",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "hasReportType",
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "nextWatchId",
@@ -115,11 +155,23 @@ export interface ChronicleRegistryInterface extends Interface {
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(functionFragment: "payouts", values: [BytesLike]): string;
   encodeFunctionData(
+    functionFragment: "premiumReceipts",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "premiumSourceEventHashes",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "publishAlert",
-    values: [BytesLike, string]
+    values: [BytesLike, BytesLike, string]
   ): string;
   encodeFunctionData(
     functionFragment: "publishDigest",
+    values: [BytesLike, BytesLike, string]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "publishPremiumReceipt",
     values: [BytesLike, BytesLike, string]
   ): string;
   encodeFunctionData(
@@ -131,6 +183,10 @@ export interface ChronicleRegistryInterface extends Interface {
     values: [BytesLike, AddressLike, BigNumberish, BytesLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "reportTypes",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "sponsoredWatches",
     values: [BigNumberish]
   ): string;
@@ -139,14 +195,30 @@ export interface ChronicleRegistryInterface extends Interface {
     values: [AddressLike]
   ): string;
 
+  decodeFunctionResult(
+    functionFragment: "alertSourceEventHashes",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "alerts", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "createSponsoredWatch",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "digestSourceEventRoots",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "digests", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "getAlertSourceEventHash",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getAlertTimestamp",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getDigestSourceEventRoot",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -157,13 +229,33 @@ export interface ChronicleRegistryInterface extends Interface {
     functionFragment: "getPayoutTimestamp",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "getPremiumReceiptTimestamp",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getReportType",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "getWatch", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "hasReportType",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "nextWatchId",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "payouts", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "premiumReceipts",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "premiumSourceEventHashes",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "publishAlert",
     data: BytesLike
@@ -173,11 +265,19 @@ export interface ChronicleRegistryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "publishPremiumReceipt",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "publishSponsoredReport",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "recordPayout",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "reportTypes",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -192,18 +292,24 @@ export interface ChronicleRegistryInterface extends Interface {
 
 export namespace AlertPublishedEvent {
   export type InputTuple = [
-    alertHash: BytesLike,
-    ipfsUri: string,
+    contentHash: BytesLike,
+    sourceEventHash: BytesLike,
+    contentUri: string,
+    reportType: BigNumberish,
     timestamp: BigNumberish
   ];
   export type OutputTuple = [
-    alertHash: string,
-    ipfsUri: string,
+    contentHash: string,
+    sourceEventHash: string,
+    contentUri: string,
+    reportType: bigint,
     timestamp: bigint
   ];
   export interface OutputObject {
-    alertHash: string;
-    ipfsUri: string;
+    contentHash: string;
+    sourceEventHash: string;
+    contentUri: string;
+    reportType: bigint;
     timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -214,21 +320,24 @@ export namespace AlertPublishedEvent {
 
 export namespace DigestPublishedEvent {
   export type InputTuple = [
-    digestHash: BytesLike,
+    contentHash: BytesLike,
     sourceEventRoot: BytesLike,
-    ipfsUri: string,
+    contentUri: string,
+    reportType: BigNumberish,
     timestamp: BigNumberish
   ];
   export type OutputTuple = [
-    digestHash: string,
+    contentHash: string,
     sourceEventRoot: string,
-    ipfsUri: string,
+    contentUri: string,
+    reportType: bigint,
     timestamp: bigint
   ];
   export interface OutputObject {
-    digestHash: string;
+    contentHash: string;
     sourceEventRoot: string;
-    ipfsUri: string;
+    contentUri: string;
+    reportType: bigint;
     timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -262,24 +371,55 @@ export namespace PayoutRecordedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace PremiumReceiptPublishedEvent {
+  export type InputTuple = [
+    contentHash: BytesLike,
+    sourceEventHash: BytesLike,
+    contentUri: string,
+    reportType: BigNumberish,
+    timestamp: BigNumberish
+  ];
+  export type OutputTuple = [
+    contentHash: string,
+    sourceEventHash: string,
+    contentUri: string,
+    reportType: bigint,
+    timestamp: bigint
+  ];
+  export interface OutputObject {
+    contentHash: string;
+    sourceEventHash: string;
+    contentUri: string;
+    reportType: bigint;
+    timestamp: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace SponsoredReportPublishedEvent {
   export type InputTuple = [
     watchId: BigNumberish,
-    reportContentHash: BytesLike,
+    reportHash: BytesLike,
     sourceEventRoot: BytesLike,
-    reportUri: string
+    contentUri: string,
+    reportType: BigNumberish
   ];
   export type OutputTuple = [
     watchId: bigint,
-    reportContentHash: string,
+    reportHash: string,
     sourceEventRoot: string,
-    reportUri: string
+    contentUri: string,
+    reportType: bigint
   ];
   export interface OutputObject {
     watchId: bigint;
-    reportContentHash: string;
+    reportHash: string;
     sourceEventRoot: string;
-    reportUri: string;
+    contentUri: string;
+    reportType: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -358,6 +498,12 @@ export interface ChronicleRegistry extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  alertSourceEventHashes: TypedContractMethod<
+    [arg0: BytesLike],
+    [string],
+    "view"
+  >;
+
   alerts: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
 
   createSponsoredWatch: TypedContractMethod<
@@ -371,16 +517,34 @@ export interface ChronicleRegistry extends BaseContract {
     "nonpayable"
   >;
 
+  digestSourceEventRoots: TypedContractMethod<
+    [arg0: BytesLike],
+    [string],
+    "view"
+  >;
+
   digests: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
 
+  getAlertSourceEventHash: TypedContractMethod<
+    [contentHash: BytesLike],
+    [string],
+    "view"
+  >;
+
   getAlertTimestamp: TypedContractMethod<
-    [alertHash: BytesLike],
+    [contentHash: BytesLike],
     [bigint],
     "view"
   >;
 
+  getDigestSourceEventRoot: TypedContractMethod<
+    [contentHash: BytesLike],
+    [string],
+    "view"
+  >;
+
   getDigestTimestamp: TypedContractMethod<
-    [digestHash: BytesLike],
+    [contentHash: BytesLike],
     [bigint],
     "view"
   >;
@@ -391,11 +555,25 @@ export interface ChronicleRegistry extends BaseContract {
     "view"
   >;
 
+  getPremiumReceiptTimestamp: TypedContractMethod<
+    [contentHash: BytesLike],
+    [bigint],
+    "view"
+  >;
+
+  getReportType: TypedContractMethod<
+    [contentHash: BytesLike],
+    [bigint],
+    "view"
+  >;
+
   getWatch: TypedContractMethod<
     [watchId: BigNumberish],
     [ChronicleRegistry.WatchCampaignStructOutput],
     "view"
   >;
+
+  hasReportType: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
 
   nextWatchId: TypedContractMethod<[], [bigint], "view">;
 
@@ -403,14 +581,28 @@ export interface ChronicleRegistry extends BaseContract {
 
   payouts: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
 
+  premiumReceipts: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
+
+  premiumSourceEventHashes: TypedContractMethod<
+    [arg0: BytesLike],
+    [string],
+    "view"
+  >;
+
   publishAlert: TypedContractMethod<
-    [alertHash: BytesLike, ipfsUri: string],
+    [contentHash: BytesLike, sourceEventHash: BytesLike, contentUri: string],
     [void],
     "nonpayable"
   >;
 
   publishDigest: TypedContractMethod<
-    [digestHash: BytesLike, sourceEventRoot: BytesLike, ipfsUri: string],
+    [contentHash: BytesLike, sourceEventRoot: BytesLike, contentUri: string],
+    [void],
+    "nonpayable"
+  >;
+
+  publishPremiumReceipt: TypedContractMethod<
+    [contentHash: BytesLike, sourceEventHash: BytesLike, contentUri: string],
     [void],
     "nonpayable"
   >;
@@ -418,9 +610,9 @@ export interface ChronicleRegistry extends BaseContract {
   publishSponsoredReport: TypedContractMethod<
     [
       watchId: BigNumberish,
-      reportContentHash: BytesLike,
+      reportHash: BytesLike,
       sourceEventRoot: BytesLike,
-      reportUri: string
+      contentUri: string
     ],
     [void],
     "nonpayable"
@@ -437,6 +629,8 @@ export interface ChronicleRegistry extends BaseContract {
     "nonpayable"
   >;
 
+  reportTypes: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
+
   sponsoredWatches: TypedContractMethod<
     [arg0: BigNumberish],
     [
@@ -446,8 +640,8 @@ export interface ChronicleRegistry extends BaseContract {
         startsAt: bigint;
         endsAt: bigint;
         createdAt: bigint;
-        reportUri: string;
-        reportContentHash: string;
+        contentUri: string;
+        reportHash: string;
         sourceEventRoot: string;
       }
     ],
@@ -465,6 +659,9 @@ export interface ChronicleRegistry extends BaseContract {
   ): T;
 
   getFunction(
+    nameOrSignature: "alertSourceEventHashes"
+  ): TypedContractMethod<[arg0: BytesLike], [string], "view">;
+  getFunction(
     nameOrSignature: "alerts"
   ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
   getFunction(
@@ -480,17 +677,32 @@ export interface ChronicleRegistry extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "digestSourceEventRoots"
+  ): TypedContractMethod<[arg0: BytesLike], [string], "view">;
+  getFunction(
     nameOrSignature: "digests"
   ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
   getFunction(
+    nameOrSignature: "getAlertSourceEventHash"
+  ): TypedContractMethod<[contentHash: BytesLike], [string], "view">;
+  getFunction(
     nameOrSignature: "getAlertTimestamp"
-  ): TypedContractMethod<[alertHash: BytesLike], [bigint], "view">;
+  ): TypedContractMethod<[contentHash: BytesLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getDigestSourceEventRoot"
+  ): TypedContractMethod<[contentHash: BytesLike], [string], "view">;
   getFunction(
     nameOrSignature: "getDigestTimestamp"
-  ): TypedContractMethod<[digestHash: BytesLike], [bigint], "view">;
+  ): TypedContractMethod<[contentHash: BytesLike], [bigint], "view">;
   getFunction(
     nameOrSignature: "getPayoutTimestamp"
   ): TypedContractMethod<[payoutPeriodHash: BytesLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getPremiumReceiptTimestamp"
+  ): TypedContractMethod<[contentHash: BytesLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getReportType"
+  ): TypedContractMethod<[contentHash: BytesLike], [bigint], "view">;
   getFunction(
     nameOrSignature: "getWatch"
   ): TypedContractMethod<
@@ -498,6 +710,9 @@ export interface ChronicleRegistry extends BaseContract {
     [ChronicleRegistry.WatchCampaignStructOutput],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "hasReportType"
+  ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
   getFunction(
     nameOrSignature: "nextWatchId"
   ): TypedContractMethod<[], [bigint], "view">;
@@ -508,16 +723,29 @@ export interface ChronicleRegistry extends BaseContract {
     nameOrSignature: "payouts"
   ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
   getFunction(
+    nameOrSignature: "premiumReceipts"
+  ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "premiumSourceEventHashes"
+  ): TypedContractMethod<[arg0: BytesLike], [string], "view">;
+  getFunction(
     nameOrSignature: "publishAlert"
   ): TypedContractMethod<
-    [alertHash: BytesLike, ipfsUri: string],
+    [contentHash: BytesLike, sourceEventHash: BytesLike, contentUri: string],
     [void],
     "nonpayable"
   >;
   getFunction(
     nameOrSignature: "publishDigest"
   ): TypedContractMethod<
-    [digestHash: BytesLike, sourceEventRoot: BytesLike, ipfsUri: string],
+    [contentHash: BytesLike, sourceEventRoot: BytesLike, contentUri: string],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "publishPremiumReceipt"
+  ): TypedContractMethod<
+    [contentHash: BytesLike, sourceEventHash: BytesLike, contentUri: string],
     [void],
     "nonpayable"
   >;
@@ -526,9 +754,9 @@ export interface ChronicleRegistry extends BaseContract {
   ): TypedContractMethod<
     [
       watchId: BigNumberish,
-      reportContentHash: BytesLike,
+      reportHash: BytesLike,
       sourceEventRoot: BytesLike,
-      reportUri: string
+      contentUri: string
     ],
     [void],
     "nonpayable"
@@ -546,6 +774,9 @@ export interface ChronicleRegistry extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "reportTypes"
+  ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
+  getFunction(
     nameOrSignature: "sponsoredWatches"
   ): TypedContractMethod<
     [arg0: BigNumberish],
@@ -556,8 +787,8 @@ export interface ChronicleRegistry extends BaseContract {
         startsAt: bigint;
         endsAt: bigint;
         createdAt: bigint;
-        reportUri: string;
-        reportContentHash: string;
+        contentUri: string;
+        reportHash: string;
         sourceEventRoot: string;
       }
     ],
@@ -589,6 +820,13 @@ export interface ChronicleRegistry extends BaseContract {
     PayoutRecordedEvent.OutputObject
   >;
   getEvent(
+    key: "PremiumReceiptPublished"
+  ): TypedContractEvent<
+    PremiumReceiptPublishedEvent.InputTuple,
+    PremiumReceiptPublishedEvent.OutputTuple,
+    PremiumReceiptPublishedEvent.OutputObject
+  >;
+  getEvent(
     key: "SponsoredReportPublished"
   ): TypedContractEvent<
     SponsoredReportPublishedEvent.InputTuple,
@@ -604,7 +842,7 @@ export interface ChronicleRegistry extends BaseContract {
   >;
 
   filters: {
-    "AlertPublished(bytes32,string,uint256)": TypedContractEvent<
+    "AlertPublished(bytes32,bytes32,string,uint8,uint256)": TypedContractEvent<
       AlertPublishedEvent.InputTuple,
       AlertPublishedEvent.OutputTuple,
       AlertPublishedEvent.OutputObject
@@ -615,7 +853,7 @@ export interface ChronicleRegistry extends BaseContract {
       AlertPublishedEvent.OutputObject
     >;
 
-    "DigestPublished(bytes32,bytes32,string,uint256)": TypedContractEvent<
+    "DigestPublished(bytes32,bytes32,string,uint8,uint256)": TypedContractEvent<
       DigestPublishedEvent.InputTuple,
       DigestPublishedEvent.OutputTuple,
       DigestPublishedEvent.OutputObject
@@ -637,7 +875,18 @@ export interface ChronicleRegistry extends BaseContract {
       PayoutRecordedEvent.OutputObject
     >;
 
-    "SponsoredReportPublished(uint256,bytes32,bytes32,string)": TypedContractEvent<
+    "PremiumReceiptPublished(bytes32,bytes32,string,uint8,uint256)": TypedContractEvent<
+      PremiumReceiptPublishedEvent.InputTuple,
+      PremiumReceiptPublishedEvent.OutputTuple,
+      PremiumReceiptPublishedEvent.OutputObject
+    >;
+    PremiumReceiptPublished: TypedContractEvent<
+      PremiumReceiptPublishedEvent.InputTuple,
+      PremiumReceiptPublishedEvent.OutputTuple,
+      PremiumReceiptPublishedEvent.OutputObject
+    >;
+
+    "SponsoredReportPublished(uint256,bytes32,bytes32,string,uint8)": TypedContractEvent<
       SponsoredReportPublishedEvent.InputTuple,
       SponsoredReportPublishedEvent.OutputTuple,
       SponsoredReportPublishedEvent.OutputObject
@@ -648,7 +897,7 @@ export interface ChronicleRegistry extends BaseContract {
       SponsoredReportPublishedEvent.OutputObject
     >;
 
-    "SponsoredWatchCreated(uint256,address,bytes32,uint256,uint256)": TypedContractEvent<
+    "SponsoredWatchCreated(uint256,address,bytes32,uint64,uint64)": TypedContractEvent<
       SponsoredWatchCreatedEvent.InputTuple,
       SponsoredWatchCreatedEvent.OutputTuple,
       SponsoredWatchCreatedEvent.OutputObject

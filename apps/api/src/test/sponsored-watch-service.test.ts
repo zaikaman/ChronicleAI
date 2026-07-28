@@ -52,6 +52,7 @@ describe("SponsoredWatchService", () => {
       keeperHubRunId: "exec_watch_report",
       explorerUrl: "https://sepolia.basescan.org/tx/0x" + "b".repeat(64),
     }),
+    publishPremiumReceipt: vi.fn(),
     recordPayout: vi.fn(),
     sendTransfer: vi.fn(),
   };

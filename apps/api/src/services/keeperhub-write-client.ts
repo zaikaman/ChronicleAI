@@ -1,6 +1,14 @@
 // KeeperHub write client: sole production path for material on-chain writes.
 // Uses Direct Execution API (contract-call / transfer) and/or workflow trigger
 // (API key), then polls run status for keeperHubRunId, txHash, and explorer URL.
+//
+// ABI aligned with IDEA Chronicle Registry signatures:
+//   publishAlert(contentHash, sourceEventHash, contentUri)
+//   publishDigest(contentHash, sourceEventRoot, contentUri)
+//   createSponsoredWatch(..., uint64 startsAt, endsAt)
+//   publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri)
+//   recordPayout(...)
+//   publishPremiumReceipt(...) — reportType PremiumReceipt
 
 import { ethers } from "ethers";
 
@@ -17,6 +25,7 @@ export interface KeeperHubWorkflowIds {
   publishDigest?: string;
   createSponsoredWatch?: string;
   publishSponsoredReport?: string;
+  publishPremiumReceipt?: string;
   recordPayout?: string;
   transfer?: string;
 }
@@ -32,11 +41,15 @@ export interface KeeperHubWriteClientConfig {
 }
 
 export interface KeeperHubWriteClient {
-  publishAlert(alertHash: string, ipfsUri: string): Promise<KeeperHubWriteReceipt>;
+  publishAlert(
+    contentHash: string,
+    sourceEventHash: string,
+    contentUri: string,
+  ): Promise<KeeperHubWriteReceipt>;
   publishDigest(
-    digestHash: string,
+    contentHash: string,
     sourceEventRoot: string,
-    ipfsUri: string,
+    contentUri: string,
   ): Promise<KeeperHubWriteReceipt>;
   createSponsoredWatch(
     targetContract: string,
@@ -46,9 +59,14 @@ export interface KeeperHubWriteClient {
   ): Promise<KeeperHubWriteReceipt & { watchId: number }>;
   publishSponsoredReport(
     watchId: number,
-    reportContentHash: string,
+    reportHash: string,
     sourceEventRoot: string,
-    reportUri: string,
+    contentUri: string,
+  ): Promise<KeeperHubWriteReceipt>;
+  publishPremiumReceipt(
+    contentHash: string,
+    sourceEventHash: string,
+    contentUri: string,
   ): Promise<KeeperHubWriteReceipt>;
   recordPayout(
     payoutPeriodHash: string,
@@ -59,16 +77,43 @@ export interface KeeperHubWriteClient {
   sendTransfer(to: string, amountEth: number): Promise<KeeperHubWriteReceipt>;
 }
 
-const REGISTRY_ABI = [
-  "function publishAlert(bytes32 alertHash, string calldata ipfsUri) external",
-  "function publishDigest(bytes32 digestHash, bytes32 sourceEventRoot, string calldata ipfsUri) external",
-  "function createSponsoredWatch(address targetContract, bytes32 watchSpecHash, uint256 startsAt, uint256 endsAt) external returns (uint256 watchId)",
-  "function publishSponsoredReport(uint256 watchId, bytes32 reportContentHash, bytes32 sourceEventRoot, string calldata reportUri) external",
+/** IDEA-aligned ChronicleRegistry ABI fragment for KeeperHub contract-call. */
+export const REGISTRY_ABI = [
+  "function publishAlert(bytes32 contentHash, bytes32 sourceEventHash, string calldata contentUri) external",
+  "function publishDigest(bytes32 contentHash, bytes32 sourceEventRoot, string calldata contentUri) external",
+  "function createSponsoredWatch(address targetContract, bytes32 watchSpecHash, uint64 startsAt, uint64 endsAt) external returns (uint256 watchId)",
+  "function publishSponsoredReport(uint256 watchId, bytes32 reportHash, bytes32 sourceEventRoot, string calldata contentUri) external",
+  "function publishPremiumReceipt(bytes32 contentHash, bytes32 sourceEventHash, string calldata contentUri) external",
   "function recordPayout(bytes32 payoutPeriodHash, address recipient, uint256 amount, bytes32 reasonHash) external",
 ] as const;
 
 function hashString(input: string): string {
   return ethers.keccak256(ethers.toUtf8Bytes(input));
+}
+
+/**
+ * Normalize a hash-like input to a bytes32 hex string.
+ * Already-0x-prefixed 32-byte hashes are passed through; other strings are keccak256'd.
+ */
+export function toBytes32Hash(input: string): string {
+  const trimmed = input.trim();
+  if (/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  return hashString(trimmed);
+}
+
+/** Clamp a unix-second timestamp into uint64 range for createSponsoredWatch. */
+export function toUint64Seconds(value: number): bigint {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`Invalid uint64 timestamp: ${value}`);
+  }
+  const floored = Math.floor(value);
+  // uint64 max
+  if (floored > Number.MAX_SAFE_INTEGER) {
+    throw new Error(`Timestamp exceeds safe integer range: ${value}`);
+  }
+  return BigInt(floored);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -96,24 +141,24 @@ interface ExecuteStatusResponse {
 
 function extractTx(status: ExecuteStatusResponse): { txHash?: string; explorerUrl?: string } {
   if (typeof status.transactionHash === "string" && status.transactionHash.length > 0) {
-    return {
+    const out: { txHash?: string; explorerUrl?: string } = {
       txHash: status.transactionHash,
-      explorerUrl:
-        typeof status.transactionLink === "string" && status.transactionLink.length > 0
-          ? status.transactionLink
-          : undefined,
     };
+    if (typeof status.transactionLink === "string" && status.transactionLink.length > 0) {
+      out.explorerUrl = status.transactionLink;
+    }
+    return out;
   }
 
   const first = status.transactionHashes?.[0];
   if (first && typeof first.hash === "string" && first.hash.length > 0) {
-    return {
+    const out: { txHash?: string; explorerUrl?: string } = {
       txHash: first.hash,
-      explorerUrl:
-        typeof first.transactionLink === "string" && first.transactionLink.length > 0
-          ? first.transactionLink
-          : undefined,
     };
+    if (typeof first.transactionLink === "string" && first.transactionLink.length > 0) {
+      out.explorerUrl = first.transactionLink;
+    }
+    return out;
   }
 
   return {};
@@ -335,15 +380,13 @@ export function createKeeperHubWriteClient(
     return body.executionId;
   }
 
-  async function runContract(
-    opts: {
-      functionName: string;
-      functionArgs: unknown[];
-      workflowId?: string;
-      workflowInput?: Record<string, unknown>;
-      idempotencyKey: string;
-    },
-  ): Promise<KeeperHubWriteReceipt> {
+  async function runContract(opts: {
+    functionName: string;
+    functionArgs: unknown[];
+    workflowId?: string | undefined;
+    workflowInput?: Record<string, unknown> | undefined;
+    idempotencyKey: string;
+  }): Promise<KeeperHubWriteReceipt> {
     let executionId: string;
 
     if (opts.workflowId) {
@@ -378,51 +421,61 @@ export function createKeeperHubWriteClient(
   }
 
   return {
-    async publishAlert(alertHash, ipfsUri) {
-      const alertBytes = hashString(alertHash);
+    async publishAlert(contentHash, sourceEventHash, contentUri) {
+      const contentBytes = toBytes32Hash(contentHash);
+      const sourceBytes = toBytes32Hash(sourceEventHash);
       return runContract({
         functionName: "publishAlert",
-        functionArgs: [alertBytes, ipfsUri],
+        functionArgs: [contentBytes, sourceBytes, contentUri],
         workflowId: workflowIds.publishAlert,
         workflowInput: {
-          alertHash: alertBytes,
-          ipfsUri,
+          contentHash: contentBytes,
+          sourceEventHash: sourceBytes,
+          contentUri,
+          // legacy workflow key aliases
+          alertHash: contentBytes,
+          ipfsUri: contentUri,
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-publishAlert-${alertHash}`,
+        idempotencyKey: `chronicle-publishAlert-${contentHash}-${sourceEventHash}`,
       });
     },
 
-    async publishDigest(digestHash, sourceEventRoot, ipfsUri) {
-      const digestBytes = hashString(digestHash);
-      const rootBytes = hashString(sourceEventRoot);
+    async publishDigest(contentHash, sourceEventRoot, contentUri) {
+      const contentBytes = toBytes32Hash(contentHash);
+      const rootBytes = toBytes32Hash(sourceEventRoot);
       return runContract({
         functionName: "publishDigest",
-        functionArgs: [digestBytes, rootBytes, ipfsUri],
+        functionArgs: [contentBytes, rootBytes, contentUri],
         workflowId: workflowIds.publishDigest,
         workflowInput: {
-          digestHash: digestBytes,
+          contentHash: contentBytes,
           sourceEventRoot: rootBytes,
-          ipfsUri,
+          contentUri,
+          // legacy workflow key aliases
+          digestHash: contentBytes,
+          ipfsUri: contentUri,
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-publishDigest-${digestHash}`,
+        idempotencyKey: `chronicle-publishDigest-${contentHash}`,
       });
     },
 
     async createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt) {
-      const specBytes = hashString(watchSpecHash);
+      const specBytes = toBytes32Hash(watchSpecHash);
+      const starts = toUint64Seconds(startsAt);
+      const ends = toUint64Seconds(endsAt);
       const receipt = await runContract({
         functionName: "createSponsoredWatch",
-        functionArgs: [targetContract, specBytes, startsAt, endsAt],
+        functionArgs: [targetContract, specBytes, starts.toString(), ends.toString()],
         workflowId: workflowIds.createSponsoredWatch,
         workflowInput: {
           targetContract,
           watchSpecHash: specBytes,
-          startsAt,
-          endsAt,
+          startsAt: starts.toString(),
+          endsAt: ends.toString(),
           contractAddress: config.registryAddress,
           network: config.network,
         },
@@ -433,28 +486,49 @@ export function createKeeperHubWriteClient(
       return { ...receipt, watchId };
     },
 
-    async publishSponsoredReport(watchId, reportContentHash, sourceEventRoot, reportUri) {
-      const contentBytes = hashString(reportContentHash);
-      const rootBytes = hashString(sourceEventRoot);
+    async publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri) {
+      const reportBytes = toBytes32Hash(reportHash);
+      const rootBytes = toBytes32Hash(sourceEventRoot);
       return runContract({
         functionName: "publishSponsoredReport",
-        functionArgs: [watchId, contentBytes, rootBytes, reportUri],
+        functionArgs: [watchId, reportBytes, rootBytes, contentUri],
         workflowId: workflowIds.publishSponsoredReport,
         workflowInput: {
           watchId,
-          reportContentHash: contentBytes,
+          reportHash: reportBytes,
           sourceEventRoot: rootBytes,
-          reportUri,
+          contentUri,
+          // legacy workflow key aliases
+          reportContentHash: reportBytes,
+          reportUri: contentUri,
           contractAddress: config.registryAddress,
           network: config.network,
         },
-        idempotencyKey: `chronicle-publishSponsoredReport-${watchId}-${reportContentHash}-${sourceEventRoot}`,
+        idempotencyKey: `chronicle-publishSponsoredReport-${watchId}-${reportHash}-${sourceEventRoot}`,
+      });
+    },
+
+    async publishPremiumReceipt(contentHash, sourceEventHash, contentUri) {
+      const contentBytes = toBytes32Hash(contentHash);
+      const sourceBytes = toBytes32Hash(sourceEventHash);
+      return runContract({
+        functionName: "publishPremiumReceipt",
+        functionArgs: [contentBytes, sourceBytes, contentUri],
+        workflowId: workflowIds.publishPremiumReceipt,
+        workflowInput: {
+          contentHash: contentBytes,
+          sourceEventHash: sourceBytes,
+          contentUri,
+          contractAddress: config.registryAddress,
+          network: config.network,
+        },
+        idempotencyKey: `chronicle-publishPremiumReceipt-${contentHash}`,
       });
     },
 
     async recordPayout(payoutPeriodHash, recipient, amount, reasonHash) {
-      const periodBytes = hashString(payoutPeriodHash);
-      const reasonBytes = hashString(reasonHash);
+      const periodBytes = toBytes32Hash(payoutPeriodHash);
+      const reasonBytes = toBytes32Hash(reasonHash);
       const amountWei = ethers.parseEther(String(amount)).toString();
       return runContract({
         functionName: "recordPayout",
@@ -513,9 +587,9 @@ function buildFallbackExplorerUrl(txHash: string, network: string): string {
 }
 
 export function isKeeperHubWriteConfigured(env: {
-  keeperhubApiBaseUrl?: string;
-  keeperhubApiKey?: string;
-  chronicleRegistryAddress?: string;
+  keeperhubApiBaseUrl?: string | undefined;
+  keeperhubApiKey?: string | undefined;
+  chronicleRegistryAddress?: string | undefined;
 }): boolean {
   return Boolean(
     env.keeperhubApiBaseUrl &&

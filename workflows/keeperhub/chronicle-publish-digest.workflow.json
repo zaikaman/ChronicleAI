@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-28T18:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Publish Digest (Registry Write)",
-    "description": "Material write: publishDigest on Chronicle Registry via web3/write-contract. Triggered by Chronicle API with digestHash, sourceEventRoot, ipfsUri."
+    "description": "Material write: publishDigest(contentHash, sourceEventRoot, contentUri) on Chronicle Registry via web3/write-contract."
   },
   "nodes": [
     {
@@ -30,8 +30,8 @@
           "network": "84532",
           "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
           "abiFunction": "publishDigest",
-          "functionArgs": "[\"{{@trigger-manual:Trigger.digestHash}}\",\"{{@trigger-manual:Trigger.sourceEventRoot}}\",\"{{@trigger-manual:Trigger.ipfsUri}}\"]",
-          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"digestHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventRoot\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"ipfsUri\",\"type\":\"string\"}],\"name\":\"publishDigest\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+          "functionArgs": "[\"{{@trigger-manual:Trigger.contentHash}}\",\"{{@trigger-manual:Trigger.sourceEventRoot}}\",\"{{@trigger-manual:Trigger.contentUri}}\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"contentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventRoot\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishDigest\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
         }
       }
     }

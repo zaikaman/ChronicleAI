@@ -16,6 +16,9 @@ import { ethers } from "ethers";
 import {
   createKeeperHubWriteClient,
   isKeeperHubWriteConfigured,
+  REGISTRY_ABI,
+  toBytes32Hash,
+  toUint64Seconds,
 } from "./keeperhub-write-client.ts";
 import type { OnChainWriteReceipt, SponsoredWatchWriteReceipt } from "./on-chain-write-receipt.ts";
 import {
@@ -54,14 +57,27 @@ export interface Web3Client {
   /** Whether treasury spends are signed by Para MPC. */
   isParaTreasuryBacked(): boolean;
 
-  publishAlert(alertHash: string, ipfsUri: string): Promise<OnChainWriteReceipt>;
-
-  publishDigest(
-    digestHash: string,
-    sourceEventRoot: string,
-    ipfsUri: string,
+  /**
+   * IDEA: publishAlert(contentHash, sourceEventHash, contentUri)
+   */
+  publishAlert(
+    contentHash: string,
+    sourceEventHash: string,
+    contentUri: string,
   ): Promise<OnChainWriteReceipt>;
 
+  /**
+   * IDEA: publishDigest(contentHash, sourceEventRoot, contentUri)
+   */
+  publishDigest(
+    contentHash: string,
+    sourceEventRoot: string,
+    contentUri: string,
+  ): Promise<OnChainWriteReceipt>;
+
+  /**
+   * IDEA: createSponsoredWatch(..., uint64 startsAt, endsAt)
+   */
   createSponsoredWatch(
     targetContract: string,
     watchSpecHash: string,
@@ -69,11 +85,23 @@ export interface Web3Client {
     endsAt: number,
   ): Promise<SponsoredWatchWriteReceipt>;
 
+  /**
+   * IDEA: publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri)
+   */
   publishSponsoredReport(
     watchId: number,
-    reportContentHash: string,
+    reportHash: string,
     sourceEventRoot: string,
-    reportUri: string,
+    contentUri: string,
+  ): Promise<OnChainWriteReceipt>;
+
+  /**
+   * IDEA reportType PremiumReceipt — optional premium intelligence receipt.
+   */
+  publishPremiumReceipt(
+    contentHash: string,
+    sourceEventHash: string,
+    contentUri: string,
   ): Promise<OnChainWriteReceipt>;
 
   recordPayout(
@@ -90,12 +118,9 @@ export interface Web3Client {
   sendTransfer(to: string, amountEth: number): Promise<OnChainWriteReceipt>;
 }
 
-const REGISTRY_ABI = [
-  "function publishAlert(bytes32 alertHash, string calldata ipfsUri) external",
-  "function publishDigest(bytes32 digestHash, bytes32 sourceEventRoot, string calldata ipfsUri) external",
-  "function createSponsoredWatch(address targetContract, bytes32 watchSpecHash, uint256 startsAt, uint256 endsAt) external returns (uint256 watchId)",
-  "function publishSponsoredReport(uint256 watchId, bytes32 reportContentHash, bytes32 sourceEventRoot, string calldata reportUri) external",
-  "function recordPayout(bytes32 payoutPeriodHash, address recipient, uint256 amount, bytes32 reasonHash) external",
+/** Full ABI used by Para / direct-ethers paths (includes view helpers). */
+const ETHERS_REGISTRY_ABI = [
+  ...REGISTRY_ABI,
   "function owner() external view returns (address)",
 ] as const;
 
@@ -111,12 +136,9 @@ interface EthersContract {
   publishDigest: ContractMethod;
   createSponsoredWatch: ContractMethod;
   publishSponsoredReport: ContractMethod;
+  publishPremiumReceipt: ContractMethod;
   recordPayout: ContractMethod;
   owner: () => Promise<string>;
-}
-
-function hashString(input: string): string {
-  return ethers.keccak256(ethers.toUtf8Bytes(input));
 }
 
 function explorerUrlFor(txHash: string, network?: string): string {
@@ -158,6 +180,9 @@ function keeperHubWorkflowIdsFromEnv(env: ServerEnv) {
       : {}),
     ...(env.keeperhubWorkflowPublishSponsoredReport
       ? { publishSponsoredReport: env.keeperhubWorkflowPublishSponsoredReport }
+      : {}),
+    ...(env.keeperhubWorkflowPublishPremiumReceipt
+      ? { publishPremiumReceipt: env.keeperhubWorkflowPublishPremiumReceipt }
       : {}),
     ...(env.keeperhubWorkflowRecordPayout
       ? { recordPayout: env.keeperhubWorkflowRecordPayout }
@@ -201,13 +226,16 @@ function createHybridParaKeeperHubWeb3Client(
       return true;
     },
 
-    publishAlert: (alertHash, ipfsUri) => kh.publishAlert(alertHash, ipfsUri),
-    publishDigest: (digestHash, sourceEventRoot, ipfsUri) =>
-      kh.publishDigest(digestHash, sourceEventRoot, ipfsUri),
+    publishAlert: (contentHash, sourceEventHash, contentUri) =>
+      kh.publishAlert(contentHash, sourceEventHash, contentUri),
+    publishDigest: (contentHash, sourceEventRoot, contentUri) =>
+      kh.publishDigest(contentHash, sourceEventRoot, contentUri),
     createSponsoredWatch: (targetContract, watchSpecHash, startsAt, endsAt) =>
       kh.createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt),
-    publishSponsoredReport: (watchId, reportContentHash, sourceEventRoot, reportUri) =>
-      kh.publishSponsoredReport(watchId, reportContentHash, sourceEventRoot, reportUri),
+    publishSponsoredReport: (watchId, reportHash, sourceEventRoot, contentUri) =>
+      kh.publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri),
+    publishPremiumReceipt: (contentHash, sourceEventHash, contentUri) =>
+      kh.publishPremiumReceipt(contentHash, sourceEventHash, contentUri),
     recordPayout: (payoutPeriodHash, recipient, amount, reasonHash) =>
       kh.recordPayout(payoutPeriodHash, recipient, amount, reasonHash),
 
@@ -254,7 +282,7 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
         const signer = await getSigner();
         return new ethers.Contract(
           env.chronicleRegistryAddress as string,
-          REGISTRY_ABI,
+          ETHERS_REGISTRY_ABI,
           signer,
         ) as unknown as EthersContract;
       })();
@@ -296,9 +324,13 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
       return true;
     },
 
-    async publishAlert(alertHash, ipfsUri) {
+    async publishAlert(contentHash, sourceEventHash, contentUri) {
       const registry = await getRegistry();
-      const tx = await registry.publishAlert(hashString(alertHash), ipfsUri);
+      const tx = await registry.publishAlert(
+        toBytes32Hash(contentHash),
+        toBytes32Hash(sourceEventHash),
+        contentUri,
+      );
       const receipt = await waitReceipt(tx);
       return {
         txHash: receipt.hash,
@@ -306,12 +338,12 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
       };
     },
 
-    async publishDigest(digestHash, sourceEventRoot, ipfsUri) {
+    async publishDigest(contentHash, sourceEventRoot, contentUri) {
       const registry = await getRegistry();
       const tx = await registry.publishDigest(
-        hashString(digestHash),
-        hashString(sourceEventRoot),
-        ipfsUri,
+        toBytes32Hash(contentHash),
+        toBytes32Hash(sourceEventRoot),
+        contentUri,
       );
       const receipt = await waitReceipt(tx);
       return {
@@ -324,13 +356,13 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
       const registry = await getRegistry();
       const tx = await registry.createSponsoredWatch(
         targetContract,
-        hashString(watchSpecHash),
-        startsAt,
-        endsAt,
+        toBytes32Hash(watchSpecHash),
+        toUint64Seconds(startsAt),
+        toUint64Seconds(endsAt),
       );
       const receipt = await waitReceipt(tx);
       const eventIface = new ethers.Interface([
-        "event SponsoredWatchCreated(uint256 indexed watchId, address indexed targetContract, bytes32 watchSpecHash, uint256 startsAt, uint256 endsAt)",
+        "event SponsoredWatchCreated(uint256 indexed watchId, address indexed targetContract, bytes32 watchSpecHash, uint64 startsAt, uint64 endsAt)",
       ]);
       let watchId = 0;
       for (const log of receipt.logs) {
@@ -354,13 +386,27 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
       };
     },
 
-    async publishSponsoredReport(watchId, reportContentHash, sourceEventRoot, reportUri) {
+    async publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri) {
       const registry = await getRegistry();
       const tx = await registry.publishSponsoredReport(
         watchId,
-        hashString(reportContentHash),
-        hashString(sourceEventRoot),
-        reportUri,
+        toBytes32Hash(reportHash),
+        toBytes32Hash(sourceEventRoot),
+        contentUri,
+      );
+      const receipt = await waitReceipt(tx);
+      return {
+        txHash: receipt.hash,
+        explorerUrl: explorerUrlFor(receipt.hash, network),
+      };
+    },
+
+    async publishPremiumReceipt(contentHash, sourceEventHash, contentUri) {
+      const registry = await getRegistry();
+      const tx = await registry.publishPremiumReceipt(
+        toBytes32Hash(contentHash),
+        toBytes32Hash(sourceEventHash),
+        contentUri,
       );
       const receipt = await waitReceipt(tx);
       return {
@@ -372,10 +418,10 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
     async recordPayout(payoutPeriodHash, recipient, amount, reasonHash) {
       const registry = await getRegistry();
       const tx = await registry.recordPayout(
-        hashString(payoutPeriodHash),
+        toBytes32Hash(payoutPeriodHash),
         recipient,
         ethers.parseEther(String(amount)),
-        hashString(reasonHash),
+        toBytes32Hash(reasonHash),
       );
       const receipt = await waitReceipt(tx);
       return {
@@ -420,13 +466,16 @@ function createKeeperHubBackedWeb3Client(env: ServerEnv): Web3Client {
       return false;
     },
 
-    publishAlert: (alertHash, ipfsUri) => kh.publishAlert(alertHash, ipfsUri),
-    publishDigest: (digestHash, sourceEventRoot, ipfsUri) =>
-      kh.publishDigest(digestHash, sourceEventRoot, ipfsUri),
+    publishAlert: (contentHash, sourceEventHash, contentUri) =>
+      kh.publishAlert(contentHash, sourceEventHash, contentUri),
+    publishDigest: (contentHash, sourceEventRoot, contentUri) =>
+      kh.publishDigest(contentHash, sourceEventRoot, contentUri),
     createSponsoredWatch: (targetContract, watchSpecHash, startsAt, endsAt) =>
       kh.createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt),
-    publishSponsoredReport: (watchId, reportContentHash, sourceEventRoot, reportUri) =>
-      kh.publishSponsoredReport(watchId, reportContentHash, sourceEventRoot, reportUri),
+    publishSponsoredReport: (watchId, reportHash, sourceEventRoot, contentUri) =>
+      kh.publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri),
+    publishPremiumReceipt: (contentHash, sourceEventHash, contentUri) =>
+      kh.publishPremiumReceipt(contentHash, sourceEventHash, contentUri),
     recordPayout: (payoutPeriodHash, recipient, amount, reasonHash) =>
       kh.recordPayout(payoutPeriodHash, recipient, amount, reasonHash),
     sendTransfer: (to, amountEth) => kh.sendTransfer(to, amountEth),
@@ -448,7 +497,7 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
   const agentWallet = new ethers.Wallet(env.paraWalletPrivateKey, provider);
   const registryContract = new ethers.Contract(
     env.chronicleRegistryAddress,
-    REGISTRY_ABI,
+    ETHERS_REGISTRY_ABI,
     agentWallet,
   ) as unknown as EthersContract;
 
@@ -493,8 +542,12 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
       return false;
     },
 
-    async publishAlert(alertHash, ipfsUri) {
-      const tx = await registryContract.publishAlert(hashString(alertHash), ipfsUri);
+    async publishAlert(contentHash, sourceEventHash, contentUri) {
+      const tx = await registryContract.publishAlert(
+        toBytes32Hash(contentHash),
+        toBytes32Hash(sourceEventHash),
+        contentUri,
+      );
       const receipt = await waitReceipt(tx);
       return {
         txHash: receipt.hash,
@@ -502,11 +555,11 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
       };
     },
 
-    async publishDigest(digestHash, sourceEventRoot, ipfsUri) {
+    async publishDigest(contentHash, sourceEventRoot, contentUri) {
       const tx = await registryContract.publishDigest(
-        hashString(digestHash),
-        hashString(sourceEventRoot),
-        ipfsUri,
+        toBytes32Hash(contentHash),
+        toBytes32Hash(sourceEventRoot),
+        contentUri,
       );
       const receipt = await waitReceipt(tx);
       return {
@@ -518,13 +571,13 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
     async createSponsoredWatch(targetContract, watchSpecHash, startsAt, endsAt) {
       const tx = await registryContract.createSponsoredWatch(
         targetContract,
-        hashString(watchSpecHash),
-        startsAt,
-        endsAt,
+        toBytes32Hash(watchSpecHash),
+        toUint64Seconds(startsAt),
+        toUint64Seconds(endsAt),
       );
       const receipt = await waitReceipt(tx);
       const eventIface = new ethers.Interface([
-        "event SponsoredWatchCreated(uint256 indexed watchId, address indexed targetContract, bytes32 watchSpecHash, uint256 startsAt, uint256 endsAt)",
+        "event SponsoredWatchCreated(uint256 indexed watchId, address indexed targetContract, bytes32 watchSpecHash, uint64 startsAt, uint64 endsAt)",
       ]);
       let watchId = 0;
       for (const log of receipt.logs) {
@@ -548,12 +601,25 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
       };
     },
 
-    async publishSponsoredReport(watchId, reportContentHash, sourceEventRoot, reportUri) {
+    async publishSponsoredReport(watchId, reportHash, sourceEventRoot, contentUri) {
       const tx = await registryContract.publishSponsoredReport(
         watchId,
-        hashString(reportContentHash),
-        hashString(sourceEventRoot),
-        reportUri,
+        toBytes32Hash(reportHash),
+        toBytes32Hash(sourceEventRoot),
+        contentUri,
+      );
+      const receipt = await waitReceipt(tx);
+      return {
+        txHash: receipt.hash,
+        explorerUrl: explorerUrlFor(receipt.hash, network),
+      };
+    },
+
+    async publishPremiumReceipt(contentHash, sourceEventHash, contentUri) {
+      const tx = await registryContract.publishPremiumReceipt(
+        toBytes32Hash(contentHash),
+        toBytes32Hash(sourceEventHash),
+        contentUri,
       );
       const receipt = await waitReceipt(tx);
       return {
@@ -564,10 +630,10 @@ function createDirectEthersWeb3Client(env: ServerEnv): Web3Client {
 
     async recordPayout(payoutPeriodHash, recipient, amount, reasonHash) {
       const tx = await registryContract.recordPayout(
-        hashString(payoutPeriodHash),
+        toBytes32Hash(payoutPeriodHash),
         recipient,
         ethers.parseEther(String(amount)),
-        hashString(reasonHash),
+        toBytes32Hash(reasonHash),
       );
       const receipt = await waitReceipt(tx);
       return {

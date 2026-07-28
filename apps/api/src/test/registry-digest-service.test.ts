@@ -21,14 +21,14 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
     isParaTreasuryBacked() {
       return false;
     },
-    async publishAlert(_alertHash: string, _ipfsUri: string) {
+    async publishAlert(_contentHash: string, _sourceEventHash: string, _contentUri: string) {
       return {
         txHash: "0xalert-tx-hash",
         keeperHubRunId: "exec_alert_1",
         explorerUrl: "https://sepolia.basescan.org/tx/0xalert-tx-hash",
       };
     },
-    async publishDigest(_digestHash: string, _sourceEventRoot: string, _ipfsUri: string) {
+    async publishDigest(_contentHash: string, _sourceEventRoot: string, _contentUri: string) {
       return {
         txHash: "0xdigest-tx-hash",
         keeperHubRunId: "exec_digest_1",
@@ -40,6 +40,9 @@ function createMockWeb3Client(overrides?: Partial<Web3Client>): Web3Client {
     },
     async publishSponsoredReport() {
       return { txHash: "0xreport-tx-hash", keeperHubRunId: "exec_report_1" };
+    },
+    async publishPremiumReceipt() {
+      return { txHash: "0xpremium-tx-hash", keeperHubRunId: "exec_premium_1" };
     },
     async recordPayout(
       _payoutPeriodHash: string,
@@ -84,11 +87,13 @@ describe("ChronicleRegistryService (digest)", () => {
     expect(capturedUri).toBe(DIGEST_URI);
   });
 
-  it("publishes an alert with HTTPS content URI", async () => {
+  it("publishes an alert with HTTPS content URI and sourceEventHash on-chain", async () => {
     let capturedUri: string | undefined;
+    let capturedSource: string | undefined;
     const web3Client = createMockWeb3Client({
-      async publishAlert(_alertHash, ipfsUri) {
-        capturedUri = ipfsUri;
+      async publishAlert(_contentHash, sourceEventHash, contentUri) {
+        capturedSource = sourceEventHash;
+        capturedUri = contentUri;
         return {
           txHash: "0xalert-tx-hash",
           keeperHubRunId: "exec_alert_1",
@@ -105,6 +110,7 @@ describe("ChronicleRegistryService (digest)", () => {
     expect(result.keeperHubRunId).toBe("exec_alert_1");
     expect(result.contentUri).toBe(ALERT_URI);
     expect(capturedUri).toBe(ALERT_URI);
+    expect(capturedSource).toBe("event-hash");
   });
 
   it("rejects non-https content URIs (e.g. chronicleai:// placeholders)", async () => {

@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-28T18:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Create Sponsored Watch (Registry Write)",
-    "description": "Material write: createSponsoredWatch on Chronicle Registry. Triggered with targetContract, watchSpecHash, startsAt, endsAt."
+    "description": "Material write: createSponsoredWatch on Chronicle Registry with uint64 startsAt/endsAt (IDEA). Triggered with targetContract, watchSpecHash, startsAt, endsAt."
   },
   "nodes": [
     {
@@ -31,7 +31,7 @@
           "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
           "abiFunction": "createSponsoredWatch",
           "functionArgs": "[\"{{@trigger-manual:Trigger.targetContract}}\",\"{{@trigger-manual:Trigger.watchSpecHash}}\",\"{{@trigger-manual:Trigger.startsAt}}\",\"{{@trigger-manual:Trigger.endsAt}}\"]",
-          "abi": "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"targetContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"watchSpecHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"startsAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"endsAt\",\"type\":\"uint256\"}],\"name\":\"createSponsoredWatch\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+          "abi": "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"targetContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"watchSpecHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"startsAt\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"endsAt\",\"type\":\"uint64\"}],\"name\":\"createSponsoredWatch\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
         }
       }
     }

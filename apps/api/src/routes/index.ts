@@ -133,6 +133,8 @@ export interface US2Dependencies {
   eventRepo: MonitoredEventRepository;
   digestRepo: DailyDigestRepository;
   execLogRepo: ExecutionLogRepository;
+  /** Multi-provider LLM attempt logging for digest generation (Gemini → OpenAI → Groq). */
+  llmAttemptRepo: LLMGenerationAttemptRepository;
   subscriberRepo: EmailSubscriberRepository;
   /** Latest treasury snapshots for FR-026 treasury-gated registry writes. */
   treasuryRepo: TreasurySnapshotRepository;
@@ -234,7 +236,14 @@ export function setupUS2Routes(app: Express, env: ServerEnv, deps: US2Dependenci
 
   const windowService = createDigestWindowService(deps.digestRepo);
   const eventSelectionService = createDigestEventSelectionService(deps.eventRepo);
-  const generationService = createDigestGenerationService();
+  const generationService = createDigestGenerationService(
+    {
+      gemini: { apiKey: env.geminiApiKey, model: env.geminiModel, baseUrl: env.geminiBaseUrl },
+      openai: { apiKey: env.openaiApiKey, model: env.openaiModel, baseUrl: env.openaiBaseUrl },
+      groq: { apiKey: env.groqApiKey, model: env.groqModel, baseUrl: env.groqBaseUrl },
+    },
+    deps.llmAttemptRepo,
+  );
   const publicationService = createDigestPublicationService(
     deps.digestRepo,
     registryService,
