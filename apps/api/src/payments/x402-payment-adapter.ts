@@ -134,7 +134,6 @@ export class X402PaymentAdapter implements PaymentAdapter {
     | string
     | undefined
     | (() => string | undefined);
-  private readonly allowTestMode: boolean;
   private readonly rpcUrl: string | undefined;
   private readonly settlementPrivateKey: string | undefined;
   /** EVM chain ID for EIP-712 domain + RPC network (env: X402_CHAIN_ID). */
@@ -178,12 +177,6 @@ export class X402PaymentAdapter implements PaymentAdapter {
      * getter so production can point at a Para MPC wallet once enrolled.
      */
     treasuryWalletAddress?: string | undefined | (() => string | undefined);
-    /**
-     * When true, the adapter will accept plain-string settlement references
-     * without EIP-712 signature verification or on-chain settlement.
-     * Intended for local development and integration tests only. Defaults to false.
-     */
-    allowTestMode?: boolean | undefined;
     /** JSON-RPC URL for the configured chain (used for direct settlement + receipt checks). */
     rpcUrl?: string | undefined;
     /**
@@ -240,7 +233,6 @@ export class X402PaymentAdapter implements PaymentAdapter {
       );
     }
     this.treasuryWalletAddressResolver = options?.treasuryWalletAddress;
-    this.allowTestMode = options?.allowTestMode ?? false;
     this.rpcUrl = options?.rpcUrl;
     this.settlementPrivateKey = options?.settlementPrivateKey;
     this.settleAuthorization = options?.settleAuthorization;
@@ -471,35 +463,13 @@ export class X402PaymentAdapter implements PaymentAdapter {
       };
     }
 
-    // Fallback to local test mode when explicitly opted in via allowTestMode
-    if (this.allowTestMode) {
-      if (params.settlementReference.length < 5) {
-        return {
-          verified: false,
-          amountSettled: 0,
-          currency: params.currency,
-          settlementReference: params.settlementReference,
-          errorMessage: "Settlement reference is too short",
-        };
-      }
-
-      const payerReference = `0x${params.settlementReference.slice(0, 40).padEnd(40, "0")}`;
-      return {
-        verified: true,
-        amountSettled: params.amountRequested,
-        currency: params.currency,
-        settlementReference: params.settlementReference,
-        payerReference,
-      };
-    }
-
     return {
       verified: false,
       amountSettled: 0,
       currency: params.currency,
       settlementReference: params.settlementReference,
       errorMessage:
-        "Settlement requires a JSON serialized EIP-712 authorization payload or an on-chain transaction hash. For test/development, construct the X402PaymentAdapter with { allowTestMode: true }",
+        "Settlement requires a JSON serialized EIP-712 authorization payload or an on-chain transaction hash",
     };
   }
 
@@ -738,17 +708,6 @@ export class X402PaymentAdapter implements PaymentAdapter {
       };
     }
 
-    // Test mode may skip the transfer rail after cryptographic checks
-    if (this.allowTestMode && !this.hasSettlementRail()) {
-      return {
-        verified: true,
-        amountSettled: params.amountRequested,
-        currency: params.currency,
-        settlementReference: params.settlementReference,
-        payerReference: from,
-      };
-    }
-
     // Submit the real transfer (facilitator or on-chain)
     const settleResult = await this.submitAuthorization(
       {
@@ -819,17 +778,6 @@ export class X402PaymentAdapter implements PaymentAdapter {
         currency: params.currency,
         settlementReference: params.txHash,
         errorMessage: "Treasury wallet address is not configured for x402 settlement",
-      };
-    }
-
-    if (this.allowTestMode && !this.rpcUrl && !this.verifyTransactionReceipt) {
-      // Test mode without RPC: accept well-formed tx hashes only when explicitly opted in
-      return {
-        verified: true,
-        amountSettled: params.amountRequested,
-        currency: params.currency,
-        settlementReference: params.txHash,
-        payerReference: `0x${params.txHash.slice(2, 42)}`,
       };
     }
 

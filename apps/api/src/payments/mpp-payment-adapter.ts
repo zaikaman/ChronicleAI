@@ -61,24 +61,15 @@ export class MppPaymentAdapter implements PaymentAdapter {
   readonly route = "mpp" as const;
 
   private readonly mppSecret: string | undefined;
-  private readonly allowTestMode: boolean;
 
   constructor(options?: {
     mppSecret?: string | undefined;
-    /**
-     * When true, accepts a default test secret when none is configured and
-     * allows non-matching HMAC strings of length ≥ 32. Defaults to false.
-     */
-    allowTestMode?: boolean | undefined;
   }) {
     this.mppSecret = options?.mppSecret;
-    this.allowTestMode = options?.allowTestMode ?? false;
   }
 
   private resolveSecret(): string | undefined {
-    if (this.mppSecret) return this.mppSecret;
-    if (this.allowTestMode) return "mpp-test-secret";
-    return undefined;
+    return this.mppSecret;
   }
 
   async createChallenge(params: {
@@ -142,12 +133,6 @@ export class MppPaymentAdapter implements PaymentAdapter {
       ...(resolvedPayer ? { payerReference: resolvedPayer } : {}),
       referralAddress,
     };
-
-    // Keep expectedHmac available only in test mode so unit tests can assert shape
-    // without shipping the answer in production challenge payloads.
-    if (this.allowTestMode) {
-      challengeData.expectedHmac = expectedHmac;
-    }
 
     return {
       challengeReference,
@@ -280,18 +265,13 @@ export class MppPaymentAdapter implements PaymentAdapter {
     const isMatch = hmacEqual(providedHmac, expectedHmac);
 
     if (!isMatch) {
-      // Explicit opt-in test bypass only (mirrors x402 allowTestMode)
-      if (this.allowTestMode && providedHmac.length >= 32) {
-        // fall through as verified for test adapters
-      } else {
-        return {
-          verified: false,
-          amountSettled: 0,
-          currency: params.currency,
-          settlementReference: params.settlementReference,
-          errorMessage: "HMAC signature verification failed",
-        };
-      }
+      return {
+        verified: false,
+        amountSettled: 0,
+        currency: params.currency,
+        settlementReference: params.settlementReference,
+        errorMessage: "HMAC signature verification failed",
+      };
     }
 
     // Map to a real payout identity when the challenge was created with an EVM address.

@@ -9,10 +9,6 @@ import {
 
 describe("MppPaymentAdapter", () => {
   const adapter = new MppPaymentAdapter({ mppSecret: "test-secret-key" });
-  const testModeAdapter = new MppPaymentAdapter({
-    mppSecret: "test-secret-key",
-    allowTestMode: true,
-  });
   const prodNoSecret = new MppPaymentAdapter();
 
   describe("createChallenge", () => {
@@ -32,16 +28,6 @@ describe("MppPaymentAdapter", () => {
       expect(result.challengeData).toHaveProperty("verificationType", "hmac_sha256");
       // Production mode must not leak the expected HMAC
       expect(result.challengeData).not.toHaveProperty("expectedHmac");
-    });
-
-    it("should include expectedHmac only when allowTestMode is true", async () => {
-      const result = await testModeAdapter.createChallenge({
-        premiumItemId: "premium-001",
-        amount: 5,
-        currency: "USDC",
-      });
-
-      expect(result.challengeData).toHaveProperty("expectedHmac");
     });
 
     it("should create a challenge with different nonces each time", async () => {
@@ -98,30 +84,7 @@ describe("MppPaymentAdapter", () => {
   });
 
   describe("verifySettlement", () => {
-    it("should accept a non-matching long HMAC only when allowTestMode is true", async () => {
-      const challenge = await testModeAdapter.createChallenge({
-        premiumItemId: "premium-001",
-        amount: 5,
-        currency: "USDC",
-      });
-
-      const settlementRef = `${challenge.expiresAt}:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2`;
-
-      const result = await testModeAdapter.verifySettlement({
-        challengeReference: challenge.challengeReference,
-        settlementReference: settlementRef,
-        amountRequested: 5,
-        currency: "USDC",
-        paymentRoute: "mpp",
-      });
-
-      expect(result.verified).toBe(true);
-      expect(result.amountSettled).toBe(5);
-      // No synthetic mpp-client-* payer when challenge had no real identity
-      expect(result.payerReference).toBeUndefined();
-    });
-
-    it("should reject non-matching HMAC when allowTestMode is false", async () => {
+    it("should reject non-matching HMAC", async () => {
       const challenge = await adapter.createChallenge({
         premiumItemId: "premium-001",
         amount: 5,
