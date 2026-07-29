@@ -23,12 +23,14 @@
 
 ### Verified Onchain Transactions Executed via KeeperHub Stack
 
-| Surface / Capability | Network | Contract / Function | Real Transaction Link |
+| Surface / Workflow | Network | Strategy / Action | Real Executed Transaction Link |
 | :--- | :--- | :--- | :--- |
-| **1. Daily Digest Publication** | Ethereum Sepolia | `ChronicleRegistry.publishDigest` | [`0xe25efe40...2a3c0a`](https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204) |
-| **2. Intelligence Alert Anchor** | Ethereum Sepolia | `ChronicleRegistry.publishAlert` | [`0x1d72ba01...2b23cb`](https://sepolia.etherscan.io/tx/0x1d72ba017d1c47ea8d2b4420c044c541b9a8d068c4740b709a9a84ef12b23cb7) |
-| **3. KeeperHub Operator Authorization** | Ethereum Sepolia | `ChronicleRegistry.setOperator` | [`0xc6106fb4...aa2024`](https://sepolia.etherscan.io/tx/0xc6106fb46f81c3de184875ea77757b24c3236d84615e33dea54d4b469caa2024) |
-| **4. Onchain Registry Contract** | Ethereum Sepolia | `ChronicleRegistry.sol` | [`0xD8Deb447...20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) |
+| **1. Desk Oracle Arbitrage** | Ethereum Sepolia | Uniswap V3 Swap (`oracle_arb` via Private RPC) | [`0xf7c52b28...0a3d0b6`](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) |
+| **2. Desk Yield Rotation** | Ethereum Sepolia | Aave V3 Supply (`rotate_yield` via KeeperHub) | [`0x5a17e7b5...3ec0cc61`](https://sepolia.etherscan.io/tx/0x5a17e7b561bceb585faa45ff05f0bdabe18e216e1b40f67525cc47cf3ec0cc61) |
+| **3. Desk Treasury Profit Sweep** | Ethereum Sepolia | Treasury Transfer (`sweep` via KeeperHub) | [`0x47d1f3b9...4cebeeda`](https://sepolia.etherscan.io/tx/0x47d1f3b90396e4fd63168f056d027cf0c9c8bd90949041f749bb249e4cebeeda) |
+| **4. Daily Digest Publication** | Ethereum Sepolia | `ChronicleRegistry.publishDigest` | [`0xe25efe40...2a3c0a`](https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204) |
+| **5. Intelligence Alert Anchor** | Ethereum Sepolia | `ChronicleRegistry.publishAlert` | [`0x1d72ba01...2b23cb`](https://sepolia.etherscan.io/tx/0x1d72ba017d1c47ea8d2b4420c044c541b9a8d068c4740b709a9a84ef12b23cb7) |
+| **6. Desk Capital Topup** | Ethereum Sepolia | Treasury Deposit (`recordCapitalMove`) | [`0x7aac47c6...95f224bf`](https://sepolia.etherscan.io/tx/0x7aac47c61d30b15a7cb381423731fbd61936e086c5e54402a7a3d54395f224bf) |
 
 ---
 
