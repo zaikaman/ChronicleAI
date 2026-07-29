@@ -688,25 +688,38 @@ export function createSponsoredWatchService(params: {
       reportExplorerUrl = receipt.explorerUrl;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown on-chain error";
-      await execLogRepo.append({
-        action_type: "sponsored_watch",
-        entity_type: "sponsored_watch",
-        entity_id: watchId,
-        status: "failed",
-        message: `On-chain publishSponsoredReport failed: ${message}`,
-        details: {
-          method: "publishSponsoredReport",
-          reportContentHash,
-          sourceEventRoot,
-          reportUri,
-          onChainWatchId,
-          createTxHash: watch.create_tx_hash,
-          error_message: message,
-        },
-        started_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-      });
-      throw new Error(`On-chain publishSponsoredReport failed: ${message}`);
+      const isAlreadyPublished =
+        message.toLowerCase().includes("already published") ||
+        message.toLowerCase().includes("report already published");
+
+      if (isAlreadyPublished) {
+        console.warn(
+          `[sponsored-watch] Watch ${watchId} (onChainWatchId ${onChainWatchId}) report already published on-chain: proceeding with DB completion.`,
+        );
+        reportTxHash = watch.report_tx_hash || watch.create_tx_hash || "0x0000000000000000000000000000000000000000000000000000000000000000";
+        reportKeeperHubRunId = watch.report_keeper_hub_run_id ?? undefined;
+        reportExplorerUrl = watch.report_explorer_url ?? undefined;
+      } else {
+        await execLogRepo.append({
+          action_type: "sponsored_watch",
+          entity_type: "sponsored_watch",
+          entity_id: watchId,
+          status: "failed",
+          message: `On-chain publishSponsoredReport failed: ${message}`,
+          details: {
+            method: "publishSponsoredReport",
+            reportContentHash,
+            sourceEventRoot,
+            reportUri,
+            onChainWatchId,
+            createTxHash: watch.create_tx_hash,
+            error_message: message,
+          },
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        });
+        throw new Error(`On-chain publishSponsoredReport failed: ${message}`);
+      }
     }
 
     const result = await watchRepo.updateStatus(watchId, "completed", {

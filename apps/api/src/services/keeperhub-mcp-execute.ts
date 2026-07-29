@@ -506,6 +506,8 @@ export function isAlreadyPublishedError(message: string): boolean {
     m.includes("already published") ||
     m.includes("alert already published") ||
     m.includes("digest already published") ||
+    m.includes("report already published") ||
+    m.includes("sponsored report already published") ||
     m.includes("premium receipt already published") ||
     m.includes("trade ticket already published")
   );

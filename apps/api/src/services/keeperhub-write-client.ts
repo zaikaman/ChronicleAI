@@ -582,8 +582,9 @@ export function createKeeperHubWriteClient(
           return receiptFromStatus(executionId, body, config.network);
         }
         if (isTerminalFailure(body)) {
+          const err = (body as any).errorContext?.error ?? body.error;
           throw new Error(
-            body.error ?? `KeeperHub execution ${executionId} ended with status ${body.status}`,
+            err ?? `KeeperHub execution ${executionId} ended with status ${body.status}`,
           );
         }
       }
@@ -599,8 +600,9 @@ export function createKeeperHubWriteClient(
           return receiptFromStatus(executionId, body, config.network);
         }
         if (isTerminalFailure(body)) {
+          const err = (body as any).errorContext?.error ?? body.error;
           throw new Error(
-            body.error ??
+            err ??
               `KeeperHub execution ${executionId} ended with status ${body.status}`,
           );
         }
