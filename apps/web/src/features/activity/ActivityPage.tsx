@@ -13,7 +13,7 @@ import {
 import { PublicationProof } from "../../components/publication-proof.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { SkeletonPanel } from "../../components/ui/skeleton.tsx";
-import { baseSepoliaAddressUrl, baseSepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
+import { baseSepoliaAddressUrl, baseSepoliaTxUrl, sepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
 import { useInView } from "../../lib/use-in-view.ts";
 import { CapitalMovesPanel } from "../desk/CapitalMovesPanel.tsx";
 import { DeskTicketsPanel } from "../desk/DeskTicketsPanel.tsx";
@@ -52,26 +52,73 @@ function ProgressivePanel({
   );
 }
 
-/** Default explorer for x402 settlement refs (payment rail = Base Sepolia). */
-function ProofLink({
-  txHash,
-  label,
-  explorerUrl,
+/** Explorer link helper for payment settlements (x402 & MPP). */
+function PaymentProofLink({
+  payment,
 }: {
-  txHash: string;
-  label?: string;
-  explorerUrl?: string;
-}): ReactElement {
-  const href = explorerUrl ?? baseSepoliaTxUrl(txHash);
+  payment: {
+    paymentRoute: string;
+    settlementReference?: string;
+    registryTxHash?: string;
+    explorerUrl?: string;
+  };
+}): ReactElement | null {
+  // 1. Explicit published receipt explorerUrl
+  if (payment.explorerUrl) {
+    const raw = payment.registryTxHash ?? payment.settlementReference ?? "";
+    const cleanHash = raw.includes(":") ? raw.split(":").pop()! : raw;
+    const formattedHash = cleanHash.startsWith("0x") ? cleanHash : `0x${cleanHash}`;
+    return (
+      <a
+        href={payment.explorerUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-xs text-muted-foreground hover:text-foreground transition-colors break-all"
+        title="View receipt publication on block explorer"
+      >
+        {truncateHash(formattedHash)}
+      </a>
+    );
+  }
+
+  // 2. On-chain registryTxHash
+  if (payment.registryTxHash) {
+    const hash = payment.registryTxHash.startsWith("0x")
+      ? payment.registryTxHash
+      : `0x${payment.registryTxHash}`;
+    return (
+      <a
+        href={sepoliaTxUrl(hash)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-xs text-muted-foreground hover:text-foreground transition-colors break-all"
+        title={`View ${hash} on Sepolia explorer`}
+      >
+        {truncateHash(hash)}
+      </a>
+    );
+  }
+
+  // 3. settlementReference (clean HMAC timestamp prefix if MPP)
+  if (!payment.settlementReference) return null;
+
+  let rawHash = payment.settlementReference.trim();
+  if (rawHash.includes(":")) {
+    rawHash = rawHash.split(":").pop() || rawHash;
+  }
+  const targetHash = rawHash.startsWith("0x") ? rawHash : `0x${rawHash}`;
+
+  const href = `https://sepolia.basescan.org/tx/${targetHash}`;
+
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
       className="font-mono text-xs text-muted-foreground hover:text-foreground transition-colors break-all"
-      title={`View ${txHash} on block explorer`}
+      title={`View ${targetHash} on Basescan`}
     >
-      {label ?? truncateHash(txHash)}
+      {truncateHash(targetHash)}
     </a>
   );
 }
@@ -318,9 +365,7 @@ function PaymentsSection(): ReactElement {
                             : "warning"
                       }
                     />
-                    {payment.settlementReference ? (
-                      <ProofLink txHash={payment.settlementReference} />
-                    ) : null}
+                    <PaymentProofLink payment={payment} />
                   </div>
                 </Surface>
               );

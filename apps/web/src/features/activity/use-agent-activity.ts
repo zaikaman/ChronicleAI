@@ -58,6 +58,10 @@ export interface AgentActivityData {
     referralAddress?: string;
     requestedAt?: string;
     settledAt?: string;
+    registryTxHash?: string;
+    keeperHubRunId?: string;
+    explorerUrl?: string;
+    contentUri?: string;
   }>;
   treasury: {
     availableBalance: number;

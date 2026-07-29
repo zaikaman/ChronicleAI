@@ -38,6 +38,10 @@ export interface PaymentItem {
   referralAddress?: string;
   requestedAt?: string;
   settledAt?: string;
+  registryTxHash?: string;
+  keeperHubRunId?: string;
+  explorerUrl?: string;
+  contentUri?: string;
 }
 
 export interface PayoutItem {

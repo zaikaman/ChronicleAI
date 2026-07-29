@@ -42,7 +42,9 @@ export function sepoliaAddressUrl(address: string): string {
 
 /** x402 payment settlement tx URL (Base Sepolia). */
 export function baseSepoliaTxUrl(txHash: string): string {
-  return `${BASE_SEPOLIA_EXPLORER}/tx/${txHash}`;
+  const hash = txHash?.trim() ?? "";
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return "";
+  return `${BASE_SEPOLIA_EXPLORER}/tx/${hash}`;
 }
 
 /** x402 payment settlement address URL (Base Sepolia). */
