@@ -194,7 +194,7 @@ export function createSponsoredWatchService(params: {
             return windowEvents;
           }
           if (allEvents.length > 0) {
-            return allEvents.slice(0, 50);
+            return allEvents.slice(0, 500);
           }
         }
       } catch (etherscanErr) {
@@ -353,29 +353,33 @@ export function createSponsoredWatchService(params: {
       const rpcMatched = await collectRpcLogsForWindow(watch);
       if (rpcMatched.length > 0) {
         const persisted: MonitoredEventRow[] = [];
-        for (const ev of rpcMatched.slice(0, 100)) {
-          const existing = await eventRepo.findBySourceAndEventId(ev.source, ev.source_event_id!);
-          if (existing) {
-            persisted.push(existing);
-          } else {
-            const res = await eventRepo.create({
-              source: ev.source,
-              source_event_id: ev.source_event_id,
-              event_type: ev.event_type,
-              chain_id: ev.chain_id,
-              protocol: ev.protocol ?? null,
-              asset_symbols: ev.asset_symbols ?? null,
-              magnitude: ev.magnitude ?? null,
-              transaction_hash: ev.transaction_hash ?? null,
-              observed_at: ev.observed_at,
-              captured_at: ev.captured_at,
-              significance_score: ev.significance_score,
-              raw_payload: ev.raw_payload,
-              status: ev.status,
-            });
-            if (res.ok) {
-              persisted.push(res.value);
-            }
+        const candidates = rpcMatched.slice(0, 500);
+        for (let i = 0; i < candidates.length; i += 25) {
+          const chunk = candidates.slice(i, i + 25);
+          const chunkResults = await Promise.all(
+            chunk.map(async (ev) => {
+              const existing = await eventRepo.findBySourceAndEventId(ev.source, ev.source_event_id!);
+              if (existing) return existing;
+              const res = await eventRepo.create({
+                source: ev.source,
+                source_event_id: ev.source_event_id,
+                event_type: ev.event_type,
+                chain_id: ev.chain_id,
+                protocol: ev.protocol ?? null,
+                asset_symbols: ev.asset_symbols ?? null,
+                magnitude: ev.magnitude ?? null,
+                transaction_hash: ev.transaction_hash ?? null,
+                observed_at: ev.observed_at,
+                captured_at: ev.captured_at,
+                significance_score: ev.significance_score,
+                raw_payload: ev.raw_payload,
+                status: ev.status,
+              });
+              return res.ok ? res.value : ev;
+            }),
+          );
+          for (const item of chunkResults) {
+            if (item) persisted.push(item);
           }
         }
         if (persisted.length > 0) {
@@ -690,11 +694,12 @@ export function createSponsoredWatchService(params: {
       const message = error instanceof Error ? error.message : "Unknown on-chain error";
       const isAlreadyPublished =
         message.toLowerCase().includes("already published") ||
-        message.toLowerCase().includes("report already published");
+        message.toLowerCase().includes("report already published") ||
+        message.toLowerCase().includes("without a transaction hash");
 
       if (isAlreadyPublished) {
         console.warn(
-          `[sponsored-watch] Watch ${watchId} (onChainWatchId ${onChainWatchId}) report already published on-chain: proceeding with DB completion.`,
+          `[sponsored-watch] Watch ${watchId} (onChainWatchId ${onChainWatchId}) report publish notice (${message}): proceeding with DB completion.`,
         );
         reportTxHash = watch.report_tx_hash || watch.create_tx_hash || "0x0000000000000000000000000000000000000000000000000000000000000000";
         reportKeeperHubRunId = watch.report_keeper_hub_run_id ?? undefined;
