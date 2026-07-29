@@ -18,6 +18,7 @@ import {
   buildDeskTicketContentUri,
   normalizeOrigin,
 } from "../services/content-uri.ts";
+import type { DeskExecutionAuditV1 } from "./execution-audit.ts";
 import type { DeskIntentFill, DeskLeg, DeskTicketBuildInput } from "./types.ts";
 
 export interface TicketPublishResult {
@@ -123,6 +124,19 @@ export function createTicketService(deps: {
     return `Desk ${input.strategy} · ${input.notionalUsdc} USDC · ${legSummary}${reason}`;
   }
 
+  /**
+   * Persist payload = canonical ticket + optional executionAudit sibling.
+   * Hash is always over the canonical body only (plan §8.4).
+   */
+  function buildPersistedPayload(
+    ticket: DeskTicketV1,
+    executionAudit?: DeskExecutionAuditV1 | null,
+  ): Record<string, unknown> {
+    const base = ticket as unknown as Record<string, unknown>;
+    if (!executionAudit) return base;
+    return { ...base, executionAudit };
+  }
+
   function buildCanonical(input: DeskTicketBuildInput) {
     const createdAt = input.createdAt ?? new Date().toISOString();
     const ticket = buildDeskTicketV1({
@@ -159,7 +173,14 @@ export function createTicketService(deps: {
           : undefined,
       });
 
-    return { ticket, ticketHash, signalHash, intentHash, summary };
+    return {
+      ticket,
+      ticketHash,
+      signalHash,
+      intentHash,
+      summary,
+      payload: buildPersistedPayload(ticket, input.executionAudit ?? null),
+    };
   }
 
   return {
@@ -167,7 +188,7 @@ export function createTicketService(deps: {
     summarize,
 
     async create(input) {
-      const { ticket, ticketHash, signalHash, intentHash, summary } =
+      const { ticketHash, signalHash, intentHash, summary, payload } =
         buildCanonical(input);
 
       // Pre-insert with placeholder URI if none; publish path rewrites after id known.
@@ -182,14 +203,14 @@ export function createTicketService(deps: {
         intent_hash: intentHash,
         content_uri: contentUri,
         summary,
-        payload: ticket as unknown as Record<string, unknown>,
+        payload,
       });
       if (!created.ok) throw created.error;
       return created.value;
     },
 
     async publish(input) {
-      const { ticket, ticketHash, signalHash, intentHash, summary } =
+      const { ticket, ticketHash, signalHash, intentHash, summary, payload } =
         buildCanonical(input);
 
       let originForUri: string;
@@ -209,7 +230,7 @@ export function createTicketService(deps: {
           intent_hash: intentHash,
           content_uri: provisionalUri,
           summary,
-          payload: ticket as unknown as Record<string, unknown>,
+          payload,
         });
         if (!created.ok) throw created.error;
         return {
@@ -232,7 +253,7 @@ export function createTicketService(deps: {
         intent_hash: intentHash,
         content_uri: provisionalUri,
         summary,
-        payload: ticket as unknown as Record<string, unknown>,
+        payload,
       });
       if (!created.ok) throw created.error;
 
@@ -337,6 +358,7 @@ export function ticketInputFromIntent(params: {
   policy: Record<string, unknown>;
   notionalUsdc: number;
   createdAt?: string | undefined;
+  executionAudit?: DeskExecutionAuditV1 | null | undefined;
 }): DeskTicketBuildInput {
   return {
     intentId: params.intentId,
@@ -347,5 +369,6 @@ export function ticketInputFromIntent(params: {
     policy: params.policy,
     notionalUsdc: params.notionalUsdc,
     createdAt: params.createdAt,
+    executionAudit: params.executionAudit,
   };
 }

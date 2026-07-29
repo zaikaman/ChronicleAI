@@ -127,7 +127,13 @@ describe("strategy-runner", () => {
   });
 
   it("executeIntent marks filled only with real tx hash", async () => {
-    const intent = makeIntent();
+    const intent = makeIntent({
+      policy_snapshot: {
+        gasRegime: "normal",
+        simulatedHfAfter: 1.45,
+        reasonCodes: ["hf_warn"],
+      },
+    });
     const intents: IntentService = {
       propose: vi.fn(),
       findById: vi.fn(async () => intent),
@@ -157,6 +163,7 @@ describe("strategy-runner", () => {
         txHash: "0xdead",
         explorerUrl: "https://sepolia.etherscan.io/tx/0xdead",
         status: "completed",
+        gasUsed: "61234",
       })),
       actionForStrategy: vi.fn(() => "defend" as const),
       requireWorkflowId: vi.fn(() => "wf"),
@@ -185,6 +192,15 @@ describe("strategy-runner", () => {
     expect(result.intent.status).toBe("filled");
     expect(result.receipt?.txHash).toBe("0xdead");
     expect(intents.markFilled).toHaveBeenCalled();
+    expect(result.executionAudit?.version).toBe(1);
+    expect(result.executionAudit?.stages.preflight.status).toBe("passed");
+    expect(result.executionAudit?.stages.preflight.policy?.simulatedHfAfter).toBe(
+      1.45,
+    );
+    expect(result.executionAudit?.stages.submit.keeperHubRunId).toBe("run-9");
+    expect(result.executionAudit?.stages.outcome.status).toBe("filled");
+    expect(result.executionAudit?.stages.outcome.gasUsed).toBe("61234");
+    expect(result.executionAudit?.stages.outcome.txHashes).toEqual(["0xdead"]);
     expect(execLogRepo.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action_type: "desk_intent",
@@ -201,6 +217,86 @@ describe("strategy-runner", () => {
           keeper_hub_run_id: "run-9",
           tx_hash: "0xdead",
           executedViaKeeperHub: true,
+          execution_audit_version: 1,
+          outcome_status: "filled",
+        }),
+      }),
+    );
+  });
+
+  it("executeIntent publishes ticket with executionAudit.version === 1", async () => {
+    const intent = makeIntent({
+      policy_snapshot: { gasRegime: "normal", reasonCodes: ["hf_warn"] },
+    });
+    const intents: IntentService = {
+      propose: vi.fn(),
+      findById: vi.fn(async () => intent),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+      listOpen: vi.fn(),
+      findOpenByStrategy: vi.fn(),
+      transition: vi.fn(),
+      approve: vi.fn(),
+      markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
+      markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      markFailed: vi.fn(),
+      markDeferred: vi.fn(),
+      cancel: vi.fn(),
+      hasOpenForStrategy: vi.fn(),
+      hasAnyOpen: vi.fn(),
+      isTerminal: vi.fn(),
+      isOpen: vi.fn(),
+      canTransition: vi.fn(),
+    };
+    const bridge: ExecutionBridge = {
+      execute: vi.fn(async () => ({
+        keeperHubRunId: "run-ticket",
+        txHash: "0xbeef",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xbeef",
+        status: "completed",
+        gasUsed: "50000",
+      })),
+      actionForStrategy: vi.fn(() => "defend" as const),
+      requireWorkflowId: vi.fn(() => "wf"),
+      isConfigured: vi.fn(() => true),
+    };
+    const publish = vi.fn(async (input: { executionAudit?: { version: number } }) => {
+      expect(input.executionAudit?.version).toBe(1);
+      return {
+        ticket: { id: "ticket-1", payload: { executionAudit: input.executionAudit } },
+        ticketHash: "0xhash",
+        signalHash: "0xsig",
+        intentHash: "0xint",
+        contentUri: "https://example.com/desk/tickets/ticket-1",
+        summary: "Desk risk_defend",
+      };
+    });
+    const runner = createStrategyRunner({
+      config,
+      policy,
+      intents,
+      executionBridge: bridge,
+      tickets: { publish } as never,
+    });
+    const result = await runner.executeIntent({
+      intentId: intent.id,
+      deskAddress: DESK,
+      inventory: { freeUsdc: 20, deskEquityUsdc: 50 },
+      publishTicket: true,
+    });
+    expect(result.ticket?.ticket.id).toBe("ticket-1");
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionAudit: expect.objectContaining({
+          version: 1,
+          stages: expect.objectContaining({
+            preflight: expect.objectContaining({ status: "passed" }),
+            submit: expect.objectContaining({ keeperHubRunId: "run-ticket" }),
+            outcome: expect.objectContaining({
+              status: "filled",
+              txHashes: ["0xbeef"],
+            }),
+          }),
         }),
       }),
     );

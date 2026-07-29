@@ -5,6 +5,7 @@
 
 export * from "./types.ts";
 export * from "./execution-audit.ts";
+export * from "./execution-audit-builder.ts";
 export * from "./policy-engine.ts";
 export * from "./signal-engine.ts";
 export * from "./signal-ingest-service.ts";

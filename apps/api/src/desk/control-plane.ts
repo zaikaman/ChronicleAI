@@ -48,6 +48,10 @@ import type {
   StrategyRunner,
 } from "./strategy-runner.ts";
 import type { TicketPublishResult, TicketService } from "./ticket-service.ts";
+import {
+  parseExecutionAuditFromPayload,
+  publicExecutionAuditFields,
+} from "./execution-audit.ts";
 import type {
   DeskExecutionResultInput,
   DeskIntentFill,
@@ -225,6 +229,16 @@ export interface PublicDeskTicketNarrative extends PublicDeskTicketSummary {
   protectStatusUrl?: string | null;
   /** Protect status links for each fill tx hash (when private route). */
   protectStatusUrls?: Array<{ txHash: string; url: string }> | null;
+  /**
+   * Continuous KeeperHub audit story (preflight → submit → outcome).
+   * Public-safe; null/omitted on legacy tickets.
+   */
+  executionAudit?: import("./execution-audit.ts").DeskExecutionAuditV1 | null;
+  /** Convenience one-liner (same as executionAudit.summaryLine). */
+  executionAuditSummary?: string | null;
+  /** Outcome gas units when known — never invented. */
+  gasUsed?: string | null;
+  gasUsedWei?: string | null;
 }
 
 export interface PremiumDeskTicketDetail extends PublicDeskTicketSummary {
@@ -610,6 +624,10 @@ export function toPublicTicketNarrative(row: DeskTicketRow): PublicDeskTicketNar
       ? flashbotsProtectStatusUrl(primaryProtectHash, chainId)
       : null;
 
+  const auditFields = publicExecutionAuditFields(
+    parseExecutionAuditFromPayload(payload),
+  );
+
   return {
     ...base,
     strategy: asOptionalString(payload.strategy),
@@ -628,6 +646,10 @@ export function toPublicTicketNarrative(row: DeskTicketRow): PublicDeskTicketNar
     executionPath,
     protectStatusUrl,
     protectStatusUrls: protectStatusUrls.length > 0 ? protectStatusUrls : null,
+    executionAudit: auditFields.executionAudit ?? null,
+    executionAuditSummary: auditFields.executionAuditSummary ?? null,
+    gasUsed: auditFields.gasUsed ?? null,
+    gasUsedWei: auditFields.gasUsedWei ?? null,
   };
 }
 

@@ -266,6 +266,12 @@ export interface DeskTicketBuildInput {
   notionalUsdc: number;
   createdAt?: string | undefined;
   summary?: string | undefined;
+  /**
+   * Execution audit spine (preflight → submit → outcome).
+   * Stored as a **sibling** of the hashed canonical ticket body so
+   * ticketHash semantics stay stable (plan §8.4).
+   */
+  executionAudit?: import("./execution-audit.ts").DeskExecutionAuditV1 | null | undefined;
 }
 
 // ── Policy engine I/O ───────────────────────────────────

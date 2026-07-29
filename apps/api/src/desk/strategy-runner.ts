@@ -6,6 +6,9 @@
 import type { DeskAgentProposal, DeskStrategy } from "@chronicleai/schemas";
 import type { DeskIntentRow, ExecutionLogRepository } from "@chronicleai/db";
 import type { ExecutionBridge, DeskWorkflowReceipt } from "./execution-bridge.ts";
+import {
+  isDeskWorkflowExecutionError,
+} from "./execution-bridge.ts";
 import type { IntentService } from "./intent-service.ts";
 import type { PolicyEngine } from "./policy-engine.ts";
 import type { TicketService, TicketPublishResult } from "./ticket-service.ts";
@@ -28,6 +31,12 @@ import {
   workflowActionForStrategy,
 } from "./workflow-inputs.ts";
 import { combineNotional } from "./agent/map-proposal.ts";
+import {
+  toExecutionAuditLogDetails,
+  type DeskAuditGasRegime,
+  type DeskExecutionAuditV1,
+} from "./execution-audit.ts";
+import { createExecutionAuditBuilder } from "./execution-audit-builder.ts";
 import type {
   DeskPolicyConfig,
   DeskPolicySnapshot,
@@ -90,6 +99,8 @@ export interface StrategyExecuteResult {
   receipt?: DeskWorkflowReceipt | undefined;
   ticket?: TicketPublishResult | undefined;
   errorMessage?: string | undefined;
+  /** Layer C audit spine assembled during execute (always when execute runs). */
+  executionAudit?: DeskExecutionAuditV1 | undefined;
 }
 
 export interface StrategyRunner {
@@ -310,11 +321,42 @@ export function createStrategyRunner(deps: {
 
       const intentStartedAt = new Date().toISOString();
       const routingForIntent = deskRoutingDetails();
+      const audit = createExecutionAuditBuilder();
+
+      // Layer C preflight from frozen intent policy snapshot (already evaluated).
+      const snap =
+        intent.policy_snapshot && typeof intent.policy_snapshot === "object"
+          ? (intent.policy_snapshot as DeskPolicySnapshot)
+          : null;
+      const gasRegimeRaw = snap?.gasRegime;
+      const gasRegime: DeskAuditGasRegime | null =
+        gasRegimeRaw === "normal" ||
+        gasRegimeRaw === "elevated" ||
+        gasRegimeRaw === "critical"
+          ? gasRegimeRaw
+          : null;
+      audit.recordPolicyPreflight({
+        at: intentStartedAt,
+        allow: true,
+        reasonCodes: [
+          ...(intent.reason_codes ?? []),
+          ...(Array.isArray(snap?.reasonCodes) ? snap.reasonCodes : []),
+        ],
+        simulatedHfAfter:
+          typeof snap?.simulatedHfAfter === "number"
+            ? snap.simulatedHfAfter
+            : null,
+        gasRegime,
+        notionalUsdc: intent.notional_usdc,
+        strategy: intent.strategy,
+      });
+
       const logIntent = async (
         status: "started" | "succeeded" | "failed",
         message: string,
         details: Record<string, unknown> = {},
       ) => {
+        const auditSnapshot = audit.hasStages() ? audit.snapshot() : null;
         await softAppendExecutionLog(deps.execLogRepo, {
           action_type: "desk_intent",
           entity_type: "desk_intent",
@@ -325,6 +367,7 @@ export function createStrategyRunner(deps: {
             strategy: intent.strategy,
             notionalUsdc: intent.notional_usdc,
             ...(routingForIntent ?? {}),
+            ...(auditSnapshot ? toExecutionAuditLogDetails(auditSnapshot) : {}),
             ...details,
           },
           started_at: intentStartedAt,
@@ -337,9 +380,27 @@ export function createStrategyRunner(deps: {
       if (!deps.executionBridge) {
         const failMsg =
           "Execution bridge not configured (set KEEPERHUB_API_KEY + strategy workflow IDs)";
+        audit.recordSubmit({
+          status: "failed",
+          errorMessage: failMsg,
+          routing: routingForIntent?.routing ?? null,
+          routingStrict: routingForIntent?.routingStrict ?? null,
+          routingProvider: routingForIntent?.routingProvider ?? null,
+          chainId: routingForIntent?.chainId ?? null,
+        });
+        audit.recordOutcome({
+          status: "failed",
+          errorMessage: failMsg,
+          txHashes: [],
+        });
+        const executionAudit = audit.build();
         const failed = await deps.intents.markFailed(intent.id, failMsg);
         await logIntent("failed", failMsg, { reason: "bridge_not_configured" });
-        return { intent: failed, errorMessage: failed.error_message ?? undefined };
+        return {
+          intent: failed,
+          errorMessage: failed.error_message ?? undefined,
+          executionAudit,
+        };
       }
 
       const strategy = intent.strategy as DeskStrategy;
@@ -402,9 +463,22 @@ export function createStrategyRunner(deps: {
       } catch (error) {
         const msg =
           error instanceof Error ? error.message : "Failed to build workflow input";
+        audit.recordSubmit({
+          status: "failed",
+          errorMessage: msg,
+          workflowAction: freeLinkPowder
+            ? "oracle_arb"
+            : workflowActionForStrategy(strategy),
+        });
+        audit.recordOutcome({
+          status: "failed",
+          errorMessage: msg,
+          txHashes: [],
+        });
+        const executionAudit = audit.build();
         const failed = await deps.intents.markFailed(intent.id, msg);
         await logIntent("failed", msg, { reason: "workflow_input_build_failed" });
-        return { intent: failed, errorMessage: msg };
+        return { intent: failed, errorMessage: msg, executionAudit };
       }
 
       const action = freeLinkPowder
@@ -418,11 +492,39 @@ export function createStrategyRunner(deps: {
           idempotencyKey: `desk-intent-${intent.id}`,
         });
 
+        if (receipt.executionAudit?.submit) {
+          audit.mergeSubmit(receipt.executionAudit.submit);
+        }
+        if (receipt.executionAudit?.outcome) {
+          audit.mergeOutcome(receipt.executionAudit.outcome);
+        } else {
+          // Bridge without fragments (tests/mocks) — still record spine from receipt.
+          audit.recordSubmit({
+            status: "started",
+            keeperHubRunId: receipt.keeperHubRunId,
+            workflowAction: action,
+            idempotencyKey: `desk-intent-${intent.id}`,
+            routing: routingForIntent?.routing ?? null,
+            routingStrict: routingForIntent?.routingStrict ?? null,
+            routingProvider: routingForIntent?.routingProvider ?? null,
+            chainId: routingForIntent?.chainId ?? null,
+          });
+        }
+
         if (!receipt.txHash) {
           const failMsg =
             `Strategy workflow completed without tx hash (refusing to log fake fill)` +
             (receipt.status ? ` status=${receipt.status}` : "") +
             (receipt.keeperHubRunId ? ` run=${receipt.keeperHubRunId}` : "");
+          audit.recordOutcome({
+            status: "failed",
+            terminalKhStatus: receipt.status,
+            txHashes: [],
+            errorMessage: failMsg,
+            gasUsed: receipt.gasUsed ?? null,
+            gasUsedWei: receipt.gasUsedWei ?? null,
+          });
+          const executionAudit = audit.build();
           const failed = await deps.intents.markFailed(
             intent.id,
             failMsg,
@@ -439,9 +541,28 @@ export function createStrategyRunner(deps: {
             intent: failed,
             receipt,
             errorMessage: failed.error_message ?? undefined,
+            executionAudit,
           };
         }
 
+        // Ensure outcome is filled when mock bridge omitted fragments.
+        if (!receipt.executionAudit?.outcome) {
+          const hashes =
+            receipt.txHashes && receipt.txHashes.length > 0
+              ? receipt.txHashes
+              : [receipt.txHash];
+          audit.recordOutcome({
+            status: "filled",
+            terminalKhStatus: receipt.status,
+            txHashes: hashes,
+            explorerUrls: receipt.explorerUrls ??
+              (receipt.explorerUrl ? [receipt.explorerUrl] : undefined),
+            gasUsed: receipt.gasUsed ?? null,
+            gasUsedWei: receipt.gasUsedWei ?? null,
+          });
+        }
+
+        const executionAudit = audit.build();
         const filled = await deps.intents.markFilled(
           intent.id,
           receipt.keeperHubRunId,
@@ -488,6 +609,7 @@ export function createStrategyRunner(deps: {
                 : {}),
             },
             notionalUsdc: filled.notional_usdc,
+            executionAudit,
           });
         }
 
@@ -502,17 +624,58 @@ export function createStrategyRunner(deps: {
           ticketRegistryTxHash: ticket?.registryTxHash ?? null,
         });
 
-        return { intent: filled, receipt, ticket };
+        return { intent: filled, receipt, ticket, executionAudit };
       } catch (error) {
         const msg =
           error instanceof Error ? error.message : "Strategy execution failed";
-        const failed = await deps.intents.markFailed(intent.id, msg);
+
+        if (isDeskWorkflowExecutionError(error)) {
+          audit.mergeSubmit(error.executionAudit.submit);
+          if (error.executionAudit.outcome) {
+            audit.mergeOutcome(error.executionAudit.outcome);
+          } else {
+            audit.recordOutcome({
+              status: error.timedOut ? "timeout" : "failed",
+              errorMessage: msg,
+              txHashes: [],
+            });
+          }
+        } else {
+          const current = audit.snapshot();
+          if (current.stages.submit.status === "skipped") {
+            audit.recordSubmit({
+              status: "failed",
+              workflowAction: action,
+              errorMessage: msg,
+              idempotencyKey: `desk-intent-${intent.id}`,
+            });
+          }
+          audit.recordOutcome({
+            status: "failed",
+            errorMessage: msg,
+            txHashes: current.stages.outcome.txHashes ?? [],
+          });
+        }
+
+        const executionAudit = audit.build();
+        const runId = isDeskWorkflowExecutionError(error)
+          ? error.keeperHubRunId
+          : null;
+        const failed = await deps.intents.markFailed(
+          intent.id,
+          msg,
+          runId ?? undefined,
+        );
         await logIntent("failed", msg, {
           reason: "execution_failed",
           action,
           error_message: msg,
+          ...(runId ? { keeper_hub_run_id: runId } : {}),
+          ...(isDeskWorkflowExecutionError(error) && error.timedOut
+            ? { timed_out: true }
+            : {}),
         });
-        return { intent: failed, errorMessage: msg };
+        return { intent: failed, errorMessage: msg, executionAudit };
       }
     },
   };

@@ -5,7 +5,14 @@ import {
   toPremiumIntent,
   toPublicIntent,
   toPublicTicket,
+  toPublicTicketNarrative,
 } from "../desk/control-plane.ts";
+import {
+  buildExecutionAudit,
+  buildOutcomeStage,
+  buildPreflightStage,
+  buildSubmitStage,
+} from "../desk/execution-audit.ts";
 import type { DeskPolicyConfig } from "../desk/types.ts";
 import type {
   DeskAgentRunRepository,
@@ -149,6 +156,76 @@ describe("public vs premium serializers", () => {
     expect(pub.ticketHash).toBe("0xabc");
     expect(pub.txHash).toBe("0xtx");
     expect(pub).not.toHaveProperty("payload");
+  });
+
+  it("toPublicTicketNarrative maps payload.executionAudit to public fields", () => {
+    const audit = buildExecutionAudit({
+      preflight: buildPreflightStage({
+        at: "2026-07-28T12:00:00.000Z",
+        status: "passed",
+        policy: {
+          allow: true,
+          reasonCodes: ["hf_ok"],
+          gasRegime: "normal",
+          simulatedHfAfter: 1.4,
+        },
+      }),
+      submit: buildSubmitStage({
+        at: "2026-07-28T12:00:01.000Z",
+        status: "started",
+        keeperHubRunId: "run_public",
+        routing: "private_mempool",
+      }),
+      outcome: buildOutcomeStage({
+        at: "2026-07-28T12:00:08.000Z",
+        status: "filled",
+        txHashes: ["0xdeadbeef"],
+        gasUsed: "61234",
+        gasUsedWei: "1000",
+      }),
+    });
+    const ticket = sampleTicket({
+      payload: {
+        version: 1,
+        strategy: "risk_defend",
+        notionalUsdc: 25,
+        signal: { type: "health_factor", features: {} },
+        legs: [{ protocol: "aave-v3", action: "repay" }],
+        fills: [{ txHash: "0xdeadbeef", step: 0 }],
+        policy: { reasonCodes: ["hf_ok"], routing: "private_mempool" },
+        executionAudit: audit,
+      },
+    });
+    const narrative = toPublicTicketNarrative(ticket);
+    expect(narrative.executionAudit?.version).toBe(1);
+    expect(narrative.executionAudit?.stages.preflight.status).toBe("passed");
+    expect(narrative.executionAudit?.stages.submit.keeperHubRunId).toBe(
+      "run_public",
+    );
+    expect(narrative.executionAudit?.stages.outcome.txHashes).toEqual([
+      "0xdeadbeef",
+    ]);
+    expect(narrative.executionAuditSummary).toContain("Preflight passed");
+    expect(narrative.gasUsed).toBe("61234");
+    expect(narrative.gasUsedWei).toBe("1000");
+  });
+
+  it("toPublicTicketNarrative leaves audit null for legacy tickets", () => {
+    const ticket = sampleTicket({
+      payload: {
+        version: 1,
+        strategy: "risk_defend",
+        notionalUsdc: 10,
+        signal: { type: "health_factor", features: {} },
+        legs: [],
+        fills: [],
+        policy: {},
+      },
+    });
+    const narrative = toPublicTicketNarrative(ticket);
+    expect(narrative.executionAudit).toBeNull();
+    expect(narrative.executionAuditSummary).toBeNull();
+    expect(narrative.gasUsed).toBeNull();
   });
 });
 

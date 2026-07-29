@@ -1,10 +1,10 @@
 # ChronicleAI — Simulation → Submit → Outcome Audit Narrative Implementation Plan
 
-**Status:** Planned (not yet implemented)  
+**Status:** Phase 0–1 implemented (Layer C audit spine); Phase 2–4 pending  
 **Owner:** ChronicleAI  
 **Scope:** Desk trade tickets first; registry / capital / Activity secondary  
 **Depends on:** KeeperHub workflow execute + executions status/logs APIs; existing desk execution bridge  
-**Last updated:** 2026-07-28  
+**Last updated:** 2026-07-29  
 **Related:** [Private routing plan](./private-routing-implementation-plan.md), `hackathon.md`, KeeperHub docs (`intro/overview`, `api/executions`, `api/direct-execution`)
 
 ---

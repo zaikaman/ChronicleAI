@@ -20,6 +20,7 @@ import {
   type LLMProviderMap,
 } from "../../services/llm-provider-client.ts";
 import type { DeskAgentProposal } from "./types.ts";
+import type { DeskExecutionAuditV1 } from "../execution-audit.ts";
 import type { DeskIntentFill, DeskLeg } from "../types.ts";
 
 export interface NarrativeInput {
@@ -32,6 +33,11 @@ export interface NarrativeInput {
   signalType?: string | undefined;
   success: boolean;
   errorMessage?: string | undefined;
+  /**
+   * Optional Layer C audit spine. Deterministic fallback and LLM prompts
+   * may only use provided facts — never invent stages, gas, or hashes.
+   */
+  executionAudit?: DeskExecutionAuditV1 | null | undefined;
 }
 
 export interface NarrativeResult {
@@ -45,8 +51,9 @@ export interface NarrativeResult {
 const NARRATIVE_SYSTEM = [
   "You are Chronicle Desk CIO writing a short trade-ticket summary for a public newspaper.",
   "Rules:",
-  "- Use only the provided strategy, notional, legs, fills, and agent thesis.",
-  "- Never invent transaction hashes, prices, or protocols not listed.",
+  "- Use only the provided strategy, notional, legs, fills, agent thesis, and execution audit facts.",
+  "- Never invent transaction hashes, gas figures, simulation results, prices, or protocols not listed.",
+  "- When execution audit stages are provided, you may mention preflight → submit → outcome briefly; do not invent missing stages.",
   "- 1–3 sentences. Calm, editorial, proof-first tone.",
   '- Respond as JSON: { "summary": string, "editorialBody": string } (use "" when no editorial body)',
 ].join("\n");
@@ -68,6 +75,21 @@ function deterministicSummary(input: NarrativeInput): string {
     ? ` · ${input.agentProposal.thesis.slice(0, 160)}`
     : "";
   const err = !input.success && input.errorMessage ? ` · ${input.errorMessage.slice(0, 80)}` : "";
+
+  const audit = input.executionAudit;
+  if (audit?.stages) {
+    const { preflight, submit, outcome } = audit.stages;
+    const runNote = submit.keeperHubRunId
+      ? `submit run ${submit.keeperHubRunId.slice(0, 12)}…`
+      : `submit ${submit.status}`;
+    const gasNote = outcome.gasUsed ? ` · ${outcome.gasUsed} gas` : "";
+    const auditBeat = `preflight ${preflight.status} → ${runNote} → outcome ${outcome.status}${gasNote}`;
+    return `Desk ${input.strategy} ${status} · ${input.notionalUsdc} USDC · ${auditBeat}${fillNote}${err}`.slice(
+      0,
+      500,
+    );
+  }
+
   return `Desk ${input.strategy} ${status} · ${input.notionalUsdc} USDC · ${legSummary}${fillNote}${err}${thesisSnippet}`.slice(
     0,
     500,
@@ -114,6 +136,28 @@ export function createNarrativeService(
         .map((f) => f.txHash)
         .filter((h): h is string => typeof h === "string" && h.length > 0);
 
+      const audit = input.executionAudit;
+      const auditLines = audit?.stages
+        ? [
+            `Execution audit summary: ${audit.summaryLine}`,
+            `Preflight status: ${audit.stages.preflight.status}` +
+              (audit.stages.preflight.policy
+                ? ` (allow=${audit.stages.preflight.policy.allow}, gasRegime=${audit.stages.preflight.policy.gasRegime ?? "n/a"})`
+                : ""),
+            `Submit status: ${audit.stages.submit.status}` +
+              (audit.stages.submit.keeperHubRunId
+                ? ` run=${audit.stages.submit.keeperHubRunId}`
+                : ""),
+            `Outcome status: ${audit.stages.outcome.status}` +
+              (audit.stages.outcome.gasUsed
+                ? ` gasUsed=${audit.stages.outcome.gasUsed}`
+                : "") +
+              (audit.stages.outcome.txHashes.length > 0
+                ? ` txs=${JSON.stringify(audit.stages.outcome.txHashes)}`
+                : ""),
+          ]
+        : ["Execution audit: (none — do not invent stages)"];
+
       const prompt = [
         `Strategy: ${input.strategy}`,
         `Notional USDC: ${input.notionalUsdc}`,
@@ -131,6 +175,7 @@ export function createNarrativeService(
           })),
         )}`,
         `Fill tx hashes (real only): ${JSON.stringify(fillHashes)}`,
+        ...auditLines,
         input.agentProposal
           ? `Agent thesis: ${input.agentProposal.thesis}`
           : "Agent thesis: (none)",

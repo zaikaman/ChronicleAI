@@ -17,6 +17,10 @@ import {
   signalTypeLabel,
   strategyLabel,
 } from "./format.ts";
+import {
+  ExecutionAuditMissing,
+  ExecutionAuditTimeline,
+} from "./ExecutionAuditTimeline.tsx";
 import { ProofMonoLink } from "./ProofMonoLink.tsx";
 import { useDeskTicket } from "./use-desk.ts";
 
@@ -231,6 +235,19 @@ export function DeskTicketPage(): ReactElement {
             {ticket.fillTxHashes.length > 0 ? " with on-chain txs below." : "."}
           </p>
         ) : null}
+      </PageSection>
+
+      {/* Execution audit — KeeperHub last mile spine */}
+      <PageSection
+        title="Execution audit"
+        description="KeeperHub last mile: preflight, submit, and outcome for this intent."
+        data-testid="desk-ticket-execution-audit"
+      >
+        {ticket.executionAudit && ticket.executionAudit.version === 1 ? (
+          <ExecutionAuditTimeline audit={ticket.executionAudit} />
+        ) : (
+          <ExecutionAuditMissing />
+        )}
       </PageSection>
 
       {/* Execution path (private routing) */}

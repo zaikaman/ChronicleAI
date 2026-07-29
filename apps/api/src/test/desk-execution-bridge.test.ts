@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createExecutionBridge } from "../desk/execution-bridge.ts";
+import {
+  createExecutionBridge,
+  isDeskWorkflowExecutionError,
+} from "../desk/execution-bridge.ts";
 
 describe("execution-bridge", () => {
   afterEach(() => {
@@ -60,6 +63,12 @@ describe("execution-bridge", () => {
     expect(receipt.keeperHubRunId).toBe("exec-1");
     expect(receipt.txHash).toBe("0xabc");
     expect(receipt.explorerUrl).toContain("0xabc");
+    expect(receipt.executionAudit?.submit.status).toBe("started");
+    expect(receipt.executionAudit?.submit.keeperHubRunId).toBe("exec-1");
+    expect(receipt.executionAudit?.submit.workflowId).toBe("wf-defend-1");
+    expect(receipt.executionAudit?.submit.workflowAction).toBe("defend");
+    expect(receipt.executionAudit?.outcome?.status).toBe("filled");
+    expect(receipt.executionAudit?.outcome?.txHashes).toEqual(["0xabc"]);
 
     const executeCall = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("/workflows/wf-defend-1/execute"),
@@ -165,8 +174,67 @@ describe("execution-bridge", () => {
       workflowIds: { rotate: "wf-rotate-1" },
     });
 
-    await expect(bridge.execute("rotate", { direction: "out_of_aave_link" })).rejects.toThrow(
-      /Contract call failed: Error\(32\)/,
+    try {
+      await bridge.execute("rotate", { direction: "out_of_aave_link" });
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      expect(isDeskWorkflowExecutionError(error)).toBe(true);
+      if (isDeskWorkflowExecutionError(error)) {
+        expect(error.message).toMatch(/Contract call failed: Error\(32\)/);
+        expect(error.keeperHubRunId).toBe("exec-err");
+        expect(error.executionAudit.submit.status).toBe("started");
+        expect(error.executionAudit.submit.keeperHubRunId).toBe("exec-err");
+        expect(error.executionAudit.outcome?.status).toBe("failed");
+        expect(error.executionAudit.outcome?.errorMessage).toMatch(
+          /Contract call failed/,
+        );
+      }
+    }
+  });
+
+  it("records submit with runId before wait completes (wait:false)", async () => {
+    let executeResolved = false;
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/execute") && init?.method === "POST") {
+        executeResolved = true;
+        return new Response(JSON.stringify({ executionId: "exec-async" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      // wait/status should not be called when wait:false
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: { defend: "wf-defend-1" },
+      routingPolicy: {
+        enabled: true,
+        strict: true,
+        provider: "flashbots_protect",
+        chainId: 11_155_111,
+      },
+    });
+
+    const receipt = await bridge.execute(
+      "defend",
+      { intentId: "i1" },
+      { wait: false, idempotencyKey: "async-key" },
+    );
+
+    expect(executeResolved).toBe(true);
+    expect(receipt.status).toBe("started");
+    expect(receipt.executionAudit?.submit.status).toBe("started");
+    expect(receipt.executionAudit?.submit.keeperHubRunId).toBe("exec-async");
+    expect(receipt.executionAudit?.submit.routing).toBe("private_mempool");
+    expect(receipt.executionAudit?.outcome).toBeUndefined();
+    expect(fetchMock.mock.calls.every((c) => !String(c[0]).includes("/wait"))).toBe(
+      true,
     );
   });
 

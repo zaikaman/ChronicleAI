@@ -23,6 +23,13 @@ import {
   type PrivateRoutingPolicy,
   type RoutingDetails,
 } from "../services/routing-metadata.ts";
+import {
+  buildOutcomeStage,
+  buildSubmitStage,
+  type DeskAuditOutcomeStage,
+  type DeskAuditRouting,
+  type DeskAuditSubmitStage,
+} from "./execution-audit.ts";
 
 export type DeskWorkflowAction =
   | "sweep"
@@ -58,6 +65,17 @@ export interface ExecutionBridgeConfig {
   routingPolicy?: PrivateRoutingPolicy | null;
 }
 
+/**
+ * Layer C audit fragments captured by the bridge.
+ * Strategy-runner merges these into ExecutionAuditBuilder.
+ */
+export interface DeskWorkflowAuditFragments {
+  /** Recorded immediately after workflow execute returns executionId. */
+  submit: DeskAuditSubmitStage;
+  /** Present after terminal success, failure, or timeout. */
+  outcome?: DeskAuditOutcomeStage;
+}
+
 export interface DeskWorkflowReceipt extends OnChainWriteReceipt {
   keeperHubRunId: string;
   /** May be empty when workflow is multi-step off-chain until final tx. */
@@ -72,6 +90,45 @@ export interface DeskWorkflowReceipt extends OnChainWriteReceipt {
   explorerUrl: string;
   status: string;
   result?: unknown;
+  /** Submit (+ outcome when wait completed) for execution audit spine. */
+  executionAudit?: DeskWorkflowAuditFragments;
+}
+
+/**
+ * Thrown on terminal KH failure or poll timeout, carrying audit fragments
+ * so strategy-runner can still assemble preflight → submit → outcome.
+ */
+export class DeskWorkflowExecutionError extends Error {
+  readonly keeperHubRunId: string | null;
+  readonly workflowId: string | null;
+  readonly action: DeskWorkflowAction | null;
+  readonly executionAudit: DeskWorkflowAuditFragments;
+  readonly timedOut: boolean;
+
+  constructor(
+    message: string,
+    opts: {
+      keeperHubRunId?: string | null;
+      workflowId?: string | null;
+      action?: DeskWorkflowAction | null;
+      executionAudit: DeskWorkflowAuditFragments;
+      timedOut?: boolean;
+    },
+  ) {
+    super(message);
+    this.name = "DeskWorkflowExecutionError";
+    this.keeperHubRunId = opts.keeperHubRunId ?? null;
+    this.workflowId = opts.workflowId ?? null;
+    this.action = opts.action ?? null;
+    this.executionAudit = opts.executionAudit;
+    this.timedOut = opts.timedOut === true;
+  }
+}
+
+export function isDeskWorkflowExecutionError(
+  error: unknown,
+): error is DeskWorkflowExecutionError {
+  return error instanceof DeskWorkflowExecutionError;
 }
 
 export interface ExecutionBridge {
@@ -350,6 +407,88 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
     return body.executionId;
   }
 
+  function buildSubmitFragment(params: {
+    executionId: string;
+    workflowId: string;
+    action: DeskWorkflowAction;
+    idempotencyKey: string;
+    routing: RoutingDetails | null;
+    at?: string;
+    status?: DeskAuditSubmitStage["status"];
+    errorMessage?: string | null;
+  }): DeskAuditSubmitStage {
+    const routingMode: DeskAuditRouting | null = params.routing
+      ? params.routing.routing
+      : null;
+    return buildSubmitStage({
+      at: params.at,
+      status: params.status ?? "started",
+      keeperHubRunId: params.executionId,
+      workflowId: params.workflowId,
+      workflowAction: params.action,
+      idempotencyKey: params.idempotencyKey,
+      routing: routingMode,
+      routingStrict: params.routing?.routingStrict ?? null,
+      routingProvider: params.routing?.routingProvider ?? null,
+      network: config.network,
+      chainId: params.routing?.chainId ?? null,
+      errorMessage: params.errorMessage,
+    });
+  }
+
+  function outcomeFromSuccessReceipt(
+    receipt: DeskWorkflowReceipt,
+    body?: ExecuteStatusResponse,
+  ): DeskAuditOutcomeStage {
+    const hashes =
+      receipt.txHashes && receipt.txHashes.length > 0
+        ? receipt.txHashes
+        : receipt.txHash
+          ? [receipt.txHash]
+          : [];
+    const explorers =
+      receipt.explorerUrls && receipt.explorerUrls.some((u) => u.length > 0)
+        ? receipt.explorerUrls
+        : receipt.explorerUrl
+          ? [receipt.explorerUrl]
+          : undefined;
+    return buildOutcomeStage({
+      status: hashes.length > 0 ? "filled" : "unknown",
+      terminalKhStatus: body?.status ?? receipt.status,
+      txHashes: hashes,
+      explorerUrls: explorers,
+      gasUsed: receipt.gasUsed ?? null,
+      gasUsedWei: receipt.gasUsedWei ?? null,
+    });
+  }
+
+  function outcomeFromFailure(params: {
+    message: string;
+    timedOut?: boolean;
+    body?: ExecuteStatusResponse;
+    txHashes?: string[];
+    explorerUrls?: string[];
+    gasUsed?: string | null;
+    gasUsedWei?: string | null;
+  }): DeskAuditOutcomeStage {
+    const gas =
+      params.body != null ? extractGasFromKeeperHubPayload(params.body) : {};
+    const extracted = params.body ? extractTx(params.body) : {};
+    const hashes =
+      params.txHashes ??
+      extracted.txHashes ??
+      (extracted.txHash ? [extracted.txHash] : []);
+    return buildOutcomeStage({
+      status: params.timedOut ? "timeout" : "failed",
+      terminalKhStatus: params.body?.status ?? (params.timedOut ? "timeout" : "error"),
+      txHashes: hashes,
+      explorerUrls: params.explorerUrls ?? extracted.explorerUrls,
+      gasUsed: params.gasUsed ?? gas.gasUsed ?? null,
+      gasUsedWei: params.gasUsedWei ?? gas.gasUsedWei ?? null,
+      errorMessage: params.message,
+    });
+  }
+
   function receiptFromStatus(
     executionId: string,
     body: ExecuteStatusResponse,
@@ -382,7 +521,11 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
     };
   }
 
-  async function pollUntilComplete(executionId: string): Promise<DeskWorkflowReceipt> {
+  async function pollUntilComplete(
+    executionId: string,
+    submit: DeskAuditSubmitStage,
+    meta: { workflowId: string; action: DeskWorkflowAction },
+  ): Promise<DeskWorkflowReceipt> {
     const started = Date.now();
     let lastError: string | undefined;
 
@@ -397,13 +540,26 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
         // Failures first: KH often returns completed=true with status=error.
         if (isTerminalFailure(body)) {
           const detail = extractKeeperHubError(body);
-          throw new Error(
+          const message =
             detail ??
-              `KeeperHub desk execution ${executionId} ended with status ${body.status}`,
-          );
+            `KeeperHub desk execution ${executionId} ended with status ${body.status}`;
+          throw new DeskWorkflowExecutionError(message, {
+            keeperHubRunId: executionId,
+            workflowId: meta.workflowId,
+            action: meta.action,
+            executionAudit: {
+              submit,
+              outcome: outcomeFromFailure({ message, body }),
+            },
+          });
         }
         if (isTerminalSuccess(body)) {
-          return receiptFromStatus(executionId, body);
+          const receipt = receiptFromStatus(executionId, body);
+          receipt.executionAudit = {
+            submit,
+            outcome: outcomeFromSuccessReceipt(receipt, body),
+          };
+          return receipt;
         }
       }
 
@@ -416,13 +572,26 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
         const body = (await statusRes.json()) as ExecuteStatusResponse;
         if (isTerminalFailure(body)) {
           const detail = extractKeeperHubError(body);
-          throw new Error(
+          const message =
             detail ??
-              `KeeperHub desk execution ${executionId} ended with status ${body.status}`,
-          );
+            `KeeperHub desk execution ${executionId} ended with status ${body.status}`;
+          throw new DeskWorkflowExecutionError(message, {
+            keeperHubRunId: executionId,
+            workflowId: meta.workflowId,
+            action: meta.action,
+            executionAudit: {
+              submit,
+              outcome: outcomeFromFailure({ message, body }),
+            },
+          });
         }
         if (isTerminalSuccess(body)) {
-          return receiptFromStatus(executionId, body);
+          const receipt = receiptFromStatus(executionId, body);
+          receipt.executionAudit = {
+            submit,
+            outcome: outcomeFromSuccessReceipt(receipt, body),
+          };
+          return receipt;
         }
         const hintHeader = statusRes.headers.get("X-Poll-Interval-Hint");
         const hintSeconds = hintHeader ? Number(hintHeader) : Number.NaN;
@@ -437,9 +606,17 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
       await sleep(pollIntervalMs);
     }
 
-    throw new Error(
-      `Timed out waiting for KeeperHub desk execution ${executionId}${lastError ? ` (${lastError})` : ""}`,
-    );
+    const message = `Timed out waiting for KeeperHub desk execution ${executionId}${lastError ? ` (${lastError})` : ""}`;
+    throw new DeskWorkflowExecutionError(message, {
+      keeperHubRunId: executionId,
+      workflowId: meta.workflowId,
+      action: meta.action,
+      timedOut: true,
+      executionAudit: {
+        submit,
+        outcome: outcomeFromFailure({ message, timedOut: true }),
+      },
+    });
   }
 
   return {
@@ -484,7 +661,43 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
           },
         },
         async () => {
-          const executionId = await startWorkflow(workflowId, payload, idempotencyKey);
+          let executionId: string;
+          try {
+            executionId = await startWorkflow(workflowId, payload, idempotencyKey);
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "KeeperHub desk workflow execute failed";
+            const submitFailed = buildSubmitFragment({
+              executionId: "",
+              workflowId,
+              action,
+              idempotencyKey,
+              routing,
+              status: "failed",
+              errorMessage: message,
+            });
+            throw new DeskWorkflowExecutionError(message, {
+              keeperHubRunId: null,
+              workflowId,
+              action,
+              executionAudit: {
+                submit: submitFailed,
+                outcome: outcomeFromFailure({ message }),
+              },
+            });
+          }
+
+          // Layer C: record submit immediately after run starts (before poll).
+          const submit = buildSubmitFragment({
+            executionId,
+            workflowId,
+            action,
+            idempotencyKey,
+            routing,
+            status: "started",
+          });
 
           if (!wait) {
             return {
@@ -492,10 +705,11 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
               txHash: "",
               explorerUrl: "",
               status: "started",
+              executionAudit: { submit },
             } satisfies DeskWorkflowReceipt;
           }
 
-          return pollUntilComplete(executionId);
+          return pollUntilComplete(executionId, submit, { workflowId, action });
         },
         {
           receiptFromResult: (receipt) => ({
