@@ -86,4 +86,34 @@ describe("ExecutionAuditBuilder", () => {
     expect(audit.stages.outcome.status).toBe("failed");
     expect(audit.stages.outcome.errorMessage).toContain("Contract call failed");
   });
+
+  it("recordKhSimulate soft-degrades passed preflight to partial on failed/error", () => {
+    const builder = createExecutionAuditBuilder();
+    builder.recordPolicyPreflight({
+      allow: true,
+      reasonCodes: ["ok"],
+      strategy: "risk_defend",
+    });
+    builder.recordKhSimulate({
+      attempted: true,
+      status: "failed",
+      wouldRevert: true,
+      revertReason: "Error(reverted)",
+      endpoint: "contract-call",
+    });
+    const soft = builder.build();
+    expect(soft.stages.preflight.status).toBe("partial");
+    expect(soft.stages.preflight.khSimulate?.wouldRevert).toBe(true);
+    expect(soft.summaryLine).toMatch(/KH sim failed/);
+
+    const builder2 = createExecutionAuditBuilder();
+    builder2.recordPolicyPreflight({ allow: true, reasonCodes: [] });
+    builder2.recordKhSimulate({
+      attempted: true,
+      status: "error",
+      errorMessage: "timeout",
+      endpoint: "contract-call",
+    });
+    expect(builder2.build().stages.preflight.status).toBe("partial");
+  });
 });

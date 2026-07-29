@@ -75,23 +75,27 @@ export class ExecutionAuditBuilder {
     return this;
   }
 
-  /** Layer A — optional; Phase 3 wires dry-run here. */
+  /**
+   * Layer A — optional KH dry-run on preflight.
+   * Soft: failed/error on a passed policy preflight → status `partial`.
+   * Strict abort path should call `setPreflight` with status `failed` after this.
+   */
   recordKhSimulate(khSimulate: DeskAuditKhSimulate, at?: string): this {
     if (!this.preflight) {
       this.preflight = buildPreflightStage({
         at,
-        status: "partial",
+        status: khSimulate.status === "passed" ? "passed" : "partial",
         khSimulate,
       });
       return this;
     }
+    const softDegrade =
+      this.preflight.status === "passed" &&
+      (khSimulate.status === "failed" || khSimulate.status === "error");
     this.preflight = {
       ...this.preflight,
       khSimulate,
-      status:
-        this.preflight.status === "passed" && khSimulate.status === "failed"
-          ? "partial"
-          : this.preflight.status,
+      status: softDegrade ? "partial" : this.preflight.status,
     };
     return this;
   }

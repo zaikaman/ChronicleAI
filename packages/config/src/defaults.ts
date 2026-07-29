@@ -43,6 +43,20 @@ export const LIQUIDATION_CLUSTER = {
 export const DESK_USE_PRIVATE_MEMPOOL = true;
 /** Expect workflow strict mode (private RPC failure does not fall back). */
 export const DESK_PRIVATE_MEMPOOL_STRICT = true;
+/**
+ * Layer A: KeeperHub Direct Execution dry-run before workflow broadcast.
+ * Default true for hackathon demo (audit trail: sim → submit → outcome).
+ * Soft fail-open unless DESK_KH_SIMULATE_STRICT=true.
+ * Env: DESK_KH_SIMULATE_PREFLIGHT (set false to disable).
+ */
+export const DESK_KH_SIMULATE_PREFLIGHT = true;
+/**
+ * When true with Layer A enabled, block risk-increasing execute on wouldRevert / transport error.
+ * Env: DESK_KH_SIMULATE_STRICT
+ */
+export const DESK_KH_SIMULATE_STRICT = false;
+/** Abort KH dry-run wait after this many ms. Env: DESK_KH_SIMULATE_TIMEOUT_MS */
+export const DESK_KH_SIMULATE_TIMEOUT_MS = 15_000;
 /** USDC notional at/above this forces KH private transfer (Phase 3 path select). */
 export const TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC = 50;
 /** Registry publish/record: true = full-stack private when workflows set the flag. */

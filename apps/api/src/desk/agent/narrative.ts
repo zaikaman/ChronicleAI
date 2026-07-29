@@ -79,11 +79,18 @@ function deterministicSummary(input: NarrativeInput): string {
   const audit = input.executionAudit;
   if (audit?.stages) {
     const { preflight, submit, outcome } = audit.stages;
+    const khSim = preflight.khSimulate;
+    const khNote =
+      khSim && khSim.status
+        ? ` · KH dry-run ${khSim.status}${
+            khSim.gasEstimate ? ` est ${khSim.gasEstimate}` : ""
+          }`
+        : "";
     const runNote = submit.keeperHubRunId
       ? `submit run ${submit.keeperHubRunId.slice(0, 12)}…`
       : `submit ${submit.status}`;
     const gasNote = outcome.gasUsed ? ` · ${outcome.gasUsed} gas` : "";
-    const auditBeat = `preflight ${preflight.status} → ${runNote} → outcome ${outcome.status}${gasNote}`;
+    const auditBeat = `preflight ${preflight.status}${khNote} → ${runNote} → outcome ${outcome.status}${gasNote}`;
     return `Desk ${input.strategy} ${status} · ${input.notionalUsdc} USDC · ${auditBeat}${fillNote}${err}`.slice(
       0,
       500,
@@ -143,6 +150,15 @@ export function createNarrativeService(
             `Preflight status: ${audit.stages.preflight.status}` +
               (audit.stages.preflight.policy
                 ? ` (allow=${audit.stages.preflight.policy.allow}, gasRegime=${audit.stages.preflight.policy.gasRegime ?? "n/a"})`
+                : "") +
+              (audit.stages.preflight.khSimulate
+                ? ` · KeeperHub dry-run status=${audit.stages.preflight.khSimulate.status}` +
+                  (audit.stages.preflight.khSimulate.wouldRevert != null
+                    ? ` wouldRevert=${audit.stages.preflight.khSimulate.wouldRevert}`
+                    : "") +
+                  (audit.stages.preflight.khSimulate.gasEstimate
+                    ? ` gasEstimate=${audit.stages.preflight.khSimulate.gasEstimate}`
+                    : "")
                 : ""),
             `Submit status: ${audit.stages.submit.status}` +
               (audit.stages.submit.keeperHubRunId

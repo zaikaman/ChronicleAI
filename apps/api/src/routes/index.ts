@@ -54,6 +54,7 @@ import {
   createKillSwitchService,
   createStrategyRunner,
   createExecutionBridgeFromEnv,
+  createKhSimulatePreflightFromEnv,
   createDeskControlPlane,
   createDeskScheduler,
   registerDeskControlPlane,
@@ -283,6 +284,8 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   const deskExecutionBridge = createExecutionBridgeFromEnv(env, {
     execLogRepo: deps.execLogRepo,
   });
+  /** Layer A: KH dry-run (simulate:true only). Default on; strict still off. */
+  const deskKhSimulatePreflight = createKhSimulatePreflightFromEnv(env);
   const deskTreasury = resolveTreasuryWallet(env);
   const deskParaTreasury = createParaTreasuryClientFromEnv(env);
   // Reuse the registry web3 client (Para / KeeperHub transfer path for top-ups).
@@ -369,6 +372,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
       routingProviderLabel: env.routingProviderLabel,
       chainId: mapNetworkToChainId(env.keeperhubNetwork, 11_155_111),
     },
+    khSimulatePreflight: deskKhSimulatePreflight,
   });
 
   // Late-bound CCTP service: control plane + starvation probe close over this ref.

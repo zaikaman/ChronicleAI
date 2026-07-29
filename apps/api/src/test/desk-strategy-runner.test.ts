@@ -354,4 +354,210 @@ describe("strategy-runner", () => {
     expect(result.errorMessage).toMatch(/without tx hash/);
     expect(intents.markFilled).not.toHaveBeenCalled();
   });
+
+  it("Layer A soft: dry-run wouldRevert still executes workflow", async () => {
+    const intent = makeIntent({
+      policy_snapshot: { gasRegime: "normal", reasonCodes: ["hf_warn"] },
+    });
+    const intents: IntentService = {
+      propose: vi.fn(),
+      findById: vi.fn(async () => intent),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+      listOpen: vi.fn(),
+      findOpenByStrategy: vi.fn(),
+      transition: vi.fn(),
+      approve: vi.fn(),
+      markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
+      markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      markFailed: vi.fn(),
+      markDeferred: vi.fn(),
+      cancel: vi.fn(),
+      hasOpenForStrategy: vi.fn(),
+      hasAnyOpen: vi.fn(),
+      isTerminal: vi.fn(),
+      isOpen: vi.fn(),
+      canTransition: vi.fn(),
+    };
+    const bridge: ExecutionBridge = {
+      execute: vi.fn(async () => ({
+        keeperHubRunId: "run-soft",
+        txHash: "0xsoft",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xsoft",
+        status: "completed",
+        gasUsed: "70000",
+      })),
+      actionForStrategy: vi.fn(() => "defend" as const),
+      requireWorkflowId: vi.fn(() => "wf"),
+      isConfigured: vi.fn(() => true),
+    };
+    const khSimulatePreflight = {
+      isEnabled: () => true,
+      isStrict: () => false,
+      simulatePrimaryLeg: vi.fn(async () => ({
+        khSimulate: {
+          attempted: true,
+          status: "failed" as const,
+          wouldRevert: true,
+          revertReason: "Error(insufficient allowance)",
+          gasEstimate: "55000",
+          endpoint: "contract-call" as const,
+        },
+        shouldBlock: false,
+      })),
+    };
+    const runner = createStrategyRunner({
+      config,
+      policy,
+      intents,
+      executionBridge: bridge,
+      khSimulatePreflight,
+    });
+    const result = await runner.executeIntent({
+      intentId: intent.id,
+      deskAddress: DESK,
+      inventory: { freeUsdc: 20, deskEquityUsdc: 50 },
+      publishTicket: false,
+    });
+    expect(bridge.execute).toHaveBeenCalled();
+    expect(result.intent.status).toBe("filled");
+    expect(result.executionAudit?.stages.preflight.khSimulate?.wouldRevert).toBe(true);
+    expect(result.executionAudit?.stages.preflight.status).toBe("partial");
+    expect(result.executionAudit?.summaryLine).toMatch(/KH sim failed/);
+    expect(result.executionAudit?.stages.outcome.gasEstimateVsUsed?.estimate).toBe(
+      "55000",
+    );
+  });
+
+  it("Layer A strict: wouldRevert blocks execute and skips submit", async () => {
+    const intent = makeIntent();
+    const intents: IntentService = {
+      propose: vi.fn(),
+      findById: vi.fn(async () => intent),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+      listOpen: vi.fn(),
+      findOpenByStrategy: vi.fn(),
+      transition: vi.fn(),
+      approve: vi.fn(),
+      markExecuting: vi.fn(),
+      markFilled: vi.fn(),
+      markFailed: vi.fn(async (_id, msg) => ({
+        ...intent,
+        status: "failed" as const,
+        error_message: msg,
+      })),
+      markDeferred: vi.fn(),
+      cancel: vi.fn(),
+      hasOpenForStrategy: vi.fn(),
+      hasAnyOpen: vi.fn(),
+      isTerminal: vi.fn(),
+      isOpen: vi.fn(),
+      canTransition: vi.fn(),
+    };
+    const bridge: ExecutionBridge = {
+      execute: vi.fn(),
+      actionForStrategy: vi.fn(() => "defend" as const),
+      requireWorkflowId: vi.fn(() => "wf"),
+      isConfigured: vi.fn(() => true),
+    };
+    const khSimulatePreflight = {
+      isEnabled: () => true,
+      isStrict: () => true,
+      simulatePrimaryLeg: vi.fn(async () => ({
+        khSimulate: {
+          attempted: true,
+          status: "failed" as const,
+          wouldRevert: true,
+          revertReason: "Error(execution reverted)",
+          endpoint: "contract-call" as const,
+        },
+        shouldBlock: true,
+        blockReason: "kh_simulate_would_revert",
+      })),
+    };
+    const runner = createStrategyRunner({
+      config,
+      policy,
+      intents,
+      executionBridge: bridge,
+      khSimulatePreflight,
+    });
+    const result = await runner.executeIntent({
+      intentId: intent.id,
+      deskAddress: DESK,
+      inventory: { freeUsdc: 20, deskEquityUsdc: 50 },
+      publishTicket: false,
+    });
+    expect(bridge.execute).not.toHaveBeenCalled();
+    expect(intents.markExecuting).not.toHaveBeenCalled();
+    expect(result.intent.status).toBe("failed");
+    expect(result.errorMessage).toMatch(/reverted|kh_simulate/);
+    expect(result.executionAudit?.stages.preflight.status).toBe("failed");
+    expect(result.executionAudit?.stages.preflight.notes).toBe(
+      "kh_simulate_would_revert",
+    );
+    expect(result.executionAudit?.stages.submit.status).toBe("skipped");
+    expect(result.executionAudit?.stages.outcome.status).toBe("skipped");
+  });
+
+  it("Layer A disabled: no khSimulate on preflight (C+B unchanged)", async () => {
+    const intent = makeIntent({
+      policy_snapshot: { gasRegime: "normal", simulatedHfAfter: 1.4 },
+    });
+    const intents: IntentService = {
+      propose: vi.fn(),
+      findById: vi.fn(async () => intent),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+      listOpen: vi.fn(),
+      findOpenByStrategy: vi.fn(),
+      transition: vi.fn(),
+      approve: vi.fn(),
+      markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
+      markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      markFailed: vi.fn(),
+      markDeferred: vi.fn(),
+      cancel: vi.fn(),
+      hasOpenForStrategy: vi.fn(),
+      hasAnyOpen: vi.fn(),
+      isTerminal: vi.fn(),
+      isOpen: vi.fn(),
+      canTransition: vi.fn(),
+    };
+    const bridge: ExecutionBridge = {
+      execute: vi.fn(async () => ({
+        keeperHubRunId: "run-off",
+        txHash: "0xoff",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xoff",
+        status: "completed",
+        gasUsed: "40000",
+      })),
+      actionForStrategy: vi.fn(() => "defend" as const),
+      requireWorkflowId: vi.fn(() => "wf"),
+      isConfigured: vi.fn(() => true),
+    };
+    const khSimulatePreflight = {
+      isEnabled: () => false,
+      isStrict: () => false,
+      simulatePrimaryLeg: vi.fn(),
+    };
+    const runner = createStrategyRunner({
+      config,
+      policy,
+      intents,
+      executionBridge: bridge,
+      khSimulatePreflight,
+    });
+    const result = await runner.executeIntent({
+      intentId: intent.id,
+      deskAddress: DESK,
+      inventory: { freeUsdc: 20, deskEquityUsdc: 50 },
+      publishTicket: false,
+    });
+    expect(khSimulatePreflight.simulatePrimaryLeg).not.toHaveBeenCalled();
+    expect(result.executionAudit?.stages.preflight.khSimulate).toBeUndefined();
+    expect(result.executionAudit?.stages.preflight.status).toBe("passed");
+    expect(result.intent.status).toBe("filled");
+  });
 });

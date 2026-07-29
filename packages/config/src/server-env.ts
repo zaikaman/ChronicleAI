@@ -50,6 +50,9 @@ import {
   DESK_TOPUP_COOLDOWN_MS,
   DESK_USE_PRIVATE_MEMPOOL,
   DESK_PRIVATE_MEMPOOL_STRICT,
+  DESK_KH_SIMULATE_PREFLIGHT,
+  DESK_KH_SIMULATE_STRICT,
+  DESK_KH_SIMULATE_TIMEOUT_MS,
   DIGEST_SCHEDULE_CHECK_INTERVAL_MS,
   PREMIUM_DESK_FEED_PRICE_USDC,
   REGISTRY_USE_PRIVATE_MEMPOOL,
@@ -332,6 +335,18 @@ export interface ServerEnv {
    * Kill-switch residual transfers always strict. Env: DESK_PRIVATE_MEMPOOL_STRICT.
    */
   deskPrivateMempoolStrict: boolean;
+  /**
+   * Layer A: KeeperHub DE dry-run (`simulate: true`) before workflow execute.
+   * Default true (hackathon audit trail). Env: DESK_KH_SIMULATE_PREFLIGHT.
+   */
+  deskKhSimulatePreflight: boolean;
+  /**
+   * When true with Layer A on, block execute on wouldRevert or dry-run transport error.
+   * Default false (fail-open). Env: DESK_KH_SIMULATE_STRICT.
+   */
+  deskKhSimulateStrict: boolean;
+  /** Abort KH dry-run wait after this many ms. Env: DESK_KH_SIMULATE_TIMEOUT_MS. */
+  deskKhSimulateTimeoutMs: number;
   /**
    * USDC notional at/above this forces KeeperHub private transfer path (Phase 3).
    * Env: TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC.
@@ -1241,6 +1256,24 @@ export function loadServerEnv(): ServerEnv {
         DESK_PRIVATE_MEMPOOL_STRICT ? "true" : "false",
       ) ?? (DESK_PRIVATE_MEMPOOL_STRICT ? "true" : "false")).toLowerCase() !==
       "false",
+    deskKhSimulatePreflight:
+      (
+        optionalEnv(
+          "DESK_KH_SIMULATE_PREFLIGHT",
+          DESK_KH_SIMULATE_PREFLIGHT ? "true" : "false",
+        ) ?? (DESK_KH_SIMULATE_PREFLIGHT ? "true" : "false")
+      ).toLowerCase() === "true",
+    deskKhSimulateStrict:
+      (
+        optionalEnv(
+          "DESK_KH_SIMULATE_STRICT",
+          DESK_KH_SIMULATE_STRICT ? "true" : "false",
+        ) ?? (DESK_KH_SIMULATE_STRICT ? "true" : "false")
+      ).toLowerCase() === "true",
+    deskKhSimulateTimeoutMs: parsePositiveIntEnv(
+      "DESK_KH_SIMULATE_TIMEOUT_MS",
+      DESK_KH_SIMULATE_TIMEOUT_MS,
+    ),
     treasuryPrivateTransferThresholdUsdc: parsePositiveNumberEnv(
       "TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC",
       TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC,

@@ -37,6 +37,7 @@ import {
   type DeskExecutionAuditV1,
 } from "./execution-audit.ts";
 import { createExecutionAuditBuilder } from "./execution-audit-builder.ts";
+import type { KhSimulatePreflight } from "./kh-simulate-preflight.ts";
 import type {
   DeskPolicyConfig,
   DeskPolicySnapshot,
@@ -144,6 +145,11 @@ export function createStrategyRunner(deps: {
    * policy include routing metadata for Activity / product surface.
    */
   routingPolicyEnv?: RoutingPolicyEnv | null | undefined;
+  /**
+   * Layer A: optional KeeperHub DE dry-run before workflow execute.
+   * When null/disabled, C+B path is unchanged.
+   */
+  khSimulatePreflight?: KhSimulatePreflight | null | undefined;
 }): StrategyRunner {
   const risk = createRiskDefendStrategy(deps.config);
   const rotation = createYieldRotationStrategy(deps.config);
@@ -485,6 +491,71 @@ export function createStrategyRunner(deps: {
         ? "oracle_arb"
         : workflowActionForStrategy(strategy);
 
+      // Layer A — optional KH dry-run (simulate:true only; never DE broadcast).
+      let khGasEstimate: string | null = null;
+      const khSim = deps.khSimulatePreflight;
+      if (khSim?.isEnabled()) {
+        const simResult = await khSim.simulatePrimaryLeg({
+          strategy,
+          workflowAction: action,
+          workflowInput,
+          deskAddress: params.deskAddress,
+          freeLinkPowder,
+        });
+        audit.recordKhSimulate(simResult.khSimulate);
+        if (
+          typeof simResult.khSimulate.gasEstimate === "string" &&
+          simResult.khSimulate.gasEstimate.length > 0
+        ) {
+          khGasEstimate = simResult.khSimulate.gasEstimate;
+        }
+
+        if (simResult.shouldBlock) {
+          const blockReason =
+            simResult.blockReason ?? "kh_simulate_would_revert";
+          const failMsg =
+            simResult.khSimulate.revertReason?.trim() ||
+            simResult.khSimulate.errorMessage?.trim() ||
+            blockReason;
+          const pre = audit.snapshot().stages.preflight;
+          audit.setPreflight({
+            ...pre,
+            status: "failed",
+            notes: blockReason,
+          });
+          audit.recordSubmit({
+            status: "skipped",
+            workflowAction: action,
+            errorMessage: failMsg,
+            idempotencyKey: `desk-intent-${intent.id}`,
+            routing: routingForIntent?.routing ?? null,
+            routingStrict: routingForIntent?.routingStrict ?? null,
+            routingProvider: routingForIntent?.routingProvider ?? null,
+            chainId: routingForIntent?.chainId ?? null,
+          });
+          audit.recordOutcome({
+            status: "skipped",
+            errorMessage: failMsg,
+            txHashes: [],
+            gasEstimateVsUsed: khGasEstimate
+              ? { estimate: khGasEstimate, used: null }
+              : null,
+          });
+          const executionAudit = audit.build();
+          const failed = await deps.intents.markFailed(intent.id, failMsg);
+          await logIntent("failed", failMsg, {
+            reason: blockReason,
+            kh_simulate_status: simResult.khSimulate.status,
+            would_revert: simResult.khSimulate.wouldRevert ?? null,
+          });
+          return {
+            intent: failed,
+            errorMessage: failed.error_message ?? failMsg,
+            executionAudit,
+          };
+        }
+      }
+
       try {
         await deps.intents.markExecuting(intent.id);
         const receipt = await deps.executionBridge.execute(action, workflowInput, {
@@ -523,6 +594,13 @@ export function createStrategyRunner(deps: {
             errorMessage: failMsg,
             gasUsed: receipt.gasUsed ?? null,
             gasUsedWei: receipt.gasUsedWei ?? null,
+            gasEstimateVsUsed:
+              khGasEstimate || receipt.gasUsed
+                ? {
+                    estimate: khGasEstimate,
+                    used: receipt.gasUsed ?? null,
+                  }
+                : null,
           });
           const executionAudit = audit.build();
           const failed = await deps.intents.markFailed(
@@ -559,7 +637,26 @@ export function createStrategyRunner(deps: {
               (receipt.explorerUrl ? [receipt.explorerUrl] : undefined),
             gasUsed: receipt.gasUsed ?? null,
             gasUsedWei: receipt.gasUsedWei ?? null,
+            gasEstimateVsUsed:
+              khGasEstimate || receipt.gasUsed
+                ? {
+                    estimate: khGasEstimate,
+                    used: receipt.gasUsed ?? null,
+                  }
+                : null,
           });
+        } else if (khGasEstimate) {
+          // Bridge attached outcome — still surface dry-run estimate when present.
+          const current = audit.snapshot().stages.outcome;
+          if (!current.gasEstimateVsUsed?.estimate) {
+            audit.mergeOutcome({
+              ...current,
+              gasEstimateVsUsed: {
+                estimate: khGasEstimate,
+                used: current.gasUsed ?? current.gasEstimateVsUsed?.used ?? null,
+              },
+            });
+          }
         }
 
         const executionAudit = audit.build();

@@ -61,21 +61,49 @@ function outcomeVariant(
   }
 }
 
-function preflightDetail(stage: DeskAuditPreflightStage): string {
+function policyPreflightLine(stage: DeskAuditPreflightStage): string {
   const bits: string[] = [];
   const policy = stage.policy;
   if (policy?.allow === false) bits.push("policy blocked");
   else if (policy?.simulatedHfAfter != null && Number.isFinite(policy.simulatedHfAfter)) {
     bits.push(`HF preflight ${policy.simulatedHfAfter.toFixed(2)}`);
-  } else if (stage.status === "passed") {
+  } else if (stage.status === "passed" || stage.status === "partial") {
     bits.push("HF preflight OK");
   }
   if (policy?.gasRegime) bits.push(`gas regime ${policy.gasRegime}`);
   if (policy?.reasonCodes?.length) {
     bits.push(policy.reasonCodes.slice(0, 2).join(", "));
   }
-  if (stage.notes?.trim()) bits.push(stage.notes.trim().slice(0, 80));
+  if (stage.notes?.trim() && !stage.khSimulate) {
+    bits.push(stage.notes.trim().slice(0, 80));
+  }
   return bits.length > 0 ? bits.join(" · ") : stage.status;
+}
+
+/**
+ * Layer A line — only when khSimulate was attempted or explicitly recorded.
+ * Label: "KeeperHub dry-run" (never "KeeperHub simulation" for HF-only).
+ */
+function khDryRunLine(stage: DeskAuditPreflightStage): string | null {
+  const sim = stage.khSimulate;
+  if (!sim) return null;
+  if (!sim.attempted && sim.status === "skipped") {
+    return sim.errorMessage?.trim()
+      ? `KeeperHub dry-run: skipped · ${sim.errorMessage.trim().slice(0, 60)}`
+      : "KeeperHub dry-run: skipped";
+  }
+  const bits: string[] = [`KeeperHub dry-run: ${sim.status}`];
+  if (sim.gasEstimate) {
+    const gas = formatGasUsed(sim.gasEstimate);
+    bits.push(gas ? `est. ${gas.replace(/ gas$/, "")} gas` : `est. ${sim.gasEstimate} gas`);
+  }
+  if (sim.wouldRevert === true) bits.push("wouldRevert true");
+  else if (sim.wouldRevert === false) bits.push("wouldRevert false");
+  if (sim.revertReason?.trim()) bits.push(sim.revertReason.trim().slice(0, 60));
+  else if (sim.errorMessage?.trim() && sim.status !== "passed") {
+    bits.push(sim.errorMessage.trim().slice(0, 60));
+  }
+  return bits.join(" · ");
 }
 
 function submitDetail(stage: DeskAuditSubmitStage): string {
@@ -313,6 +341,7 @@ export function ExecutionAuditTimeline({
   audit,
 }: ExecutionAuditTimelineProps): ReactElement {
   const { preflight, submit, outcome } = audit.stages;
+  const khDryRun = khDryRunLine(preflight);
 
   return (
     <div data-testid="execution-audit-timeline">
@@ -331,9 +360,27 @@ export function ExecutionAuditTimeline({
           title="Preflight"
           statusLabel={preflight.status}
           statusVariant={preflightVariant(preflight.status)}
-          detail={preflightDetail(preflight)}
+          detail={policyPreflightLine(preflight)}
           at={preflight.at}
           testId="execution-audit-preflight"
+          extra={
+            khDryRun ? (
+              <div className="flex flex-col gap-1 mt-0.5 w-full min-w-0">
+                <p
+                  className="text-xs text-muted-foreground leading-relaxed text-pretty"
+                  data-testid="execution-audit-kh-dry-run"
+                >
+                  {khDryRun}
+                </p>
+                <p
+                  className="text-[11px] text-muted-foreground/80 leading-relaxed text-pretty"
+                  data-testid="execution-audit-kh-dry-run-caveat"
+                >
+                  Dry-run uses org wallet from-path; Safe/msg.sender caveats may apply.
+                </p>
+              </div>
+            ) : null
+          }
         />
 
         <StageRow

@@ -1,6 +1,6 @@
 # ChronicleAI — Simulation → Submit → Outcome Audit Narrative Implementation Plan
 
-**Status:** Phase 0–2 implemented (Layer C spine + Layer B run logs); Phase 3–4 pending  
+**Status:** Phase 0–3 implemented (Layer C spine + Layer B run logs + Layer A optional KH dry-run); Phase 4 pending  
 **Owner:** ChronicleAI  
 **Scope:** Desk trade tickets first; registry / capital / Activity secondary  
 **Depends on:** KeeperHub workflow execute + executions status/logs APIs; existing desk execution bridge  
@@ -545,7 +545,7 @@ Honest subtitle: dry-run uses org wallet `from` path; Safe/msg.sender caveats pe
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `DESK_KH_SIMULATE_PREFLIGHT` | `false` | Enable layer A |
+| `DESK_KH_SIMULATE_PREFLIGHT` | `true` | Enable layer A (hackathon default on; soft fail-open) |
 | `DESK_KH_SIMULATE_STRICT` | `false` | Block execute on revert/error |
 | `DESK_KH_SIMULATE_TIMEOUT_MS` | `15000` | Abort sim wait |
 
@@ -746,7 +746,7 @@ No mocks for production paths; tests may mock **HTTP to KeeperHub** only.
 1. **Hash boundary:** Confirm `executionAudit` is outside on-chain `ticketHash` canonical body (§8.4).  
 2. **Declined intents:** Publish ticket for policy-blocked intents or execution_logs only?  
 3. **Capital moves / registry:** Same audit type in this hackathon or desk-only?  
-4. **Phase 3 default:** `DESK_KH_SIMULATE_PREFLIGHT` default false until dry-run shapes verified on Sepolia.  
+4. **Phase 3 default:** `DESK_KH_SIMULATE_PREFLIGHT` default **true** for hackathon audit trail (sim → submit → outcome); `DESK_KH_SIMULATE_STRICT` stays **false** (fail-open).  
 5. **Premium feed:** Full node inputs premium-only vs never store publicly (recommend never on public).  
 
 ---
