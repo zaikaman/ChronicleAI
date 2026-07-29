@@ -36,7 +36,7 @@
           "network": "11155111",
           "contractAddress": "0xD8Deb4475a7E23E194Bc93f8739858Fb20744111",
           "abiFunction": "recordPayout",
-          "functionArgs": "[\"{{@trigger-manual:Trigger.payoutPeriodHash}}\",\"{{@trigger-manual:Trigger.recipient}}\",\"{{@trigger-manual:Trigger.amount}}\",\"{{@trigger-manual:Trigger.reasonHash}}\"]",
+          "functionArgs": "[\"{{@trigger-manual.payoutPeriodHash}}\",\"{{@trigger-manual.recipient}}\",\"{{@trigger-manual.amount}}\",\"{{@trigger-manual.reasonHash}}\"]",
           "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"payoutPeriodHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordPayout\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
           "usePrivateMempool": true,
           "strict": true

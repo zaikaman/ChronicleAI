@@ -36,7 +36,7 @@
           "network": "11155111",
           "contractAddress": "0xD8Deb4475a7E23E194Bc93f8739858Fb20744111",
           "abiFunction": "publishTradeTicket",
-          "functionArgs": "[\"{{@trigger-manual:Trigger.ticketHash}}\",\"{{@trigger-manual:Trigger.signalHash}}\",\"{{@trigger-manual:Trigger.intentHash}}\",\"{{@trigger-manual:Trigger.contentUri}}\"]",
+          "functionArgs": "[\"{{@trigger-manual.ticketHash}}\",\"{{@trigger-manual.signalHash}}\",\"{{@trigger-manual.intentHash}}\",\"{{@trigger-manual.contentUri}}\"]",
           "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"ticketHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"signalHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishTradeTicket\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
           "usePrivateMempool": true,
           "strict": true
