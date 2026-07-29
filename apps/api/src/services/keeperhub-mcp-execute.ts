@@ -318,7 +318,7 @@ function receiptFromStatus(
       (txHash ? buildFallbackExplorerUrl(txHash, network) : ""),
     mode,
     toolCalls,
-    result: statusPayload.result ?? statusPayload.output,
+    result: statusPayload.result ?? statusPayload.output ?? statusPayload.data ?? statusPayload,
     status: statusStr,
     ...(hashes.length > 0 ? { txHashes: hashes } : {}),
     ...(explorers.some((u) => u.length > 0) ? { explorerUrls: explorers } : {}),

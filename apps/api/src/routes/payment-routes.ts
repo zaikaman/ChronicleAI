@@ -477,12 +477,17 @@ export function createPaymentRoutes(params: {
             return;
           }
 
-          const watch = await watchService.createSponsoredWatch({
-            targetContract,
-            watchSpecHash,
-            startsAt,
-            endsAt,
-          });
+          // Trigger sponsored watch creation in background to prevent HTTP request timeout (Heroku 30s limit)
+          void watchService
+            .createSponsoredWatch({
+              targetContract,
+              watchSpecHash,
+              startsAt,
+              endsAt,
+            })
+            .catch((watchError) => {
+              console.error("[payments/settlements] Background createSponsoredWatch failed:", watchError);
+            });
 
           res.json({
             settled: true,
@@ -496,23 +501,16 @@ export function createPaymentRoutes(params: {
             accessReceipt: receipt.accessReceipt,
             accessReceiptExpiresAt: receipt.accessReceiptExpiresAt,
             sponsoredWatch: {
-              id: watch.id,
-              targetContract: watch.target_contract,
-              status: watch.status,
-              createTxHash: watch.create_tx_hash,
-              createExplorerUrl: watch.create_explorer_url,
-              onChainWatchId: watch.on_chain_watch_id,
-              startsAt: watch.starts_at,
-              endsAt: watch.ends_at,
-              // Report fields are null until end-of-campaign publishSponsoredReport
-              reportTxHash: watch.report_tx_hash,
-              reportExplorerUrl: watch.report_explorer_url,
-              sourceEventRoot: watch.source_event_root,
+              targetContract,
+              watchSpecHash,
+              startsAt,
+              endsAt,
+              status: "accepted",
             },
           });
           return;
         } catch (watchError) {
-          console.error("Failed to create sponsored watch:", watchError);
+          console.error("Failed to prepare sponsored watch for settlement:", watchError);
         }
       }
 

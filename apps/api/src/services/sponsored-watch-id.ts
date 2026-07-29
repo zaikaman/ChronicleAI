@@ -2,12 +2,15 @@
 // Never invents a watch id: missing/invalid input returns undefined or throws.
 
 import {
+  createPublicClient,
   decodeEventLog,
+  http,
   type Hex,
   type Log,
   parseAbiItem,
   toEventSelector,
 } from "viem";
+import { base, baseSepolia, mainnet, sepolia } from "viem/chains";
 
 /** SponsoredWatchCreated(uint256 indexed watchId, address indexed targetContract, ...) */
 export const SPONSORED_WATCH_CREATED_EVENT =
@@ -77,15 +80,32 @@ export function parseOnChainWatchId(value: unknown): number | undefined {
 
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
-    if ("watchId" in record) {
-      return parseOnChainWatchId(record.watchId);
+    const keysToCheck = [
+      "watchId",
+      "watch_id",
+      "result",
+      "output",
+      "data",
+      "returnValue",
+      "return_value",
+      "id",
+      "executionResult",
+      "execution_result",
+      "0",
+    ];
+    for (const key of keysToCheck) {
+      if (key in record && record[key] !== undefined && record[key] !== value) {
+        const parsed = parseOnChainWatchId(record[key]);
+        if (parsed !== undefined) return parsed;
+      }
     }
-    if ("result" in record) {
-      return parseOnChainWatchId(record.result);
-    }
-    // Result / named args / tuple index
-    if ("0" in record) {
-      return parseOnChainWatchId(record["0"]);
+    const logs = (record.logs ?? record.events ?? (record.transactionReceipt as Record<string, unknown> | undefined)?.logs) as ReceiptLogLike[] | undefined;
+    if (Array.isArray(logs) && logs.length > 0) {
+      try {
+        return decodeSponsoredWatchIdFromLogs(logs, "payload logs");
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -164,3 +184,44 @@ function summarizeValue(value: unknown): string {
     return Object.prototype.toString.call(value);
   }
 }
+
+/**
+  * Fallback RPC lookup for SponsoredWatchCreated logs when KeeperHub payload lacks decoded watchId.
+  */
+export async function fetchAndDecodeWatchIdFromTxHash(
+  txHash: string,
+  network?: string,
+  rpcUrl?: string,
+): Promise<number | undefined> {
+  const hash = txHash.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+    return undefined;
+  }
+
+  try {
+    const net = (network || "").toLowerCase();
+    const chain =
+      net === "base-sepolia" || net === "84532"
+        ? baseSepolia
+        : net === "base" || net === "8453"
+          ? base
+          : net === "mainnet" || net === "ethereum" || net === "1"
+            ? mainnet
+            : sepolia;
+
+    const publicClient = createPublicClient({
+      chain,
+      transport: rpcUrl?.trim() ? http(rpcUrl.trim()) : http(),
+    });
+
+    const receipt = await publicClient.getTransactionReceipt({ hash: hash as Hex });
+    if (receipt?.logs && receipt.logs.length > 0) {
+      return decodeSponsoredWatchIdFromLogs(receipt.logs, `txHash ${hash}`);
+    }
+  } catch (err) {
+    console.warn(`[sponsored-watch-id] RPC log fetch for tx ${hash} failed:`, err);
+  }
+
+  return undefined;
+}
+

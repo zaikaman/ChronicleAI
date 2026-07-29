@@ -42,7 +42,11 @@ import {
   type PrivateRoutingPolicy,
   type RoutingDetails,
 } from "./routing-metadata.ts";
-import { parseOnChainWatchId, requireOnChainWatchId } from "./sponsored-watch-id.ts";
+import {
+  fetchAndDecodeWatchIdFromTxHash,
+  parseOnChainWatchId,
+  requireOnChainWatchId,
+} from "./sponsored-watch-id.ts";
 
 export interface KeeperHubWriteReceipt extends OnChainWriteReceipt {
   keeperHubRunId: string;
@@ -756,16 +760,17 @@ export function createKeeperHubWriteClient(
         { targetContract, watchSpecHash, startsAt, endsAt },
       );
 
-      // Prefer explicit return value; also scan KeeperHub status payload for event-decoded id.
-      const fromResult = parseWatchId(receipt.result);
-      const fromPayload =
-        fromResult === undefined
-          ? parseWatchId(
-              (receipt as { watchId?: unknown }).watchId ??
-                // Some KeeperHub payloads nest decoded returns under result.watchId
-                undefined,
-            )
-          : fromResult;
+      // Prefer explicit return value; also scan KeeperHub status payload & RPC fallback for event-decoded id.
+      let fromPayload = parseWatchId(receipt.result);
+      if (fromPayload === undefined) {
+        fromPayload = parseWatchId(receipt);
+      }
+      if (fromPayload === undefined && receipt.txHash) {
+        fromPayload = await fetchAndDecodeWatchIdFromTxHash(
+          receipt.txHash,
+          config.network,
+        );
+      }
 
       const watchId = requireOnChainWatchId(
         fromPayload,
