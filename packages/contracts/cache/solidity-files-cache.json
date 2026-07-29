@@ -36,6 +36,42 @@
       "artifacts": [
         "ChronicleRegistry"
       ]
+    },
+    "D:\\ChronicleAI\\packages\\contracts\\contracts\\ChronicleRegistry.sol": {
+      "lastModificationDate": 1785226880151,
+      "contentHash": "0476ff53f61fcec1fdd8c509f5013c6d",
+      "sourceName": "contracts/ChronicleRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ChronicleRegistry"
+      ]
     }
   }
 }

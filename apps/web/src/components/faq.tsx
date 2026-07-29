@@ -142,7 +142,7 @@ export function FAQ(): ReactNode {
               </Link>
             </motion.div>
             <motion.a
-              href="https://sepolia.etherscan.io/address/0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F"
+              href="https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111"
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.02 }}

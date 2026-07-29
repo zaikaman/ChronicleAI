@@ -17,8 +17,8 @@
 | :--- | :--- |
 | **Source Code Repository** | [GitHub Repository](https://github.com/zaikaman/ChronicleAI) |
 | **Demonstration Video** | [Watch Video Demo](https://youtube.com) *(Demo showing agent executing onchain through KeeperHub)* |
-| **Executed Onchain Transaction (Sepolia)** | [`0xd51f1fa69e06180df1a52bd482613d33dfc270d740c03425cb735817290ec596`](https://sepolia.etherscan.io/tx/0xd51f1fa69e06180df1a52bd482613d33dfc270d740c03425cb735817290ec596) *(Desk trade intent execution via KeeperHub private mempool)* |
-| **Executed CCTP Rebalance Transaction** | [`0x8f7d9e4a3b2c1d0f5e6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e`](https://base-sepolia.blockscout.com) *(Base Sepolia → Sepolia Circle CCTP burn/mint)* |
+| **Onchain ChronicleRegistry Contract (Sepolia)** | [`0xD8Deb4475a7E23E194Bc93f8739858Fb20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) *(Onchain contract where all alerts, digests, trade tickets, and payouts anchor via KeeperHub)* |
+| **All Transactions & Execution Explorer** | [/activity](file:///d:/ChronicleAI/apps/web/src/features/activity/ActivityPage.tsx) *(Public real-time dashboard displaying all execution logs, transaction hashes, CCTP rebalances, and payout receipts)* |
 | **KeeperHub Stack Coverage** | **6 / 6 Surfaces Fully Implemented** (Workflows, MCP Server, x402/MPP Dual Routing, Smart Gas, Private Routing, Execution Audit Trail) |
 
 ---
@@ -178,6 +178,7 @@ For judges and AI evaluator agents inspecting source code:
 | **CCTP Rebalance Service** | [`apps/api/src/cctp/rebalance-service.ts`](file:///d:/ChronicleAI/apps/api/src/cctp/rebalance-service.ts) | Circle CCTP cross-chain bridge and worker implementation. |
 | **Desk Trading Agent** | [`apps/api/src/desk/agent/desk-trading-agent.ts`](file:///d:/ChronicleAI/apps/api/src/desk/agent/desk-trading-agent.ts) | LLM trading decision engine and proposal mapping. |
 | **Execution Audit Engine** | [`apps/api/src/desk/execution-audit.ts`](file:///d:/ChronicleAI/apps/api/src/desk/execution-audit.ts) | Multi-tier audit trail builder and log synthesizer. |
+| **All Transactions Explorer UI** | [`apps/web/src/features/activity/ActivityPage.tsx`](file:///d:/ChronicleAI/apps/web/src/features/activity/ActivityPage.tsx) | Live public dashboard displaying all onchain transactions, execution logs, CCTP rebalances, and payout receipts. |
 | **Web Dashboard UI** | [`apps/web/src/features/desk/DeskStatusPage.tsx`](file:///d:/ChronicleAI/apps/web/src/features/desk/DeskStatusPage.tsx) | Live trading desk dashboard, audit timeline, and control UI. |
 
 ---

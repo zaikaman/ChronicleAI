@@ -34,7 +34,7 @@
         "config": {
           "actionType": "web3/write-contract",
           "network": "11155111",
-          "contractAddress": "0x246B3ea8eA9DdE9ABBF06889eFaf02c2747F711F",
+          "contractAddress": "0xD8Deb4475a7E23E194Bc93f8739858Fb20744111",
           "abiFunction": "recordCapitalMove",
           "functionArgs": "[\"{{@trigger-manual:Trigger.moveId}}\",\"{{@trigger-manual:Trigger.from}}\",\"{{@trigger-manual:Trigger.to}}\",\"{{@trigger-manual:Trigger.amount}}\",\"{{@trigger-manual:Trigger.reasonHash}}\"]",
           "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"moveId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordCapitalMove\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",

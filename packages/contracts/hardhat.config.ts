@@ -10,9 +10,8 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from the backend API's .env file
 dotenv.config({ path: path.resolve(__dirname, "../../apps/api/.env") });
 
-const deployerKey = process.env.PARA_WALLET_PRIVATE_KEY
-  ? [process.env.PARA_WALLET_PRIVATE_KEY]
-  : [];
+const rawDeployerKey = process.env.PARA_WALLET_PRIVATE_KEY || process.env.TREASURY_WALLET_PRIVATE_KEY;
+const deployerKey = rawDeployerKey ? [rawDeployerKey] : [];
 
 const config: HardhatUserConfig = {
   solidity: "0.8.20",
