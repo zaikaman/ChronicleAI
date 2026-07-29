@@ -28,7 +28,10 @@ const fadeInScale = {
 };
 
 const logos: LogoItem[] = [
-  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub Workflows</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Flashbots Protect RPC</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Circle CCTP V2</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub MCP Server</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Ethereum Sepolia</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Aave V3</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Uniswap V3</span> },
@@ -303,9 +306,9 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            An autonomous on-chain newspaper and market desk. Free alerts and digests with
-            KeeperHub publication proofs, premium feeds via x402 or MPP, and a closed-loop desk
-            that proposes under policy — then executes onchain through KeeperHub.
+            An autonomous onchain intelligence registry &amp; trading desk powered by KeeperHub's 6 execution surfaces: 
+            Workflows, MCP Server tools, x402/MPP dual-routing, smart gas preflight dry-runs, Flashbots private RPCs, 
+            and Circle CCTP cross-chain liquidity rebalancing.
           </motion.p>
 
           <motion.div

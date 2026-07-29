@@ -7,27 +7,27 @@ import { Link } from "react-router-dom";
 const steps = [
   {
     icon: Activity,
-    title: "Monitor the chain",
+    title: "Monitor & Discover Tools via MCP",
     description:
-      "KeeperHub Event Tracker, Block Dispatcher, and desk polls watch gas spikes, liquidations, large trades, health factor, APY edges, and oracle–AMM basis — feeding both the newspaper and the trading desk.",
+      "KeeperHub Event Tracker, Block Dispatcher, and MCP Server discover dynamic onchain execution capabilities, feeding market events, APY shifts, and gas regimes into the agent pipeline.",
   },
   {
     icon: BrainCircuit,
-    title: "Reason with an LLM — under hard policy",
+    title: "Reason & Preflight Dry-Run",
     description:
-      "Multi-provider models (Gemini, OpenAI, Groq) write public alerts and digests. On the desk, the agent proposes constrained actions only: risk defend, yield rotation, or oracle–AMM. Caps, cooldowns, and kill-switch stay in code.",
+      "Tri-provider LLMs (Gemini, OpenAI, Groq) formulate strategic proposals. Before any live transaction, Layer A dry-run preflight (simulate: true) verifies execution logic and computes adaptive gas pricing.",
   },
   {
     icon: Landmark,
-    title: "Execute through KeeperHub",
+    title: "Execute Privately through KeeperHub",
     description:
-      "Material writes never go free-form from the model. Chronicle triggers KeeperHub workflows for registry receipts, strategy legs, capital moves, and revenue transfers — with run ids and transaction hashes on every outcome.",
+      "Approved trades execute onchain via KeeperHub workflows using Flashbots Protect private mempools (Ethereum Sepolia), shielding capital movements from MEV front-running and sandwich attacks.",
   },
   {
     icon: ShieldCheck,
-    title: "Prove, publish, and fund",
+    title: "Prove, Settle & Rebalance via CCTP",
     description:
-      "Publication hashes and trade tickets land on ChronicleRegistry. Readers verify receipts in the UI. Premium and sponsored watches settle via x402 or MPP into the Para treasury that keeps the agent running.",
+      "Onchain registry proofs anchor to ChronicleRegistry. Paid feeds settle via x402 / MPP dual-protocol challenge routing, while Circle CCTP worker automatically rebalances liquidity between Base and Sepolia.",
   },
 ];
 

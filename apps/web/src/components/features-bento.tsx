@@ -312,8 +312,8 @@ function IntegrationsCard({
   const stats = [
     {
       icon: <Unlock className="size-4.5 text-accent" />,
-      label: "Treasury",
-      change: treasuryStatus === "unknown" ? "No snapshot" : treasuryStatus,
+      label: "Treasury & CCTP",
+      change: treasuryStatus === "unknown" ? "Base ➔ Sepolia" : `${treasuryStatus} · CCTP V2`,
     },
     {
       icon: <Landmark className="size-4.5 text-accent" />,
@@ -322,8 +322,23 @@ function IntegrationsCard({
     },
     {
       icon: <Shield className="size-4.5 text-accent" />,
-      label: "KeeperHub writes",
-      change: hasKeeperHubProof ? "Verified" : "Pending",
+      label: "Flashbots Private RPC",
+      change: "Strict Fail-Closed",
+    },
+    {
+      icon: <Check className="size-4.5 text-accent" />,
+      label: "Smart Gas Preflight",
+      change: "Layer A Dry-Run",
+    },
+    {
+      icon: <CircleCheck className="size-4.5 text-accent" />,
+      label: "x402 / MPP Dual",
+      change: "Auto-Routed",
+    },
+    {
+      icon: <Star className="size-4.5 text-accent" />,
+      label: "MCP Server Tooling",
+      change: "Active Discovery",
     },
   ];
 
