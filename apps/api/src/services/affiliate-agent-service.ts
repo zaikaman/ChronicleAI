@@ -501,8 +501,24 @@ async function runLangChainChat(
   providerConfigs: LLMProviderMap,
 ): Promise<AffiliateAgentChatResult> {
   const wallet = params.affiliateWallet.trim().toLowerCase();
-  const models = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER, {
+
+  // Affiliate agent ONLY uses Groq with GROQ_AFFILIATE_API_KEY
+  const affiliateGroqApiKey =
+    process.env.GROQ_AFFILIATE_API_KEY?.trim() ||
+    providerConfigs.groq?.apiKey ||
+    "";
+
+  const groqOnlyConfigs: LLMProviderMap = {
+    ...providerConfigs,
+    groq: {
+      ...providerConfigs.groq,
+      apiKey: affiliateGroqApiKey,
+    },
+  };
+
+  const models = createChatModelsInOrder(groqOnlyConfigs, ["groq"], {
     temperature: 0.2,
+    preferredProvider: "groq",
   });
   if (models.length === 0) {
     return runFallbackChat(params, deps);

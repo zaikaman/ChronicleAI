@@ -83,6 +83,7 @@ export interface ServerEnv {
   openaiModel: string;
   openaiBaseUrl: string | undefined;
   groqApiKey: string;
+  groqAffiliateApiKey: string;
   groqApiKeys: string[];
   groqModel: string;
   groqBaseUrl: string | undefined;
@@ -1118,6 +1119,7 @@ export function loadServerEnv(): ServerEnv {
     get groqApiKey() {
       return getNextGroqApiKey();
     },
+    groqAffiliateApiKey: optionalEnv("GROQ_AFFILIATE_API_KEY", "") as string,
     groqModel: optionalEnv("GROQ_MODEL", "llama-3.3-70b-versatile") as string,
     groqBaseUrl: optionalEnv("GROQ_BASE_URL"),
     x402FacilitatorUrl: optionalEnv("X402_FACILITATOR_URL"),
