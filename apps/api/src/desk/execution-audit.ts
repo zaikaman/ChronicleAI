@@ -32,6 +32,16 @@ export type DeskAuditGasRegime = "normal" | "elevated" | "critical";
 export type DeskAuditRouting = "private_mempool" | "public";
 export type DeskAuditKhSimulateEndpoint = "contract-call" | "transfer";
 
+/** Additive smart gas narrative for execution audit reliability (Phase 3). */
+export interface DeskAuditGasNarrative {
+  estimate?: string | null;
+  used?: string | null;
+  usedWei?: string | null;
+  regime?: DeskAuditGasRegime | null;
+  attemptCount?: number | null;
+  notes?: string | null;
+}
+
 // ── Stage shapes (DeskExecutionAuditV1) ─────────────────────────────────────
 
 /** Policy preflight fields (Layer C) — never label HF-only as “KeeperHub simulation.” */
@@ -122,6 +132,8 @@ export interface DeskAuditOutcomeStage {
     estimate?: string | null;
     used?: string | null;
   } | null;
+  /** Additive smart gas narrative (Phase 3). */
+  gasNarrative?: DeskAuditGasNarrative | null;
   errorMessage?: string | null;
   /** Layer B */
   runNodes?: DeskAuditRunNode[];
@@ -247,6 +259,7 @@ export interface BuildOutcomeStageInput {
   gasUsed?: string | null;
   gasUsedWei?: string | null;
   gasEstimateVsUsed?: DeskAuditOutcomeStage["gasEstimateVsUsed"];
+  gasNarrative?: DeskAuditGasNarrative | null;
   errorMessage?: string | null;
   runNodes?: DeskAuditRunNode[];
   logsFetched?: boolean;
@@ -266,11 +279,40 @@ export function buildOutcomeStage(input: BuildOutcomeStageInput): DeskAuditOutco
   if (input.gasUsed !== undefined) stage.gasUsed = input.gasUsed;
   if (input.gasUsedWei !== undefined) stage.gasUsedWei = input.gasUsedWei;
   if (input.gasEstimateVsUsed !== undefined) stage.gasEstimateVsUsed = input.gasEstimateVsUsed;
+  if (input.gasNarrative !== undefined) stage.gasNarrative = input.gasNarrative;
   if (input.errorMessage !== undefined) stage.errorMessage = input.errorMessage;
   if (input.runNodes !== undefined) stage.runNodes = input.runNodes;
   if (input.logsFetched !== undefined) stage.logsFetched = input.logsFetched;
   if (input.logsFetchError !== undefined) stage.logsFetchError = input.logsFetchError;
   return stage;
+}
+
+/**
+  * Synthesize gas narrative from preflight (Layer A dry-run + Layer C policy regime) and outcome (Layer B/C gas used).
+  * Never invents numbers. Returns null if no gas or regime details exist.
+  */
+export function buildGasNarrative(
+  preflight?: DeskAuditPreflightStage | null,
+  outcome?: DeskAuditOutcomeStage | null,
+): DeskAuditGasNarrative | null {
+  const estimate = preflight?.khSimulate?.gasEstimate ?? outcome?.gasEstimateVsUsed?.estimate ?? null;
+  const used = outcome?.gasUsed ?? outcome?.gasEstimateVsUsed?.used ?? null;
+  const usedWei = outcome?.gasUsedWei ?? null;
+  const regime = preflight?.policy?.gasRegime ?? null;
+
+  if (!estimate && !used && !usedWei && !regime) return null;
+
+  const notesParts: string[] = [];
+  if (estimate) notesParts.push("estimate from Layer A dry-run");
+  if (used) notesParts.push("used from workflow execution logs");
+
+  return {
+    estimate: estimate || null,
+    used: used || null,
+    usedWei: usedWei || null,
+    regime: regime || null,
+    notes: notesParts.length > 0 ? notesParts.join("; ") : null,
+  };
 }
 
 export interface BuildRunNodeInput {

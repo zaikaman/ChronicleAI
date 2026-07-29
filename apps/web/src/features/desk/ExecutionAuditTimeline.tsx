@@ -15,6 +15,7 @@ import {
 } from "../../lib/explorer.ts";
 import { ProofMonoLink } from "./ProofMonoLink.tsx";
 import type {
+  DeskAuditGasNarrative,
   DeskAuditOutcomeStage,
   DeskAuditPreflightStage,
   DeskAuditRunNode,
@@ -287,6 +288,54 @@ function RunStepsList({
   );
 }
 
+function GasNarrativeRow({
+  gasNarrative,
+  gasEstimateVsUsed,
+  khSimulateGasEstimate,
+  gasUsed,
+  gasRegime,
+}: {
+  gasNarrative?: DeskAuditGasNarrative | null;
+  gasEstimateVsUsed?: { estimate?: string | null; used?: string | null } | null;
+  khSimulateGasEstimate?: string | null;
+  gasUsed?: string | null;
+  gasRegime?: string | null;
+}): ReactElement | null {
+  const estRaw =
+    gasNarrative?.estimate ??
+    gasEstimateVsUsed?.estimate ??
+    khSimulateGasEstimate ??
+    null;
+  const usedRaw =
+    gasNarrative?.used ?? gasEstimateVsUsed?.used ?? gasUsed ?? null;
+  const regime = gasNarrative?.regime ?? gasRegime ?? null;
+
+  const estFormatted = estRaw
+    ? formatGasUsed(estRaw)?.replace(/ gas$/, "")
+    : null;
+  const usedFormatted = usedRaw
+    ? formatGasUsed(usedRaw)?.replace(/ gas$/, "")
+    : null;
+
+  if (!estFormatted && !usedFormatted && !regime) return null;
+
+  const parts: string[] = [];
+  if (estFormatted) parts.push(`estimate ${estFormatted}`);
+  if (usedFormatted) parts.push(`used ${usedFormatted}`);
+  if (regime) parts.push(`regime ${regime}`);
+
+  return (
+    <div
+      className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground font-mono bg-muted/20 px-2.5 py-1 rounded border border-border/40"
+      data-testid="execution-audit-gas-narrative"
+    >
+      <span className="font-semibold text-foreground">Gas</span>
+      <span>—</span>
+      <span>{parts.join(" · ")}</span>
+    </div>
+  );
+}
+
 interface StageRowProps {
   step: number;
   title: string;
@@ -459,6 +508,13 @@ export function ExecutionAuditTimeline({
                     </div>
                   ))
                 : null}
+              <GasNarrativeRow
+                gasNarrative={outcome.gasNarrative}
+                gasEstimateVsUsed={outcome.gasEstimateVsUsed}
+                khSimulateGasEstimate={preflight.khSimulate?.gasEstimate}
+                gasUsed={outcome.gasUsed}
+                gasRegime={preflight.policy?.gasRegime}
+              />
               <RunStepsList
                 nodes={outcome.runNodes ?? []}
                 logsFetched={outcome.logsFetched}

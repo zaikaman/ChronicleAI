@@ -9,6 +9,7 @@
 
 import {
   buildExecutionAudit,
+  buildGasNarrative,
   buildOutcomeStage,
   buildPreflightStage,
   buildSubmitStage,
@@ -16,6 +17,7 @@ import {
   type BuildOutcomeStageInput,
   type BuildPreflightStageInput,
   type BuildSubmitStageInput,
+  type DeskAuditGasNarrative,
   type DeskAuditKhSimulate,
   type DeskAuditOutcomeStage,
   type DeskAuditPolicySnapshot,
@@ -172,14 +174,31 @@ export class ExecutionAuditBuilder {
   /**
    * Assemble v1 audit. Missing stages default to skipped so the spine
    * always has preflight → submit → outcome.
+   * Synthesizes smart gas narrative when estimate/used/regime are present.
    */
   build(at?: string): DeskExecutionAuditV1 {
     const ts = at ?? new Date().toISOString();
     const skeleton = emptyAuditSkeleton(ts);
+    const preflight = this.preflight ?? skeleton.stages.preflight;
+    let outcome = this.outcome ?? skeleton.stages.outcome;
+
+    const narrative = buildGasNarrative(preflight, outcome);
+    if (narrative && (!outcome.gasNarrative || !outcome.gasEstimateVsUsed)) {
+      outcome = {
+        ...outcome,
+        gasNarrative: outcome.gasNarrative ?? narrative,
+        gasEstimateVsUsed:
+          outcome.gasEstimateVsUsed ??
+          (narrative.estimate || narrative.used
+            ? { estimate: narrative.estimate, used: narrative.used }
+            : null),
+      };
+    }
+
     return buildExecutionAudit({
-      preflight: this.preflight ?? skeleton.stages.preflight,
+      preflight,
       submit: this.submit ?? skeleton.stages.submit,
-      outcome: this.outcome ?? skeleton.stages.outcome,
+      outcome,
     });
   }
 

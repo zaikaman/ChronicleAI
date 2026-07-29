@@ -119,6 +119,15 @@ export type DeskAuditOutcomeStatus =
 export type DeskAuditGasRegime = "normal" | "elevated" | "critical";
 export type DeskAuditRouting = "private_mempool" | "public";
 
+export interface DeskAuditGasNarrative {
+  estimate?: string | null;
+  used?: string | null;
+  usedWei?: string | null;
+  regime?: DeskAuditGasRegime | null;
+  attemptCount?: number | null;
+  notes?: string | null;
+}
+
 export interface DeskAuditPolicySnapshot {
   allow: boolean;
   reasonCodes: string[];
@@ -195,6 +204,7 @@ export interface DeskAuditOutcomeStage {
     estimate?: string | null;
     used?: string | null;
   } | null;
+  gasNarrative?: DeskAuditGasNarrative | null;
   errorMessage?: string | null;
   runNodes?: DeskAuditRunNode[];
   logsFetched?: boolean;

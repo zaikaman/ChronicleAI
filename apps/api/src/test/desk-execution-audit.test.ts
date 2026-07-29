@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildExecutionAudit,
+  buildGasNarrative,
   buildOutcomeStage,
   buildPreflightStage,
   buildRunNode,
@@ -16,6 +17,7 @@ import {
   toPublicExecutionAudit,
   type DeskExecutionAuditV1,
 } from "../desk/execution-audit.ts";
+import { createExecutionAuditBuilder } from "../desk/execution-audit-builder.ts";
 
 function sampleFilledAudit(
   overrides?: Partial<{
@@ -366,5 +368,59 @@ describe("public redaction", () => {
     expect(pub.stages.preflight.khSimulate).toBeUndefined();
     expect(pub.summaryLine).not.toMatch(/\d+ gas/);
     expect(JSON.stringify(pub)).not.toContain("wouldRevert");
+  });
+
+  it("buildGasNarrative synthesizes estimate, used, regime correctly", () => {
+    const preflight = buildPreflightStage({
+      status: "passed",
+      policy: { allow: true, reasonCodes: [], gasRegime: "elevated" },
+      khSimulate: { attempted: true, status: "passed", gasEstimate: "84212" },
+    });
+    const outcome = buildOutcomeStage({
+      status: "filled",
+      gasUsed: "91004",
+      gasUsedWei: "91004000000000",
+    });
+
+    const narrative = buildGasNarrative(preflight, outcome);
+    expect(narrative).toEqual({
+      estimate: "84212",
+      used: "91004",
+      usedWei: "91004000000000",
+      regime: "elevated",
+      notes: "estimate from Layer A dry-run; used from workflow execution logs",
+    });
+  });
+
+  it("ExecutionAuditBuilder synthesizes gasNarrative on build()", () => {
+    const builder = createExecutionAuditBuilder();
+    builder.recordPolicyPreflight({
+      allow: true,
+      reasonCodes: ["hf_ok"],
+      gasRegime: "normal",
+    });
+    builder.recordKhSimulate({
+      attempted: true,
+      status: "passed",
+      gasEstimate: "50000",
+    });
+    builder.recordSubmit({
+      status: "started",
+      keeperHubRunId: "run_99",
+    });
+    builder.recordOutcome({
+      status: "filled",
+      gasUsed: "52000",
+    });
+
+    const audit = builder.build();
+    expect(audit.stages.outcome.gasNarrative).toBeDefined();
+    expect(audit.stages.outcome.gasNarrative?.estimate).toBe("50000");
+    expect(audit.stages.outcome.gasNarrative?.used).toBe("52000");
+    expect(audit.stages.outcome.gasNarrative?.regime).toBe("normal");
+    expect(audit.stages.outcome.gasEstimateVsUsed).toEqual({
+      estimate: "50000",
+      used: "52000",
+    });
   });
 });

@@ -660,9 +660,9 @@ ChronicleAI is **done** for this plan when:
 - [ ] README: private + faucet ETH; no sponsorship
 
 ### Phase 3
-- [ ] Gas narrative types + builder
-- [ ] Ticket UI gas row
-- [ ] Tests for estimate/used merge
+- [x] Gas narrative types + builder
+- [x] Ticket UI gas row
+- [x] Tests for estimate/used merge
 
 ### Phase 4
 - [ ] Payment auto-select + discovery docs
