@@ -36,7 +36,7 @@
           "network": "11155111",
           "contractAddress": "0xD8Deb4475a7E23E194Bc93f8739858Fb20744111",
           "abiFunction": "publishDigest",
-          "functionArgs": "[\"{{@trigger-manual.contentHash}}\",\"{{@trigger-manual.sourceEventRoot}}\",\"{{@trigger-manual.contentUri}}\"]",
+          "functionArgs": "[\"{{@trigger-manual:Manual / API Trigger.contentHash}}\",\"{{@trigger-manual:Manual / API Trigger.sourceEventRoot}}\",\"{{@trigger-manual:Manual / API Trigger.contentUri}}\"]",
           "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"contentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventRoot\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishDigest\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
           "usePrivateMempool": true,
           "strict": true

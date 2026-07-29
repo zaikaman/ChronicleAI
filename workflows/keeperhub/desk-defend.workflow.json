@@ -34,7 +34,7 @@
         "config": {
           "actionType": "aave-v3/get-user-account-data",
           "network": "11155111",
-          "user": "{{@trigger-manual.deskAddress}}"
+          "user": "{{@trigger-manual:Manual / API Trigger.deskAddress}}"
         }
       }
     },
@@ -50,7 +50,7 @@
         "label": "Mode Is Repay",
         "config": {
           "actionType": "Condition",
-          "condition": "{{@trigger-manual.mode}} === 'repay'",
+          "condition": "{{@trigger-manual:Manual / API Trigger.mode}} === 'repay'",
           "conditionConfig": {
             "group": {
               "id": "mode-check",
@@ -59,7 +59,7 @@
                 {
                   "id": "rule-repay",
                   "operator": "===",
-                  "leftOperand": "{{@trigger-manual.mode}}",
+                  "leftOperand": "{{@trigger-manual:Manual / API Trigger.mode}}",
                   "rightOperand": "repay"
                 }
               ]
@@ -81,7 +81,7 @@
         "config": {
           "actionType": "web3/approve-token",
           "network": "11155111",
-          "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"{{@trigger-manual.asset}}\",\"symbol\":\"ASSET\"}}",
+          "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"{{@trigger-manual:Manual / API Trigger.asset}}\",\"symbol\":\"ASSET\"}}",
           "spenderAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
           "amount": "max",
           "usePrivateMempool": true,
@@ -102,10 +102,10 @@
         "config": {
           "actionType": "aave-v3/repay",
           "network": "11155111",
-          "asset": "{{@trigger-manual.asset}}",
-          "amount": "{{@trigger-manual.amount}}",
+          "asset": "{{@trigger-manual:Manual / API Trigger.asset}}",
+          "amount": "{{@trigger-manual:Manual / API Trigger.amount}}",
           "interestRateMode": "2",
-          "onBehalfOf": "{{@trigger-manual.deskAddress}}",
+          "onBehalfOf": "{{@trigger-manual:Manual / API Trigger.deskAddress}}",
           "usePrivateMempool": true,
           "strict": true
         }
@@ -124,9 +124,9 @@
         "config": {
           "actionType": "aave-v3/withdraw",
           "network": "11155111",
-          "asset": "{{@trigger-manual.asset}}",
-          "amount": "{{@trigger-manual.amount}}",
-          "to": "{{@trigger-manual.deskAddress}}",
+          "asset": "{{@trigger-manual:Manual / API Trigger.asset}}",
+          "amount": "{{@trigger-manual:Manual / API Trigger.amount}}",
+          "to": "{{@trigger-manual:Manual / API Trigger.deskAddress}}",
           "usePrivateMempool": true,
           "strict": true
         }

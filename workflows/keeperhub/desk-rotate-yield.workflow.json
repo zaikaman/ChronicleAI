@@ -33,7 +33,7 @@
         "label": "Direction Into Aave LINK",
         "config": {
           "actionType": "Condition",
-          "condition": "{{@trigger-manual.direction}} === 'into_aave_link'",
+          "condition": "{{@trigger-manual:Manual / API Trigger.direction}} === 'into_aave_link'",
           "conditionConfig": {
             "group": {
               "id": "dir-check",
@@ -42,7 +42,7 @@
                 {
                   "id": "rule-into",
                   "operator": "===",
-                  "leftOperand": "{{@trigger-manual.direction}}",
+                  "leftOperand": "{{@trigger-manual:Manual / API Trigger.direction}}",
                   "rightOperand": "into_aave_link"
                 }
               ]
@@ -88,9 +88,9 @@
           "tokenIn": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
           "tokenOut": "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5",
           "fee": "3000",
-          "recipient": "{{@trigger-manual.deskAddress}}",
-          "amountIn": "{{@trigger-manual.amountIn}}",
-          "amountOutMinimum": "{{@trigger-manual.amountOutMinimum}}",
+          "recipient": "{{@trigger-manual:Manual / API Trigger.deskAddress}}",
+          "amountIn": "{{@trigger-manual:Manual / API Trigger.amountIn}}",
+          "amountOutMinimum": "{{@trigger-manual:Manual / API Trigger.amountOutMinimum}}",
           "sqrtPriceLimitX96": "0",
           "usePrivateMempool": true,
           "strict": true
@@ -132,8 +132,8 @@
           "actionType": "aave-v3/supply",
           "network": "11155111",
           "asset": "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5",
-          "amount": "{{@trigger-manual.amountLink}}",
-          "onBehalfOf": "{{@trigger-manual.deskAddress}}",
+          "amount": "{{@trigger-manual:Manual / API Trigger.amountLink}}",
+          "onBehalfOf": "{{@trigger-manual:Manual / API Trigger.deskAddress}}",
           "referralCode": "0",
           "usePrivateMempool": true,
           "strict": true
@@ -154,8 +154,8 @@
           "actionType": "aave-v3/withdraw",
           "network": "11155111",
           "asset": "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5",
-          "amount": "{{@trigger-manual.amountLink}}",
-          "to": "{{@trigger-manual.deskAddress}}",
+          "amount": "{{@trigger-manual:Manual / API Trigger.amountLink}}",
+          "to": "{{@trigger-manual:Manual / API Trigger.deskAddress}}",
           "usePrivateMempool": true,
           "strict": true
         }
@@ -198,9 +198,9 @@
           "tokenIn": "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5",
           "tokenOut": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
           "fee": "3000",
-          "recipient": "{{@trigger-manual.deskAddress}}",
-          "amountIn": "{{@trigger-manual.amountIn}}",
-          "amountOutMinimum": "{{@trigger-manual.amountOutMinimum}}",
+          "recipient": "{{@trigger-manual:Manual / API Trigger.deskAddress}}",
+          "amountIn": "{{@trigger-manual:Manual / API Trigger.amountIn}}",
+          "amountOutMinimum": "{{@trigger-manual:Manual / API Trigger.amountOutMinimum}}",
           "sqrtPriceLimitX96": "0",
           "usePrivateMempool": true,
           "strict": true

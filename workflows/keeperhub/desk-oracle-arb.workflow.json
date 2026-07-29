@@ -34,7 +34,7 @@
         "config": {
           "actionType": "web3/approve-token",
           "network": "11155111",
-          "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"{{@trigger-manual.tokenIn}}\",\"symbol\":\"TOKEN_IN\"}}",
+          "tokenConfig": "{\"mode\":\"custom\",\"customToken\":{\"address\":\"{{@trigger-manual:Manual / API Trigger.tokenIn}}\",\"symbol\":\"TOKEN_IN\"}}",
           "spenderAddress": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E",
           "amount": "max",
           "usePrivateMempool": true,
@@ -55,12 +55,12 @@
         "config": {
           "actionType": "uniswap/swap-exact-input",
           "network": "11155111",
-          "tokenIn": "{{@trigger-manual.tokenIn}}",
-          "tokenOut": "{{@trigger-manual.tokenOut}}",
-          "fee": "{{@trigger-manual.fee}}",
-          "recipient": "{{@trigger-manual.deskAddress}}",
-          "amountIn": "{{@trigger-manual.amountIn}}",
-          "amountOutMinimum": "{{@trigger-manual.amountOutMinimum}}",
+          "tokenIn": "{{@trigger-manual:Manual / API Trigger.tokenIn}}",
+          "tokenOut": "{{@trigger-manual:Manual / API Trigger.tokenOut}}",
+          "fee": "{{@trigger-manual:Manual / API Trigger.fee}}",
+          "recipient": "{{@trigger-manual:Manual / API Trigger.deskAddress}}",
+          "amountIn": "{{@trigger-manual:Manual / API Trigger.amountIn}}",
+          "amountOutMinimum": "{{@trigger-manual:Manual / API Trigger.amountOutMinimum}}",
           "sqrtPriceLimitX96": "0",
           "usePrivateMempool": true,
           "strict": true
