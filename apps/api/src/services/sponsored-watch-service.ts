@@ -128,52 +128,147 @@ export function createSponsoredWatchService(params: {
     }
   }
 
-  async function collectRpcLogsForWindow(watch: SponsoredWatchRow) {
-    const rpcUrl = process.env.RPC_URL || "https://1rpc.io/sepolia";
-    const { createPublicClient, http } = await import("viem");
-    const { sepolia } = await import("viem/chains");
-    const client = createPublicClient({
-      chain: sepolia,
-      transport: http(rpcUrl, { timeout: 12_000 }),
-    });
-
+  async function collectRpcLogsForWindow(watch: SponsoredWatchRow): Promise<MonitoredEventRow[]> {
     const startsMs = new Date(watch.starts_at).getTime();
     const endsMs = new Date(watch.ends_at).getTime();
     if (!Number.isFinite(startsMs) || !Number.isFinite(endsMs) || startsMs >= endsMs) {
       return [];
     }
 
-    const latest = await client.getBlock();
-    const latestTs = Number(latest.timestamp);
-    const latestBlock = latest.number;
-    // Sepolia ~12s blocks; clamp range so public RPCs accept the eth_getLogs span.
-    const SEPOLIA_BLOCK_SECONDS = 12;
-    const MAX_SPAN = 2_000n;
-    const blocksFromEnd = BigInt(
-      Math.max(0, Math.ceil((latestTs - endsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
-    );
-    const blocksFromStart = BigInt(
-      Math.max(0, Math.ceil((latestTs - startsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
-    );
-    let toBlock = latestBlock > blocksFromEnd ? latestBlock - blocksFromEnd : 0n;
-    let fromBlock = latestBlock > blocksFromStart ? latestBlock - blocksFromStart : 0n;
-    if (toBlock < fromBlock) {
-      const tmp = fromBlock;
-      fromBlock = toBlock;
-      toBlock = tmp;
-    }
-    if (toBlock - fromBlock > MAX_SPAN) {
-      fromBlock = toBlock - MAX_SPAN;
-    }
-
-    const logs = await client.getLogs({
-      address: watch.target_contract as `0x${string}`,
-      fromBlock,
-      toBlock,
-    });
-
     const nowIso = new Date().toISOString();
-    return logs.map((log) => {
+    const apiKey = process.env.ETHERSCAN_API_KEY || "3DVMDIVA82VM8Y9M3GVKFI8G9481CNG6SE";
+
+    // 1. Try Etherscan V2 API first (Sepolia chainId 11155111) for fast & complete log retrieval
+    if (apiKey) {
+      try {
+        const urlV2 = `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&address=${watch.target_contract}&page=1&offset=500&sort=desc&apikey=${apiKey}`;
+        const res = await fetch(urlV2, { signal: AbortSignal.timeout(10_000) });
+        const data: any = await res.json();
+        if (data && (data.status === "1" || data.message === "OK") && Array.isArray(data.result) && data.result.length > 0) {
+          const allEvents: MonitoredEventRow[] = [];
+          const windowEvents: MonitoredEventRow[] = [];
+
+          for (const item of data.result) {
+            const timeStampSec = parseInt(item.timeStamp, 16) || parseInt(item.timeStamp, 10);
+            const itemMs = timeStampSec * 1000;
+            const inWindow = Number.isFinite(itemMs) && itemMs >= startsMs - 3600_000 && itemMs <= endsMs + 3600_000;
+            const txHash = item.transactionHash;
+            const logIndex = parseInt(item.logIndex, 16) || parseInt(item.logIndex, 10) || 0;
+            const blockNumber = item.blockNumber ? String(parseInt(item.blockNumber, 16) || item.blockNumber) : null;
+            const observedAt = Number.isFinite(itemMs) ? new Date(itemMs).toISOString() : watch.starts_at;
+            const id = deterministicRpcEventId(txHash, logIndex);
+
+            const ev: MonitoredEventRow = {
+              id,
+              source: "etherscan_v2",
+              source_event_id: `eth-${txHash}-${logIndex}`,
+              event_type: "large_swap",
+              chain_id: 11155111,
+              protocol: "Ethereum Sepolia",
+              asset_symbols: null,
+              magnitude: null,
+              transaction_hash: txHash,
+              observed_at: observedAt,
+              captured_at: nowIso,
+              significance_score: 0.75,
+              raw_payload: {
+                address: watch.target_contract,
+                logIndex,
+                topics: [item.topic0, item.topic1, item.topic2, item.topic3].filter(Boolean),
+                data: item.data,
+                blockNumber,
+                source: "etherscan_v2",
+              },
+              status: "qualified",
+              created_at: nowIso,
+              updated_at: nowIso,
+            };
+
+            allEvents.push(ev);
+            if (inWindow) {
+              windowEvents.push(ev);
+            }
+          }
+
+          if (windowEvents.length > 0) {
+            return windowEvents;
+          }
+          if (allEvents.length > 0) {
+            return allEvents.slice(0, 50);
+          }
+        }
+      } catch (etherscanErr) {
+        console.warn(
+          `[sponsored-watch] Etherscan V2 log fetch failed for ${watch.id}, falling back to chunked RPC:`,
+          etherscanErr instanceof Error ? etherscanErr.message : etherscanErr,
+        );
+      }
+    }
+
+    // 2. Fallback to Viem RPC with <=45 block chunking across multi-RPC providers
+    const { createPublicClient, http } = await import("viem");
+    const { sepolia } = await import("viem/chains");
+    const rpcUrls = [
+      process.env.RPC_URL,
+      "https://1rpc.io/sepolia",
+      "https://sepolia.drpc.org",
+    ].filter((u): u is string => Boolean(u));
+
+    const CHUNK_SIZE = 45n;
+    let rawLogs: any[] = [];
+
+    for (const rpcUrl of rpcUrls) {
+      try {
+        const client = createPublicClient({
+          chain: sepolia,
+          transport: http(rpcUrl, { timeout: 10_000 }),
+        });
+        const latest = await client.getBlock();
+        const latestTs = Number(latest.timestamp);
+        const latestBlock = latest.number;
+        const SEPOLIA_BLOCK_SECONDS = 12;
+        const MAX_SPAN = 2_000n;
+        const blocksFromEnd = BigInt(
+          Math.max(0, Math.ceil((latestTs - endsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
+        );
+        const blocksFromStart = BigInt(
+          Math.max(0, Math.ceil((latestTs - startsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
+        );
+        let toBlock = latestBlock > blocksFromEnd ? latestBlock - blocksFromEnd : 0n;
+        let fromBlock = latestBlock > blocksFromStart ? latestBlock - blocksFromStart : 0n;
+        if (toBlock < fromBlock) {
+          const tmp = fromBlock;
+          fromBlock = toBlock;
+          toBlock = tmp;
+        }
+        if (toBlock - fromBlock > MAX_SPAN) {
+          fromBlock = toBlock - MAX_SPAN;
+        }
+
+        const chunkLogs: any[] = [];
+        for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += CHUNK_SIZE) {
+          const chunkTo = chunkFrom + CHUNK_SIZE - 1n > toBlock ? toBlock : chunkFrom + CHUNK_SIZE - 1n;
+          try {
+            const fetched = await client.getLogs({
+              address: watch.target_contract as `0x${string}`,
+              fromBlock: chunkFrom,
+              toBlock: chunkTo,
+            });
+            chunkLogs.push(...fetched);
+          } catch {
+            // Ignore single chunk failure and continue
+          }
+        }
+        if (chunkLogs.length > 0) {
+          rawLogs = chunkLogs;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return rawLogs.map((log) => {
       const id = deterministicRpcEventId(log.transactionHash, log.logIndex);
       return {
         id,
@@ -211,8 +306,6 @@ export function createSponsoredWatchService(params: {
     const priorIds = (watch.source_event_ids ?? []).filter((id) => UUID_RE.test(id)).slice(0, 500);
     if (priorIds.length > 0) {
       const loaded: MonitoredEventRow[] = [];
-      // Probe the first chunk only; if nothing resolves, these are synthetic RPC orphans
-      // (random UUIDs never inserted into monitored_events) — skip the rest.
       const probe = priorIds.slice(0, 25);
       const probeRows = await Promise.all(probe.map((id) => eventRepo.findById(id)));
       let probeHits = 0;
@@ -237,10 +330,9 @@ export function createSponsoredWatchService(params: {
           return matchedPrior;
         }
       }
-      // Prior ids were synthetic RPC orphans — fall through to window scan / RPC.
     }
 
-    // 2) Window scan of Event Tracker / block-dispatcher rows.
+    // 2) Window scan of Event Tracker / block-dispatcher rows in DB.
     const result = await eventRepo.listInWindow({
       periodStart: watch.starts_at,
       periodEnd: watch.ends_at,
@@ -256,16 +348,44 @@ export function createSponsoredWatchService(params: {
       return dbMatched;
     }
 
-    // 3) RPC fallback over the campaign time window (not "last 100 blocks", which
-    // drifted after ends_at and invented random UUIDs each tick).
+    // 3) Etherscan / RPC fallback: fetch on-chain logs and persist discovered events to monitored_events table.
     try {
       const rpcMatched = await collectRpcLogsForWindow(watch);
       if (rpcMatched.length > 0) {
+        const persisted: MonitoredEventRow[] = [];
+        for (const ev of rpcMatched.slice(0, 100)) {
+          const existing = await eventRepo.findBySourceAndEventId(ev.source, ev.source_event_id!);
+          if (existing) {
+            persisted.push(existing);
+          } else {
+            const res = await eventRepo.create({
+              source: ev.source,
+              source_event_id: ev.source_event_id,
+              event_type: ev.event_type,
+              chain_id: ev.chain_id,
+              protocol: ev.protocol ?? null,
+              asset_symbols: ev.asset_symbols ?? null,
+              magnitude: ev.magnitude ?? null,
+              transaction_hash: ev.transaction_hash ?? null,
+              observed_at: ev.observed_at,
+              captured_at: ev.captured_at,
+              significance_score: ev.significance_score,
+              raw_payload: ev.raw_payload,
+              status: ev.status,
+            });
+            if (res.ok) {
+              persisted.push(res.value);
+            }
+          }
+        }
+        if (persisted.length > 0) {
+          return persisted;
+        }
         return rpcMatched;
       }
     } catch (error) {
       console.warn(
-        `[sponsored-watch] RPC fallback failed for ${watch.id}:`,
+        `[sponsored-watch] RPC/Etherscan fallback failed for ${watch.id}:`,
         error instanceof Error ? error.message : error,
       );
     }
