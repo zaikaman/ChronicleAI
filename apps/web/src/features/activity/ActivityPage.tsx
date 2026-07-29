@@ -1,5 +1,5 @@
-import { type ReactElement, type ReactNode, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { type ReactElement, type ReactNode, useEffect, useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
 import {
@@ -167,6 +167,12 @@ function mapExecutionLog(log: {
         ? details.protectStatusUrl
         : undefined;
 
+  const executionAuditSummary =
+    typeof details?.execution_audit_summary === "string" &&
+    details.execution_audit_summary.trim().length > 0
+      ? details.execution_audit_summary.trim()
+      : undefined;
+
   const entry: {
     id: string;
     actionType: string;
@@ -184,6 +190,7 @@ function mapExecutionLog(log: {
     routingApplied?: string;
     routingRequested?: string;
     protectStatusUrl?: string;
+    executionAuditSummary?: string;
   } = {
     id: log.id,
     actionType: log.actionType,
@@ -202,6 +209,7 @@ function mapExecutionLog(log: {
   if (routingApplied) entry.routingApplied = routingApplied;
   if (routingRequested) entry.routingRequested = routingRequested;
   if (protectStatusUrl) entry.protectStatusUrl = protectStatusUrl;
+  if (executionAuditSummary) entry.executionAuditSummary = executionAuditSummary;
   return entry;
 }
 
@@ -392,15 +400,61 @@ function PayoutsSection(): ReactElement {
   );
 }
 
-function ExecutionLogsSection(): ReactElement {
-  const executionLogsPage = useExecutionLogs(25);
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function ExecutionLogsSection({
+  entityId,
+  entityType,
+  onClearFilter,
+}: {
+  entityId?: string | null;
+  entityType?: string | null;
+  onClearFilter?: () => void;
+}): ReactElement {
+  const executionLogsPage = useExecutionLogs(25, {
+    entityId: entityId ?? null,
+    entityType: entityType ?? null,
+  });
   const executionLogs = useMemo(
     () => executionLogsPage.items.map(mapExecutionLog),
     [executionLogsPage.items],
   );
 
+  const filtered = Boolean(entityId);
+
   return (
-    <>
+    <div id="execution-logs" data-testid="execution-logs-section">
+      {filtered ? (
+        <Surface
+          className="mb-3 px-4 py-3 flex flex-wrap items-center justify-between gap-2"
+          data-testid="execution-logs-intent-filter"
+        >
+          <p className="text-xs text-muted-foreground leading-relaxed min-w-0">
+            Showing KeeperHub logs for intent{" "}
+            <code className="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded break-all">
+              {entityId}
+            </code>
+            {entityType ? (
+              <>
+                {" "}
+                · type{" "}
+                <span className="font-medium text-foreground">{entityType}</span>
+              </>
+            ) : null}
+          </p>
+          {onClearFilter ? (
+            <button
+              type="button"
+              onClick={onClearFilter}
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              data-testid="execution-logs-clear-filter"
+            >
+              Clear filter
+            </button>
+          ) : null}
+        </Surface>
+      ) : null}
       {executionLogsPage.isLoading ? (
         <SkeletonPanel rows={5} data-testid="execution-logs-loading" />
       ) : executionLogsPage.error ? (
@@ -416,13 +470,38 @@ function ExecutionLogsSection(): ReactElement {
           />
         </>
       )}
-    </>
+    </div>
   );
 }
 
 export function ActivityPage(): ReactElement {
   // Primary aggregate only — secondary list endpoints load as panels enter view (P1-3).
   const { data, isLoading, error, refetch } = useAgentActivity();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const entityIdRaw = searchParams.get("entityId")?.trim() ?? "";
+  const entityId = UUID_RE.test(entityIdRaw) ? entityIdRaw : null;
+  const entityTypeRaw = searchParams.get("entityType")?.trim() ?? "";
+  const entityType = entityTypeRaw.length > 0 ? entityTypeRaw : null;
+
+  useEffect(() => {
+    if (!entityId) return;
+    // Scroll to execution log panel after paint (ticket deep link).
+    const t = window.setTimeout(() => {
+      document.getElementById("execution-logs")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [entityId]);
+
+  const clearEntityFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("entityId");
+    next.delete("entityType");
+    setSearchParams(next, { replace: true });
+  };
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -701,9 +780,18 @@ export function ActivityPage(): ReactElement {
             title="KeeperHub execution log"
             description="Full audit trail of monitoring, generation, publication, and treasury actions — including failures and retries."
           >
-            <ProgressivePanel placeholder="Loading execution logs…">
-              {() => <ExecutionLogsSection />}
-            </ProgressivePanel>
+            {/* Deep-link filter loads immediately so scroll + data are ready. */}
+            {entityId ? (
+              <ExecutionLogsSection
+                entityId={entityId}
+                entityType={entityType}
+                onClearFilter={clearEntityFilter}
+              />
+            ) : (
+              <ProgressivePanel placeholder="Loading execution logs…">
+                {() => <ExecutionLogsSection />}
+              </ProgressivePanel>
+            )}
           </PageSection>
         </>
       )}

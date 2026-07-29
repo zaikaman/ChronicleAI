@@ -8,7 +8,11 @@ import { useEffect, useState, type ReactElement } from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
 import { Surface } from "../../components/page-chrome.tsx";
 import { RoutingBadge } from "../../components/routing-badge.tsx";
-import { formatGasUsed, truncateHash } from "../../lib/explorer.ts";
+import {
+  flashbotsProtectStatusUrl,
+  formatGasUsed,
+  truncateHash,
+} from "../../lib/explorer.ts";
 import { ProofMonoLink } from "./ProofMonoLink.tsx";
 import type {
   DeskAuditOutcomeStage,
@@ -421,16 +425,38 @@ export function ExecutionAuditTimeline({
           at={outcome.at}
           testId="execution-audit-outcome"
           extra={
-            <div className="flex flex-col gap-1 mt-0.5 w-full min-w-0">
+            <div className="flex flex-col gap-1.5 mt-0.5 w-full min-w-0">
               {outcome.txHashes.length > 0
                 ? outcome.txHashes.map((hash, i) => (
-                    <ProofMonoLink
+                    <div
                       key={hash}
-                      value={hash}
-                      asTx
-                      href={outcome.explorerUrls?.[i] || undefined}
-                      data-testid={`execution-audit-tx-${i}`}
-                    />
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1"
+                    >
+                      <ProofMonoLink
+                        value={hash}
+                        asTx
+                        href={outcome.explorerUrls?.[i] || undefined}
+                        data-testid={`execution-audit-tx-${i}`}
+                      />
+                      {submit.routing === "private_mempool"
+                        ? (() => {
+                            const protectUrl = flashbotsProtectStatusUrl(hash);
+                            if (!protectUrl) return null;
+                            return (
+                              <a
+                                href={protectUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+                                data-testid={`execution-audit-protect-${i}`}
+                                title="Flashbots Protect status (Sepolia)"
+                              >
+                                Protect →
+                              </a>
+                            );
+                          })()
+                        : null}
+                    </div>
                   ))
                 : null}
               <RunStepsList

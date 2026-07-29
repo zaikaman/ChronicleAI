@@ -53,6 +53,7 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   /**
    * GET /activity/execution-logs
    * Page-based KeeperHub execution audit trail.
+   * Optional ?entityId= (UUID) and ?entityType= for ticket deep links (Phase 4).
    */
   router.get("/activity/execution-logs", async (req, res, next) => {
     try {
@@ -65,9 +66,24 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
         return;
       }
 
+      const entityIdRaw =
+        typeof req.query.entityId === "string" ? req.query.entityId.trim() : "";
+      const entityId =
+        entityIdRaw &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          entityIdRaw,
+        )
+          ? entityIdRaw
+          : undefined;
+      const entityTypeRaw =
+        typeof req.query.entityType === "string" ? req.query.entityType.trim() : "";
+      const entityType = entityTypeRaw.length > 0 ? entityTypeRaw : undefined;
+
       const result = await execLogRepo.listPage({
         page: parsed.page,
         limit: parsed.limit,
+        ...(entityId ? { entityId } : {}),
+        ...(entityType ? { entityType } : {}),
       });
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });

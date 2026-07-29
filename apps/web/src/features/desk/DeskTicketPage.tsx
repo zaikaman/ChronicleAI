@@ -248,6 +248,17 @@ export function DeskTicketPage(): ReactElement {
         ) : (
           <ExecutionAuditMissing />
         )}
+        {ticket.intentId ? (
+          <p className="mt-3">
+            <Link
+              to={`/activity?entityId=${encodeURIComponent(ticket.intentId)}&entityType=desk_intent`}
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="ticket-activity-intent-link"
+            >
+              Activity logs for this intent →
+            </Link>
+          </p>
+        ) : null}
       </PageSection>
 
       {/* Execution path (private routing) */}

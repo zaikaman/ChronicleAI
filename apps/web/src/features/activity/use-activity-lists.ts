@@ -80,10 +80,11 @@ async function fetchPage<T>(
   page: number,
   limit: number,
   signal?: AbortSignal,
+  extraParams?: Record<string, string | number | boolean | undefined | null>,
 ): Promise<{ items: T[]; pagination: PaginationMeta }> {
   const data = await apiGetJson<{ items?: T[]; pagination?: unknown }>(path, {
     signal,
-    params: { page, limit },
+    params: { page, limit, ...extraParams },
   });
   const items = data.items ?? [];
   return {
@@ -99,15 +100,17 @@ async function fetchPage<T>(
 function usePaginatedList<T>(
   path: string,
   limit: number,
-  queryKey: readonly unknown[],
+  /** Stable key prefix — page is appended live; do not embed page in prefix. */
+  queryKeyPrefix: readonly unknown[],
   options: ProgressiveListOptions = {},
+  extraParams?: Record<string, string | number | boolean | undefined | null>,
 ): PaginatedListState<T> {
   const { enabled = true } = options;
   const [page, setPage] = useState(1);
 
   const query = useQuery({
-    queryKey: [...queryKey.slice(0, -2), page, limit] as const,
-    queryFn: ({ signal }) => fetchPage<T>(path, page, limit, signal),
+    queryKey: [...queryKeyPrefix, page, limit, extraParams ?? null] as const,
+    queryFn: ({ signal }) => fetchPage<T>(path, page, limit, signal, extraParams),
     placeholderData: (previous) => previous,
     enabled,
   });
@@ -129,15 +132,38 @@ function usePaginatedList<T>(
   };
 }
 
+export interface ExecutionLogsFilterOptions extends ProgressiveListOptions {
+  /** Filter logs by entity_id (desk intent UUID). Phase 4 deep link. */
+  entityId?: string | null;
+  entityType?: string | null;
+}
+
 export function useExecutionLogs(
   limit = 25,
-  options: ProgressiveListOptions = {},
+  options: ExecutionLogsFilterOptions = {},
 ): PaginatedListState<ExecutionLogItem> {
+  const { entityId, entityType, ...listOptions } = options;
+  const entityIdTrimmed =
+    typeof entityId === "string" && entityId.trim().length > 0 ? entityId.trim() : null;
+  const entityTypeTrimmed =
+    typeof entityType === "string" && entityType.trim().length > 0
+      ? entityType.trim()
+      : null;
+  const extraParams: Record<string, string | undefined> = {};
+  if (entityIdTrimmed) extraParams.entityId = entityIdTrimmed;
+  if (entityTypeTrimmed) extraParams.entityType = entityTypeTrimmed;
+
   return usePaginatedList<ExecutionLogItem>(
     "/activity/execution-logs",
     limit,
-    queryKeys.activity.executionLogs(1, limit),
-    options,
+    [
+      "activity",
+      "execution-logs",
+      entityIdTrimmed,
+      entityTypeTrimmed,
+    ] as const,
+    listOptions,
+    Object.keys(extraParams).length > 0 ? extraParams : undefined,
   );
 }
 
@@ -148,7 +174,7 @@ export function useActivityPayments(
   return usePaginatedList<PaymentItem>(
     "/activity/payments",
     limit,
-    queryKeys.activity.payments(1, limit),
+    ["activity", "payments"] as const,
     options,
   );
 }
@@ -160,7 +186,7 @@ export function useActivityPayouts(
   return usePaginatedList<PayoutItem>(
     "/activity/payouts",
     limit,
-    queryKeys.activity.payouts(1, limit),
+    ["activity", "payouts"] as const,
     options,
   );
 }

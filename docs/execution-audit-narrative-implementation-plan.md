@@ -1,6 +1,6 @@
 # ChronicleAI — Simulation → Submit → Outcome Audit Narrative Implementation Plan
 
-**Status:** Phase 0–3 implemented (Layer C spine + Layer B run logs + Layer A optional KH dry-run); Phase 4 pending  
+**Status:** Phase 0–4 implemented (Layer C spine + Layer B run logs + Layer A optional KH dry-run + polish/demo)  
 **Owner:** ChronicleAI  
 **Scope:** Desk trade tickets first; registry / capital / Activity secondary  
 **Depends on:** KeeperHub workflow execute + executions status/logs APIs; existing desk execution bridge  
@@ -681,17 +681,40 @@ Tone: calm, editorial, proof-first — matches desk ticket and newspaper product
 
 ## 12. Demo script (judges)
 
-1. Open desk status — show agent/policy live (optional).  
-2. Open a **trade ticket** URL from a real Sepolia fill.  
-3. Scroll to **Execution audit**:
-   - ① Policy preflight (and KH dry-run if Phase 3 on).  
-   - ② Submit with KeeperHub run id + private route badge.  
-   - ③ Outcome with tx link(s) + gas used.  
-4. Expand **Run steps** (Phase 2) — match a node to explorer.  
-5. Click explorer + optional Flashbots Protect status.  
-6. One sentence: “Chronicle decides under policy; KeeperHub is the last mile; this ticket is the full audit trail.”
+**Target runtime:** under 30 seconds on one ticket URL.
 
-Submit package still needs: GitHub link, demo video, **tx link** executed via KeeperHub (hackathon rules).
+### Prep (before recording)
+
+1. Confirm a real Sepolia fill exists with `payload.executionAudit` (Phases 1–3).
+2. Copy the public ticket URL: `/desk/tickets/<ticketId>`.
+3. Optional: note the intent id for Activity deep link (`?entityId=<intentId>&entityType=desk_intent`).
+
+### On camera
+
+1. **Open desk status** (optional, 3s) — agent/policy live; private route note if shown.
+2. **Open the trade ticket URL** — headline = strategy · notional; proofs visible in chrome.
+3. **Scroll to Execution audit** (the continuous story):
+   - **① Preflight** — Policy preflight (HF / gas regime / reason codes). If Phase 3 ran: **KeeperHub dry-run** line (wouldRevert + est. gas).
+   - **② Submit** — KeeperHub run id + private route badge when applicable.
+   - **③ Outcome** — terminal status, tx link(s), gas used.
+4. **Expand Run steps** (Phase 2) — pick one web3 node; open its explorer tx.
+5. **Protect →** (when private) — Flashbots Protect status from the outcome row (and/or Execution path section).
+6. **Optional 5s:** click **Activity logs for this intent →** — filtered KeeperHub log rows with the same audit summary one-liner.
+7. **Close line:** “Chronicle decides under policy; KeeperHub is the last mile; this ticket is the full audit trail.”
+
+### List surface (optional cutaway)
+
+- Activity **Trade tickets** cards show `executionAuditSummary` under the title.
+- KeeperHub execution log **Message** column shows the audit subtitle for `desk_intent` / `desk_workflow` when `details.execution_audit_summary` is present.
+
+### Submit package checklist
+
+| Item | Notes |
+|------|--------|
+| GitHub link | Public ChronicleAI repo |
+| Demo video | One ticket URL walkthrough above |
+| Tx link | On-chain fill/registry tx executed via **KeeperHub** (hackathon rules) |
+| Ticket URL | `/desk/tickets/:id` with execution audit visible |
 
 ---
 
@@ -727,17 +750,19 @@ No mocks for production paths; tests may mock **HTTP to KeeperHub** only.
 
 ## 15. Exit criteria (definition of done)
 
-- [ ] `DeskExecutionAuditV1` defined and tested  
-- [ ] Desk execute always attempts to record C stages (no invented data)  
-- [ ] Public ticket detail API returns audit when present  
-- [ ] `DeskTicketPage` shows continuous preflight → submit → outcome  
-- [ ] Gas used and KeeperHub run id visible in the story (not only buried in proofs)  
+- [x] `DeskExecutionAuditV1` defined and tested  
+- [x] Desk execute always attempts to record C stages (no invented data)  
+- [x] Public ticket detail API returns audit when present  
+- [x] `DeskTicketPage` shows continuous preflight → submit → outcome  
+- [x] Gas used and KeeperHub run id visible in the story (not only buried in proofs)  
 - [x] Phase 2: run nodes from `/logs` on success path  
-- [ ] Phase 3 (optional): dry-run only; zero DE broadcasts in code paths  
-- [ ] Narrative/fallback mentions audit beats  
-- [ ] Legacy tickets without audit do not crash  
-- [ ] `pnpm` typecheck + build pass  
-- [ ] Demo script runnable on one real ticket URL  
+- [x] Phase 3 (optional): dry-run only; zero DE broadcasts in code paths  
+- [x] Narrative/fallback mentions audit beats  
+- [x] Legacy tickets without audit do not crash  
+- [x] Phase 4: list cards + Activity summary + intent deep link + Protect on timeline  
+- [x] `pnpm` typecheck + build pass  
+
+- [x] Demo script documented for one real ticket URL  
 
 ---
 

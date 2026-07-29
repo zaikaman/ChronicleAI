@@ -12,6 +12,14 @@ import {
 } from "./repository-utils.ts";
 import type { ExecutionLogInsert, ExecutionLogRow } from "./types.ts";
 
+/** Optional entity filters for page-based Activity deep links (Phase 4). */
+export interface ExecutionLogListPageParams extends PaginationParams {
+  /** When set, only rows with this entity_id (UUID). */
+  entityId?: string;
+  /** Optional companion to entityId (e.g. desk_intent). */
+  entityType?: string;
+}
+
 export interface ExecutionLogRepository {
   append(data: ExecutionLogInsert): Promise<Result<ExecutionLogRow>>;
   listByEntity(
@@ -20,7 +28,9 @@ export interface ExecutionLogRepository {
     limitParam?: number,
   ): Promise<Result<ExecutionLogRow[]>>;
   listRecent(limitParam?: number): Promise<Result<ExecutionLogRow[]>>;
-  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<ExecutionLogRow>>>;
+  listPage(
+    params?: ExecutionLogListPageParams,
+  ): Promise<Result<PaginatedResult<ExecutionLogRow>>>;
 }
 
 export function createExecutionLogRepository(supabase: SupabaseClient): ExecutionLogRepository {
@@ -112,10 +122,33 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
         maxLimit: 100,
       });
 
-      const { data: rows, error, count } = await table()
+      const entityId =
+        typeof params?.entityId === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          params.entityId.trim(),
+        )
+          ? params.entityId.trim()
+          : null;
+      const entityType =
+        typeof params?.entityType === "string" && params.entityType.trim().length > 0
+          ? params.entityType.trim()
+          : null;
+
+      let query = table()
         .select("*", { count: "exact" })
-        .order("created_at", { ascending: false })
-        .range(offset, offset + limit - 1);
+        .order("created_at", { ascending: false });
+
+      if (entityId) {
+        query = query.eq("entity_id", entityId);
+      }
+      if (entityType) {
+        query = query.eq("entity_type", entityType);
+      }
+
+      const { data: rows, error, count } = await query.range(
+        offset,
+        offset + limit - 1,
+      );
 
       if (error) {
         return failure(mapPostgrestError(error));

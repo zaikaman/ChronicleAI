@@ -29,6 +29,11 @@ interface ExecutionLogEntry {
   routingRequested?: string | null;
   /** Flashbots Protect status URL when private route was requested (Phase 4). */
   protectStatusUrl?: string | null;
+  /**
+   * Deterministic execution audit one-liner from details.execution_audit_summary
+   * (desk_intent / desk_workflow). Phase 4.
+   */
+  executionAuditSummary?: string | null;
 }
 
 interface ExecutionLogTableProps {
@@ -329,12 +334,47 @@ export function ExecutionLogTable({
                 <td
                   style={{
                     ...tableCellStyle,
-                    maxWidth: "300px",
+                    maxWidth: "320px",
                     overflow: "hidden",
-                    textOverflow: "ellipsis",
                   }}
                 >
-                  <span style={{ fontSize: "var(--font-size-xs)" }}>{log.message ?? "-"}</span>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.25rem",
+                      minWidth: 0,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "var(--font-size-xs)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={log.message ?? undefined}
+                    >
+                      {log.message ?? "-"}
+                    </span>
+                    {log.executionAuditSummary ? (
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          color: "var(--fg-tertiary)",
+                          lineHeight: 1.4,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                        title={log.executionAuditSummary}
+                        data-testid="log-execution-audit-summary"
+                      >
+                        {log.executionAuditSummary}
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td style={{ ...tableCellStyle, whiteSpace: "nowrap" }}>
                   <TimestampDisplay timestamp={log.createdAt} format="relative" />

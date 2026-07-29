@@ -46,6 +46,15 @@ export function DeskTicketsPanel({
               {" · "}
               <TimestampDisplay timestamp={ticket.createdAt} />
             </p>
+            {ticket.executionAuditSummary ? (
+              <p
+                className="mt-1.5 text-xs text-muted-foreground leading-relaxed text-pretty max-w-xl line-clamp-2"
+                data-testid="desk-ticket-card-audit-summary"
+                title={ticket.executionAuditSummary}
+              >
+                {ticket.executionAuditSummary}
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0">
             {ticket.txHash ? (

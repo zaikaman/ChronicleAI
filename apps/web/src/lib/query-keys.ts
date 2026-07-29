@@ -14,8 +14,20 @@ export const queryKeys = {
   activity: {
     all: ["activity"] as const,
     summary: ["activity", "summary"] as const,
-    executionLogs: (page: number, limit: number) =>
-      ["activity", "execution-logs", page, limit] as const,
+    executionLogs: (
+      page: number,
+      limit: number,
+      entityId?: string | null,
+      entityType?: string | null,
+    ) =>
+      [
+        "activity",
+        "execution-logs",
+        page,
+        limit,
+        entityId ?? null,
+        entityType ?? null,
+      ] as const,
     payments: (page: number, limit: number) =>
       ["activity", "payments", page, limit] as const,
     payouts: (page: number, limit: number) =>
