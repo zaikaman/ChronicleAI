@@ -6,6 +6,7 @@ import type {
   ExecutionLogRepository,
   PaymentRecordRepository,
   PremiumIntelligenceRepository,
+  SponsoredWatchRepository,
 } from "@chronicleai/db";
 import type { PremiumIntelligenceItemRow } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
@@ -41,16 +42,20 @@ export class PremiumAccessService {
   private readonly receiptService: PremiumAccessReceiptService;
   private readonly visibilityService: PremiumContentVisibilityService;
 
+  private readonly watchRepo?: SponsoredWatchRepository | undefined;
+
   constructor(params: {
     premiumRepo: PremiumIntelligenceRepository;
     paymentRecordRepo: PaymentRecordRepository;
     execLogRepo: ExecutionLogRepository;
     receiptService: PremiumAccessReceiptService;
+    watchRepo?: SponsoredWatchRepository | undefined;
   }) {
     this.premiumRepo = params.premiumRepo;
     this.paymentRecordRepo = params.paymentRecordRepo;
     this.execLogRepo = params.execLogRepo;
     this.receiptService = params.receiptService;
+    this.watchRepo = params.watchRepo;
     this.visibilityService = new PremiumContentVisibilityService();
   }
 
@@ -138,9 +143,51 @@ export class PremiumAccessService {
       }
     }
 
+    const fullContent = this.visibilityService.toFullWithPrivateContent(item);
+
+    if (item.content_type === "sponsored_monitor" && this.watchRepo) {
+      try {
+        const watchesResult = await this.watchRepo.list();
+        if (watchesResult.ok && Array.isArray(watchesResult.value)) {
+          const privateObj =
+            typeof item.content_private === "object" && item.content_private !== null
+              ? (item.content_private as Record<string, unknown>)
+              : {};
+          const targetContract = String(privateObj.targetContract ?? "").toLowerCase();
+          const watchSpecHash = String(privateObj.watchSpecHash ?? "").toLowerCase();
+
+          const match = watchesResult.value.find((w: { watch_spec_hash?: string | null; target_contract?: string | null }) => {
+            if (watchSpecHash && w.watch_spec_hash?.toLowerCase() === watchSpecHash) return true;
+            if (targetContract && w.target_contract?.toLowerCase() === targetContract) return true;
+            return false;
+          });
+
+          if (match) {
+            fullContent.contentPrivate = {
+              ...privateObj,
+              watchId: match.id,
+              status: match.status,
+              reportTitle: match.report_title ?? undefined,
+              reportSummary: match.report_summary ?? undefined,
+              reportHighlights: match.report_highlights ?? undefined,
+              reportAnalysis: match.report_analysis ?? undefined,
+              createTxHash: match.create_tx_hash ?? undefined,
+              reportTxHash: match.report_tx_hash ?? undefined,
+              createExplorerUrl: match.create_explorer_url ?? undefined,
+              reportExplorerUrl: match.report_explorer_url ?? undefined,
+              sourceEventRoot: match.source_event_root ?? undefined,
+              monitoredEventCount: match.monitored_event_count ?? 0,
+            };
+          }
+        }
+      } catch {
+        // ignore enrichment failure
+      }
+    }
+
     return {
       allowed: true,
-      content: this.visibilityService.toFullWithPrivateContent(item),
+      content: fullContent,
       ...(autoIssuedReceipt ? { accessReceipt: autoIssuedReceipt } : {}),
     };
   }

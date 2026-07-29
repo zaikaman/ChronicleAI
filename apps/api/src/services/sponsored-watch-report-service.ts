@@ -36,6 +36,8 @@ export interface SponsoredWatchReportInput {
   startsAt: string;
   endsAt: string;
   events: MonitoredEventRow[];
+  eventSignature?: string | null;
+  description?: string | null;
 }
 
 export interface SponsoredWatchReportService {
@@ -148,9 +150,13 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
     const highlights = [
       "Zero events matched the sponsored target contract in the campaign window.",
       "On-chain create and report receipts still form the paid campaign audit trail.",
+      ...(input.eventSignature ? [`Filtered by requested event signature: ${input.eventSignature}`] : []),
+      ...(input.description ? [`Campaign instructions: "${input.description}"`] : []),
     ];
     const analysis =
       `Campaign ${watchId} monitored ${targetContract} from ${startsAt} to ${endsAt}. ` +
+      (input.description ? `Watch instructions: "${input.description}". ` : "") +
+      (input.eventSignature ? `Event filter: ${input.eventSignature}. ` : "") +
       "No Event Tracker / block-dispatcher events referenced this contract address in the window. " +
       "The empty source-event root is committed on-chain for verifiable completeness.";
 
@@ -190,6 +196,8 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
 
   const analysisParts: string[] = [
     `Campaign ${watchId} monitored ${targetContract} (spec ${input.watchSpecHash.slice(0, 18)}…) from ${startsAt} to ${endsAt}.`,
+    ...(input.description ? [`Watch instructions: "${input.description}".`] : []),
+    ...(input.eventSignature ? [`Event filter signature: ${input.eventSignature}.`] : []),
     `Source set size: ${events.length} event(s) across chain id(s) ${[...new Set(events.map((e) => e.chain_id))].join(", ")}.`,
   ];
   if (protocols.length > 0) {
@@ -227,10 +235,12 @@ function buildLlmPrompt(input: SponsoredWatchReportInput): string {
   return [
     "You are ChronicleAI writing a paid sponsored-watch intelligence report.",
     "Return ONLY a JSON object with keys: title (string), summary (string), highlights (string array, 2-8 items), analysis (string markdown-friendly prose), confidence (\"high\"|\"medium\"|\"low\").",
-    "Ground every claim in the observed events. Do not invent transactions.",
+    "Ground every claim in the observed events and user instructions. Do not invent transactions.",
     `watchId: ${input.watchId}`,
     `targetContract: ${input.targetContract}`,
     `watchSpecHash: ${input.watchSpecHash}`,
+    ...(input.eventSignature ? [`requestedEventSignature: ${input.eventSignature}`] : []),
+    ...(input.description ? [`userWatchInstructions: "${input.description}"`] : []),
     `window: ${input.startsAt} → ${input.endsAt}`,
     `eventCount: ${input.events.length}`,
     "events:",

@@ -210,6 +210,7 @@ export interface SponsoredWatchRow {
   report_analysis: string | null;
   last_monitored_at: string | null;
   monitored_event_count: number;
+  watch_spec?: Record<string, unknown> | null;
   status: string;
   created_at: string;
   updated_at: string;

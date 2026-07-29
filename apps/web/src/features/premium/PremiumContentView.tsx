@@ -197,6 +197,203 @@ function FeedEntriesTable({ entries }: { entries: unknown[] }): React.ReactEleme
   );
 }
 
+function SponsoredWatchDetails({
+  targetContract,
+  watchSpecHash,
+  startsAt,
+  endsAt,
+  durationDays,
+  durationHours,
+  eventSignature,
+  description,
+  status,
+  watchId,
+  reportTitle,
+  reportSummary,
+  reportHighlights,
+  reportAnalysis,
+  createExplorerUrl,
+  reportExplorerUrl,
+  createTxHash,
+  reportTxHash,
+}: {
+  targetContract: string;
+  watchSpecHash?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  durationDays?: number | null;
+  durationHours?: number | null;
+  eventSignature?: string | null;
+  description?: string | null;
+  status?: string | null;
+  watchId?: string | null;
+  reportTitle?: string | null;
+  reportSummary?: string | null;
+  reportHighlights?: string[];
+  reportAnalysis?: string | null;
+  createExplorerUrl?: string | null;
+  reportExplorerUrl?: string | null;
+  createTxHash?: string | null;
+  reportTxHash?: string | null;
+}): React.ReactElement {
+  const watchStatus = status ?? "accepted";
+  const statusVariant =
+    watchStatus === "completed"
+      ? "success"
+      : watchStatus === "monitoring"
+        ? "warning"
+        : watchStatus === "failed"
+          ? "error"
+          : "info";
+
+  return (
+    <div className="space-y-6 mb-6">
+      <section className="p-5 rounded-xl border border-accent/30 bg-accent/5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+          <div>
+            <h4 className="text-base font-semibold text-foreground">
+              {reportTitle ?? "Sponsored Contract Watch"}
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              {watchStatus === "completed"
+                ? "Monitoring window completed · Report generated"
+                : "Active monitoring campaign registered on-chain"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge label={watchStatus} variant={statusVariant} />
+            {watchId ? (
+              <a
+                href={`/premium/watches/${watchId}`}
+                className="px-3 py-1 text-xs font-medium border border-border rounded-lg bg-background hover:bg-muted text-foreground transition-colors"
+              >
+                View Full Watch Page &rarr;
+              </a>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div>
+            <span className="text-muted-foreground block mb-1">Target Contract</span>
+            <a
+              href={`https://sepolia.etherscan.io/address/${targetContract}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-accent hover:underline break-all"
+            >
+              {targetContract}
+            </a>
+          </div>
+
+          {watchSpecHash ? (
+            <div>
+              <span className="text-muted-foreground block mb-1">Watch Spec Hash</span>
+              <span className="font-mono text-foreground break-all">{watchSpecHash}</span>
+            </div>
+          ) : null}
+
+          {startsAt && endsAt ? (
+            <div>
+              <span className="text-muted-foreground block mb-1">Monitoring Window</span>
+              <span className="text-foreground font-medium">
+                {startsAt.slice(0, 19).replace("T", " ")} &rarr; {endsAt.slice(0, 19).replace("T", " ")}
+              </span>
+            </div>
+          ) : null}
+
+          {durationHours || durationDays ? (
+            <div>
+              <span className="text-muted-foreground block mb-1">Campaign Duration</span>
+              <span className="text-foreground font-medium">
+                {durationHours ? `${durationHours} hour(s)` : `${durationDays} day(s)`}
+              </span>
+            </div>
+          ) : null}
+
+          {eventSignature ? (
+            <div className="sm:col-span-2">
+              <span className="text-muted-foreground block mb-1">Event Filter</span>
+              <code className="px-2 py-1 rounded bg-muted font-mono text-foreground text-[11px]">
+                {eventSignature}
+              </code>
+            </div>
+          ) : null}
+
+          {description ? (
+            <div className="sm:col-span-2">
+              <span className="text-muted-foreground block mb-1">Description</span>
+              <p className="text-muted-foreground">{description}</p>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      {reportSummary ? (
+        <section className="p-5 rounded-xl border border-border bg-card space-y-3">
+          <h4 className="text-base font-semibold text-foreground">Executive Summary</h4>
+          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+            {reportSummary}
+          </p>
+        </section>
+      ) : null}
+
+      {reportHighlights && reportHighlights.length > 0 ? (
+        <section className="p-5 rounded-xl border border-border bg-card space-y-3">
+          <h4 className="text-base font-semibold text-foreground">Campaign Key Takeaways</h4>
+          <ul className="space-y-2 text-sm text-muted-foreground list-none p-0 m-0">
+            {reportHighlights.map((highlight, idx) => (
+              <li key={idx} className="flex gap-2.5 items-start">
+                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
+                <span>{highlight}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {reportAnalysis ? (
+        <section className="p-5 rounded-xl border border-border bg-card space-y-3">
+          <h4 className="text-base font-semibold text-foreground">Detailed Observation Analysis</h4>
+          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+            {reportAnalysis}
+          </p>
+        </section>
+      ) : null}
+
+      {(createTxHash || reportTxHash) ? (
+        <section className="p-4 rounded-xl border border-border/60 bg-muted/20 text-xs font-mono space-y-2">
+          <span className="font-sans font-semibold text-foreground block">On-Chain Audit Trail</span>
+          {createTxHash ? (
+            <div>
+              <span className="text-muted-foreground">Create Tx: </span>
+              {createExplorerUrl ? (
+                <a href={createExplorerUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline break-all">
+                  {createTxHash}
+                </a>
+              ) : (
+                <span className="text-foreground break-all">{createTxHash}</span>
+              )}
+            </div>
+          ) : null}
+          {reportTxHash ? (
+            <div>
+              <span className="text-muted-foreground">Report Tx: </span>
+              {reportExplorerUrl ? (
+                <a href={reportExplorerUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline break-all">
+                  {reportTxHash}
+                </a>
+              ) : (
+                <span className="text-foreground break-all">{reportTxHash}</span>
+              )}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 export function PremiumContentView({
   content,
   title,
@@ -234,8 +431,47 @@ export function PremiumContentView({
     ? privatePayload.feedEntries
     : [];
 
+  const targetContract =
+    typeof privatePayload.targetContract === "string"
+      ? privatePayload.targetContract
+      : typeof (privatePayload.watchSpec as Record<string, unknown> | undefined)?.targetContract === "string"
+        ? String((privatePayload.watchSpec as Record<string, unknown>).targetContract)
+        : null;
+  const watchSpecHash =
+    typeof privatePayload.watchSpecHash === "string" ? privatePayload.watchSpecHash : null;
+  const startsAt =
+    typeof privatePayload.startsAt === "string" ? privatePayload.startsAt : null;
+  const endsAt =
+    typeof privatePayload.endsAt === "string" ? privatePayload.endsAt : null;
+  const durationDays =
+    typeof privatePayload.durationDays === "number" ? privatePayload.durationDays : null;
+  const durationHours =
+    typeof privatePayload.durationHours === "number" ? privatePayload.durationHours : null;
+  const watchSpec = isRecord(privatePayload.watchSpec) ? privatePayload.watchSpec : null;
+  const eventSignature =
+    typeof watchSpec?.eventSignature === "string" ? watchSpec.eventSignature : null;
+  const description =
+    typeof watchSpec?.description === "string" ? watchSpec.description : null;
+
+  const watchStatus = typeof privatePayload.status === "string" ? privatePayload.status : null;
+  const watchId = typeof privatePayload.watchId === "string" ? privatePayload.watchId : null;
+  const reportTitle = typeof privatePayload.reportTitle === "string" ? privatePayload.reportTitle : null;
+  const reportSummary = typeof privatePayload.reportSummary === "string" ? privatePayload.reportSummary : null;
+  const reportHighlights = Array.isArray(privatePayload.reportHighlights)
+    ? (privatePayload.reportHighlights as string[])
+    : undefined;
+  const reportAnalysis = typeof privatePayload.reportAnalysis === "string" ? privatePayload.reportAnalysis : null;
+  const createExplorerUrl = typeof privatePayload.createExplorerUrl === "string" ? privatePayload.createExplorerUrl : null;
+  const reportExplorerUrl = typeof privatePayload.reportExplorerUrl === "string" ? privatePayload.reportExplorerUrl : null;
+  const createTxHash = typeof privatePayload.createTxHash === "string" ? privatePayload.createTxHash : null;
+  const reportTxHash = typeof privatePayload.reportTxHash === "string" ? privatePayload.reportTxHash : null;
+
   const hasBody =
-    sections.length > 0 || analysis != null || events.length > 0 || feedEntries.length > 0;
+    sections.length > 0 ||
+    analysis != null ||
+    events.length > 0 ||
+    feedEntries.length > 0 ||
+    targetContract != null;
 
   return (
     <article
@@ -294,6 +530,29 @@ export function PremiumContentView({
           </p>
         ) : (
           <>
+            {targetContract ? (
+              <SponsoredWatchDetails
+                targetContract={targetContract}
+                watchSpecHash={watchSpecHash}
+                startsAt={startsAt}
+                endsAt={endsAt}
+                durationDays={durationDays}
+                durationHours={durationHours}
+                eventSignature={eventSignature}
+                description={description}
+                status={watchStatus}
+                watchId={watchId}
+                reportTitle={reportTitle}
+                reportSummary={reportSummary}
+                reportHighlights={reportHighlights}
+                reportAnalysis={reportAnalysis}
+                createExplorerUrl={createExplorerUrl}
+                reportExplorerUrl={reportExplorerUrl}
+                createTxHash={createTxHash}
+                reportTxHash={reportTxHash}
+              />
+            ) : null}
+
             {sections.map((section, idx) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: ordered report sections
               <SectionBlock key={idx} section={section} />

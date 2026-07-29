@@ -34,6 +34,7 @@ export function clearPremiumAccessReceipt(itemId: string): void {
 
 export interface PremiumTeasersState {
   items: PremiumItemTeaserResponse[];
+  unlockedItemIds: string[];
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
@@ -60,21 +61,38 @@ export interface PremiumItemAccessResult {
 /**
  * Hook to fetch premium item teasers.
  */
-export function usePremiumTeasers(): PremiumTeasersState {
+export function usePremiumTeasers(payerAddress?: string): PremiumTeasersState {
   const query = useQuery({
-    queryKey: queryKeys.premium.teasers,
+    queryKey: [...queryKeys.premium.teasers, payerAddress],
     queryFn: async ({ signal }) => {
-      const data = await apiGetJson<{ items: PremiumItemTeaserResponse[] }>(
-        "/premium/items",
-        { signal },
-      );
-      return data.items ?? [];
+      const url = payerAddress
+        ? `/premium/items?payer=${encodeURIComponent(payerAddress)}`
+        : "/premium/items";
+      const data = await apiGetJson<{
+        items: PremiumItemTeaserResponse[];
+        unlockedItemIds?: string[];
+        receipts?: Record<string, string>;
+      }>(url, { signal });
+
+      if (data.receipts) {
+        for (const [itemId, token] of Object.entries(data.receipts)) {
+          if (itemId && token) {
+            storePremiumAccessReceipt(itemId, token);
+          }
+        }
+      }
+
+      return {
+        items: data.items ?? [],
+        unlockedItemIds: data.unlockedItemIds ?? [],
+      };
     },
     staleTime: 30_000,
   });
 
   return {
-    items: query.data ?? [],
+    items: query.data?.items ?? [],
+    unlockedItemIds: query.data?.unlockedItemIds ?? [],
     isLoading: query.isLoading || (query.isFetching && !query.data),
     error: query.error ? toErrorMessage(query.error, "Failed to load premium items") : null,
     refetch: () => {
@@ -119,7 +137,11 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
         headers["X-Payer-Reference"] = payerReference;
       }
 
-      const response = await fetch(`${API_BASE}/premium/items/${itemId}`, {
+      const url = payerReference
+        ? `${API_BASE}/premium/items/${itemId}?payer=${encodeURIComponent(payerReference)}`
+        : `${API_BASE}/premium/items/${itemId}`;
+
+      const response = await fetch(url, {
         headers,
         credentials: "include",
       });

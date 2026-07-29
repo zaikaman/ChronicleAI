@@ -19,7 +19,9 @@ import {
 
 export function PremiumPage(): ReactElement {
   const wallet = useWallet();
-  const { items, isLoading, error, refetch } = usePremiumTeasers();
+  const { items, unlockedItemIds, isLoading, error, refetch } = usePremiumTeasers(
+    wallet.address ?? undefined,
+  );
   const {
     isLoading: isAccessLoading,
     error: accessError,
@@ -48,14 +50,14 @@ export function PremiumPage(): ReactElement {
 
   const unlockedIds = useMemo(() => {
     void receiptVersion;
-    const ids = new Set<string>();
+    const ids = new Set<string>(unlockedItemIds);
     for (const item of items) {
       if (loadPremiumAccessReceipt(item.id)) {
         ids.add(item.id);
       }
     }
     return ids;
-  }, [items, receiptVersion]);
+  }, [items, unlockedItemIds, receiptVersion]);
 
   // Prefer server 402 challenge amounts when present; otherwise keep teaser price.
   useEffect(() => {

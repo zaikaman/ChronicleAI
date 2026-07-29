@@ -30,6 +30,7 @@ export function createPremiumRoutes(params: {
     paymentRecordRepo: params.paymentRecordRepo,
     execLogRepo: params.execLogRepo,
     receiptService: params.receiptService,
+    watchRepo: params.watchRepo,
   });
 
   /**
@@ -148,7 +149,7 @@ export function createPremiumRoutes(params: {
    * Responses:
    *   200 - { items: PremiumItemTeaser[] }
    */
-  router.get("/premium/items", async (_req, res, next) => {
+  router.get("/premium/items", async (req, res, next) => {
     try {
       const result = await params.premiumRepo.listTeasers();
 
@@ -159,7 +160,31 @@ export function createPremiumRoutes(params: {
 
       const items = visibilityService.toTeaserList(result.value);
 
-      res.json({ items });
+      const rawPayer =
+        (typeof req.query.payer === "string" ? req.query.payer.trim() : null) ||
+        (typeof req.headers["x-payer-reference"] === "string"
+          ? (req.headers["x-payer-reference"] as string).trim()
+          : null);
+
+      const unlockedItemIds: string[] = [];
+      const receipts: Record<string, string> = {};
+
+      if (rawPayer) {
+        for (const item of items) {
+          const settledResult = await params.paymentRecordRepo.findSettledByPayer(item.id, rawPayer);
+          if (settledResult.ok && settledResult.value) {
+            unlockedItemIds.push(item.id);
+            const { token } = params.receiptService.issue({
+              premiumItemId: item.id,
+              payerReference: rawPayer,
+              paymentRecordId: settledResult.value.id,
+            });
+            receipts[item.id] = token;
+          }
+        }
+      }
+
+      res.json({ items, unlockedItemIds, receipts });
     } catch (error) {
       next(error);
     }
