@@ -281,8 +281,8 @@ export interface ServerEnv {
   /** KeeperHub network slug / chain id for writes (default sepolia). */
   keeperhubNetwork: string;
   /**
-   * Prefer native LangChain + KeeperHub MCP for Loop 1/2 registry writes
-   * (publishAlert / publishDigest). Default true when KeeperHub is configured.
+   * Prefer KeeperHub MCP for all material writes (registry + desk + transfer).
+   * Default true when KeeperHub is configured.
    * Set KEEPERHUB_MCP_ENABLED=false to force REST workflow execute only.
    */
   keeperhubMcpEnabled: boolean;
@@ -291,6 +291,16 @@ export interface ServerEnv {
    * When unset, derived as `${KEEPERHUB_API_BASE_URL}/mcp`.
    */
   keeperhubMcpUrl: string | undefined;
+  /**
+   * Fall back to REST workflow execute when MCP fails. Default true.
+   * Set KEEPERHUB_MCP_REST_FALLBACK=false to fail closed on MCP errors.
+   */
+  keeperhubMcpRestFallback: boolean;
+  /**
+   * Use LangChain ReAct agent for alert/digest MCP path when LLM keys exist.
+   * Other write methods always use deterministic MCP. Default true.
+   */
+  keeperhubMcpLangchainAgent: boolean;
   /**
    * Pre-imported KeeperHub workflow IDs (maps 1:1 to workflows/keeperhub/*.workflow.json).
    * Required for each write action — Direct Execution is disabled; missing IDs fail hard.
@@ -1205,12 +1215,18 @@ export function loadServerEnv(): ServerEnv {
     keeperhubApiBaseUrl: optionalEnv("KEEPERHUB_API_BASE_URL"),
     keeperhubApiKey: optionalEnv("KEEPERHUB_API_KEY"),
     keeperhubNetwork: optionalEnv("KEEPERHUB_NETWORK", "sepolia") as string,
-    // Default ON: Loop 1/2 use LangChain ReAct + KeeperHub MCP when KH is configured.
+    // Default ON: all material writes prefer KeeperHub MCP when KH is configured.
     // Opt out with KEEPERHUB_MCP_ENABLED=false for REST-only workflow execute.
     keeperhubMcpEnabled:
       (optionalEnv("KEEPERHUB_MCP_ENABLED", "true") ?? "true").toLowerCase() !==
       "false",
     keeperhubMcpUrl: optionalEnv("KEEPERHUB_MCP_URL"),
+    keeperhubMcpRestFallback:
+      (optionalEnv("KEEPERHUB_MCP_REST_FALLBACK", "true") ?? "true").toLowerCase() !==
+      "false",
+    keeperhubMcpLangchainAgent:
+      (optionalEnv("KEEPERHUB_MCP_LANGCHAIN_AGENT", "true") ?? "true").toLowerCase() !==
+      "false",
     keeperhubWorkflowPublishAlert: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_ALERT"),
     keeperhubWorkflowPublishDigest: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_DIGEST"),
     keeperhubWorkflowCreateSponsoredWatch: optionalEnv(

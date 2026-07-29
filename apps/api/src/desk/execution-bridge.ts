@@ -1,10 +1,11 @@
 /**
  * Desk execution bridge: sole path to trigger KeeperHub strategy/capital workflows.
  * Mirrors registry write client discipline:
- * - Only POST /api/workflows/{id}/execute with org API key
+ * - Prefer KeeperHub MCP (list → execute → poll) when configured
+ * - REST POST /api/workflows/{id}/execute remains fallback
  * - Require env workflow IDs; fail hard if missing
  * - Store keeper_hub_run_id; poll status when wait=true
- * - Never mock fills
+ * - Never mock fills; never Direct Execution broadcast
  */
 
 import type { DeskStrategy } from "@chronicleai/schemas";
@@ -17,6 +18,12 @@ import {
   isExecutionLogEntityUuid,
   withKeeperHubLog,
 } from "../services/keeperhub-execution-log.ts";
+import { resolveKeeperHubMcpUrl } from "../services/keeperhub-mcp-client.ts";
+import {
+  executeViaKeeperHubMcp,
+  mcpActionFromDeskAction,
+  summarizeMcpToolCalls,
+} from "../services/keeperhub-mcp-execute.ts";
 import {
   buildKillSwitchRoutingDetails,
   buildPrivateRoutingDetails,
@@ -50,6 +57,15 @@ export interface DeskWorkflowIds {
   killSwitch?: string | undefined;
 }
 
+export interface DeskBridgeMcpOptions {
+  /** Prefer MCP tools over REST. Default true when config present. */
+  enabled?: boolean;
+  /** Full MCP URL; defaults to `${apiBaseUrl}/mcp`. */
+  mcpUrl?: string;
+  /** Fall back to REST if MCP fails. Default true. */
+  restFallback?: boolean;
+}
+
 export interface ExecutionBridgeConfig {
   apiBaseUrl: string;
   apiKey: string;
@@ -67,6 +83,11 @@ export interface ExecutionBridgeConfig {
    * Kill-switch always uses private + strict regardless of policy.enabled.
    */
   routingPolicy?: PrivateRoutingPolicy | null;
+  /**
+   * Optional MCP preferred path for all desk actions.
+   * When omitted, bridge uses REST only (existing unit tests).
+   */
+  mcp?: DeskBridgeMcpOptions | null;
 }
 
 /**
@@ -315,6 +336,13 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
   const pollTimeoutMs = config.pollTimeoutMs ?? 180_000;
   const workflowIds = config.workflowIds;
   const execLogRepo = config.execLogRepo ?? null;
+  const mcpOpts = config.mcp ?? null;
+  const mcpEnabled =
+    mcpOpts != null &&
+    mcpOpts.enabled !== false &&
+    Boolean(config.apiKey?.trim());
+  const mcpUrl = resolveKeeperHubMcpUrl(baseUrl, mcpOpts?.mcpUrl);
+  const mcpRestFallback = mcpOpts?.restFallback !== false;
 
   function routingDetailsForAction(action: DeskWorkflowAction): RoutingDetails | null {
     if (action === "kill_switch") {
@@ -420,6 +448,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
     at?: string;
     status?: DeskAuditSubmitStage["status"];
     errorMessage?: string | null;
+    executionPath?: "mcp" | "rest" | null;
   }): DeskAuditSubmitStage {
     const routingMode: DeskAuditRouting | null = params.routing
       ? params.routing.routing
@@ -436,6 +465,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
       routingProvider: params.routing?.routingProvider ?? null,
       network: config.network,
       chainId: params.routing?.chainId ?? null,
+      executionPath: params.executionPath ?? "rest",
       errorMessage: params.errorMessage,
     });
   }
@@ -694,11 +724,143 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
             network: config.network,
             wait,
             idempotencyKey,
+            executionPath: mcpEnabled ? "mcp" : "rest",
+            ...(mcpEnabled ? { mcp_url: mcpUrl } : {}),
             ...(routing ?? {}),
             ...(intentId && !entityId ? { intent_id_raw: intentId } : {}),
           },
         },
         async () => {
+          // ── MCP preferred path ──────────────────────────────────────────
+          if (mcpEnabled) {
+            try {
+              const mcpReceipt = await executeViaKeeperHubMcp({
+                action: mcpActionFromDeskAction(action),
+                workflowInput: payload,
+                preferredWorkflowId: workflowId,
+                mcp: {
+                  mcpUrl,
+                  apiKey: config.apiKey,
+                },
+                network: config.network,
+                pollIntervalMs,
+                pollTimeoutMs,
+                idempotencyKey,
+                singleExecute: false,
+                wait,
+              });
+
+              const submit = buildSubmitFragment({
+                executionId: mcpReceipt.keeperHubRunId,
+                workflowId,
+                action,
+                idempotencyKey,
+                routing,
+                status: "started",
+                executionPath: "mcp",
+              });
+
+              if (!wait) {
+                return {
+                  keeperHubRunId: mcpReceipt.keeperHubRunId,
+                  txHash: "",
+                  explorerUrl: "",
+                  status: "started",
+                  executionAudit: { submit },
+                } satisfies DeskWorkflowReceipt;
+              }
+
+              const hash = mcpReceipt.txHash ?? "";
+              const hashes =
+                mcpReceipt.txHashes && mcpReceipt.txHashes.length > 0
+                  ? mcpReceipt.txHashes
+                  : hash
+                    ? [hash]
+                    : [];
+              const explorers =
+                mcpReceipt.explorerUrls &&
+                mcpReceipt.explorerUrls.some((u) => u.length > 0)
+                  ? mcpReceipt.explorerUrls
+                  : mcpReceipt.explorerUrl
+                    ? [mcpReceipt.explorerUrl]
+                    : undefined;
+
+              const receipt: DeskWorkflowReceipt = {
+                keeperHubRunId: mcpReceipt.keeperHubRunId,
+                txHash: hash,
+                ...(hashes.length > 0 ? { txHashes: hashes } : {}),
+                ...(explorers ? { explorerUrls: explorers } : {}),
+                explorerUrl: mcpReceipt.explorerUrl ?? "",
+                status: mcpReceipt.status ?? "completed",
+                result: mcpReceipt.result,
+                ...(mcpReceipt.gasUsed ? { gasUsed: mcpReceipt.gasUsed } : {}),
+                ...(mcpReceipt.gasUsedWei
+                  ? { gasUsedWei: mcpReceipt.gasUsedWei }
+                  : {}),
+              };
+
+              // Layer B: enrich with REST logs when possible (soft-fail).
+              let outcome = outcomeFromSuccessReceipt(receipt);
+              try {
+                outcome = await enrichOutcomeWithRunLogs(
+                  mcpReceipt.keeperHubRunId,
+                  outcome,
+                );
+              } catch {
+                /* soft-fail */
+              }
+              if (outcome.gasUsed && !receipt.gasUsed) {
+                receipt.gasUsed = outcome.gasUsed;
+              }
+              if (outcome.gasUsedWei && !receipt.gasUsedWei) {
+                receipt.gasUsedWei = outcome.gasUsedWei;
+              }
+              receipt.executionAudit = { submit, outcome };
+
+              console.info(
+                `[keeperhub-mcp] desk ${action} succeeded via MCP` +
+                  ` run=${receipt.keeperHubRunId} tx=${receipt.txHash || "(none)"}` +
+                  ` tools=${summarizeMcpToolCalls(mcpReceipt.toolCalls)
+                    .map((t) => t.name)
+                    .join(",")}`,
+              );
+              return receipt;
+            } catch (mcpError) {
+              const message =
+                mcpError instanceof Error
+                  ? mcpError.message
+                  : "KeeperHub desk MCP execute failed";
+
+              if (!mcpRestFallback) {
+                const submitFailed = buildSubmitFragment({
+                  executionId: "",
+                  workflowId,
+                  action,
+                  idempotencyKey,
+                  routing,
+                  status: "failed",
+                  errorMessage: message,
+                  executionPath: "mcp",
+                });
+                throw new DeskWorkflowExecutionError(message, {
+                  keeperHubRunId: null,
+                  workflowId,
+                  action,
+                  executionAudit: {
+                    submit: submitFailed,
+                    outcome: outcomeFromFailure({ message }),
+                  },
+                });
+              }
+
+              console.warn(
+                `[keeperhub-mcp] desk ${action} MCP path failed, falling back to REST: ${message}`,
+              );
+              // Fall through to REST below.
+            }
+          }
+
+          // ── REST path ───────────────────────────────────────────────────
           let executionId: string;
           try {
             executionId = await startWorkflow(workflowId, payload, idempotencyKey);
@@ -715,6 +877,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
               routing,
               status: "failed",
               errorMessage: message,
+              executionPath: "rest",
             });
             throw new DeskWorkflowExecutionError(message, {
               keeperHubRunId: null,
@@ -735,6 +898,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
             idempotencyKey,
             routing,
             status: "started",
+            executionPath: "rest",
           });
 
           if (!wait) {
@@ -794,6 +958,9 @@ export function createExecutionBridgeFromEnv(
     deskUsePrivateMempool?: boolean | undefined;
     deskPrivateMempoolStrict?: boolean | undefined;
     routingProviderLabel?: string | undefined;
+    keeperhubMcpEnabled?: boolean | undefined;
+    keeperhubMcpUrl?: string | undefined;
+    keeperhubMcpRestFallback?: boolean | undefined;
   },
   options?: { execLogRepo?: ExecutionLogRepository | null },
 ): ExecutionBridge | null {
@@ -808,6 +975,7 @@ export function createExecutionBridgeFromEnv(
     provider: env.routingProviderLabel?.trim() || "flashbots_protect",
     chainId: 11_155_111,
   };
+  const mcpEnabled = env.keeperhubMcpEnabled !== false;
   return createExecutionBridge({
     apiBaseUrl: base,
     apiKey: key,
@@ -815,5 +983,14 @@ export function createExecutionBridgeFromEnv(
     workflowIds: deskWorkflowIdsFromEnv(env),
     execLogRepo: options?.execLogRepo ?? null,
     routingPolicy,
+    mcp: mcpEnabled
+      ? {
+          enabled: true,
+          ...(env.keeperhubMcpUrl?.trim()
+            ? { mcpUrl: env.keeperhubMcpUrl.trim() }
+            : {}),
+          restFallback: env.keeperhubMcpRestFallback !== false,
+        }
+      : null,
   });
 }

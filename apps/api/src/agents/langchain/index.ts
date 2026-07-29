@@ -50,6 +50,18 @@ export {
 } from "./keeperhub-mcp-publication-agent.ts";
 
 export {
+  executeViaKeeperHubMcp,
+  executeViaDeterministicMcp,
+  pollExecutionViaMcp,
+  summarizeMcpToolCalls,
+  mcpActionFromDeskAction,
+  mcpActionFromWriteMethod,
+  type McpWriteAction,
+  type ExecuteViaKeeperHubMcpParams,
+  type KeeperHubMcpExecuteReceipt,
+} from "../../services/keeperhub-mcp-execute.ts";
+
+export {
   alertContentSchema,
   digestContentSchema,
   digestSectionsSchema,

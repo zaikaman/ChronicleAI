@@ -3,6 +3,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKeeperHubWriteClient } from "../services/keeperhub-write-client.ts";
 
+vi.mock("../services/keeperhub-mcp-execute.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/keeperhub-mcp-execute.ts")>();
+  return {
+    ...actual,
+    executeViaKeeperHubMcp: vi.fn(),
+  };
+});
+
+vi.mock("../agents/langchain/keeperhub-mcp-publication-agent.ts", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../agents/langchain/keeperhub-mcp-publication-agent.ts")
+    >();
+  return {
+    ...actual,
+    publishViaKeeperHubMcp: vi.fn(),
+  };
+});
+
 const baseConfig = {
   apiBaseUrl: "https://app.keeperhub.com",
   apiKey: "kh_test_key",
@@ -347,7 +366,113 @@ describe("createKeeperHubWriteClient", () => {
         method: "publishAlert",
         keeper_hub_run_id: "exec_log_1",
         tx_hash: "0x" + "ef".repeat(32),
+        executionPath: "rest",
       }),
+    });
+  });
+
+  it("publishTradeTicket via MCP builds correct workflow input and sets executionPath", async () => {
+    const { executeViaKeeperHubMcp } = await import(
+      "../services/keeperhub-mcp-execute.ts"
+    );
+    const mcpMock = vi.mocked(executeViaKeeperHubMcp);
+    mcpMock.mockResolvedValue({
+      keeperHubRunId: "exec_mcp_ticket",
+      txHash: "0x" + "ab".repeat(32),
+      explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "ab".repeat(32),
+      mode: "deterministic-mcp",
+      toolCalls: [
+        { name: "list_workflows", arguments: {}, result: {} },
+        {
+          name: "execute_workflow",
+          arguments: {},
+          result: { executionId: "exec_mcp_ticket" },
+        },
+      ],
+      gasUsed: "11111",
+    });
+
+    const append = vi.fn().mockResolvedValue({ ok: true, value: {} });
+    const client = createKeeperHubWriteClient({
+      ...baseConfig,
+      workflowIds: { publishTradeTicket: "wf_trade_ticket" },
+      execLogRepo: {
+        append,
+        listByEntity: vi.fn(),
+        listRecent: vi.fn(),
+        listPage: vi.fn(),
+      } as never,
+      mcp: {
+        enabled: true,
+        restFallback: true,
+        langchainAgent: false,
+      },
+    });
+
+    const ticketHash = "0x" + "11".repeat(32);
+    const signalHash = "0x" + "22".repeat(32);
+    const intentHash = "0x" + "33".repeat(32);
+    const receipt = await client.publishTradeTicket(
+      ticketHash,
+      signalHash,
+      intentHash,
+      "https://chronicle.example/desk/tickets/t1",
+    );
+
+    expect(receipt.keeperHubRunId).toBe("exec_mcp_ticket");
+    expect(receipt.txHash).toBe("0x" + "ab".repeat(32));
+    expect(receipt.gasUsed).toBe("11111");
+
+    expect(mcpMock).toHaveBeenCalledTimes(1);
+    const call = mcpMock.mock.calls[0]![0];
+    expect(call.action).toBe("publishTradeTicket");
+    expect(call.preferredWorkflowId).toBe("wf_trade_ticket");
+    expect(call.workflowInput).toMatchObject({
+      ticketHash,
+      signalHash,
+      intentHash,
+      contentUri: "https://chronicle.example/desk/tickets/t1",
+      network: "sepolia",
+      contractAddress: baseConfig.registryAddress,
+    });
+
+    expect(append.mock.calls[0]?.[0]).toMatchObject({
+      details: expect.objectContaining({
+        executionPath: "mcp",
+        method: "publishTradeTicket",
+      }),
+    });
+  });
+
+  it("sendTransfer via MCP uses transfer action and human USDC amount input", async () => {
+    const { executeViaKeeperHubMcp } = await import(
+      "../services/keeperhub-mcp-execute.ts"
+    );
+    const mcpMock = vi.mocked(executeViaKeeperHubMcp);
+    mcpMock.mockResolvedValue({
+      keeperHubRunId: "exec_mcp_xfer",
+      txHash: "0x" + "cd".repeat(32),
+      explorerUrl: "https://sepolia.etherscan.io/tx/0x" + "cd".repeat(32),
+      mode: "deterministic-mcp",
+      toolCalls: [],
+    });
+
+    const client = createKeeperHubWriteClient({
+      ...baseConfig,
+      workflowIds: { transfer: "wf_transfer" },
+      mcp: { enabled: true, langchainAgent: false },
+    });
+
+    const to = "0x" + "99".repeat(20);
+    await client.sendTransfer(to, 12.5);
+
+    const call = mcpMock.mock.calls[mcpMock.mock.calls.length - 1]![0];
+    expect(call.action).toBe("transfer");
+    expect(call.workflowInput).toMatchObject({
+      recipientAddress: to,
+      amount: "12.5",
+      network: "sepolia",
+      tokenAddress: baseConfig.usdcAddress,
     });
   });
 });

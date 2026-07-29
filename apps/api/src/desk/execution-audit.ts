@@ -84,6 +84,11 @@ export interface DeskAuditSubmitStage {
   routingProvider?: string | null;
   network?: string | null;
   chainId?: number | null;
+  /**
+   * How the workflow was triggered: KeeperHub MCP tools vs REST execute.
+   * Set by execution-bridge when MCP preferred path is used.
+   */
+  executionPath?: "mcp" | "rest" | null;
   errorMessage?: string | null;
 }
 
@@ -208,6 +213,7 @@ export interface BuildSubmitStageInput {
   routingProvider?: string | null;
   network?: string | null;
   chainId?: number | null;
+  executionPath?: "mcp" | "rest" | null;
   errorMessage?: string | null;
 }
 
@@ -227,6 +233,7 @@ export function buildSubmitStage(input: BuildSubmitStageInput): DeskAuditSubmitS
   if (input.routingProvider !== undefined) stage.routingProvider = input.routingProvider;
   if (input.network !== undefined) stage.network = input.network;
   if (input.chainId !== undefined) stage.chainId = input.chainId;
+  if (input.executionPath !== undefined) stage.executionPath = input.executionPath;
   if (input.errorMessage !== undefined) stage.errorMessage = input.errorMessage;
   return stage;
 }

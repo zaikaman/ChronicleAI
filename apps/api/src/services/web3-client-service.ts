@@ -289,7 +289,7 @@ function llmProvidersFromEnv(env: ServerEnv): LLMProviderMap {
   return createProviderConfigs(env);
 }
 
-/** Native LangChain + KeeperHub MCP options for alert/digest writes. */
+/** KeeperHub MCP options for all material writes (preferred path). */
 function keeperHubMcpOptionsFromEnv(env: ServerEnv): KeeperHubMcpWriteOptions {
   return {
     enabled: env.keeperhubMcpEnabled !== false,
@@ -297,7 +297,8 @@ function keeperHubMcpOptionsFromEnv(env: ServerEnv): KeeperHubMcpWriteOptions {
       ? { mcpUrl: env.keeperhubMcpUrl.trim() }
       : {}),
     llmProviders: llmProvidersFromEnv(env),
-    restFallback: true,
+    langchainAgent: env.keeperhubMcpLangchainAgent !== false,
+    restFallback: env.keeperhubMcpRestFallback !== false,
   };
 }
 
@@ -339,8 +340,10 @@ function createHybridParaKeeperHubWeb3Client(
   const mcp = keeperHubMcpOptionsFromEnv(env);
   if (mcp.enabled) {
     console.info(
-      "[web3] Loop 1/2 registry writes: LangChain ReAct agent + KeeperHub MCP " +
-        "(list_workflows → execute_workflow → get_execution); REST fallback on MCP failure",
+      "[web3] Material writes prefer KeeperHub MCP " +
+        "(list_workflows → execute_workflow → get_execution); " +
+        `REST fallback=${mcp.restFallback !== false}; ` +
+        `LangChain alert/digest=${mcp.langchainAgent !== false}`,
     );
   }
   const kh = createKeeperHubWriteClient({
@@ -614,8 +617,10 @@ function createKeeperHubBackedWeb3Client(
   const mcp = keeperHubMcpOptionsFromEnv(env);
   if (mcp.enabled) {
     console.info(
-      "[web3] Loop 1/2 registry writes: LangChain ReAct agent + KeeperHub MCP " +
-        "(list_workflows → execute_workflow → get_execution); REST fallback on MCP failure",
+      "[web3] Material writes prefer KeeperHub MCP " +
+        "(list_workflows → execute_workflow → get_execution); " +
+        `REST fallback=${mcp.restFallback !== false}; ` +
+        `LangChain alert/digest=${mcp.langchainAgent !== false}`,
     );
   }
   const kh = createKeeperHubWriteClient({

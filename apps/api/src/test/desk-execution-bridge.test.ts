@@ -4,9 +4,18 @@ import {
   isDeskWorkflowExecutionError,
 } from "../desk/execution-bridge.ts";
 
+vi.mock("../services/keeperhub-mcp-execute.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/keeperhub-mcp-execute.ts")>();
+  return {
+    ...actual,
+    executeViaKeeperHubMcp: vi.fn(),
+  };
+});
+
 describe("execution-bridge", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("fails hard when workflow id is missing", async () => {
@@ -549,5 +558,153 @@ describe("execution-bridge", () => {
         chainId: 11_155_111,
       }),
     });
+  });
+
+  it("prefers MCP for desk defend with same input shape and executionPath mcp", async () => {
+    const { executeViaKeeperHubMcp } = await import(
+      "../services/keeperhub-mcp-execute.ts"
+    );
+    const mcpMock = vi.mocked(executeViaKeeperHubMcp);
+    mcpMock.mockResolvedValue({
+      keeperHubRunId: "exec_mcp_defend",
+      txHash: "0xmcpdefend",
+      explorerUrl: "https://sepolia.etherscan.io/tx/0xmcpdefend",
+      mode: "deterministic-mcp",
+      toolCalls: [
+        { name: "list_workflows", arguments: {}, result: {} },
+        {
+          name: "execute_workflow",
+          arguments: {},
+          result: { executionId: "exec_mcp_defend" },
+        },
+        {
+          name: "get_execution",
+          arguments: { executionId: "exec_mcp_defend" },
+          result: {},
+        },
+      ],
+      status: "completed",
+      gasUsed: "55000",
+      txHashes: ["0xmcpdefend"],
+    });
+
+    // REST must not be used on MCP success.
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, _init?: RequestInit) =>
+        new Response("should not hit REST", { status: 500 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const append = vi.fn().mockResolvedValue({ ok: true, value: {} });
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: { defend: "wf-defend-1" },
+      mcp: { enabled: true, restFallback: true },
+      execLogRepo: {
+        append,
+        listByEntity: vi.fn(),
+        listRecent: vi.fn(),
+        listPage: vi.fn(),
+      } as never,
+    });
+
+    const input = {
+      intentId: "intent-mcp-1",
+      legs: [{ kind: "withdraw", amount: "1" }],
+      network: "sepolia",
+    };
+    const receipt = await bridge.execute("defend", input, {
+      idempotencyKey: "desk-defend-mcp",
+    });
+
+    expect(receipt.keeperHubRunId).toBe("exec_mcp_defend");
+    expect(receipt.txHash).toBe("0xmcpdefend");
+    expect(receipt.gasUsed).toBe("55000");
+    expect(receipt.executionAudit?.submit.executionPath).toBe("mcp");
+    expect(receipt.executionAudit?.submit.workflowAction).toBe("defend");
+    expect(receipt.executionAudit?.outcome?.status).toBe("filled");
+
+    expect(mcpMock).toHaveBeenCalledTimes(1);
+    const call = mcpMock.mock.calls[0]![0];
+    expect(call.action).toBe("deskDefend");
+    expect(call.preferredWorkflowId).toBe("wf-defend-1");
+    expect(call.workflowInput).toMatchObject({
+      intentId: "intent-mcp-1",
+      network: "sepolia",
+      legs: [{ kind: "withdraw", amount: "1" }],
+    });
+    expect(call.idempotencyKey).toBe("desk-defend-mcp");
+
+    // No REST workflow execute on success path.
+    expect(
+      fetchMock.mock.calls.some((c) => String(c[0]).includes("/execute")),
+    ).toBe(false);
+
+    expect(append.mock.calls[0]?.[0]).toMatchObject({
+      details: expect.objectContaining({
+        executionPath: "mcp",
+        action: "defend",
+        workflowId: "wf-defend-1",
+      }),
+    });
+  });
+
+  it("falls back to REST when MCP fails and restFallback is true", async () => {
+    const { executeViaKeeperHubMcp } = await import(
+      "../services/keeperhub-mcp-execute.ts"
+    );
+    const mcpMock = vi.mocked(executeViaKeeperHubMcp);
+    mcpMock.mockRejectedValue(new Error("MCP transport down"));
+
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/execute") && init?.method === "POST") {
+        return new Response(JSON.stringify({ executionId: "exec-rest-fb" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/wait") || u.includes("/status")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-rest-fb",
+            status: "completed",
+            completed: true,
+            transactionHash: "0xrestfb",
+            transactionLink: "https://sepolia.etherscan.io/tx/0xrestfb",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (u.includes("/logs")) {
+        return new Response(JSON.stringify({ logs: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: { defend: "wf-defend-1" },
+      mcp: { enabled: true, restFallback: true },
+    });
+
+    const receipt = await bridge.execute(
+      "defend",
+      { intentId: "x", legs: [] },
+      { idempotencyKey: "desk-defend-fb" },
+    );
+
+    expect(receipt.keeperHubRunId).toBe("exec-rest-fb");
+    expect(receipt.txHash).toBe("0xrestfb");
+    expect(receipt.executionAudit?.submit.executionPath).toBe("rest");
+    expect(mcpMock).toHaveBeenCalled();
   });
 });

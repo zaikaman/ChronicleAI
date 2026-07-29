@@ -10,6 +10,9 @@
  * When no LLM is configured (or the agent fails to finish), a deterministic MCP
  * orchestration path still uses the same tools — never silent REST substitution
  * unless the caller opts into REST fallback after this module throws.
+ *
+ * Deterministic execute / poll / receipt helpers live in
+ * `services/keeperhub-mcp-execute.ts` (shared with desk + all write methods).
  */
 
 import { LLM_FALLBACK_ORDER } from "@chronicleai/config";
@@ -22,9 +25,16 @@ import {
   type KeeperHubMcpClientConfig,
 } from "../../services/keeperhub-mcp-client.ts";
 import {
-  extractGasFromKeeperHubPayload,
-  type OnChainWriteReceipt,
-} from "../../services/on-chain-write-receipt.ts";
+  buildFallbackExplorerUrl,
+  collectExecutionIds,
+  executeViaDeterministicMcp,
+  extractExecutionId,
+  extractTxFromExecutionPayload,
+  isAlreadyPublishedError,
+  pollExecutionViaMcp,
+  type KeeperHubMcpExecuteReceipt,
+} from "../../services/keeperhub-mcp-execute.ts";
+import { extractGasFromKeeperHubPayload } from "../../services/on-chain-write-receipt.ts";
 import { createChatModelsInOrder } from "./models.ts";
 import { invokeToolAgent, type ToolAgentToolCall } from "./tool-agent.ts";
 import {
@@ -34,17 +44,11 @@ import {
 
 export type McpPublicationAction = "publishAlert" | "publishDigest";
 
-export interface KeeperHubMcpPublicationReceipt extends OnChainWriteReceipt {
-  keeperHubRunId: string;
-  txHash: string;
-  explorerUrl: string;
-  /** How the publication was driven. */
+export interface KeeperHubMcpPublicationReceipt
+  extends Omit<KeeperHubMcpExecuteReceipt, "mode"> {
   mode: "langchain-mcp-agent" | "deterministic-mcp";
-  /** Tool invocations performed (agent or deterministic). */
-  toolCalls: KeeperHubMcpToolCallRecord[];
   /** Provider label when the LangChain agent ran. */
   provider?: LLMProvider | undefined;
-  result?: unknown;
 }
 
 export interface PublishViaKeeperHubMcpParams {
@@ -72,246 +76,33 @@ export interface PublishViaKeeperHubMcpParams {
   signal?: AbortSignal | undefined;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// Re-export shared helpers so existing imports keep working.
+export {
+  extractExecutionId,
+  extractTxFromExecutionPayload,
+  isAlreadyPublishedError,
+  collectExecutionIds,
+};
+
+function errorTextFromUnknown(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
-function buildFallbackExplorerUrl(txHash: string, network: string): string {
-  const n = network.toLowerCase();
-  if (n === "base-sepolia" || n === "84532") {
-    return `https://sepolia.basescan.org/tx/${txHash}`;
+class McpPublicationError extends Error {
+  readonly toolCalls: KeeperHubMcpToolCallRecord[];
+  readonly executionIds: string[];
+
+  constructor(
+    message: string,
+    toolCalls: KeeperHubMcpToolCallRecord[],
+    options?: { cause?: unknown },
+  ) {
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
+    this.name = "McpPublicationError";
+    this.toolCalls = toolCalls;
+    this.executionIds = collectExecutionIds(toolCalls);
   }
-  if (n === "base" || n === "8453") {
-    return `https://basescan.org/tx/${txHash}`;
-  }
-  if (n === "sepolia" || n === "11155111") {
-    return `https://sepolia.etherscan.io/tx/${txHash}`;
-  }
-  if (n === "ethereum" || n === "mainnet" || n === "1") {
-    return `https://etherscan.io/tx/${txHash}`;
-  }
-  return `https://sepolia.etherscan.io/tx/${txHash}`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return null;
-}
-
-function parseJsonish(value: unknown): unknown {
-  if (typeof value !== "string") return value;
-  const trimmed = value.trim();
-  if (!trimmed) return value;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return value;
-  }
-}
-
-/** Walk nested MCP / agent payloads for an execution id. */
-export function extractExecutionId(payload: unknown): string | undefined {
-  const root = parseJsonish(payload);
-  const rec = asRecord(root);
-  if (!rec) return undefined;
-
-  for (const key of ["executionId", "execution_id", "id", "runId", "run_id"]) {
-    const v = rec[key];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-
-  for (const nestedKey of ["data", "result", "status", "execution"]) {
-    const nested = extractExecutionId(rec[nestedKey]);
-    if (nested) return nested;
-  }
-  return undefined;
-}
-
-function extractTxFromRecord(
-  rec: Record<string, unknown>,
-): { txHash?: string; explorerUrl?: string } {
-  if (typeof rec.transactionHash === "string" && rec.transactionHash.length > 0) {
-    const out: { txHash?: string; explorerUrl?: string } = {
-      txHash: rec.transactionHash,
-    };
-    if (typeof rec.transactionLink === "string" && rec.transactionLink.length > 0) {
-      out.explorerUrl = rec.transactionLink;
-    }
-    return out;
-  }
-  if (typeof rec.txHash === "string" && rec.txHash.length > 0) {
-    const out: { txHash?: string; explorerUrl?: string } = { txHash: rec.txHash };
-    if (typeof rec.explorerUrl === "string" && rec.explorerUrl.length > 0) {
-      out.explorerUrl = rec.explorerUrl;
-    }
-    return out;
-  }
-  const hashes = rec.transactionHashes;
-  if (Array.isArray(hashes) && hashes[0] && typeof hashes[0] === "object") {
-    const first = hashes[0] as Record<string, unknown>;
-    if (typeof first.hash === "string" && first.hash.length > 0) {
-      const out: { txHash?: string; explorerUrl?: string } = { txHash: first.hash };
-      if (typeof first.transactionLink === "string" && first.transactionLink.length > 0) {
-        out.explorerUrl = first.transactionLink;
-      }
-      return out;
-    }
-  }
-  return {};
-}
-
-export function extractTxFromExecutionPayload(
-  payload: unknown,
-): { txHash?: string; explorerUrl?: string; statusPayload?: Record<string, unknown> } {
-  const root = parseJsonish(payload);
-  const rec = asRecord(root);
-  if (!rec) return {};
-
-  // get_execution returns { status, logs }
-  const status = asRecord(rec.status) ?? rec;
-  const direct = extractTxFromRecord(status);
-  if (direct.txHash) {
-    return { ...direct, statusPayload: status };
-  }
-
-  // Sometimes nested under data / result
-  for (const key of ["data", "result", "output"]) {
-    const nested = asRecord(status[key] ?? rec[key]);
-    if (nested) {
-      const found = extractTxFromRecord(nested);
-      if (found.txHash) {
-        return { ...found, statusPayload: status };
-      }
-    }
-  }
-
-  return { statusPayload: status };
-}
-
-function isTerminalSuccess(status: Record<string, unknown> | undefined): boolean {
-  if (!status) return false;
-  if (status.completed === true) return true;
-  const s = typeof status.status === "string" ? status.status.toLowerCase() : "";
-  return s === "success" || s === "completed" || s === "succeeded";
-}
-
-function isTerminalFailure(status: Record<string, unknown> | undefined): boolean {
-  if (!status) return false;
-  const s = typeof status.status === "string" ? status.status.toLowerCase() : "";
-  return s === "error" || s === "failed" || s === "cancelled" || s === "canceled";
-}
-
-function receiptFromStatus(
-  executionId: string,
-  statusPayload: Record<string, unknown>,
-  network: string,
-  mode: KeeperHubMcpPublicationReceipt["mode"],
-  toolCalls: KeeperHubMcpToolCallRecord[],
-  provider?: LLMProvider,
-): KeeperHubMcpPublicationReceipt {
-  const { txHash, explorerUrl } = extractTxFromRecord(statusPayload);
-  if (!txHash) {
-    // Try one more full extract
-    const again = extractTxFromExecutionPayload(statusPayload);
-    if (!again.txHash) {
-      throw new Error(
-        `KeeperHub MCP execution ${executionId} completed without a transaction hash`,
-      );
-    }
-    const gas = extractGasFromKeeperHubPayload(statusPayload);
-    return {
-      keeperHubRunId: executionId,
-      txHash: again.txHash,
-      explorerUrl: again.explorerUrl ?? buildFallbackExplorerUrl(again.txHash, network),
-      mode,
-      toolCalls,
-      ...(provider ? { provider } : {}),
-      result: statusPayload.result ?? statusPayload.output,
-      ...(gas.gasUsed ? { gasUsed: gas.gasUsed } : {}),
-      ...(gas.gasUsedWei ? { gasUsedWei: gas.gasUsedWei } : {}),
-    };
-  }
-  const gas = extractGasFromKeeperHubPayload(statusPayload);
-  return {
-    keeperHubRunId: executionId,
-    txHash,
-    explorerUrl: explorerUrl ?? buildFallbackExplorerUrl(txHash, network),
-    mode,
-    toolCalls,
-    ...(provider ? { provider } : {}),
-    result: statusPayload.result ?? statusPayload.output,
-    ...(gas.gasUsed ? { gasUsed: gas.gasUsed } : {}),
-    ...(gas.gasUsedWei ? { gasUsedWei: gas.gasUsedWei } : {}),
-  };
-}
-
-function defaultWorkflowHints(action: McpPublicationAction): string[] {
-  if (action === "publishAlert") {
-    return ["publish-alert", "publishAlert", "publish_alert", "alert"];
-  }
-  return ["publish-digest", "publishDigest", "publish_digest", "digest"];
-}
-
-function scoreWorkflowMatch(
-  workflow: Record<string, unknown>,
-  hints: string[],
-  preferredId?: string,
-): number {
-  const id = typeof workflow.id === "string" ? workflow.id : "";
-  const name = typeof workflow.name === "string" ? workflow.name : "";
-  const slug = typeof workflow.slug === "string" ? workflow.slug : "";
-  const desc = typeof workflow.description === "string" ? workflow.description : "";
-  const hay = `${id} ${name} ${slug} ${desc}`.toLowerCase();
-
-  if (preferredId && id === preferredId) return 10_000;
-
-  let score = 0;
-  for (const hint of hints) {
-    const h = hint.toLowerCase();
-    if (!h) continue;
-    if (id.toLowerCase() === h) score += 500;
-    if (name.toLowerCase().includes(h)) score += 100;
-    if (slug.toLowerCase().includes(h)) score += 80;
-    if (hay.includes(h)) score += 20;
-  }
-  return score;
-}
-
-function pickWorkflowId(
-  listPayload: unknown,
-  hints: string[],
-  preferredId?: string,
-): string | undefined {
-  if (preferredId?.trim()) return preferredId.trim();
-
-  const root = parseJsonish(listPayload);
-  const rec = asRecord(root);
-  const list: unknown[] = Array.isArray(root)
-    ? root
-    : Array.isArray(rec?.workflows)
-      ? (rec!.workflows as unknown[])
-      : Array.isArray(rec?.data)
-        ? (rec!.data as unknown[])
-        : Array.isArray(rec?.items)
-          ? (rec!.items as unknown[])
-          : [];
-
-  let bestId: string | undefined;
-  let bestScore = 0;
-  for (const item of list) {
-    const w = asRecord(item);
-    if (!w) continue;
-    const id = typeof w.id === "string" ? w.id : undefined;
-    if (!id) continue;
-    const score = scoreWorkflowMatch(w, hints, preferredId);
-    if (score > bestScore) {
-      bestScore = score;
-      bestId = id;
-    }
-  }
-  return bestId;
 }
 
 function buildSystemPrompt(action: McpPublicationAction, preferredWorkflowId?: string): string {
@@ -342,52 +133,6 @@ function buildSystemPrompt(action: McpPublicationAction, preferredWorkflowId?: s
   ].join("\n");
 }
 
-/** True when the registry (or KH) reported a duplicate contentHash publish. */
-export function isAlreadyPublishedError(message: string): boolean {
-  const m = message.toLowerCase();
-  return (
-    m.includes("already published") ||
-    m.includes("alert already published") ||
-    m.includes("digest already published") ||
-    m.includes("premium receipt already published")
-  );
-}
-
-function collectExecutionIds(toolCalls: KeeperHubMcpToolCallRecord[]): string[] {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  for (const tc of toolCalls) {
-    if (tc.name !== "execute_workflow") continue;
-    const id = extractExecutionId(tc.result);
-    if (id && !seen.has(id)) {
-      seen.add(id);
-      ids.push(id);
-    }
-  }
-  return ids;
-}
-
-function errorTextFromUnknown(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
-
-class McpPublicationError extends Error {
-  readonly toolCalls: KeeperHubMcpToolCallRecord[];
-  readonly executionIds: string[];
-
-  constructor(
-    message: string,
-    toolCalls: KeeperHubMcpToolCallRecord[],
-    options?: { cause?: unknown },
-  ) {
-    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
-    this.name = "McpPublicationError";
-    this.toolCalls = toolCalls;
-    this.executionIds = collectExecutionIds(toolCalls);
-  }
-}
-
 function buildUserPrompt(params: PublishViaKeeperHubMcpParams): string {
   return [
     `Action: ${params.action}`,
@@ -415,13 +160,43 @@ function toolCallsFromAgent(
   }));
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function parseJsonish(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function isTerminalSuccess(status: Record<string, unknown> | undefined): boolean {
+  if (!status) return false;
+  if (status.completed === true) {
+    const err = status.error;
+    if (err != null && typeof err === "string" && err.trim().length > 0) {
+      return false;
+    }
+    return true;
+  }
+  const s = typeof status.status === "string" ? status.status.toLowerCase() : "";
+  return s === "success" || s === "completed" || s === "succeeded";
+}
+
 /**
  * Try to assemble a receipt from agent tool-call history (no extra MCP polls).
  */
 function receiptFromToolHistory(
   toolCalls: KeeperHubMcpToolCallRecord[],
   network: string,
-  mode: KeeperHubMcpPublicationReceipt["mode"],
   provider?: LLMProvider,
 ): KeeperHubMcpPublicationReceipt | null {
   let executionId: string | undefined;
@@ -454,204 +229,53 @@ function receiptFromToolHistory(
 
   if (!executionId || !statusPayload) return null;
   try {
-    return receiptFromStatus(
-      executionId,
-      statusPayload,
-      network,
-      mode,
+    const extracted = extractTxFromExecutionPayload(statusPayload);
+    if (!extracted.txHash) return null;
+    const gas = extractGasFromKeeperHubPayload(statusPayload);
+    return {
+      keeperHubRunId: executionId,
+      txHash: extracted.txHash,
+      explorerUrl:
+        extracted.explorerUrl ??
+        buildFallbackExplorerUrl(extracted.txHash, network),
+      mode: "langchain-mcp-agent",
       toolCalls,
-      provider,
-    );
+      ...(provider ? { provider } : {}),
+      result: statusPayload.result ?? statusPayload.output,
+      ...(gas.gasUsed ? { gasUsed: gas.gasUsed } : {}),
+      ...(gas.gasUsedWei ? { gasUsedWei: gas.gasUsedWei } : {}),
+    };
   } catch {
     return null;
   }
 }
 
-async function pollExecutionViaMcp(
-  client: KeeperHubMcpClient,
-  executionId: string,
-  toolCalls: KeeperHubMcpToolCallRecord[],
-  opts: {
-    network: string;
-    pollIntervalMs: number;
-    pollTimeoutMs: number;
-    mode: KeeperHubMcpPublicationReceipt["mode"];
-    provider?: LLMProvider;
-    signal?: AbortSignal;
-  },
-): Promise<KeeperHubMcpPublicationReceipt> {
-  const started = Date.now();
-  let lastError: string | undefined;
-
-  while (Date.now() - started < opts.pollTimeoutMs) {
-    if (opts.signal?.aborted) {
-      throw Object.assign(new Error("timeout"), { name: "AbortError" });
-    }
-
-    const res = await client.callTool("get_execution", {
-      executionId,
-      includeData: false,
-    });
-    toolCalls.push({
-      name: "get_execution",
-      arguments: { executionId, includeData: false },
-      result: res.data,
-      isError: res.isError,
-    });
-
-    if (res.isError) {
-      lastError = res.text;
-      await sleep(opts.pollIntervalMs);
-      continue;
-    }
-
-    const parsed = parseJsonish(res.data);
-    const rec = asRecord(parsed);
-    const status = asRecord(rec?.status) ?? rec ?? undefined;
-
-    if (isTerminalFailure(status)) {
-      const errMsg =
-        (status && typeof status.error === "string" && status.error) ||
-        `KeeperHub MCP execution ${executionId} ended with status ${status?.status ?? "failed"}`;
-      throw new Error(errMsg);
-    }
-
-    if (isTerminalSuccess(status) && status) {
-      // Optional logs pull for audit richness
-      try {
-        const logsRes = await client.callTool("get_execution", {
-          executionId,
-          includeData: true,
-        });
-        toolCalls.push({
-          name: "get_execution_logs",
-          arguments: { executionId },
-          result: logsRes.data,
-          isError: logsRes.isError,
-        });
-        if (!logsRes.isError) {
-          const logsParsed = parseJsonish(logsRes.data);
-          const logsRec = asRecord(logsParsed);
-          const richStatus = asRecord(logsRec?.status) ?? status;
-          return receiptFromStatus(
-            executionId,
-            richStatus,
-            opts.network,
-            opts.mode,
-            toolCalls,
-            opts.provider,
-          );
-        }
-      } catch {
-        /* soft-fail logs */
-      }
-
-      return receiptFromStatus(
-        executionId,
-        status,
-        opts.network,
-        opts.mode,
-        toolCalls,
-        opts.provider,
-      );
-    }
-
-    await sleep(opts.pollIntervalMs);
-  }
-
-  throw new Error(
-    `Timed out waiting for KeeperHub MCP execution ${executionId}` +
-      (lastError ? ` (${lastError})` : ""),
-  );
-}
-
 /**
  * Deterministic MCP path: list → get → execute → poll.
- * Uses the same MCP tools the LangChain agent would call.
+ * Delegates to shared `executeViaDeterministicMcp`.
  */
 export async function publishViaDeterministicMcp(
   client: KeeperHubMcpClient,
   params: PublishViaKeeperHubMcpParams,
 ): Promise<KeeperHubMcpPublicationReceipt> {
-  const toolCalls: KeeperHubMcpToolCallRecord[] = [];
-  const hints = [
-    ...(params.workflowHints ?? []),
-    ...defaultWorkflowHints(params.action),
-  ];
-  const pollIntervalMs = params.pollIntervalMs ?? 2_000;
-  const pollTimeoutMs = params.pollTimeoutMs ?? 120_000;
-
-  let workflowId = params.preferredWorkflowId?.trim();
-
-  // Discover routes
-  const listRes = await client.callTool("list_workflows", {});
-  toolCalls.push({
-    name: "list_workflows",
-    arguments: {},
-    result: listRes.data,
-    isError: listRes.isError,
-  });
-  if (!listRes.isError) {
-    workflowId =
-      pickWorkflowId(listRes.data, hints, params.preferredWorkflowId) ?? workflowId;
-  }
-
-  if (!workflowId) {
-    throw new Error(
-      `KeeperHub MCP could not resolve a workflow for ${params.action}. ` +
-        `Set KEEPERHUB_WORKFLOW_${params.action === "publishAlert" ? "PUBLISH_ALERT" : "PUBLISH_DIGEST"} ` +
-        `or ensure a matching workflow exists in the org.`,
-    );
-  }
-
-  const getRes = await client.callTool("get_workflow", { workflowId });
-  toolCalls.push({
-    name: "get_workflow",
-    arguments: { workflowId },
-    result: getRes.data,
-    isError: getRes.isError,
-  });
-  if (getRes.isError) {
-    throw new Error(
-      `KeeperHub MCP get_workflow failed for ${workflowId}: ${getRes.text}`,
-    );
-  }
-
-  const executeArgs: Record<string, unknown> = {
-    workflowId,
-    input: params.input,
-  };
-  if (params.idempotencyKey) {
-    executeArgs.idempotency_key = params.idempotencyKey;
-  }
-
-  const execRes = await client.callTool("execute_workflow", executeArgs);
-  toolCalls.push({
-    name: "execute_workflow",
-    arguments: executeArgs,
-    result: execRes.data,
-    isError: execRes.isError,
-  });
-  if (execRes.isError) {
-    throw new Error(
-      `KeeperHub MCP execute_workflow failed: ${execRes.text}`,
-    );
-  }
-
-  const executionId = extractExecutionId(execRes.data);
-  if (!executionId) {
-    throw new Error(
-      "KeeperHub MCP execute_workflow response missing executionId",
-    );
-  }
-
-  return pollExecutionViaMcp(client, executionId, toolCalls, {
+  const receipt = await executeViaDeterministicMcp(client, {
+    action: params.action,
+    workflowInput: params.input,
+    preferredWorkflowId: params.preferredWorkflowId,
+    workflowHints: params.workflowHints,
+    idempotencyKey: params.idempotencyKey,
+    mcp: params.mcp,
     network: params.network,
-    pollIntervalMs,
-    pollTimeoutMs,
-    mode: "deterministic-mcp",
-    ...(params.signal ? { signal: params.signal } : {}),
+    pollIntervalMs: params.pollIntervalMs,
+    pollTimeoutMs: params.pollTimeoutMs,
+    singleExecute: true,
+    wait: true,
+    signal: params.signal,
   });
+  return {
+    ...receipt,
+    mode: "deterministic-mcp",
+  };
 }
 
 async function publishViaLangChainMcpAgent(
@@ -706,7 +330,6 @@ async function publishViaLangChainMcpAgent(
   const fromHistory = receiptFromToolHistory(
     toolCalls,
     params.network,
-    "langchain-mcp-agent",
     result.provider ?? primary.provider,
   );
   if (fromHistory) {
@@ -720,17 +343,21 @@ async function publishViaLangChainMcpAgent(
     let lastPollError: unknown;
     for (const executionId of executionIds) {
       try {
-        return await pollExecutionViaMcp(client, executionId, toolCalls, {
+        const polled = await pollExecutionViaMcp(client, executionId, toolCalls, {
           network: params.network,
           pollIntervalMs: params.pollIntervalMs ?? 2_000,
           pollTimeoutMs: params.pollTimeoutMs ?? 120_000,
           mode: "langchain-mcp-agent",
-          provider: result.provider ?? primary.provider,
+          requireTxHash: true,
           ...(params.signal ? { signal: params.signal } : {}),
         });
+        return {
+          ...polled,
+          mode: "langchain-mcp-agent",
+          provider: result.provider ?? primary.provider,
+        };
       } catch (pollError) {
         lastPollError = pollError;
-        // Try earlier execution ids if a later duplicate failed.
         continue;
       }
     }
@@ -807,7 +434,7 @@ export async function publishViaKeeperHubMcp(
           let lastPollError: unknown = agentError;
           for (const executionId of executionIds) {
             try {
-              return await pollExecutionViaMcp(
+              const polled = await pollExecutionViaMcp(
                 client,
                 executionId,
                 [...toolCalls],
@@ -816,16 +443,17 @@ export async function publishViaKeeperHubMcp(
                   pollIntervalMs: params.pollIntervalMs ?? 2_000,
                   pollTimeoutMs: params.pollTimeoutMs ?? 120_000,
                   mode: "langchain-mcp-agent",
+                  requireTxHash: true,
                   ...(params.signal ? { signal: params.signal } : {}),
                 },
               );
+              return { ...polled, mode: "langchain-mcp-agent" };
             } catch (pollError) {
               lastPollError = pollError;
             }
           }
 
           const pollMsg = errorTextFromUnknown(lastPollError);
-          // Surface already-published clearly; caller must not REST re-submit.
           if (isAlreadyPublishedError(message) || isAlreadyPublishedError(pollMsg)) {
             throw new Error(
               `KeeperHub MCP ${params.action}: contentHash already on-chain ` +
@@ -838,10 +466,7 @@ export async function publishViaKeeperHubMcp(
             : new Error(pollMsg);
         }
 
-        // No execute yet — safe to run deterministic MCP (single execute).
         if (isAlreadyPublishedError(message)) {
-          // Agent failed before we captured an execution id, but registry says
-          // duplicate — re-submit would only fail again.
           throw new Error(
             `KeeperHub MCP ${params.action}: ${message} ` +
               `(refusing deterministic re-submit of the same contentHash)`,
