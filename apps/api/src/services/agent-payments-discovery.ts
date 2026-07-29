@@ -41,6 +41,16 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
         description:
           "Agent path. Client creates a challenge with paymentRoute=mpp, computes HMAC-SHA256 over challengeData.hmacPayloadTemplate with the shared MPP secret, then settles with expiresAt:hmac as settlementReference.",
       },
+      {
+        id: "auto",
+        label: "Auto Dual-Route (auto)",
+        audience: "dual",
+        verificationType: "auto_selected_x402_or_mpp",
+        currency: "USDC",
+        network: "Auto-negotiated (Base/Sepolia for x402, Tempo for MPP)",
+        description:
+          "Auto-selects payment rail based on request context. Pass X-Chronicle-Client: agent header or clientType: machine to resolve MPP; defaults to x402 for browser wallets.",
+      },
     ],
     endpoints: {
       discovery: "GET /payments",

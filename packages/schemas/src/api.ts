@@ -129,10 +129,10 @@ export interface PaymentChallengeResponse {
 
 // ── Agent payment discovery (machine-readable) ──────────
 /** Audience for a payment rail — human wallet UI vs automated clients. */
-export type PaymentRouteAudience = "human" | "machine" | "both";
+export type PaymentRouteAudience = "human" | "machine" | "both" | "dual";
 
 export interface AgentPaymentRouteInfo {
-  id: PaymentRoute;
+  id: PaymentRoute | "auto" | string;
   label: string;
   audience: PaymentRouteAudience;
   /** Settlement verification mechanism (e.g. eip712, hmac_sha256). */

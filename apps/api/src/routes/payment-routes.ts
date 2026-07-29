@@ -222,17 +222,17 @@ export function createPaymentRoutes(params: {
         return;
       }
 
-      if (!body.paymentRoute) {
-        res.status(400).json({ error: "paymentRoute is required" });
-        return;
-      }
-
-      if (!challengeService.validateRoute(body.paymentRoute)) {
+      const routeInput = body.paymentRoute ?? "auto";
+      if (!challengeService.validateRoute(routeInput)) {
         res.status(400).json({
-          error: "Unsupported payment route. Supported routes: x402, mpp",
+          error: "Unsupported payment route. Supported routes: x402, mpp, auto",
         });
         return;
       }
+
+      const chronicleClientHeader = typeof req.headers["x-chronicle-client"] === "string"
+        ? req.headers["x-chronicle-client"]
+        : undefined;
 
       const prepared = await sponsoredWatchProductService.prepareCampaign({
         targetContract: body.targetContract,
@@ -244,7 +244,7 @@ export function createPaymentRoutes(params: {
         ...(body.endsAt !== undefined ? { endsAt: body.endsAt } : {}),
         ...(body.durationDays !== undefined ? { durationDays: body.durationDays } : {}),
         ...(body.durationHours !== undefined ? { durationHours: body.durationHours } : {}),
-        paymentRoute: body.paymentRoute as PaymentRoute,
+        paymentRoute: routeInput as PaymentRoute,
         ...(body.payerReference !== undefined
           ? { payerReference: body.payerReference }
           : {}),
@@ -277,10 +277,11 @@ export function createPaymentRoutes(params: {
    */
   router.post("/payments/challenges", async (req, res, next) => {
     try {
-      const { premiumItemId, paymentRoute, payerReference, referralAddress } = req.body as {
+      const { premiumItemId, paymentRoute, payerReference, referralAddress, clientType } = req.body as {
         premiumItemId?: string;
         paymentRoute?: string;
-        payerReference: string | undefined;
+        payerReference?: string | undefined;
+        clientType?: string | undefined;
         /** Optional affiliate wallet for capped revenue attribution (not the payer). */
         referralAddress?: string | undefined;
       };
@@ -290,14 +291,10 @@ export function createPaymentRoutes(params: {
         return;
       }
 
-      if (!paymentRoute) {
-        res.status(400).json({ error: "paymentRoute is required" });
-        return;
-      }
-
-      if (!challengeService.validateRoute(paymentRoute)) {
+      const routeInput = paymentRoute ?? "auto";
+      if (!challengeService.validateRoute(routeInput)) {
         res.status(400).json({
-          error: "Unsupported payment route. Supported routes: x402, mpp",
+          error: "Unsupported payment route. Supported routes: x402, mpp, auto",
         });
         return;
       }
@@ -319,17 +316,16 @@ export function createPaymentRoutes(params: {
         return;
       }
 
-      if (!challengeService.validateRouteForItem(itemResult.value, paymentRoute)) {
-        res.status(400).json({
-          error: `Premium item does not support payment route: ${paymentRoute}`,
-        });
-        return;
-      }
+      const chronicleClientHeader = typeof req.headers["x-chronicle-client"] === "string"
+        ? req.headers["x-chronicle-client"]
+        : undefined;
 
       const result = await challengeService.createChallenge({
         premiumItem: itemResult.value,
-        paymentRoute,
+        paymentRoute: routeInput,
         payerReference: payerReference ?? undefined,
+        chronicleClientHeader,
+        clientType,
         referralAddress: referralAddress ?? null,
       });
 
@@ -338,10 +334,11 @@ export function createPaymentRoutes(params: {
         entity_type: "premium_intelligence_item",
         entity_id: premiumItemId,
         status: "started",
-        message: `Payment challenge issued via ${paymentRoute}`,
+        message: `Payment challenge issued via ${result.challenge.paymentRoute}`,
         details: {
           challengeReference: result.challenge.challengeReference,
-          paymentRoute,
+          paymentRoute: result.challenge.paymentRoute,
+          autoSelectReason: result.autoSelectReason,
           amountRequested: result.challenge.amountRequested,
           currency: result.challenge.currency,
           premiumItemId,
@@ -354,6 +351,7 @@ export function createPaymentRoutes(params: {
       res.status(201).json({
         challengeReference: result.challenge.challengeReference,
         paymentRoute: result.challenge.paymentRoute,
+        autoSelectReason: result.autoSelectReason,
         amountRequested: result.challenge.amountRequested,
         currency: result.challenge.currency,
         expiresAt: result.challenge.expiresAt,

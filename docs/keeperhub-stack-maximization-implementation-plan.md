@@ -665,8 +665,8 @@ ChronicleAI is **done** for this plan when:
 - [x] Tests for estimate/used merge
 
 ### Phase 4
-- [ ] Payment auto-select + discovery docs
-- [ ] (Stretch) paid KH workflow smoke + Activity row
+- [x] Payment auto-select + discovery docs
+- [ ] (Skipped by user) paid KH workflow smoke + Activity row
 
 ### Phase 5
 - [ ] Stack smoke script

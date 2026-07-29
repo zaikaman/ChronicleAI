@@ -13,9 +13,21 @@ import { PAYMENT_ROUTES } from "@chronicleai/schemas";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
 import type { ChallengeResult } from "../payments/payment-adapter.ts";
 
+export type AutoRouteReason =
+  | "explicit_x402"
+  | "explicit_mpp"
+  | "auto_selected_mpp"
+  | "auto_selected_x402";
+
+export interface ResolvedPaymentRoute {
+  paymentRoute: PaymentRoute;
+  reason: AutoRouteReason;
+}
+
 export interface ChallengeServiceResult {
   challenge: ChallengeResult;
   paymentRecordId: string;
+  autoSelectReason: AutoRouteReason;
 }
 
 export class PaymentChallengeService {
@@ -39,10 +51,40 @@ export class PaymentChallengeService {
   }
 
   /**
-   * Validate that the requested payment route is supported.
+   * Validate that the requested payment route is supported (including 'auto').
    */
-  validateRoute(route: string): route is PaymentRoute {
-    return PAYMENT_ROUTES.includes(route as PaymentRoute);
+  validateRoute(route: string): route is PaymentRoute | "auto" {
+    return route === "auto" || PAYMENT_ROUTES.includes(route as PaymentRoute);
+  }
+
+  /**
+   * Resolve an explicit or 'auto' route selection into a concrete PaymentRoute and reason.
+   */
+  resolveAutoRoute(params: {
+    paymentRoute?: string | undefined;
+    payerReference?: string | undefined;
+    chronicleClientHeader?: string | undefined;
+    clientType?: string | undefined;
+  }): ResolvedPaymentRoute {
+    const route = params.paymentRoute?.toLowerCase().trim();
+    if (route === "x402") {
+      return { paymentRoute: "x402", reason: "explicit_x402" };
+    }
+    if (route === "mpp") {
+      return { paymentRoute: "mpp", reason: "explicit_mpp" };
+    }
+
+    // Auto or omitted route logic
+    const payerRef = params.payerReference?.toLowerCase().trim();
+    const isMppRef = Boolean(payerRef && (payerRef.startsWith("mpp-") || payerRef.startsWith("agent-")));
+    const isAgentHeader = params.chronicleClientHeader?.toLowerCase().trim() === "agent";
+    const isMachineClient = params.clientType?.toLowerCase().trim() === "machine";
+
+    if (isAgentHeader || isMachineClient || isMppRef) {
+      return { paymentRoute: "mpp", reason: "auto_selected_mpp" };
+    }
+
+    return { paymentRoute: "x402", reason: "auto_selected_x402" };
   }
 
   /**
@@ -60,19 +102,34 @@ export class PaymentChallengeService {
   }
 
   /**
-   * Create a payment challenge for a premium item using the specified route.
+   * Create a payment challenge for a premium item using the specified or auto-resolved route.
    * Persists adapter `expiresAt` so settlement can reject stale challenges.
    */
   async createChallenge(params: {
     premiumItem: PremiumIntelligenceItemRow;
-    paymentRoute: PaymentRoute;
+    paymentRoute?: PaymentRoute | "auto" | string | undefined;
     payerReference?: string | undefined;
+    chronicleClientHeader?: string | undefined;
+    clientType?: string | undefined;
     /** Optional affiliate wallet from intent (not the payer). */
     referralAddress?: string | null | undefined;
   }): Promise<ChallengeServiceResult> {
-    const adapter = this.adapters.get(params.paymentRoute);
+    const resolved = this.resolveAutoRoute({
+      paymentRoute: params.paymentRoute,
+      payerReference: params.payerReference,
+      chronicleClientHeader: params.chronicleClientHeader,
+      clientType: params.clientType,
+    });
+
+    const adapter = this.adapters.get(resolved.paymentRoute);
     if (!adapter) {
-      throw new Error(`Unsupported payment route: ${params.paymentRoute}`);
+      throw new Error(`Unsupported payment route: ${resolved.paymentRoute}`);
+    }
+
+    if (!this.validateRouteForItem(params.premiumItem, resolved.paymentRoute)) {
+      throw new Error(
+        `Premium item does not support payment route: ${resolved.paymentRoute}`,
+      );
     }
 
     // Prefer sticky first-touch attribution from wallet connect over explicit intent.
@@ -125,7 +182,7 @@ export class PaymentChallengeService {
     // Record the challenge in the database (including expiry from the adapter)
     const result = await this.paymentRecordRepo.createChallenge({
       premium_item_id: params.premiumItem.id,
-      payment_route: params.paymentRoute,
+      payment_route: resolved.paymentRoute,
       payer_reference: params.payerReference ?? null,
       referral_address: challengeReferral,
       amount_requested: params.premiumItem.price_amount,
@@ -143,6 +200,7 @@ export class PaymentChallengeService {
     return {
       challenge,
       paymentRecordId: result.value.id,
+      autoSelectReason: resolved.reason,
     };
   }
 }
