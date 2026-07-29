@@ -1,7 +1,8 @@
 // Shared multi-provider LLM client backed by LangChain chat models.
-// Provider order remains Gemini → Groq → OpenAI at call sites.
+// Provider order remains Groq → OpenAI at call sites (Gemini removed for now).
 
 import type { LLMProvider } from "@chronicleai/schemas";
+import { advanceAndGetGroqKeyIndex, getGroqApiKeys } from "@chronicleai/config";
 import {
   createChatModel,
   messageContentToText,
@@ -57,6 +58,36 @@ async function callViaLangChain(
   signal: AbortSignal,
   systemInstruction: string,
 ): Promise<string> {
+  if (provider === "groq") {
+    const groqKeys = getGroqApiKeys(process.env);
+    const keysToTry = groqKeys.length > 0 ? groqKeys : (config.apiKey ? [config.apiKey] : []);
+    const startIndex = advanceAndGetGroqKeyIndex(keysToTry.length);
+    let lastError: unknown;
+    for (let i = 0; i < keysToTry.length; i++) {
+      const keyIndex = (startIndex + i) % keysToTry.length;
+      const apiKey = keysToTry[keyIndex]!;
+      if (!apiKey.trim()) continue;
+      const model = createChatModel("groq", { ...config, apiKey });
+      if (!model) continue;
+      try {
+        const response = await model.invoke(
+          [
+            { role: "system", content: systemInstruction },
+            { role: "user", content: prompt },
+          ],
+          { signal },
+        );
+        const text = messageContentToText(response.content);
+        if (!text) throw new Error("groq returned empty response");
+        return text;
+      } catch (err) {
+        lastError = err;
+        if (signal?.aborted) throw err;
+      }
+    }
+    throw lastError ?? new Error("groq API key not configured");
+  }
+
   const model = createChatModel(provider, config);
   if (!model) {
     throw new Error(`${provider} API key not configured`);

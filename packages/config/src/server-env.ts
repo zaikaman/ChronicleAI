@@ -784,6 +784,16 @@ export function getNextGroqApiKey(
   return key ?? "";
 }
 
+/**
+ * Returns the starting index for round-robin rotation and advances the global index.
+ */
+export function advanceAndGetGroqKeyIndex(totalKeys: number): number {
+  if (totalKeys <= 0) return 0;
+  const index = currentGroqKeyIndex % totalKeys;
+  currentGroqKeyIndex = (currentGroqKeyIndex + 1) % totalKeys;
+  return index;
+}
+
 const DEFAULT_ROUTING_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**

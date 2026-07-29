@@ -1,6 +1,6 @@
 // Integration tests for KeeperHub event ingestion flow
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 describe("KeeperHub Event Ingestion - Integration", () => {
   // These tests verify the orchestration flow without needing a real database
@@ -136,6 +136,12 @@ describe("KeeperHub Event Ingestion - Integration", () => {
   });
 
   it("all providers fail does not produce alert content", async () => {
+    const langchainAgents = await import("../agents/langchain/index.ts");
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockRejectedValue(
+      new Error("Mock network failure"),
+    );
+
     const { createPublicAlertContentService } = await import(
       "../services/public-alert-content-service.ts"
     );
@@ -168,9 +174,9 @@ describe("KeeperHub Event Ingestion - Integration", () => {
 
     const service = createPublicAlertContentService(
       {
-        gemini: { apiKey: "", model: "gemini-2.0-flash" },
-        openai: { apiKey: "", model: "gpt-4o-mini" },
-        groq: { apiKey: "", model: "llama-3.3-70b-versatile" },
+        gemini: { apiKey: "gemini_key", model: "gemini-2.0-flash" },
+        openai: { apiKey: "openai_key", model: "gpt-4o-mini" },
+        groq: { apiKey: "groq_key", model: "llama-3.3-70b-versatile" },
       },
       llmAttemptRepo,
     );

@@ -12,7 +12,7 @@ import {
 } from "../monitoring/flow-enrichment.ts";
 import {
   alertContentSchema,
-  createChatModel,
+  createChatModelsInOrder,
   invokeStructuredAgent,
 } from "../agents/langchain/index.ts";
 import {
@@ -192,28 +192,11 @@ export function createPublicAlertContentService(
     async generateAlert(input) {
       const prompt = buildPrompt(input);
       const attempts: ProviderAttemptResult[] = [];
+      const models = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER);
 
-      for (const provider of LLM_FALLBACK_ORDER) {
-        const config = providerConfigs[provider];
-        const attemptOrder = LLM_FALLBACK_ORDER.indexOf(provider) + 1;
-        const model = createChatModel(provider, config);
-        if (!model) {
-          attempts.push({
-            provider,
-            success: false,
-            latencyMs: 0,
-            failureReason: "API key not configured",
-          });
-          await llmAttemptRepo.create({
-            monitored_event_id: input.monitoredEventId,
-            provider,
-            attempt_order: attemptOrder,
-            status: "failed",
-            latency_ms: 0,
-            failure_reason: "API key not configured",
-          });
-          continue;
-        }
+      for (let i = 0; i < models.length; i++) {
+        const { provider, model } = models[i]!;
+        const attemptOrder = i + 1;
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);

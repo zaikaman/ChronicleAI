@@ -1,13 +1,15 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { getNextGroqApiKey, resetGroqKeyIndex } from "@chronicleai/config";
+import { getNextGroqApiKey, resetGroqKeyIndex, LLM_FALLBACK_ORDER } from "@chronicleai/config";
 import { createProviderConfigs } from "../services/llm-provider-client.ts";
+import { createChatModelsInOrder } from "../agents/langchain/models.ts";
 
-describe("createProviderConfigs Groq Rotation", () => {
+describe("createProviderConfigs & createChatModelsInOrder Groq Rotation", () => {
   beforeEach(() => {
     resetGroqKeyIndex();
     process.env.GROQ_API_KEY = "rot_key_1";
     process.env.GROQ_API_KEY_2 = "rot_key_2";
     process.env.GROQ_API_KEY_3 = "rot_key_3";
+    process.env.OPENAI_API_KEY = "openai_key_test";
   });
 
   it("rotates groq apiKey dynamically on each property access via providerConfigs", () => {
@@ -36,5 +38,32 @@ describe("createProviderConfigs Groq Rotation", () => {
     expect(configs.groq.apiKey).toBe("rot_key_3");
     // Access 4: rot_key_1
     expect(configs.groq.apiKey).toBe("rot_key_1");
+  });
+
+  it("creates models for each Groq key before OpenAI, starting in round-robin order", () => {
+    resetGroqKeyIndex();
+    const providerConfigs = {
+      gemini: { apiKey: "gemini_key", model: "gemini-2.0-flash" },
+      openai: { apiKey: "openai_key_test", model: "gpt-4o-mini" },
+      groq: { apiKey: "rot_key_1", model: "llama-3.3-70b-versatile" },
+    };
+
+    // Request 1: should get [Groq(rot_key_1), Groq(rot_key_2), Groq(rot_key_3), OpenAI]
+    const models1 = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER);
+    expect(models1.length).toBe(4);
+    expect(models1[0]!.provider).toBe("groq");
+    expect(models1[0]!.config.apiKey).toBe("rot_key_1");
+    expect(models1[1]!.provider).toBe("groq");
+    expect(models1[1]!.config.apiKey).toBe("rot_key_2");
+    expect(models1[2]!.provider).toBe("groq");
+    expect(models1[2]!.config.apiKey).toBe("rot_key_3");
+    expect(models1[3]!.provider).toBe("openai");
+
+    // Request 2: should start round-robin from rot_key_2
+    const models2 = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER);
+    expect(models2[0]!.config.apiKey).toBe("rot_key_2");
+    expect(models2[1]!.config.apiKey).toBe("rot_key_3");
+    expect(models2[2]!.config.apiKey).toBe("rot_key_1");
+    expect(models2[3]!.provider).toBe("openai");
   });
 });

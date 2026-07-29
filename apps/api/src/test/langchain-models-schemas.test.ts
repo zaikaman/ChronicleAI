@@ -149,8 +149,8 @@ describe("structured response schemas are OpenAI-strict compatible", () => {
 });
 
 describe("LLM fallback order", () => {
-  it("is Gemini → Groq → OpenAI", () => {
-    expect(LLM_FALLBACK_ORDER).toEqual(["gemini", "groq", "openai"]);
+  it("is Groq → OpenAI", () => {
+    expect(LLM_FALLBACK_ORDER).toEqual(["groq", "openai"]);
   });
 });
 

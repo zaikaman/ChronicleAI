@@ -40,7 +40,7 @@ Most autonomous agent projects focus solely on **reasoning** — deciding what t
 
 **ChronicleAI** solves the last mile completely. It is an **autonomous onchain trading desk, capital manager, and intelligence registry** built on top of **KeeperHub**. 
 
-ChronicleAI continuously ingests onchain market signals, fuses intelligence using a tri-provider LLM fallback engine (Gemini → Groq → OpenAI), maps strategic proposals, and delegates 100% of its onchain operations — trade execution, capital rebalancing, registry publishing, and cross-chain CCTP top-ups — to **KeeperHub**.
+ChronicleAI continuously ingests onchain market signals, fuses intelligence using a dual-provider LLM fallback engine (Groq → OpenAI), maps strategic proposals, and delegates 100% of its onchain operations — trade execution, capital rebalancing, registry publishing, and cross-chain CCTP top-ups — to **KeeperHub**.
 
 ```
                            +-------------------------------------+
@@ -87,7 +87,7 @@ ChronicleAI natively integrates all six core surfaces of the KeeperHub execution
 sequenceDiagram
     autonumber
     participant Signal as Market / Onchain Signal
-    participant Fusion as Signal Fusion (Tri-LLM)
+    participant Fusion as Signal Fusion (Dual-LLM)
     participant Desk as Desk Trading Agent
     participant Policy as Policy & Risk Engine
     participant Preflight as KH Simulation Preflight
@@ -151,11 +151,10 @@ graph TD
 
 ## Core Technical Features & Innovations
 
-### 1. Tri-Provider LLM Fallback Architecture
+### 1. Dual-Provider LLM Fallback Architecture
 To guarantee 99.99% reasoning availability, ChronicleAI implements a resilient multi-provider LLM fallback hierarchy:
-- **Primary**: Google Gemini 2.5 Flash / 3.6 Flash (high-throughput reasoning)
-- **Secondary**: Groq Llama-3 (ultra-low latency execution fallback)
-- **Tertiary**: OpenAI GPT-4o (high-precision edge case resolution)
+- **Primary**: Groq Llama-3.3 70B (ultra-low latency, round-robin multi-key rotation with automatic per-key rate-limit fallback)
+- **Secondary**: OpenAI GPT-4o Mini (high-precision edge case resolution when all Groq keys are exhausted)
 
 ### 2. Autonomous Liquidity Starvation Defense (Circle CCTP)
 When market volatility or trade execution depletes USDC on the primary trading chain (Ethereum Sepolia), ChronicleAI's background CCTP rebalance worker (`apps/api/src/cctp/rebalance-service.ts`) detects liquidity starvation, automatically initiating cross-chain USDC burns on Base Sepolia, fetching Circle Iris attestations, and minting fresh USDC on Sepolia to maintain trading desk operation.
@@ -221,9 +220,11 @@ DESK_USE_PRIVATE_MEMPOOL=true
 DESK_PRIVATE_MEMPOOL_STRICT=true
 REGISTRY_USE_PRIVATE_MEMPOOL=true
 
-# AI Provider Keys
-GEMINI_API_KEY=AIzaSy...
+# AI Provider Keys (Groq → OpenAI fallback; Gemini removed)
 GROQ_API_KEY=gsk_...
+# Optional additional Groq keys for round-robin rotation:
+# GROQ_API_KEY_2=gsk_...
+# GROQ_API_KEY_3=gsk_...
 OPENAI_API_KEY=sk-...
 
 # Web3 & Network RPCs

@@ -69,8 +69,8 @@ const baseContext = (): DeskAgentContext => ({
 
 const providers: LLMProviderMap = {
   gemini: { apiKey: "g", model: "gemini-test" },
-  openai: { apiKey: "", model: "o" },
-  groq: { apiKey: "", model: "q" },
+  openai: { apiKey: "o", model: "o" },
+  groq: { apiKey: "q", model: "q" },
 };
 
 describe("proposal-schema", () => {

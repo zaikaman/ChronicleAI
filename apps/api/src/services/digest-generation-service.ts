@@ -12,6 +12,7 @@ import type { Confidence, DigestSections, FlowContext, LLMProvider } from "@chro
 import { extractFlowContext } from "../monitoring/flow-enrichment.ts";
 import {
   createChatModel,
+  createChatModelsInOrder,
   digestContentSchema,
   invokeStructuredAgent,
 } from "../agents/langchain/index.ts";
@@ -582,47 +583,11 @@ export function createDigestGenerationService(
       const stats = computeDigestStats(params.events);
       const prompt = buildDigestPrompt(params, stats);
       const attempts: DigestProviderAttemptResult[] = [];
+      const models = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER);
 
-      for (const provider of LLM_FALLBACK_ORDER) {
-        const config = providerConfigs[provider];
-        const attemptOrder = LLM_FALLBACK_ORDER.indexOf(provider) + 1;
-
-        if (!config?.apiKey?.trim()) {
-          attempts.push({
-            provider,
-            success: false,
-            latencyMs: 0,
-            failureReason: "API key not configured",
-          });
-          await recordDigestAttempt(repo, {
-            monitoredEventId: logEventId,
-            provider,
-            attemptOrder,
-            status: "failed",
-            latencyMs: 0,
-            failureReason: "API key not configured",
-          });
-          continue;
-        }
-
-        const model = createChatModel(provider, config);
-        if (!model) {
-          attempts.push({
-            provider,
-            success: false,
-            latencyMs: 0,
-            failureReason: "API key not configured",
-          });
-          await recordDigestAttempt(repo, {
-            monitoredEventId: logEventId,
-            provider,
-            attemptOrder,
-            status: "failed",
-            latencyMs: 0,
-            failureReason: "API key not configured",
-          });
-          continue;
-        }
+      for (let i = 0; i < models.length; i++) {
+        const { provider, model } = models[i]!;
+        const attemptOrder = i + 1;
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), DIGEST_GENERATION_TIMEOUT_MS);

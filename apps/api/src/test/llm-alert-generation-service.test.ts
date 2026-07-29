@@ -1,10 +1,9 @@
-// Unit tests for LLM alert generation fallback
-
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createLLMGenerationAttemptRepository } from "@chronicleai/db";
 // Increase timeout for all-providers-failed test which makes actual fetch calls
 import { createPublicAlertContentService } from "../services/public-alert-content-service.ts";
+import * as langchainAgents from "../agents/langchain/index.ts";
 
 describe("LLMAlertGenerationService - Fallback", () => {
   // Create a mock supabase client for the LLM attempt repo
@@ -35,7 +34,7 @@ describe("LLMAlertGenerationService - Fallback", () => {
 
   it("has the correct fallback order", async () => {
     const { LLM_FALLBACK_ORDER } = await import("@chronicleai/config");
-    expect(LLM_FALLBACK_ORDER).toEqual(["gemini", "groq", "openai"]);
+    expect(LLM_FALLBACK_ORDER).toEqual(["groq", "openai"]);
   });
 
   it("creates service with correct provider configs", () => {
@@ -84,21 +83,19 @@ describe("LLMAlertGenerationService - Fallback", () => {
   });
 
   it("handles all-providers-failed scenario gracefully", async () => {
-    // Mock fetch to reject instantly, preventing real HTTP calls
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => {
-      throw new Error("Mock network failure");
-    };
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    vi.spyOn(langchainAgents, "invokeStructuredAgent").mockRejectedValue(
+      new Error("Mock network failure"),
+    );
 
-    try {
-      const mockSupabase = createMockSupabase();
+    const mockSupabase = createMockSupabase();
       const llmAttemptRepo = createLLMGenerationAttemptRepository(mockSupabase as never);
 
       const service = createPublicAlertContentService(
         {
-          gemini: { apiKey: "", model: "gemini-2.0-flash" },
-          openai: { apiKey: "", model: "gpt-4o-mini" },
-          groq: { apiKey: "", model: "llama-3.3-70b-versatile" },
+          gemini: { apiKey: "gemini_key", model: "gemini-2.0-flash" },
+          openai: { apiKey: "openai_key", model: "gpt-4o-mini" },
+          groq: { apiKey: "groq_key", model: "llama-3.3-70b-versatile" },
         },
         llmAttemptRepo,
       );
@@ -113,14 +110,11 @@ describe("LLMAlertGenerationService - Fallback", () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.attempts).toHaveLength(3);
+      expect(result.attempts).toHaveLength(2);
       expect(result.content).toBeUndefined();
       expect(result.providerUsed).toBeUndefined();
 
       const providers = result.attempts.map((a) => a.provider);
-      expect(providers).toEqual(["gemini", "groq", "openai"]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      expect(providers).toEqual(["groq", "openai"]);
   });
 });

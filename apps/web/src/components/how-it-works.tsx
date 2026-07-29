@@ -15,7 +15,7 @@ const steps = [
     icon: BrainCircuit,
     title: "Reason & Preflight Dry-Run",
     description:
-      "Tri-provider LLMs (Gemini, OpenAI, Groq) formulate strategic proposals. Before any live transaction, Layer A dry-run preflight (simulate: true) verifies execution logic and computes adaptive gas pricing.",
+      "Dual-provider LLMs (Groq Llama-3.3 primary, OpenAI GPT-4o fallback) formulate strategic proposals with automatic Groq key rotation. Before any live transaction, Layer A dry-run preflight (simulate: true) verifies execution logic and computes adaptive gas pricing.",
   },
   {
     icon: Landmark,

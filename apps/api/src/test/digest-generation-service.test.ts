@@ -185,7 +185,7 @@ describe("DigestGenerationService", () => {
       events: sampleEvents,
     });
 
-    expect(result.generationProvider).toBe("gemini");
+    expect(result.generationProvider).toBe("groq");
     expect(result.title).toBe(llmBody.title);
     expect(result.summary).toContain("DeFi activity");
     expect(result.highlights).toHaveLength(3);
@@ -196,7 +196,7 @@ describe("DigestGenerationService", () => {
     expect(attempts).toHaveLength(1);
     expect(attempts[0]?.entity_type).toBe("daily_digest");
     expect(attempts[0]?.monitored_event_id).toBe("evt-001"); // highest significance
-    expect(attempts[0]?.provider).toBe("gemini");
+    expect(attempts[0]?.provider).toBe("groq");
     expect(attempts[0]?.status).toBe("succeeded");
   });
 
@@ -234,7 +234,7 @@ describe("DigestGenerationService", () => {
       events: [],
     });
 
-    expect(result.generationProvider).toBe("gemini");
+    expect(result.generationProvider).toBe("groq");
     expect(result.title).toContain("ChronicleAI Daily Digest");
     expect(result.sourceEventIds).toEqual([]);
     expect(result.highlights.length).toBeGreaterThanOrEqual(1);
@@ -272,7 +272,7 @@ describe("DigestGenerationService", () => {
       expect(error).toBeInstanceOf(DigestGenerationError);
       const genError = error as DigestGenerationError;
       expect(genError.message).toContain("all LLM providers failed");
-      expect(genError.attempts.length).toBe(3);
+      expect(genError.attempts.length).toBe(2);
       expect(genError.attempts.every((a) => !a.success)).toBe(true);
     }
   });
@@ -294,7 +294,7 @@ describe("DigestGenerationService", () => {
     });
   });
 
-  it("falls through invalid Gemini JSON and throws when later keys are empty", async () => {
+  it("falls through invalid Groq JSON and throws when later keys are empty", async () => {
     vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
     const invokeSpy = vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
       structured: { not: "a-digest" },
@@ -304,9 +304,9 @@ describe("DigestGenerationService", () => {
 
     const service = createDigestGenerationService(
       {
-        gemini: { apiKey: "gemini-key", model: "gemini-2.0-flash" },
+        gemini: { apiKey: "", model: "gemini-2.0-flash" },
         openai: { apiKey: "", model: "gpt-4o-mini" },
-        groq: { apiKey: "", model: "llama-3.3-70b-versatile" },
+        groq: { apiKey: "groq-key", model: "llama-3.3-70b-versatile" },
       },
       createMockLlmAttemptRepo(),
     );

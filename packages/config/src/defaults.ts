@@ -93,8 +93,8 @@ export const DASHBOARD_ROW_LIMITS = {
 } as const;
 
 // ── LLM Provider Fallback Order ─────────────────────────
-/** Newspaper + desk agent: Gemini → Groq → OpenAI. */
-export const LLM_FALLBACK_ORDER = ["gemini", "groq", "openai"] as const;
+/** Newspaper + desk agent: Groq → OpenAI (Gemini removed for now). */
+export const LLM_FALLBACK_ORDER = ["groq", "openai"] as const;
 
 /** Desk agent uses the same fallback order as the newspaper path. */
 export const DESK_AGENT_LLM_FALLBACK_ORDER = LLM_FALLBACK_ORDER;

@@ -7,6 +7,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatOpenAI } from "@langchain/openai";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { LLMProvider } from "@chronicleai/schemas";
+import { advanceAndGetGroqKeyIndex, getGroqApiKeys } from "@chronicleai/config";
 import type { LLMProviderConfig, LLMProviderMap } from "../../services/llm-provider-client.ts";
 
 export type ChronicleChatModel = BaseChatModel;
@@ -110,6 +111,8 @@ export function orderedProviders(
 
 /**
  * Build chat models for every configured provider in fallback order.
+ * For Groq, generates chat model instances for every configured Groq API key
+ * in round-robin sequence so that rate limits on any key trigger fallback to the next key.
  */
 export function createChatModelsInOrder(
   providerConfigs: LLMProviderMap,
@@ -132,8 +135,27 @@ export function createChatModelsInOrder(
   )) {
     const config = providerConfigs[provider];
     if (!config) continue;
-    const model = createChatModel(provider, config, modelOpts);
-    if (model) out.push({ provider, model, config });
+
+    if (provider === "groq") {
+      const groqKeys = getGroqApiKeys(process.env);
+      if (groqKeys.length > 0) {
+        const startIndex = advanceAndGetGroqKeyIndex(groqKeys.length);
+        for (let i = 0; i < groqKeys.length; i++) {
+          const keyIndex = (startIndex + i) % groqKeys.length;
+          const apiKey = groqKeys[keyIndex]!;
+          if (!apiKey.trim()) continue;
+          const keyConfig: LLMProviderConfig = { ...config, apiKey };
+          const model = createChatModel("groq", keyConfig, modelOpts);
+          if (model) out.push({ provider: "groq", model, config: keyConfig });
+        }
+      } else if (config.apiKey?.trim()) {
+        const model = createChatModel("groq", config, modelOpts);
+        if (model) out.push({ provider: "groq", model, config });
+      }
+    } else {
+      const model = createChatModel(provider, config, modelOpts);
+      if (model) out.push({ provider, model, config });
+    }
   }
   return out;
 }

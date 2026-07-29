@@ -67,9 +67,9 @@ describe("createPremiumDeepDiveGenerationService", () => {
     });
 
     const service = createPremiumDeepDiveGenerationService({
-      gemini: { apiKey: "test-key", model: "gemini-test" },
+      gemini: { apiKey: "", model: "gemini-test" },
       openai: { apiKey: "", model: "gpt" },
-      groq: { apiKey: "", model: "groq" },
+      groq: { apiKey: "test-key", model: "groq-test" },
     });
 
     const result = await service.generateNarrative({
@@ -84,7 +84,7 @@ describe("createPremiumDeepDiveGenerationService", () => {
     });
 
     expect(result.usedLlm).toBe(true);
-    expect(result.generationProvider).toBe("gemini");
+    expect(result.generationProvider).toBe("groq");
     expect(result.summaryPublic).toContain("LLM teaser");
     expect(result.sections[0]?.body).toBe("LLM executive");
     expect(result.analysis).toContain("LLM deep analysis");
