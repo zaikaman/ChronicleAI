@@ -8,6 +8,7 @@ import { PremiumContentView } from "./PremiumContentView.tsx";
 import { PremiumTeaserCard } from "./PremiumTeaserCard.tsx";
 import { SponsoredWatchList } from "./SponsoredWatchList.tsx";
 import { SponsoredWatchRequestForm } from "./SponsoredWatchRequestForm.tsx";
+import { useWallet } from "../wallet";
 import {
   loadPremiumAccessReceipt,
   storePremiumAccessReceipt,
@@ -17,6 +18,7 @@ import {
 } from "./use-premium.ts";
 
 export function PremiumPage(): ReactElement {
+  const wallet = useWallet();
   const { items, isLoading, error, refetch } = usePremiumTeasers();
   const {
     isLoading: isAccessLoading,
@@ -93,9 +95,9 @@ export function PremiumPage(): ReactElement {
         setCurrentItemCurrency(item.priceCurrency);
       }
 
-      await accessItem(itemId);
+      await accessItem(itemId, undefined, wallet.address ?? undefined);
     },
-    [items, accessItem],
+    [items, accessItem, wallet.address],
   );
 
   const handleShowPayment = useCallback(() => {

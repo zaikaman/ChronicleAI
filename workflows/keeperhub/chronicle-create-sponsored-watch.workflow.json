@@ -37,9 +37,7 @@
           "contractAddress": "0xD8Deb4475a7E23E194Bc93f8739858Fb20744111",
           "abiFunction": "createSponsoredWatch",
           "functionArgs": "[\"{{@trigger-manual:Manual / API Trigger.targetContract}}\",\"{{@trigger-manual:Manual / API Trigger.watchSpecHash}}\",\"{{@trigger-manual:Manual / API Trigger.startsAt}}\",\"{{@trigger-manual:Manual / API Trigger.endsAt}}\"]",
-          "abi": "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"targetContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"watchSpecHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"startsAt\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"endsAt\",\"type\":\"uint64\"}],\"name\":\"createSponsoredWatch\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
-          "usePrivateMempool": true,
-          "strict": true
+          "abi": "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"targetContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"watchSpecHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"startsAt\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"endsAt\",\"type\":\"uint64\"}],\"name\":\"createSponsoredWatch\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
         }
       }
     }

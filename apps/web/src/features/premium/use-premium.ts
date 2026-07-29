@@ -47,7 +47,7 @@ export interface PremiumItemAccessResult {
    * Access premium content. Uses a stored HMAC access receipt when available
    * (from a prior settlement). Bare payer references are not used for unlock.
    */
-  accessItem: (itemId: string, accessReceipt?: string) => Promise<void>;
+  accessItem: (itemId: string, accessReceipt?: string, payerReference?: string) => Promise<void>;
   isPaymentRequired: boolean;
   paymentChallenge: {
     premiumItemId: string;
@@ -100,7 +100,7 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
     currency: string;
   } | null>(null);
 
-  const accessItem = useCallback(async (itemId: string, accessReceipt?: string) => {
+  const accessItem = useCallback(async (itemId: string, accessReceipt?: string, payerReference?: string) => {
     setIsLoading(true);
     setError(null);
     setData(null);
@@ -115,6 +115,9 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
         headers.Authorization = `Bearer ${receipt}`;
         headers["X-Premium-Access-Receipt"] = receipt;
       }
+      if (payerReference) {
+        headers["X-Payer-Reference"] = payerReference;
+      }
 
       const response = await fetch(`${API_BASE}/premium/items/${itemId}`, {
         headers,
@@ -122,6 +125,10 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
       });
 
       if (response.status === 200) {
+        const autoReceipt = response.headers.get("X-Premium-Access-Receipt");
+        if (autoReceipt) {
+          storePremiumAccessReceipt(itemId, autoReceipt);
+        }
         const itemData = (await response.json()) as Record<string, unknown>;
         setData(itemData);
         return;

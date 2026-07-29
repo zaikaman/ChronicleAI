@@ -66,8 +66,9 @@ export class PremiumAccessService {
   async accessPremiumItem(params: {
     itemId: string;
     accessReceipt?: string | undefined;
+    payerReference?: string | undefined;
     paymentRoute?: PaymentRoute | undefined;
-  }): Promise<PremiumAccessResult> {
+  }): Promise<PremiumAccessResult & { accessReceipt?: string }> {
     const itemResult = await this.premiumRepo.findById(params.itemId);
 
     if (!itemResult.ok || !itemResult.value) {
@@ -78,7 +79,25 @@ export class PremiumAccessService {
     const paymentRoute =
       params.paymentRoute ?? (item.payment_routes[0] as PaymentRoute) ?? "x402";
 
-    const receiptToken = params.accessReceipt?.trim();
+    let receiptToken = params.accessReceipt?.trim();
+    let autoIssuedReceipt: string | undefined = undefined;
+
+    if (!receiptToken && params.payerReference?.trim()) {
+      const settledResult = await this.paymentRecordRepo.findSettledByPayer(
+        params.itemId,
+        params.payerReference.trim(),
+      );
+      if (settledResult.ok && settledResult.value) {
+        const issued = this.receiptService.issue({
+          paymentRecordId: settledResult.value.id,
+          premiumItemId: params.itemId,
+          payerReference: settledResult.value.payer_reference,
+        });
+        receiptToken = issued.token;
+        autoIssuedReceipt = issued.token;
+      }
+    }
+
     if (!receiptToken) {
       throw new PaymentRequiredError(item, paymentRoute);
     }
@@ -122,6 +141,7 @@ export class PremiumAccessService {
     return {
       allowed: true,
       content: this.visibilityService.toFullWithPrivateContent(item),
+      ...(autoIssuedReceipt ? { accessReceipt: autoIssuedReceipt } : {}),
     };
   }
 

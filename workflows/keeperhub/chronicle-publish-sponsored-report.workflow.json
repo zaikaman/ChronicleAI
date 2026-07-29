@@ -37,9 +37,7 @@
           "contractAddress": "0xD8Deb4475a7E23E194Bc93f8739858Fb20744111",
           "abiFunction": "publishSponsoredReport",
           "functionArgs": "[\"{{@trigger-manual:Manual / API Trigger.watchId}}\",\"{{@trigger-manual:Manual / API Trigger.reportHash}}\",\"{{@trigger-manual:Manual / API Trigger.sourceEventRoot}}\",\"{{@trigger-manual:Manual / API Trigger.contentUri}}\"]",
-          "abi": "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reportHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventRoot\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishSponsoredReport\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
-          "usePrivateMempool": true,
-          "strict": true
+          "abi": "[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reportHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventRoot\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishSponsoredReport\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
         }
       }
     }

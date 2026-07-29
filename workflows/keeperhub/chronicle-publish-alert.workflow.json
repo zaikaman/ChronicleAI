@@ -37,9 +37,7 @@
           "contractAddress": "0xD8Deb4475a7E23E194Bc93f8739858Fb20744111",
           "abiFunction": "publishAlert",
           "functionArgs": "[\"{{@trigger-manual:Manual / API Trigger.contentHash}}\",\"{{@trigger-manual:Manual / API Trigger.sourceEventHash}}\",\"{{@trigger-manual:Manual / API Trigger.contentUri}}\"]",
-          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"contentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventHash\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishAlert\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
-          "usePrivateMempool": true,
-          "strict": true
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"contentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"sourceEventHash\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"contentUri\",\"type\":\"string\"}],\"name\":\"publishAlert\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
         }
       }
     }

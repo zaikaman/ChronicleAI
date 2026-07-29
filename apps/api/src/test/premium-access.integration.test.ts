@@ -133,6 +133,24 @@ describe("Premium Access Integration", () => {
       expect(mockPaymentRecordRepo.listByPremiumItem).not.toHaveBeenCalled();
     });
 
+    it("should grant access and issue receipt if payer reference matches a settled payment in DB", async () => {
+      mockPremiumRepo.findById.mockResolvedValue({ ok: true, value: mockPremiumItem });
+      mockPaymentRecordRepo.findSettledByPayer.mockResolvedValue({ ok: true, value: settledPayment });
+      mockPaymentRecordRepo.findById.mockResolvedValue({ ok: true, value: settledPayment });
+
+      const result = await accessService.accessPremiumItem({
+        itemId: "premium-deep-dive-001",
+        payerReference: "0xpayinguser",
+      });
+
+      expect(result.allowed).toBe(true);
+      expect(result.accessReceipt).toBeDefined();
+      expect(mockPaymentRecordRepo.findSettledByPayer).toHaveBeenCalledWith(
+        "premium-deep-dive-001",
+        "0xpayinguser",
+      );
+    });
+
     it("should deny access with a receipt for a different item", async () => {
       mockPremiumRepo.findById.mockResolvedValue({ ok: true, value: mockPremiumItem });
 

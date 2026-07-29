@@ -207,6 +207,14 @@ export function createPremiumRoutes(params: {
         return;
       }
 
+      const payerHeader = req.headers["x-payer-reference"];
+      const payerReference =
+        typeof payerHeader === "string" && payerHeader.trim()
+          ? payerHeader.trim()
+          : typeof req.query.payer === "string" && req.query.payer.trim()
+            ? req.query.payer.trim()
+            : undefined;
+
       const accessReceipt = extractAccessReceiptFromRequest({
         authorizationHeader:
           typeof req.headers.authorization === "string" ? req.headers.authorization : undefined,
@@ -221,9 +229,13 @@ export function createPremiumRoutes(params: {
         const accessResult = await accessService.accessPremiumItem({
           itemId: id,
           accessReceipt,
+          payerReference,
         });
 
         if (accessResult.allowed) {
+          if (accessResult.accessReceipt) {
+            res.setHeader("X-Premium-Access-Receipt", accessResult.accessReceipt);
+          }
           res.json(accessResult.content);
           return;
         }
