@@ -20,10 +20,23 @@ export {
   estimateTokens,
   fitPromptToTokenBudget,
   MAX_SAFE_INPUT_TOKENS,
+  GROQ_EFFECTIVE_INPUT_BUDGET,
+  GROQ_MAX_INPUT_TOKENS,
   type StructuredAgentInvokeParams,
   type StructuredAgentResult,
   type ProviderStructuredAttempt,
 } from "./structured-agent.ts";
+
+export {
+  fitSystemAndUserToTokenBudget,
+  fitTextToTokenBudget,
+  fitMessageArrayToTokenBudget,
+  capModelInputToGroqBudget,
+  exceedsGroqInputLimit,
+  GROQ_INPUT_SAFETY_MARGIN,
+} from "./token-budget.ts";
+
+export { withGroqInputTokenCap } from "./models.ts";
 
 export {
   invokeToolAgent,

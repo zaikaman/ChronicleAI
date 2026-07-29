@@ -1,6 +1,9 @@
 /**
  * LangChain chat model factory for ChronicleAI providers.
  * Maps Gemini / OpenAI / Groq configs onto first-class ChatModel instances.
+ *
+ * Groq models are wrapped with a hard ≤8000 input-token cap so no call site
+ * (structured agents, tool agents, raw invoke) can overshoot the provider limit.
  */
 
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -9,6 +12,10 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import type { LLMProvider } from "@chronicleai/schemas";
 import { advanceAndGetGroqKeyIndex, getGroqApiKeys } from "@chronicleai/config";
 import type { LLMProviderConfig, LLMProviderMap } from "../../services/llm-provider-client.ts";
+import {
+  capModelInputToGroqBudget,
+  GROQ_EFFECTIVE_INPUT_BUDGET,
+} from "./token-budget.ts";
 
 export type ChronicleChatModel = BaseChatModel;
 
@@ -16,6 +23,84 @@ export interface CreateChatModelOptions {
   temperature?: number | undefined;
   modelOverride?: string | undefined;
   maxTokens?: number | undefined;
+}
+
+const GROQ_CAP_FLAG = Symbol.for("chronicleai.groqInputCap");
+
+/**
+ * Wrap a Groq chat model so every invoke/stream/batch/_generate path is capped
+ * at GROQ_EFFECTIVE_INPUT_BUDGET estimated tokens. Re-applies on bind/withConfig
+ * so response_format / tool bindings keep the guard.
+ */
+export function withGroqInputTokenCap(
+  model: ChronicleChatModel,
+): ChronicleChatModel {
+  const anyModel = model as ChronicleChatModel & {
+    [GROQ_CAP_FLAG]?: boolean;
+    invoke: (...args: unknown[]) => unknown;
+    stream?: (...args: unknown[]) => unknown;
+    batch?: (...args: unknown[]) => unknown;
+    _generate?: (...args: unknown[]) => unknown;
+    bind?: (...args: unknown[]) => unknown;
+    withConfig?: (...args: unknown[]) => unknown;
+    bindTools?: (...args: unknown[]) => unknown;
+  };
+
+  if (anyModel[GROQ_CAP_FLAG]) return model;
+  anyModel[GROQ_CAP_FLAG] = true;
+
+  const originalInvoke = anyModel.invoke.bind(anyModel);
+  anyModel.invoke = ((input: unknown, options?: unknown) =>
+    originalInvoke(
+      capModelInputToGroqBudget(input, GROQ_EFFECTIVE_INPUT_BUDGET),
+      options,
+    )) as typeof anyModel.invoke;
+
+  if (typeof anyModel.stream === "function") {
+    const originalStream = anyModel.stream.bind(anyModel);
+    anyModel.stream = ((input: unknown, options?: unknown) =>
+      originalStream(
+        capModelInputToGroqBudget(input, GROQ_EFFECTIVE_INPUT_BUDGET),
+        options,
+      )) as typeof anyModel.stream;
+  }
+
+  if (typeof anyModel.batch === "function") {
+    const originalBatch = anyModel.batch.bind(anyModel);
+    anyModel.batch = ((inputs: unknown[], options?: unknown) =>
+      originalBatch(
+        (Array.isArray(inputs) ? inputs : []).map((item) =>
+          capModelInputToGroqBudget(item, GROQ_EFFECTIVE_INPUT_BUDGET),
+        ),
+        options,
+      )) as typeof anyModel.batch;
+  }
+
+  if (typeof anyModel._generate === "function") {
+    const originalGenerate = anyModel._generate.bind(anyModel);
+    anyModel._generate = ((messages: unknown, ...rest: unknown[]) =>
+      originalGenerate(
+        Array.isArray(messages)
+          ? capModelInputToGroqBudget(messages, GROQ_EFFECTIVE_INPUT_BUDGET)
+          : messages,
+        ...rest,
+      )) as typeof anyModel._generate;
+  }
+
+  for (const methodName of ["bind", "withConfig", "bindTools"] as const) {
+    const original = anyModel[methodName];
+    if (typeof original !== "function") continue;
+    const bound = original.bind(anyModel) as (...args: unknown[]) => unknown;
+    (anyModel as unknown as Record<string, unknown>)[methodName] = (...args: unknown[]) => {
+      const result = bound(...args);
+      if (result && typeof result === "object") {
+        return withGroqInputTokenCap(result as ChronicleChatModel);
+      }
+      return result;
+    };
+  }
+
+  return model;
 }
 
 /**
@@ -79,7 +164,8 @@ export function createChatModel(
   }
 
   // Groq: OpenAI-compatible chat completions endpoint.
-  return new ChatOpenAI({
+  // Hard-cap input tokens at the model boundary (≤8000) for every call path.
+  const groqModel = new ChatOpenAI({
     apiKey: config.apiKey,
     model,
     temperature,
@@ -91,6 +177,7 @@ export function createChatModel(
       timeout: 120000,
     },
   });
+  return withGroqInputTokenCap(groqModel);
 }
 
 /**

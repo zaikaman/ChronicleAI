@@ -222,18 +222,121 @@ describe("invokeStructuredAgent groq JSON Object Mode", () => {
 
   it("fitPromptToTokenBudget truncates prompt when userPrompt exceeds token limit", () => {
     const systemPrompt = "System prompt context";
-    const userPrompt = "A".repeat(30000); // 30,000 chars ≈ 9,375 tokens
+    const userPrompt = "A".repeat(30000); // 30,000 chars ≈ 10,000 tokens @ 3 chars/tok
     const schemaHint = "Schema hint context";
 
-    const fitted = fitPromptToTokenBudget(userPrompt, systemPrompt, schemaHint, 6000);
-    expect(estimateTokens(fitted + systemPrompt + schemaHint)).toBeLessThanOrEqual(6100);
+    const fitted = fitPromptToTokenBudget(userPrompt, systemPrompt, schemaHint, 7750);
+    expect(
+      estimateTokens(fitted) + estimateTokens(systemPrompt) + estimateTokens(schemaHint),
+    ).toBeLessThanOrEqual(8000);
     expect(fitted).toContain("[Context truncated");
   });
 
   it("fitPromptToTokenBudget preserves prompt when within token budget", () => {
     const systemPrompt = "System prompt";
     const userPrompt = "Normal small user prompt";
-    const fitted = fitPromptToTokenBudget(userPrompt, systemPrompt, "", 6000);
+    const fitted = fitPromptToTokenBudget(userPrompt, systemPrompt, "", 7750);
     expect(fitted).toBe(userPrompt);
+  });
+});
+
+describe("Groq 8000 input token hard cap", () => {
+  it("fitSystemAndUserToTokenBudget never exceeds GROQ_MAX_INPUT_TOKENS", async () => {
+    const {
+      fitSystemAndUserToTokenBudget,
+      GROQ_MAX_INPUT_TOKENS,
+      GROQ_EFFECTIVE_INPUT_BUDGET,
+      estimateTokens: est,
+    } = await import("../agents/langchain/token-budget.ts");
+
+    // User-only overflow: system stays intact, user is truncated.
+    const system = "You are ChronicleAI.";
+    const user = "U".repeat(40_000);
+    const fitted = fitSystemAndUserToTokenBudget(system, user, GROQ_EFFECTIVE_INPUT_BUDGET);
+    const total = est(fitted.systemPrompt) + est(fitted.userPrompt) + 12;
+    expect(total).toBeLessThanOrEqual(GROQ_MAX_INPUT_TOKENS);
+    expect(fitted.systemPrompt).toBe(system);
+    expect(fitted.userPrompt.length).toBeLessThan(user.length);
+    expect(fitted.userPrompt).toContain("[Context truncated");
+
+    // System-alone overflow: both sides shrink so combined stays under 8k.
+    const hugeSystem = "S".repeat(40_000);
+    const fitted2 = fitSystemAndUserToTokenBudget(hugeSystem, user, GROQ_EFFECTIVE_INPUT_BUDGET);
+    const total2 = est(fitted2.systemPrompt) + est(fitted2.userPrompt) + 12;
+    expect(total2).toBeLessThanOrEqual(GROQ_MAX_INPUT_TOKENS);
+    expect(fitted2.systemPrompt.length).toBeLessThan(hugeSystem.length);
+  });
+
+  it("fitMessageArrayToTokenBudget drops oldest turns and stays under 8000", async () => {
+    const {
+      fitMessageArrayToTokenBudget,
+      GROQ_MAX_INPUT_TOKENS,
+      estimateTokens: est,
+    } = await import("../agents/langchain/token-budget.ts");
+
+    const messages = [
+      { role: "system", content: "You are a helpful desk agent." },
+      { role: "user", content: "A".repeat(9000) },
+      { role: "assistant", content: "B".repeat(9000) },
+      { role: "user", content: "C".repeat(9000) },
+    ];
+    const fitted = fitMessageArrayToTokenBudget(messages, 7750);
+    const total = fitted.reduce(
+      (sum, m) => sum + est(String(m.content)) + 6,
+      0,
+    );
+    expect(total).toBeLessThanOrEqual(GROQ_MAX_INPUT_TOKENS);
+    // Latest user turn should survive.
+    expect(fitted.some((m) => String(m.content).startsWith("C") || String(m.content).includes("C"))).toBe(
+      true,
+    );
+  });
+
+  it("capModelInputToGroqBudget caps string and message-array inputs", async () => {
+    const {
+      capModelInputToGroqBudget,
+      GROQ_MAX_INPUT_TOKENS,
+      estimateTokens: est,
+    } = await import("../agents/langchain/token-budget.ts");
+
+    const huge = "X".repeat(50_000);
+    const cappedStr = capModelInputToGroqBudget(huge) as string;
+    expect(est(cappedStr)).toBeLessThanOrEqual(GROQ_MAX_INPUT_TOKENS);
+
+    const cappedMsgs = capModelInputToGroqBudget([
+      { role: "system", content: "sys " + "S".repeat(5000) },
+      { role: "user", content: "usr " + "U".repeat(40_000) },
+    ]) as Array<{ content: string }>;
+    const total = cappedMsgs.reduce((sum, m) => sum + est(m.content) + 6, 0);
+    expect(total).toBeLessThanOrEqual(GROQ_MAX_INPUT_TOKENS);
+  });
+
+  it("withGroqInputTokenCap intercepts invoke and never forwards >8000 tokens", async () => {
+    const { withGroqInputTokenCap } = await import("../agents/langchain/models.ts");
+    const {
+      estimateTokens: est,
+      GROQ_MAX_INPUT_TOKENS,
+    } = await import("../agents/langchain/token-budget.ts");
+
+    let seenInput: unknown;
+    let invokeCount = 0;
+    const fakeModel = {
+      invoke: async (input: unknown) => {
+        invokeCount += 1;
+        seenInput = input;
+        return { content: "{}" };
+      },
+    };
+
+    const capped = withGroqInputTokenCap(fakeModel as never);
+    await (capped as { invoke: (input: unknown) => Promise<unknown> }).invoke([
+      { role: "system", content: "S".repeat(10_000) },
+      { role: "user", content: "U".repeat(40_000) },
+    ]);
+
+    expect(invokeCount).toBe(1);
+    const msgs = seenInput as Array<{ content: string }>;
+    const total = msgs.reduce((sum, m) => sum + est(String(m.content)) + 6, 0);
+    expect(total).toBeLessThanOrEqual(GROQ_MAX_INPUT_TOKENS);
   });
 });

@@ -1,5 +1,6 @@
 // Shared multi-provider LLM client backed by LangChain chat models.
 // Provider order remains Groq → OpenAI at call sites (Gemini removed for now).
+// Groq calls are hard-capped at ≤8000 estimated input tokens before invoke.
 
 import type { LLMProvider } from "@chronicleai/schemas";
 import { advanceAndGetGroqKeyIndex, getGroqApiKeys } from "@chronicleai/config";
@@ -7,6 +8,10 @@ import {
   createChatModel,
   messageContentToText,
 } from "../agents/langchain/models.ts";
+import {
+  fitSystemAndUserToTokenBudget,
+  GROQ_EFFECTIVE_INPUT_BUDGET,
+} from "../agents/langchain/token-budget.ts";
 
 import type { ServerEnv } from "@chronicleai/config";
 
@@ -58,6 +63,20 @@ async function callViaLangChain(
   signal: AbortSignal,
   systemInstruction: string,
 ): Promise<string> {
+  // Belt-and-suspenders: cap system+user before invoke. Groq models are also
+  // wrapped at createChatModel, but call sites that pass huge prompts still
+  // benefit from an explicit fit here (cleaner truncation notice placement).
+  const fitted =
+    provider === "groq"
+      ? fitSystemAndUserToTokenBudget(
+          systemInstruction,
+          prompt,
+          GROQ_EFFECTIVE_INPUT_BUDGET,
+        )
+      : { systemPrompt: systemInstruction, userPrompt: prompt };
+  const systemContent = fitted.systemPrompt;
+  const userContent = fitted.userPrompt;
+
   if (provider === "groq") {
     const groqKeys = getGroqApiKeys(process.env);
     const keysToTry = groqKeys.length > 0 ? groqKeys : (config.apiKey ? [config.apiKey] : []);
@@ -72,8 +91,8 @@ async function callViaLangChain(
       try {
         const response = await model.invoke(
           [
-            { role: "system", content: systemInstruction },
-            { role: "user", content: prompt },
+            { role: "system", content: systemContent },
+            { role: "user", content: userContent },
           ],
           { signal },
         );
@@ -95,8 +114,8 @@ async function callViaLangChain(
 
   const response = await model.invoke(
     [
-      { role: "system", content: systemInstruction },
-      { role: "user", content: prompt },
+      { role: "system", content: systemContent },
+      { role: "user", content: userContent },
     ],
     { signal },
   );

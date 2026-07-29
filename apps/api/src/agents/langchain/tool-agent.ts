@@ -13,6 +13,11 @@ import type { BaseMessage } from "@langchain/core/messages";
 import type { LLMProvider } from "@chronicleai/schemas";
 import type { ChronicleChatModel } from "./models.ts";
 import { messageContentToText } from "./models.ts";
+import {
+  fitMessageArrayToTokenBudget,
+  fitTextToTokenBudget,
+  GROQ_EFFECTIVE_INPUT_BUDGET,
+} from "./token-budget.ts";
 
 export interface ToolAgentMessage {
   role: "user" | "assistant" | "system";
@@ -39,6 +44,11 @@ export interface InvokeToolAgentParams {
   signal?: AbortSignal | undefined;
   /** Optional provider labels aligned with model + fallbackModels for telemetry. */
   providerLabels?: LLMProvider[] | undefined;
+  /**
+   * When true (default if any provider label is groq), pre-cap system + messages
+   * to the Groq 8k input budget. Groq chat models also enforce this at invoke.
+   */
+  enforceGroqInputBudget?: boolean | undefined;
 }
 
 export interface ToolAgentResult {
@@ -61,12 +71,26 @@ export async function invokeToolAgent(
     exitBehavior: "end",
   });
 
+  const usesGroq =
+    params.enforceGroqInputBudget === true ||
+    (params.enforceGroqInputBudget !== false &&
+      (params.providerLabels?.includes("groq") ?? false));
+
+  // Pre-cap the seed context. Mid-loop tool results are still guarded by the
+  // Groq model wrapper (withGroqInputTokenCap) on every subsequent invoke.
+  const systemPrompt = usesGroq
+    ? fitTextToTokenBudget(
+        params.systemPrompt,
+        Math.floor(GROQ_EFFECTIVE_INPUT_BUDGET * 0.35),
+      )
+    : params.systemPrompt;
+
   const agent =
     params.fallbackModels && params.fallbackModels.length > 0
       ? createAgent({
           model: params.model,
           tools: params.tools,
-          systemPrompt: params.systemPrompt,
+          systemPrompt,
           middleware: [
             modelFallbackMiddleware(...params.fallbackModels),
             callLimit,
@@ -75,16 +99,30 @@ export async function invokeToolAgent(
       : createAgent({
           model: params.model,
           tools: params.tools,
-          systemPrompt: params.systemPrompt,
+          systemPrompt,
           middleware: [callLimit],
         });
 
-  const inputMessages = params.messages
+  const rawInputMessages = params.messages
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({
       role: m.role as "user" | "assistant",
       content: m.content,
     }));
+
+  // Leave headroom for the system prompt already bound on the agent.
+  const messageBudget = usesGroq
+    ? Math.max(
+        512,
+        GROQ_EFFECTIVE_INPUT_BUDGET -
+          Math.ceil(systemPrompt.length / 3) -
+          64,
+      )
+    : Number.POSITIVE_INFINITY;
+
+  const inputMessages = usesGroq
+    ? fitMessageArrayToTokenBudget(rawInputMessages, messageBudget)
+    : rawInputMessages;
 
   const invokePromise = agent.invoke(
     { messages: inputMessages },

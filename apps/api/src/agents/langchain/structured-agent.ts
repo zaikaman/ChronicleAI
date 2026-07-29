@@ -20,6 +20,21 @@ import { toJsonSchema } from "@langchain/core/utils/json_schema";
 import type { LLMProvider } from "@chronicleai/schemas";
 import type { ChronicleChatModel } from "./models.ts";
 import { messageContentToText } from "./models.ts";
+import {
+  fitPromptToTokenBudget,
+  fitSystemAndUserToTokenBudget,
+  GROQ_EFFECTIVE_INPUT_BUDGET,
+  MAX_SAFE_INPUT_TOKENS,
+} from "./token-budget.ts";
+
+// Re-export budget helpers so existing imports from structured-agent keep working.
+export {
+  estimateTokens,
+  fitPromptToTokenBudget,
+  GROQ_EFFECTIVE_INPUT_BUDGET,
+  GROQ_MAX_INPUT_TOKENS,
+  MAX_SAFE_INPUT_TOKENS,
+} from "./token-budget.ts";
 
 export interface StructuredAgentInvokeParams<TSchema extends InteropZodObject> {
   model: ChronicleChatModel;
@@ -78,52 +93,6 @@ function nativeResponseFormat<TSchema extends InteropZodObject>(schema: TSchema)
   return providerStrategy(schema);
 }
 
-/**
- * Safe maximum input token budget for structured LLM agent calls.
- * Keeps input tokens + output token reserve well within provider limits (e.g. 8000 TPM limit on Groq).
- */
-export const MAX_SAFE_INPUT_TOKENS = 6000;
-
-/**
- * Estimate token count of text conservatively (1 token ≈ 3.2 characters).
- */
-export function estimateTokens(text: string): number {
-  if (!text) return 0;
-  return Math.ceil(text.length / 3.2);
-}
-
-/**
- * Truncate prompt string if systemPrompt + userPrompt + schemaHint exceeds maxInputTokens.
- * Ensures total requested tokens stay strictly <= 8000 tokens.
- */
-export function fitPromptToTokenBudget(
-  userPrompt: string,
-  systemPrompt: string,
-  schemaHint = "",
-  maxInputTokens = MAX_SAFE_INPUT_TOKENS,
-): string {
-  const systemTokens = estimateTokens(systemPrompt);
-  const schemaTokens = estimateTokens(schemaHint);
-  const overhead = systemTokens + schemaTokens + 100;
-  const allowedUserTokens = maxInputTokens - overhead;
-
-  if (allowedUserTokens <= 500) {
-    const charCap = Math.max(500, allowedUserTokens * 3);
-    return userPrompt.slice(0, charCap) + "\n\n[Context truncated for 8000 token limit]";
-  }
-
-  const userTokens = estimateTokens(userPrompt);
-  if (userTokens <= allowedUserTokens) {
-    return userPrompt;
-  }
-
-  const allowedChars = Math.floor(allowedUserTokens * 3.0);
-  return (
-    userPrompt.slice(0, allowedChars) +
-    "\n\n[Context truncated to enforce 8000 token limit]"
-  );
-}
-
 /** Pull the first JSON object from model text (handles markdown fences). */
 function extractJsonObject(raw: string): string | null {
   const match = raw.match(/\{[\s\S]*\}/);
@@ -165,15 +134,17 @@ async function invokeGroqJsonObjectStructuredAgent<TSchema extends InteropZodObj
     schemaHint = "";
   }
 
-  const systemPrompt = schemaHint
+  const rawSystemPrompt = schemaHint
     ? `${params.systemPrompt}\n\nCRITICAL: Respond with a single raw JSON object only (no markdown fences, no preamble, no prose) matching this JSON Schema:\n${schemaHint}`
     : `${params.systemPrompt}\n\nCRITICAL: Respond with a single raw JSON object only (no markdown fences, no preamble, no prose).`;
 
-  const safeUserPrompt = fitPromptToTokenBudget(
+  // Budget the *actual* wire payload (full system with schema + user), not the
+  // pre-merge pieces — otherwise schemaHint is double-counted or CRITICAL text
+  // is ignored and Groq can still see >8000 input tokens.
+  const { systemPrompt, userPrompt: safeUserPrompt } = fitSystemAndUserToTokenBudget(
+    rawSystemPrompt,
     params.userPrompt,
-    params.systemPrompt,
-    schemaHint,
-    MAX_SAFE_INPUT_TOKENS,
+    GROQ_EFFECTIVE_INPUT_BUDGET,
   );
 
   const inputMessages = [

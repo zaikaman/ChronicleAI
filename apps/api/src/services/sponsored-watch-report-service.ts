@@ -8,6 +8,11 @@ import { getAddress, isAddress, keccak256, stringToBytes } from "viem";
 import type { MonitoredEventRow } from "@chronicleai/db";
 import { ALERT_GENERATION_TIMEOUT_MS, LLM_FALLBACK_ORDER } from "@chronicleai/config";
 import {
+  estimateTokens,
+  GROQ_EFFECTIVE_INPUT_BUDGET,
+  GROQ_MAX_INPUT_TOKENS,
+} from "../agents/langchain/token-budget.ts";
+import {
   extractJsonObject,
   LLM_PROVIDER_CALLERS,
   type LLMProviderMap,
@@ -283,22 +288,21 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
 }
 
 /**
- * Groq free/dev tiers commonly cap ~8k input tokens. We budget conservatively
- * (chars/4 ≈ tokens) and leave headroom for system prompt + JSON completion.
+ * Groq free/dev tiers cap ~8k input tokens. Shared hard cap lives in
+ * token-budget.ts; this re-export keeps call-site imports stable.
  */
-export const GROQ_INPUT_TOKEN_BUDGET = 8000;
-/** Tokens reserved for system instruction + model completion overhead. */
-const LLM_PROMPT_RESERVED_TOKENS = 2_000;
+export const GROQ_INPUT_TOKEN_BUDGET = GROQ_MAX_INPUT_TOKENS;
+/**
+ * Tokens reserved inside the user prompt builder for the separate system
+ * instruction that callGroq attaches. Effective event/header budget uses
+ * GROQ_EFFECTIVE_INPUT_BUDGET minus this reserve.
+ */
+const LLM_PROMPT_RESERVED_TOKENS = 1_500;
 /** Soft ceiling on event lines even when the budget still has room. */
 const LLM_MAX_EVENT_LINES = 24;
 const MIN_TITLE_CHARS = 12;
 const MIN_SUMMARY_CHARS = 40;
 const MIN_ANALYSIS_CHARS = 60;
-
-function estimateTokens(text: string): number {
-  // ~4 chars/token is a stable lower-bound estimator for English + hex addresses.
-  return Math.ceil(text.length / 4);
-}
 
 function isPlaceholderText(value: string): boolean {
   const t = value.trim();
@@ -353,7 +357,9 @@ function buildLlmPrompt(
   input: SponsoredWatchReportInput,
   options?: { maxInputTokens?: number },
 ): string {
-  const maxInputTokens = options?.maxInputTokens ?? GROQ_INPUT_TOKEN_BUDGET;
+  // For Groq, never let the built user prompt approach the hard 8k cap —
+  // system instruction is attached separately by the LLM client.
+  const maxInputTokens = options?.maxInputTokens ?? GROQ_EFFECTIVE_INPUT_BUDGET;
   const eventBudgetTokens = Math.max(500, maxInputTokens - LLM_PROMPT_RESERVED_TOKENS);
 
   const ranked = [...input.events].sort(
@@ -414,8 +420,9 @@ async function tryLlmNarrative(
     const config = providerConfigs[provider];
     if (!config?.apiKey) continue;
 
-    // Groq input window is ~8k tokens; OpenAI path can take a larger prompt.
-    const maxInputTokens = provider === "groq" ? GROQ_INPUT_TOKEN_BUDGET : 24_000;
+    // Groq input window is hard-capped at 8k; OpenAI path can take a larger prompt.
+    const maxInputTokens =
+      provider === "groq" ? GROQ_EFFECTIVE_INPUT_BUDGET : 24_000;
     const prompt = buildLlmPrompt(input, { maxInputTokens });
 
     const caller = LLM_PROVIDER_CALLERS[provider];
