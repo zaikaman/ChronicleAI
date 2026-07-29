@@ -1,6 +1,6 @@
 # ChronicleAI — Simulation → Submit → Outcome Audit Narrative Implementation Plan
 
-**Status:** Phase 0–1 implemented (Layer C audit spine); Phase 2–4 pending  
+**Status:** Phase 0–2 implemented (Layer C spine + Layer B run logs); Phase 3–4 pending  
 **Owner:** ChronicleAI  
 **Scope:** Desk trade tickets first; registry / capital / Activity secondary  
 **Depends on:** KeeperHub workflow execute + executions status/logs APIs; existing desk execution bridge  
@@ -732,7 +732,7 @@ No mocks for production paths; tests may mock **HTTP to KeeperHub** only.
 - [ ] Public ticket detail API returns audit when present  
 - [ ] `DeskTicketPage` shows continuous preflight → submit → outcome  
 - [ ] Gas used and KeeperHub run id visible in the story (not only buried in proofs)  
-- [ ] Phase 2: run nodes from `/logs` on success path  
+- [x] Phase 2: run nodes from `/logs` on success path  
 - [ ] Phase 3 (optional): dry-run only; zero DE broadcasts in code paths  
 - [ ] Narrative/fallback mentions audit beats  
 - [ ] Legacy tickets without audit do not crash  

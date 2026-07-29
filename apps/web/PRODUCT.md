@@ -49,7 +49,7 @@ Operator and workflow setup: `workflows/keeperhub/README.md` (Private routing se
 
 ## Execution audit (product note)
 
-Desk trade tickets may include a continuous **execution audit** story: **policy preflight → workflow submit → outcome** (gas, txs, terminal status). Optional later: KeeperHub dry-run on preflight and per-node run steps from KeeperHub logs.
+Desk trade tickets may include a continuous **execution audit** story: **policy preflight → workflow submit → outcome** (gas, txs, terminal status), plus **Run steps** from KeeperHub execution logs when available. Optional later: KeeperHub dry-run on preflight.
 
 | Prefer | Avoid |
 |--------|--------|

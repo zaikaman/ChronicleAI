@@ -30,6 +30,10 @@ import {
   type DeskAuditRouting,
   type DeskAuditSubmitStage,
 } from "./execution-audit.ts";
+import {
+  attachRunNodesToOutcome,
+  fetchAndNormalizeExecutionLogs,
+} from "./keeperhub-execution-logs.ts";
 
 export type DeskWorkflowAction =
   | "sweep"
@@ -489,6 +493,21 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
     });
   }
 
+  /**
+   * Layer B: after terminal success/failure/timeout, fetch per-node logs.
+   * Soft-fail only — never fails the trade solely because logs failed.
+   * Prefer receipt-level gas; derive from node gasUsedUnits only when missing.
+   */
+  async function enrichOutcomeWithRunLogs(
+    executionId: string,
+    outcome: DeskAuditOutcomeStage,
+  ): Promise<DeskAuditOutcomeStage> {
+    const logs = await fetchAndNormalizeExecutionLogs(executionId, authorizedFetch, {
+      timeoutMs: 15_000,
+    });
+    return attachRunNodesToOutcome(outcome, logs);
+  }
+
   function receiptFromStatus(
     executionId: string,
     body: ExecuteStatusResponse,
@@ -543,22 +562,31 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
           const message =
             detail ??
             `KeeperHub desk execution ${executionId} ended with status ${body.status}`;
+          const outcome = await enrichOutcomeWithRunLogs(
+            executionId,
+            outcomeFromFailure({ message, body }),
+          );
           throw new DeskWorkflowExecutionError(message, {
             keeperHubRunId: executionId,
             workflowId: meta.workflowId,
             action: meta.action,
-            executionAudit: {
-              submit,
-              outcome: outcomeFromFailure({ message, body }),
-            },
+            executionAudit: { submit, outcome },
           });
         }
         if (isTerminalSuccess(body)) {
           const receipt = receiptFromStatus(executionId, body);
-          receipt.executionAudit = {
-            submit,
-            outcome: outcomeFromSuccessReceipt(receipt, body),
-          };
+          const outcome = await enrichOutcomeWithRunLogs(
+            executionId,
+            outcomeFromSuccessReceipt(receipt, body),
+          );
+          // Prefer wait/status gas; derived node gas only fills gaps (already applied).
+          if (outcome.gasUsed && !receipt.gasUsed) {
+            receipt.gasUsed = outcome.gasUsed;
+          }
+          if (outcome.gasUsedWei && !receipt.gasUsedWei) {
+            receipt.gasUsedWei = outcome.gasUsedWei;
+          }
+          receipt.executionAudit = { submit, outcome };
           return receipt;
         }
       }
@@ -575,22 +603,30 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
           const message =
             detail ??
             `KeeperHub desk execution ${executionId} ended with status ${body.status}`;
+          const outcome = await enrichOutcomeWithRunLogs(
+            executionId,
+            outcomeFromFailure({ message, body }),
+          );
           throw new DeskWorkflowExecutionError(message, {
             keeperHubRunId: executionId,
             workflowId: meta.workflowId,
             action: meta.action,
-            executionAudit: {
-              submit,
-              outcome: outcomeFromFailure({ message, body }),
-            },
+            executionAudit: { submit, outcome },
           });
         }
         if (isTerminalSuccess(body)) {
           const receipt = receiptFromStatus(executionId, body);
-          receipt.executionAudit = {
-            submit,
-            outcome: outcomeFromSuccessReceipt(receipt, body),
-          };
+          const outcome = await enrichOutcomeWithRunLogs(
+            executionId,
+            outcomeFromSuccessReceipt(receipt, body),
+          );
+          if (outcome.gasUsed && !receipt.gasUsed) {
+            receipt.gasUsed = outcome.gasUsed;
+          }
+          if (outcome.gasUsedWei && !receipt.gasUsedWei) {
+            receipt.gasUsedWei = outcome.gasUsedWei;
+          }
+          receipt.executionAudit = { submit, outcome };
           return receipt;
         }
         const hintHeader = statusRes.headers.get("X-Poll-Interval-Hint");
@@ -607,15 +643,17 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
     }
 
     const message = `Timed out waiting for KeeperHub desk execution ${executionId}${lastError ? ` (${lastError})` : ""}`;
+    // Best-effort logs when runId exists (plan §2.2).
+    const outcome = await enrichOutcomeWithRunLogs(
+      executionId,
+      outcomeFromFailure({ message, timedOut: true }),
+    );
     throw new DeskWorkflowExecutionError(message, {
       keeperHubRunId: executionId,
       workflowId: meta.workflowId,
       action: meta.action,
       timedOut: true,
-      executionAudit: {
-        submit,
-        outcome: outcomeFromFailure({ message, timedOut: true }),
-      },
+      executionAudit: { submit, outcome },
     });
   }
 

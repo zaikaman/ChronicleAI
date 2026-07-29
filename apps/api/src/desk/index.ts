@@ -14,6 +14,7 @@ export * from "./position-service.ts";
 export * from "./intent-service.ts";
 export * from "./capital-manager.ts";
 export * from "./execution-bridge.ts";
+export * from "./keeperhub-execution-logs.ts";
 export * from "./ticket-service.ts";
 export * from "./heartbeat-service.ts";
 export * from "./strategy-risk.ts";

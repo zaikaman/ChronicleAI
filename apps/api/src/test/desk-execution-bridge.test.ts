@@ -43,6 +43,13 @@ describe("execution-bridge", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
+      // Phase 2: empty logs still success path.
+      if (u.includes("/logs")) {
+        return new Response(JSON.stringify({ execution: { id: "exec-1" }, logs: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       return new Response("not found", { status: 404 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -69,6 +76,8 @@ describe("execution-bridge", () => {
     expect(receipt.executionAudit?.submit.workflowAction).toBe("defend");
     expect(receipt.executionAudit?.outcome?.status).toBe("filled");
     expect(receipt.executionAudit?.outcome?.txHashes).toEqual(["0xabc"]);
+    expect(receipt.executionAudit?.outcome?.logsFetched).toBe(true);
+    expect(receipt.executionAudit?.outcome?.runNodes).toEqual([]);
 
     const executeCall = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("/workflows/wf-defend-1/execute"),
@@ -78,6 +87,149 @@ describe("execution-bridge", () => {
     const headers = executeCall![1]?.headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer kh_test");
     expect(headers.get("Idempotency-Key")).toBe("desk-defend-test");
+
+    const logsCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/logs"));
+    expect(logsCalls).toHaveLength(1);
+  });
+
+  it("after poll success, fetches /logs once and attaches run nodes", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/execute") && init?.method === "POST") {
+        return new Response(JSON.stringify({ executionId: "exec-logs" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/wait") || u.includes("/status")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-logs",
+            status: "completed",
+            completed: true,
+            transactionHash: "0xswap",
+            transactionLink: "https://sepolia.etherscan.io/tx/0xswap",
+            // No top-level gas — nodes should derive units.
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (u.includes("/logs")) {
+        return new Response(
+          JSON.stringify({
+            execution: { id: "exec-logs", status: "success" },
+            logs: [
+              {
+                nodeId: "swap-1",
+                nodeName: "Swap",
+                nodeType: "web3/write-contract",
+                status: "success",
+                duration: "1200",
+                startedAt: "2024-01-01T00:00:02Z",
+                completedAt: "2024-01-01T00:00:03Z",
+                output: {
+                  success: true,
+                  transactionHash: "0xswap",
+                  gasUsed: "2100000882000",
+                  gasUsedUnits: "61234",
+                  transactionLink: "https://sepolia.etherscan.io/tx/0xswap",
+                },
+              },
+              {
+                nodeId: "approve-1",
+                nodeName: "Approve USDC",
+                nodeType: "web3/approve-token",
+                status: "success",
+                duration: "800",
+                startedAt: "2024-01-01T00:00:00Z",
+                completedAt: "2024-01-01T00:00:01Z",
+                output: {
+                  success: true,
+                  transactionHash: "0xapprove",
+                  gasUsed: "1000000000000",
+                  gasUsedUnits: "21000",
+                  transactionLink: "https://sepolia.etherscan.io/tx/0xapprove",
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: { defend: "wf-defend-1" },
+    });
+
+    const receipt = await bridge.execute("defend", { intentId: "i1" });
+    expect(receipt.executionAudit?.outcome?.status).toBe("filled");
+    expect(receipt.executionAudit?.outcome?.logsFetched).toBe(true);
+    expect(receipt.executionAudit?.outcome?.runNodes).toHaveLength(2);
+    // Sorted ascending by startedAt: approve then swap.
+    expect(receipt.executionAudit?.outcome?.runNodes?.[0]?.nodeName).toBe(
+      "Approve USDC",
+    );
+    expect(receipt.executionAudit?.outcome?.runNodes?.[1]?.nodeName).toBe("Swap");
+    expect(receipt.executionAudit?.outcome?.runNodes?.[1]?.gasUsedUnits).toBe("61234");
+    // Derived gas units when wait payload had none.
+    expect(receipt.executionAudit?.outcome?.gasUsed).toBe("82234");
+    expect(receipt.gasUsed).toBe("82234");
+
+    const logsCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/logs"));
+    expect(logsCalls).toHaveLength(1);
+  });
+
+  it("logs 500 soft-fails: outcome still filled, logsFetched false", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/execute") && init?.method === "POST") {
+        return new Response(JSON.stringify({ executionId: "exec-soft" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/wait") || u.includes("/status")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-soft",
+            status: "completed",
+            completed: true,
+            transactionHash: "0xok",
+            transactionLink: "https://sepolia.etherscan.io/tx/0xok",
+            gasUsedUnits: "50000",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (u.includes("/logs")) {
+        return new Response("internal error", { status: 500 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: { defend: "wf-defend-1" },
+    });
+
+    const receipt = await bridge.execute("defend", { intentId: "i1" });
+    expect(receipt.txHash).toBe("0xok");
+    expect(receipt.executionAudit?.outcome?.status).toBe("filled");
+    expect(receipt.executionAudit?.outcome?.txHashes).toEqual(["0xok"]);
+    expect(receipt.executionAudit?.outcome?.logsFetched).toBe(false);
+    expect(receipt.executionAudit?.outcome?.logsFetchError).toMatch(/logs HTTP 500/);
+    expect(receipt.executionAudit?.outcome?.runNodes).toEqual([]);
+    // Receipt gas from wait payload still present (not wiped by logs fail).
+    expect(receipt.executionAudit?.outcome?.gasUsed).toBe("50000");
   });
 
   it("records all multi-leg transaction hashes from KeeperHub", async () => {
@@ -108,6 +260,12 @@ describe("execution-bridge", () => {
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
+      }
+      if (u.includes("/logs")) {
+        return new Response(JSON.stringify({ logs: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
       return new Response("not found", { status: 404 });
     });
@@ -163,6 +321,24 @@ describe("execution-bridge", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
+      // Failure path still attempts Layer B logs (soft).
+      if (u.includes("/logs")) {
+        return new Response(
+          JSON.stringify({
+            logs: [
+              {
+                nodeId: "fail-node",
+                nodeName: "Write",
+                nodeType: "web3/write-contract",
+                status: "error",
+                error: "Contract call failed: Error(32)",
+                startedAt: "2024-01-01T00:00:00Z",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
       return new Response("not found", { status: 404 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -188,6 +364,8 @@ describe("execution-bridge", () => {
         expect(error.executionAudit.outcome?.errorMessage).toMatch(
           /Contract call failed/,
         );
+        expect(error.executionAudit.outcome?.logsFetched).toBe(true);
+        expect(error.executionAudit.outcome?.runNodes?.[0]?.nodeId).toBe("fail-node");
       }
     }
   });
@@ -259,6 +437,12 @@ describe("execution-bridge", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
+      if (u.includes("/logs")) {
+        return new Response(JSON.stringify({ logs: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       return new Response("not found", { status: 404 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -322,6 +506,12 @@ describe("execution-bridge", () => {
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
+      }
+      if (u.includes("/logs")) {
+        return new Response(JSON.stringify({ logs: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
       return new Response("not found", { status: 404 });
     });
