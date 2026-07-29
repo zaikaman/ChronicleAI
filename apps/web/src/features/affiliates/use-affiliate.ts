@@ -117,7 +117,9 @@ export function useAffiliateAgent(walletAddress: string | null | undefined) {
       setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
 
       try {
-        const body = await apiPostJson<{
+        const jobBody = await apiPostJson<{
+          jobId?: string;
+          status?: "pending" | "processing" | "completed" | "failed";
           reply?: string;
           error?: string;
           stats?: AffiliateStats | null;
@@ -129,10 +131,42 @@ export function useAffiliateAgent(walletAddress: string | null | undefined) {
           message: trimmed,
         });
 
-        const reply = body.reply ?? "No reply from agent.";
+        let finalResult = jobBody;
+
+        if (jobBody.jobId && jobBody.status !== "completed" && jobBody.status !== "failed") {
+          const jobId = jobBody.jobId;
+          const pollInterval = 1500;
+          const maxPolls = 200; // 5 minutes max
+
+          for (let attempt = 0; attempt < maxPolls; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, pollInterval));
+
+            const pollRes = await apiGetJson<{
+              jobId: string;
+              status: "pending" | "processing" | "completed" | "failed";
+              reply?: string;
+              error?: string;
+              stats?: AffiliateStats | null;
+              toolCalls?: Array<{ name: string }>;
+              mode?: "llm" | "fallback";
+              provider?: string | null;
+            }>(`/affiliates/agent/chat/jobs/${encodeURIComponent(jobId)}`);
+
+            if (pollRes.status === "completed") {
+              finalResult = pollRes;
+              break;
+            }
+
+            if (pollRes.status === "failed") {
+              throw new Error(pollRes.error ?? "Background job failed");
+            }
+          }
+        }
+
+        const reply = finalResult.reply ?? "No reply from agent.";
         setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-        if (onStats && body.stats !== undefined) {
-          onStats(body.stats);
+        if (onStats && finalResult.stats !== undefined) {
+          onStats(finalResult.stats);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Agent request failed";

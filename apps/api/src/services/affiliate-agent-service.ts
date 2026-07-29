@@ -39,12 +39,40 @@ export interface AffiliateAgentChatResult {
   provider?: LLMProvider | "fallback";
 }
 
+export type AffiliateAgentJobStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed";
+
+export interface AffiliateAgentJob {
+  id: string;
+  affiliateWallet: string;
+  status: AffiliateAgentJobStatus;
+  request: {
+    message: string;
+    history?: AffiliateAgentMessage[];
+  };
+  result?: AffiliateAgentChatResult | null;
+  error?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AffiliateAgentService {
   chat(params: {
     affiliateWallet: string;
     message: string;
     history?: AffiliateAgentMessage[];
   }): Promise<AffiliateAgentChatResult>;
+
+  startChatJob(params: {
+    affiliateWallet: string;
+    message: string;
+    history?: AffiliateAgentMessage[];
+  }): AffiliateAgentJob;
+
+  getChatJob(jobId: string): AffiliateAgentJob | null;
 }
 
 type ToolName =
@@ -61,7 +89,7 @@ const TOOL_NAMES = new Set<string>([
 ]);
 
 const MAX_TOOL_ROUNDS = 5;
-const LLM_TIMEOUT_MS = 45_000;
+const LLM_TIMEOUT_MS = 300_000;
 
 interface LlmToolRequest {
   id: string;
@@ -661,7 +689,18 @@ export function createAffiliateAgentService(deps: {
   llm?: AffiliateAgentLlm | null;
   providerConfigs?: LLMProviderMap;
 }): AffiliateAgentService {
-  return {
+  const jobs = new Map<string, AffiliateAgentJob>();
+
+  const cleanupOldJobs = () => {
+    const cutoff = Date.now() - 30 * 60 * 1000;
+    for (const [id, job] of jobs.entries()) {
+      if (new Date(job.createdAt).getTime() < cutoff) {
+        jobs.delete(id);
+      }
+    }
+  };
+
+  const service: AffiliateAgentService = {
     async chat(params) {
       // Explicit test injection
       if (deps.llm !== undefined && deps.llm !== null) {
@@ -707,5 +746,50 @@ export function createAffiliateAgentService(deps: {
 
       return runFallbackChat(params, deps);
     },
+
+    startChatJob(params) {
+      cleanupOldJobs();
+      const id = `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const now = new Date().toISOString();
+      const job: AffiliateAgentJob = {
+        id,
+        affiliateWallet: params.affiliateWallet,
+        status: "pending",
+        request: {
+          message: params.message,
+          history: params.history,
+        },
+        result: null,
+        error: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      jobs.set(id, job);
+
+      // Execute asynchronously in background
+      (async () => {
+        job.status = "processing";
+        job.updatedAt = new Date().toISOString();
+        try {
+          const res = await service.chat(params);
+          job.status = "completed";
+          job.result = res;
+          job.updatedAt = new Date().toISOString();
+        } catch (err) {
+          job.status = "failed";
+          job.error = err instanceof Error ? err.message : String(err);
+          job.updatedAt = new Date().toISOString();
+        }
+      })();
+
+      return job;
+    },
+
+    getChatJob(jobId) {
+      return jobs.get(jobId) ?? null;
+    },
   };
+
+  return service;
 }

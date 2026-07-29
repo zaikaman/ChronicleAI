@@ -346,8 +346,9 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
 
   /**
    * POST /affiliates/agent/chat
-   * Affiliate payout agent — tools execute real KeeperHub withdrawals.
+   * Start asynchronous affiliate agent chat job.
    * Body: { walletAddress, message, history? } — no signature required.
+   * Returns: HTTP 202 { jobId, status } immediately to avoid router timeouts.
    */
   router.post("/affiliates/agent/chat", async (req, res, next) => {
     try {
@@ -386,29 +387,75 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
             }))
         : [];
 
-      const result = await agentService.chat({
+      const job = agentService.startChatJob({
         affiliateWallet: wallet,
         message,
         history,
       });
 
+      res.status(202).json({
+        jobId: job.id,
+        status: job.status,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /affiliates/agent/chat/jobs/:jobId
+   * Check status and result of a background payout agent chat job.
+   */
+  router.get("/affiliates/agent/chat/jobs/:jobId", async (req, res, next) => {
+    try {
+      const { jobId } = req.params;
+      if (!jobId) {
+        res.status(400).json({ error: "jobId is required" });
+        return;
+      }
+
+      const job = agentService.getChatJob(jobId);
+      if (!job) {
+        res.status(404).json({ error: "Job not found" });
+        return;
+      }
+
+      if (job.status === "completed" && job.result) {
+        res.status(200).json({
+          jobId: job.id,
+          status: job.status,
+          reply: job.result.reply,
+          mode: job.result.mode,
+          provider: job.result.provider ?? null,
+          toolCalls: job.result.toolCalls.map((t) => ({
+            name: t.name,
+            arguments: t.arguments,
+            result:
+              t.name === "get_affiliate_stats" && t.result && typeof t.result === "object"
+                ? {
+                    referredCount: (t.result as { referredCount?: number }).referredCount,
+                    totalEarnedUsdc: (t.result as { totalEarnedUsdc?: number }).totalEarnedUsdc,
+                    availableUsdc: (t.result as { availableUsdc?: number }).availableUsdc,
+                  }
+                : t.result,
+          })),
+          stats: job.result.stats ?? null,
+        });
+        return;
+      }
+
+      if (job.status === "failed") {
+        res.status(200).json({
+          jobId: job.id,
+          status: job.status,
+          error: job.error ?? "Job failed",
+        });
+        return;
+      }
+
       res.status(200).json({
-        reply: result.reply,
-        mode: result.mode,
-        provider: result.provider ?? null,
-        toolCalls: result.toolCalls.map((t) => ({
-          name: t.name,
-          arguments: t.arguments,
-          result:
-            t.name === "get_affiliate_stats" && t.result && typeof t.result === "object"
-              ? {
-                  referredCount: (t.result as { referredCount?: number }).referredCount,
-                  totalEarnedUsdc: (t.result as { totalEarnedUsdc?: number }).totalEarnedUsdc,
-                  availableUsdc: (t.result as { availableUsdc?: number }).availableUsdc,
-                }
-              : t.result,
-        })),
-        stats: result.stats ?? null,
+        jobId: job.id,
+        status: job.status,
       });
     } catch (error) {
       next(error);

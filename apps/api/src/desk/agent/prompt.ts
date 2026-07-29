@@ -102,12 +102,12 @@ export function buildDeskAgentUserPrompt(context: DeskAgentContext): string {
     "",
     "RECENT_SIGNALS (newest first):",
     JSON.stringify(
-      context.signals.map((s) => ({
+      context.signals.slice(0, 5).map((s) => ({
         id: s.id,
         type: s.signalType,
         severity: s.severity,
         verdict: s.policyVerdict,
-        features: s.features,
+        features: sanitizeFeatures(s.features),
         fusion: s.fusionLabel,
         at: s.createdAt,
       })),
@@ -117,13 +117,13 @@ export function buildDeskAgentUserPrompt(context: DeskAgentContext): string {
     "",
     "RECENT_INTENTS:",
     JSON.stringify(
-      context.intents.map((i) => ({
+      context.intents.slice(0, 5).map((i) => ({
         id: i.id,
         strategy: i.strategy,
         status: i.status,
         notionalUsdc: i.notionalUsdc,
         reasons: i.reasonCodes,
-        error: i.errorMessage,
+        error: i.errorMessage ? String(i.errorMessage).slice(0, 100) : undefined,
         at: i.createdAt,
       })),
       null,
@@ -132,7 +132,7 @@ export function buildDeskAgentUserPrompt(context: DeskAgentContext): string {
     "",
     "RECENT_CAPITAL_MOVES:",
     JSON.stringify(
-      context.capitalMoves.map((m) => ({
+      context.capitalMoves.slice(0, 5).map((m) => ({
         direction: m.direction,
         amountUsdc: m.amountUsdc,
         reason: m.reason,
@@ -144,7 +144,7 @@ export function buildDeskAgentUserPrompt(context: DeskAgentContext): string {
   ];
 
   if (context.lastCapitalSummary) {
-    lines.push(`LAST_CAPITAL_SUMMARY: ${context.lastCapitalSummary}`);
+    lines.push(`LAST_CAPITAL_SUMMARY: ${context.lastCapitalSummary.slice(0, 500)}`);
   }
 
   lines.push(
@@ -153,6 +153,23 @@ export function buildDeskAgentUserPrompt(context: DeskAgentContext): string {
   );
 
   return lines.join("\n");
+}
+
+function sanitizeFeatures(
+  features: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!features || typeof features !== "object") return features;
+  const copy: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(features)) {
+    if (typeof v === "string") {
+      copy[k] = v.length > 200 ? `${v.slice(0, 200)}...` : v;
+    } else if (Array.isArray(v)) {
+      copy[k] = v.slice(0, 5);
+    } else {
+      copy[k] = v;
+    }
+  }
+  return copy;
 }
 
 /** Prompt invariants used in unit tests. */

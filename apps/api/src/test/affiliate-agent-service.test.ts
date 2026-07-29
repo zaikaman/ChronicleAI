@@ -238,4 +238,34 @@ describe("createAffiliateAgentService", () => {
       expect(result.reply.toLowerCase()).toContain("provider down");
     });
   });
+
+  describe("background job execution", () => {
+    it("starts job in pending/processing state and settles to completed", async () => {
+      const stats = baseStats();
+      const getStats = vi.fn().mockResolvedValue(stats);
+      const agent = createAffiliateAgentService({
+        dashboardService: {
+          getStats,
+          getAvailableBalanceUsdc: vi.fn(),
+        },
+        withdrawalService: { withdraw: vi.fn() },
+        llm: null,
+      });
+
+      const job = agent.startChatJob({
+        affiliateWallet: WALLET,
+        message: "show my stats",
+      });
+
+      expect(job.id).toBeDefined();
+      expect(job.status).toMatch(/pending|processing/);
+
+      // Wait briefly for background execution to complete
+      await new Promise((r) => setTimeout(r, 50));
+
+      const updated = agent.getChatJob(job.id);
+      expect(updated?.status).toBe("completed");
+      expect(updated?.result?.reply).toContain("People referred");
+    });
+  });
 });

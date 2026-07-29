@@ -11,7 +11,9 @@ import {
   alertContentSchema,
   deskProposalSchema,
   digestContentSchema,
+  estimateTokens,
   failureClassificationSchema,
+  fitPromptToTokenBudget,
   invokeStructuredAgent,
   normalizeGeminiBaseUrl,
   premiumNarrativeSchema,
@@ -216,5 +218,22 @@ describe("invokeStructuredAgent groq JSON Object Mode", () => {
         provider: "groq",
       }),
     ).rejects.toThrow(/schema validation/i);
+  });
+
+  it("fitPromptToTokenBudget truncates prompt when userPrompt exceeds token limit", () => {
+    const systemPrompt = "System prompt context";
+    const userPrompt = "A".repeat(30000); // 30,000 chars ≈ 9,375 tokens
+    const schemaHint = "Schema hint context";
+
+    const fitted = fitPromptToTokenBudget(userPrompt, systemPrompt, schemaHint, 6000);
+    expect(estimateTokens(fitted + systemPrompt + schemaHint)).toBeLessThanOrEqual(6100);
+    expect(fitted).toContain("[Context truncated");
+  });
+
+  it("fitPromptToTokenBudget preserves prompt when within token budget", () => {
+    const systemPrompt = "System prompt";
+    const userPrompt = "Normal small user prompt";
+    const fitted = fitPromptToTokenBudget(userPrompt, systemPrompt, "", 6000);
+    expect(fitted).toBe(userPrompt);
   });
 });
