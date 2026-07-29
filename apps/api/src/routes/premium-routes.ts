@@ -40,7 +40,7 @@ export function createPremiumRoutes(params: {
    */
   router.get("/premium/watches", async (_req, res, next) => {
     try {
-      const result = await params.watchRepo.listActive();
+      const result = await params.watchRepo.list();
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });
         return;

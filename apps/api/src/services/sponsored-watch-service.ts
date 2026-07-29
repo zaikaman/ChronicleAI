@@ -20,6 +20,8 @@ import {
 } from "./sponsored-watch-report-service.ts";
 import type { Web3Client } from "./web3-client-service.ts";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface CompleteWatchParams {
   reportContentHash: string;
   sourceEventRoot: string;
@@ -122,8 +124,8 @@ export function createSponsoredWatchService(params: {
       });
       if (logs.length > 0) {
         // Construct transient MonitoredEventRows for report generation
-        return logs.map((log, idx) => ({
-          id: `rpc-event-${watch.id}-${idx}`,
+        return logs.map((log) => ({
+          id: crypto.randomUUID(),
           source: "rpc_direct",
           source_event_id: `rpc-${log.transactionHash.slice(0, 10)}-${log.logIndex}`,
           event_type: "large_swap" as const,
@@ -177,7 +179,7 @@ export function createSponsoredWatchService(params: {
 
   async function refreshMonitoring(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
     const matching = await collectMatchingEvents(watch);
-    const sourceEventIds = matching.map((e) => e.id);
+    const sourceEventIds = matching.map((e) => e.id).filter((id) => UUID_RE.test(id));
     const now = new Date().toISOString();
 
     const result = await watchRepo.update(watch.id, {
@@ -354,7 +356,9 @@ export function createSponsoredWatchService(params: {
       report_explorer_url: reportExplorerUrl ?? null,
       content_uri: reportUri,
       source_event_root: sourceEventRoot,
-      source_event_ids: sourceEventIds ?? watch.source_event_ids ?? [],
+      source_event_ids: (sourceEventIds ?? watch.source_event_ids ?? []).filter((id) =>
+        UUID_RE.test(id),
+      ),
       report_title: reportTitle ?? null,
       report_summary: reportSummary ?? null,
       report_highlights: reportHighlights ?? [],

@@ -226,9 +226,9 @@ export function SponsoredWatchRequestForm({
       });
 
       const watch = settled?.sponsoredWatch as SettledWatch | undefined;
-      if (watch?.id) {
+      if (watch) {
         setSettledWatch(watch);
-        onSettled?.(watch.id);
+        onSettled?.(watch.id ?? "");
       }
       setStep("settled");
     } catch (err) {
@@ -365,12 +365,18 @@ export function SponsoredWatchRequestForm({
           <p className="text-muted-foreground m-0 mb-2">
             Status <StatusBadge label={settledWatch.status} variant="info" />
           </p>
-          <Link
-            to={`/premium/watches/${settledWatch.id}`}
-            className="text-sm font-semibold text-foreground hover:text-muted-foreground transition-colors"
-          >
-            Open campaign audit trail →
-          </Link>
+          {settledWatch.id ? (
+            <Link
+              to={`/premium/watches/${settledWatch.id}`}
+              className="text-sm font-semibold text-foreground hover:text-muted-foreground transition-colors"
+            >
+              Open campaign audit trail →
+            </Link>
+          ) : (
+            <p className="text-xs text-muted-foreground m-0">
+              Initializing campaign on-chain. It will appear in the campaigns list below shortly.
+            </p>
+          )}
         </div>
       ) : null}
     </Surface>

@@ -278,7 +278,8 @@ export function useSponsoredWatches(): {
       );
       return data.watches ?? [];
     },
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
   });
 
   return {

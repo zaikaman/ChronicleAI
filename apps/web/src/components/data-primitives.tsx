@@ -149,7 +149,23 @@ interface TimestampDisplayProps {
 function formatRelativeTime(timestamp: string): string {
   const now = Date.now();
   const then = new Date(timestamp).getTime();
+  if (Number.isNaN(then)) return timestamp;
+
   const diffMs = now - then;
+
+  if (diffMs < 0) {
+    const futureMs = Math.abs(diffMs);
+    const futureMinutes = Math.floor(futureMs / 60000);
+    const futureHours = Math.floor(futureMinutes / 60);
+    const futureDays = Math.floor(futureHours / 24);
+
+    if (futureMinutes < 1) return "in <1m";
+    if (futureMinutes < 60) return `in ${futureMinutes}m`;
+    if (futureHours < 24) return `in ${futureHours}h`;
+    if (futureDays < 7) return `in ${futureDays}d`;
+    return new Date(timestamp).toLocaleDateString();
+  }
+
   const diffMinutes = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
