@@ -9,6 +9,7 @@
 import type {
   ExecutionLogRepository,
   MonitoredEventRepository,
+  MonitoredEventRow,
   SponsoredWatchRepository,
   SponsoredWatchRow,
 } from "@chronicleai/db";
@@ -16,11 +17,15 @@ import { buildSponsoredReportContentUri } from "./content-uri.ts";
 import {
   createSponsoredWatchReportService,
   eventMatchesTargetContract,
+  isPlaceholderSponsoredReport,
   type SponsoredWatchReportService,
 } from "./sponsored-watch-report-service.ts";
 import type { Web3Client } from "./web3-client-service.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** In-process single-flight so concurrent 60s ticks cannot double-publish one watch. */
+const completionInFlight = new Set<string>();
 
 export interface CompleteWatchParams {
   reportContentHash: string;
@@ -37,6 +42,8 @@ export interface CampaignCycleResult {
   activated: number;
   monitored: number;
   completed: number;
+  /** Completed watches whose narrative was junk/empty and got template/LLM backfill. */
+  repaired: number;
   failed: number;
   errors: string[];
 }
@@ -92,10 +99,148 @@ export function createSponsoredWatchService(params: {
     return web3Client;
   }
 
+  /**
+   * Stable UUID derived from tx+logIndex so RPC observations can be re-derived
+   * across ticks without inventing fresh random ids each minute (which previously
+   * filled source_event_ids with 400+ orphans that never existed in monitored_events).
+   */
+  function deterministicRpcEventId(txHash: string, logIndex: number): string {
+    const hex = Array.from(
+      new TextEncoder().encode(`${txHash.toLowerCase()}:${logIndex}`),
+    )
+      .reduce((acc, b) => acc + b.toString(16).padStart(2, "0"), "")
+      .padEnd(32, "0")
+      .slice(0, 32);
+    // Prefer crypto digest when available for better distribution.
+    try {
+      // Node 22+: sync not available for subtle; use a simple FNV-ish mix on hex chars.
+      let h = 2166136261;
+      const key = `${txHash.toLowerCase()}:${logIndex}`;
+      for (let i = 0; i < key.length; i++) {
+        h ^= key.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      const h2 = (h >>> 0).toString(16).padStart(8, "0");
+      const base = (h2 + hex).replace(/[^0-9a-f]/gi, "0").padEnd(32, "0").slice(0, 32);
+      return `${base.slice(0, 8)}-${base.slice(8, 12)}-5${base.slice(13, 16)}-a${base.slice(17, 20)}-${base.slice(20, 32)}`;
+    } catch {
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4000-8000-${hex.slice(16, 28)}`;
+    }
+  }
+
+  async function collectRpcLogsForWindow(watch: SponsoredWatchRow) {
+    const rpcUrl = process.env.RPC_URL || "https://1rpc.io/sepolia";
+    const { createPublicClient, http } = await import("viem");
+    const { sepolia } = await import("viem/chains");
+    const client = createPublicClient({
+      chain: sepolia,
+      transport: http(rpcUrl, { timeout: 12_000 }),
+    });
+
+    const startsMs = new Date(watch.starts_at).getTime();
+    const endsMs = new Date(watch.ends_at).getTime();
+    if (!Number.isFinite(startsMs) || !Number.isFinite(endsMs) || startsMs >= endsMs) {
+      return [];
+    }
+
+    const latest = await client.getBlock();
+    const latestTs = Number(latest.timestamp);
+    const latestBlock = latest.number;
+    // Sepolia ~12s blocks; clamp range so public RPCs accept the eth_getLogs span.
+    const SEPOLIA_BLOCK_SECONDS = 12;
+    const MAX_SPAN = 2_000n;
+    const blocksFromEnd = BigInt(
+      Math.max(0, Math.ceil((latestTs - endsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
+    );
+    const blocksFromStart = BigInt(
+      Math.max(0, Math.ceil((latestTs - startsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
+    );
+    let toBlock = latestBlock > blocksFromEnd ? latestBlock - blocksFromEnd : 0n;
+    let fromBlock = latestBlock > blocksFromStart ? latestBlock - blocksFromStart : 0n;
+    if (toBlock < fromBlock) {
+      const tmp = fromBlock;
+      fromBlock = toBlock;
+      toBlock = tmp;
+    }
+    if (toBlock - fromBlock > MAX_SPAN) {
+      fromBlock = toBlock - MAX_SPAN;
+    }
+
+    const logs = await client.getLogs({
+      address: watch.target_contract as `0x${string}`,
+      fromBlock,
+      toBlock,
+    });
+
+    const nowIso = new Date().toISOString();
+    return logs.map((log) => {
+      const id = deterministicRpcEventId(log.transactionHash, log.logIndex);
+      return {
+        id,
+        source: "rpc_direct" as const,
+        source_event_id: `rpc-${log.transactionHash}-${log.logIndex}`,
+        event_type: "large_swap" as const,
+        chain_id: 11155111,
+        protocol: "Ethereum Sepolia",
+        asset_symbols: null,
+        magnitude: null,
+        transaction_hash: log.transactionHash,
+        observed_at: watch.starts_at,
+        captured_at: nowIso,
+        significance_score: 0.75,
+        raw_payload: {
+          address: watch.target_contract,
+          logIndex: log.logIndex,
+          topics: log.topics,
+          blockNumber: log.blockNumber?.toString?.() ?? String(log.blockNumber),
+          source: "rpc_direct",
+        },
+        status: "qualified" as const,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+    });
+  }
+
   async function collectMatchingEvents(watch: SponsoredWatchRow) {
     if (!eventRepo) {
       return [];
     }
+
+    // 1) Reload previously correlated rows by id (survives across ticks when they are real DB rows).
+    const priorIds = (watch.source_event_ids ?? []).filter((id) => UUID_RE.test(id)).slice(0, 500);
+    if (priorIds.length > 0) {
+      const loaded: MonitoredEventRow[] = [];
+      // Probe the first chunk only; if nothing resolves, these are synthetic RPC orphans
+      // (random UUIDs never inserted into monitored_events) — skip the rest.
+      const probe = priorIds.slice(0, 25);
+      const probeRows = await Promise.all(probe.map((id) => eventRepo.findById(id)));
+      let probeHits = 0;
+      for (const row of probeRows) {
+        if (row.ok) {
+          loaded.push(row.value);
+          probeHits += 1;
+        }
+      }
+      if (probeHits > 0) {
+        for (let i = 25; i < priorIds.length; i += 50) {
+          const chunk = priorIds.slice(i, i + 50);
+          const rows = await Promise.all(chunk.map((id) => eventRepo.findById(id)));
+          for (const row of rows) {
+            if (row.ok) loaded.push(row.value);
+          }
+        }
+        const matchedPrior = loaded.filter((event) =>
+          eventMatchesTargetContract(event, watch.target_contract),
+        );
+        if (matchedPrior.length > 0) {
+          return matchedPrior;
+        }
+      }
+      // Prior ids were synthetic RPC orphans — fall through to window scan / RPC.
+    }
+
+    // 2) Window scan of Event Tracker / block-dispatcher rows.
     const result = await eventRepo.listInWindow({
       periodStart: watch.starts_at,
       periodEnd: watch.ends_at,
@@ -110,41 +255,19 @@ export function createSponsoredWatchService(params: {
     if (dbMatched.length > 0) {
       return dbMatched;
     }
-    // Fallback: If DB contains no events for custom contract, attempt RPC log query if available
+
+    // 3) RPC fallback over the campaign time window (not "last 100 blocks", which
+    // drifted after ends_at and invented random UUIDs each tick).
     try {
-      const rpcUrl = process.env.RPC_URL || "https://1rpc.io/sepolia";
-      const { createPublicClient, http } = await import("viem");
-      const { sepolia } = await import("viem/chains");
-      const client = createPublicClient({ chain: sepolia, transport: http(rpcUrl, { timeout: 8000 }) });
-      const block = await client.getBlockNumber();
-      const logs = await client.getLogs({
-        address: watch.target_contract as `0x${string}`,
-        fromBlock: block > 100n ? block - 100n : 0n,
-        toBlock: block,
-      });
-      if (logs.length > 0) {
-        // Construct transient MonitoredEventRows for report generation
-        return logs.map((log) => ({
-          id: crypto.randomUUID(),
-          source: "rpc_direct",
-          source_event_id: `rpc-${log.transactionHash.slice(0, 10)}-${log.logIndex}`,
-          event_type: "large_swap" as const,
-          chain_id: 11155111,
-          protocol: "Ethereum Sepolia",
-          asset_symbols: null,
-          magnitude: null,
-          transaction_hash: log.transactionHash,
-          observed_at: watch.starts_at,
-          captured_at: new Date().toISOString(),
-          significance_score: 0.9,
-          raw_payload: { address: watch.target_contract, logIndex: log.logIndex, topics: log.topics },
-          status: "qualified" as const,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
+      const rpcMatched = await collectRpcLogsForWindow(watch);
+      if (rpcMatched.length > 0) {
+        return rpcMatched;
       }
-    } catch {
-      // Ignore RPC fallback failures and return empty list
+    } catch (error) {
+      console.warn(
+        `[sponsored-watch] RPC fallback failed for ${watch.id}:`,
+        error instanceof Error ? error.message : error,
+      );
     }
     return dbMatched;
   }
@@ -211,13 +334,25 @@ export function createSponsoredWatchService(params: {
     return result.value;
   }
 
-  async function completeEndedWatch(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
-    const matching = await collectMatchingEvents(watch);
+  function watchSpecFields(watch: SponsoredWatchRow): {
+    eventSignature: string | null;
+    description: string | null;
+  } {
     const watchRaw = watch as unknown as Record<string, unknown>;
     const watchSpecObj =
       typeof watchRaw.watch_spec === "object" && watchRaw.watch_spec !== null
         ? (watchRaw.watch_spec as Record<string, unknown>)
         : {};
+    return {
+      eventSignature:
+        typeof watchSpecObj.eventSignature === "string" ? watchSpecObj.eventSignature : null,
+      description: typeof watchSpecObj.description === "string" ? watchSpecObj.description : null,
+    };
+  }
+
+  async function generateReportForWatch(watch: SponsoredWatchRow) {
+    const matching = await collectMatchingEvents(watch);
+    const spec = watchSpecFields(watch);
     const report = await reportService.generateReport({
       watchId: watch.id,
       targetContract: watch.target_contract,
@@ -225,37 +360,142 @@ export function createSponsoredWatchService(params: {
       startsAt: watch.starts_at,
       endsAt: watch.ends_at,
       events: matching,
-      eventSignature: typeof watchSpecObj.eventSignature === "string" ? watchSpecObj.eventSignature : null,
-      description: typeof watchSpecObj.description === "string" ? watchSpecObj.description : null,
+      eventSignature: spec.eventSignature,
+      description: spec.description,
+      priorMonitoredCount: watch.monitored_event_count ?? 0,
+      priorSourceEventIdCount: watch.source_event_ids?.length ?? 0,
     });
+    return { report, matching };
+  }
 
-    await execLogRepo.append({
-      action_type: "generate_digest",
-      entity_type: "sponsored_watch",
-      entity_id: watch.id,
-      status: "succeeded",
-      message: `Sponsored watch report generated (${matching.length} source event(s))`,
-      details: {
+  async function completeEndedWatch(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
+    if (completionInFlight.has(watch.id)) {
+      throw new Error(`Sponsored watch ${watch.id} completion already in flight`);
+    }
+    completionInFlight.add(watch.id);
+    try {
+      const { report, matching } = await generateReportForWatch(watch);
+
+      // Never publish placeholder junk on-chain — fall back should already be template,
+      // but guard the dual-audit path explicitly.
+      if (
+        isPlaceholderSponsoredReport({
+          reportTitle: report.title,
+          reportSummary: report.summary,
+          reportAnalysis: report.analysis,
+          reportHighlights: report.highlights,
+        })
+      ) {
+        throw new Error(
+          `Generated report for ${watch.id} failed quality checks (placeholder/empty narrative)`,
+        );
+      }
+
+      await execLogRepo.append({
+        action_type: "generate_digest",
+        entity_type: "sponsored_watch",
+        entity_id: watch.id,
+        status: "succeeded",
+        message: `Sponsored watch report generated (${matching.length} source event(s), source=${report.generationSource ?? "unknown"})`,
+        details: {
+          reportContentHash: report.reportContentHash,
+          sourceEventRoot: report.sourceEventRoot,
+          sourceEventIds: report.sourceEventIds.slice(0, 50),
+          title: report.title,
+          confidence: report.confidence,
+          generationSource: report.generationSource ?? null,
+          generationProvider: report.generationProvider ?? null,
+        },
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      });
+
+      return completeWatchInternal(watch.id, {
         reportContentHash: report.reportContentHash,
         sourceEventRoot: report.sourceEventRoot,
         sourceEventIds: report.sourceEventIds,
-        title: report.title,
-        confidence: report.confidence,
-      },
-      started_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
+        reportTitle: report.title,
+        reportSummary: report.summary,
+        reportHighlights: report.highlights,
+        reportAnalysis: report.analysis,
+        monitoredEventCount: matching.length,
+      });
+    } finally {
+      completionInFlight.delete(watch.id);
+    }
+  }
 
-    return completeWatchInternal(watch.id, {
-      reportContentHash: report.reportContentHash,
-      sourceEventRoot: report.sourceEventRoot,
-      sourceEventIds: report.sourceEventIds,
-      reportTitle: report.title,
-      reportSummary: report.summary,
-      reportHighlights: report.highlights,
-      reportAnalysis: report.analysis,
-      monitoredEventCount: matching.length,
-    });
+  /**
+   * Backfill narrative for completed watches stuck with empty/"..." copy.
+   * Keeps existing on-chain report tx + content hash (already committed);
+   * only repairs the HTTPS content-URI body the dashboard reads.
+   */
+  async function repairPlaceholderReport(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
+    if (completionInFlight.has(watch.id)) {
+      throw new Error(`Sponsored watch ${watch.id} repair already in flight`);
+    }
+    completionInFlight.add(watch.id);
+    try {
+      const { report, matching } = await generateReportForWatch(watch);
+      if (
+        isPlaceholderSponsoredReport({
+          reportTitle: report.title,
+          reportSummary: report.summary,
+          reportAnalysis: report.analysis,
+          reportHighlights: report.highlights,
+        })
+      ) {
+        throw new Error(`Repair for ${watch.id} still produced placeholder narrative`);
+      }
+
+      // Keep the higher of live re-query vs historically recorded count so a
+      // failed RPC replay does not wipe a real campaign down to zero.
+      const monitoredCount = Math.max(
+        matching.length,
+        watch.monitored_event_count ?? 0,
+        watch.source_event_ids?.length ?? 0,
+      );
+      const result = await watchRepo.update(watch.id, {
+        report_title: report.title,
+        report_summary: report.summary,
+        report_highlights: report.highlights,
+        report_analysis: report.analysis,
+        // Do not clobber historical source_event_ids with an empty re-query.
+        ...(matching.length > 0
+          ? { source_event_ids: report.sourceEventIds.filter((id) => UUID_RE.test(id)) }
+          : {}),
+        monitored_event_count: monitoredCount,
+        last_monitored_at: new Date().toISOString(),
+        // Preserve on-chain commitments; narrative backfill is off-chain content URI only.
+      });
+      if (!result.ok) {
+        throw new Error(`Failed to repair sponsored watch report: ${result.error.message}`);
+      }
+
+      await execLogRepo.append({
+        action_type: "generate_digest",
+        entity_type: "sponsored_watch",
+        entity_id: watch.id,
+        status: "succeeded",
+        message: `Sponsored watch report narrative repaired (${matching.length} source event(s), source=${report.generationSource ?? "unknown"})`,
+        details: {
+          method: "repairPlaceholderReport",
+          title: report.title,
+          confidence: report.confidence,
+          generationSource: report.generationSource ?? null,
+          generationProvider: report.generationProvider ?? null,
+          preservedReportTxHash: watch.report_tx_hash,
+          preservedReportContentHash: watch.report_content_hash,
+          note: "On-chain report hash left unchanged; dashboard body backfilled after placeholder LLM output",
+        },
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      });
+
+      return result.value;
+    } finally {
+      completionInFlight.delete(watch.id);
+    }
   }
 
   async function completeWatchInternal(
@@ -551,6 +791,7 @@ export function createSponsoredWatchService(params: {
         activated: 0,
         monitored: 0,
         completed: 0,
+        repaired: 0,
         failed: 0,
         errors: [],
       };
@@ -595,6 +836,7 @@ export function createSponsoredWatchService(params: {
         cycle.errors.push(`listDueForCompletion: ${dueComplete.error.message}`);
       } else {
         for (const watch of dueComplete.value) {
+          if (completionInFlight.has(watch.id)) continue;
           try {
             await completeEndedWatch(watch);
             cycle.completed += 1;
@@ -621,6 +863,35 @@ export function createSponsoredWatchService(params: {
               started_at: nowIso,
               completed_at: new Date().toISOString(),
             });
+          }
+        }
+      }
+
+      // 4. Repair completed campaigns stuck with empty / "..." narrative
+      //    (e.g. Groq 8k overflow accepted as placeholder before quality gates).
+      const maybeRepair = await watchRepo.listCompletedNeedingReportRepair(25);
+      if (!maybeRepair.ok) {
+        cycle.errors.push(`listCompletedNeedingReportRepair: ${maybeRepair.error.message}`);
+      } else {
+        for (const watch of maybeRepair.value) {
+          if (
+            !isPlaceholderSponsoredReport({
+              reportTitle: watch.report_title,
+              reportSummary: watch.report_summary,
+              reportAnalysis: watch.report_analysis,
+              reportHighlights: watch.report_highlights,
+            })
+          ) {
+            continue;
+          }
+          if (completionInFlight.has(watch.id)) continue;
+          try {
+            await repairPlaceholderReport(watch);
+            cycle.repaired += 1;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            cycle.errors.push(`repair ${watch.id}: ${message}`);
+            cycle.failed += 1;
           }
         }
       }

@@ -6,6 +6,7 @@ import {
   buildSourceEventRoot,
   createSponsoredWatchReportService,
   eventMatchesTargetContract,
+  isPlaceholderSponsoredReport,
 } from "../services/sponsored-watch-report-service.ts";
 
 const TARGET = "0x1234567890abcdef1234567890abcdef12345678";
@@ -91,5 +92,85 @@ describe("sponsored-watch-report-service", () => {
     expect(report.sourceEventRoot).toBe(buildSourceEventRoot([]));
     expect(report.summary.toLowerCase()).toContain("no qualifying");
     expect(report.confidence).toBe("high");
+  });
+
+  it("uses prior correlation count when live events are gone", async () => {
+    const report = await service.generateReport({
+      watchId: "watch-orphan-ids",
+      targetContract: TARGET,
+      watchSpecHash: "0x" + "f".repeat(64),
+      startsAt: "2026-07-01T00:00:00.000Z",
+      endsAt: "2026-07-08T00:00:00.000Z",
+      events: [],
+      priorMonitoredCount: 437,
+      priorSourceEventIdCount: 437,
+    });
+    expect(report.summary).toContain("437");
+    expect(report.summary.toLowerCase()).not.toContain("no qualifying");
+    expect(report.confidence).toBe("medium");
+    expect(report.highlights.some((h) => h.includes("437"))).toBe(true);
+  });
+
+  it("detects placeholder / ellipsis report bodies", () => {
+    expect(
+      isPlaceholderSponsoredReport({
+        reportTitle: "...",
+        reportSummary: "...",
+        reportAnalysis: "...",
+        reportHighlights: ["...", "..."],
+      }),
+    ).toBe(true);
+    expect(
+      isPlaceholderSponsoredReport({
+        reportTitle: "Sponsored Watch Report — 0x1234…abcd",
+        reportSummary:
+          "ChronicleAI observed 12 on-chain events on the target during the campaign window.",
+        reportAnalysis: "Detailed analysis of matched swaps and liquidations across the window.",
+        reportHighlights: ["1. large swap on uniswap"],
+      }),
+    ).toBe(false);
+  });
+
+  it("falls back to template when LLM returns ellipsis placeholders", async () => {
+    const llmService = createSponsoredWatchReportService({
+      providerConfigs: {
+        gemini: { apiKey: "", model: "x" },
+        openai: { apiKey: "", model: "x" },
+        groq: { apiKey: "test-key", model: "llama" },
+      },
+    });
+
+    const { LLM_PROVIDER_CALLERS } = await import("../services/llm-provider-client.ts");
+    const original = LLM_PROVIDER_CALLERS.groq;
+    LLM_PROVIDER_CALLERS.groq = async () =>
+      JSON.stringify({
+        title: "...",
+        summary: "...",
+        highlights: ["...", "..."],
+        analysis: "...",
+        confidence: "high",
+      });
+
+    try {
+      const report = await llmService.generateReport({
+        watchId: "watch-junk-llm",
+        targetContract: TARGET,
+        watchSpecHash: "0x" + "e".repeat(64),
+        startsAt: "2026-07-01T00:00:00.000Z",
+        endsAt: "2026-07-08T00:00:00.000Z",
+        events: [event({ id: "evt-1" })],
+      });
+      expect(report.generationSource).toBe("template");
+      expect(report.title).toContain("Sponsored Watch Report");
+      expect(report.summary).not.toBe("...");
+      expect(isPlaceholderSponsoredReport({
+        reportTitle: report.title,
+        reportSummary: report.summary,
+        reportAnalysis: report.analysis,
+        reportHighlights: report.highlights,
+      })).toBe(false);
+    } finally {
+      LLM_PROVIDER_CALLERS.groq = original;
+    }
   });
 });

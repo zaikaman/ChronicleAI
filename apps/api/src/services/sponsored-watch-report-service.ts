@@ -38,6 +38,13 @@ export interface SponsoredWatchReportInput {
   events: MonitoredEventRow[];
   eventSignature?: string | null;
   description?: string | null;
+  /**
+   * When live re-query returns 0 rows but the campaign previously correlated
+   * N observations (e.g. synthetic RPC ids never persisted), keep that count
+   * so the template does not falsely claim an empty campaign.
+   */
+  priorMonitoredCount?: number;
+  priorSourceEventIdCount?: number;
 }
 
 export interface SponsoredWatchReportService {
@@ -146,6 +153,51 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
 
   if (events.length === 0) {
     const title = `Sponsored Watch Report — ${shortTarget}`;
+    const priorCount = Math.max(
+      input.priorMonitoredCount ?? 0,
+      input.priorSourceEventIdCount ?? 0,
+    );
+
+    // Campaign ticks previously correlated observations, but rows are gone
+    // (synthetic RPC UUIDs never written to monitored_events, or retention).
+    if (priorCount > 0) {
+      const summary =
+        `Campaign monitoring correlated ${priorCount} observation(s) on ${targetContract} ` +
+        `during ${windowLabel}. The live event store no longer holds those rows ` +
+        `(common when an earlier RPC fallback used ephemeral ids), so this report ` +
+        `reconstructs from the campaign audit trail rather than a full event replay.`;
+      const highlights = [
+        `${priorCount} observation(s) were recorded on the sponsored watch during the paid window.`,
+        "Underlying monitored_events rows are no longer loadable — narrative is audit-trail based.",
+        "On-chain create + publishSponsoredReport receipts remain the verifiable dual audit trail.",
+        ...(input.eventSignature
+          ? [`Filtered by requested event signature: ${input.eventSignature}`]
+          : []),
+        ...(input.description ? [`Campaign instructions: "${input.description}"`] : []),
+      ];
+      const analysis =
+        `Campaign ${watchId} monitored ${targetContract} from ${startsAt} to ${endsAt}. ` +
+        (input.description ? `Watch instructions: "${input.description}". ` : "") +
+        (input.eventSignature ? `Event filter: ${input.eventSignature}. ` : "") +
+        `Monitoring ticks recorded ${priorCount} matched observation(s). ` +
+        "A later regenerate could not reload those rows from monitored_events " +
+        "(orphan source_event_ids from a non-persisted RPC path, or retention). " +
+        "Treat the on-chain report tx + source-event root as the canonical completeness proof; " +
+        "this HTTPS body is a best-effort narrative backfill.";
+
+      return finalizeReport(
+        { title, summary, highlights, analysis, confidence: "medium" },
+        {
+          sourceEventIds,
+          sourceEventRoot,
+          targetContract,
+          startsAt,
+          endsAt,
+          generationSource: "template",
+        },
+      );
+    }
+
     const summary = `No qualifying on-chain events were observed on ${targetContract} during the campaign window (${windowLabel}). The monitoring job completed with an empty source set.`;
     const highlights = [
       "Zero events matched the sponsored target contract in the campaign window.",
@@ -230,12 +282,89 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
   );
 }
 
-function buildLlmPrompt(input: SponsoredWatchReportInput): string {
-  const eventLines = input.events.slice(0, 40).map((e, i) => `${i + 1}. ${formatEventLine(e)}`);
-  return [
+/**
+ * Groq free/dev tiers commonly cap ~8k input tokens. We budget conservatively
+ * (chars/4 ≈ tokens) and leave headroom for system prompt + JSON completion.
+ */
+export const GROQ_INPUT_TOKEN_BUDGET = 8000;
+/** Tokens reserved for system instruction + model completion overhead. */
+const LLM_PROMPT_RESERVED_TOKENS = 2_000;
+/** Soft ceiling on event lines even when the budget still has room. */
+const LLM_MAX_EVENT_LINES = 24;
+const MIN_TITLE_CHARS = 12;
+const MIN_SUMMARY_CHARS = 40;
+const MIN_ANALYSIS_CHARS = 60;
+
+function estimateTokens(text: string): number {
+  // ~4 chars/token is a stable lower-bound estimator for English + hex addresses.
+  return Math.ceil(text.length / 4);
+}
+
+function isPlaceholderText(value: string): boolean {
+  const t = value.trim();
+  if (!t) return true;
+  // Models sometimes emit ellipsis / "..." / "…" when the context window blows up.
+  if (/^[.…]{1,10}$/u.test(t)) return true;
+  if (/^(n\/?a|none|null|undefined|tbd|todo|placeholder)$/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * True when a persisted campaign report is missing or is LLM junk
+ * (e.g. title/summary/analysis literally "...").
+ */
+export function isPlaceholderSponsoredReport(fields: {
+  reportTitle?: string | null;
+  reportSummary?: string | null;
+  reportAnalysis?: string | null;
+  reportHighlights?: string[] | null;
+}): boolean {
+  const title = fields.reportTitle?.trim() ?? "";
+  const summary = fields.reportSummary?.trim() ?? "";
+  const analysis = fields.reportAnalysis?.trim() ?? "";
+  const highlights = (fields.reportHighlights ?? []).map((h) => h.trim()).filter(Boolean);
+
+  if (!title || !summary) return true;
+  if (isPlaceholderText(title) || isPlaceholderText(summary)) return true;
+  if (analysis && isPlaceholderText(analysis)) return true;
+  if (highlights.length > 0 && highlights.every((h) => isPlaceholderText(h))) return true;
+  if (title.length < MIN_TITLE_CHARS || summary.length < MIN_SUMMARY_CHARS) return true;
+  return false;
+}
+
+function isUsableLlmNarrative(parts: {
+  title: string;
+  summary: string;
+  analysis: string;
+  highlights: string[];
+}): boolean {
+  if (isPlaceholderText(parts.title) || isPlaceholderText(parts.summary) || isPlaceholderText(parts.analysis)) {
+    return false;
+  }
+  if (parts.title.length < MIN_TITLE_CHARS) return false;
+  if (parts.summary.length < MIN_SUMMARY_CHARS) return false;
+  if (parts.analysis.length < MIN_ANALYSIS_CHARS) return false;
+  if (parts.highlights.length === 0) return false;
+  if (parts.highlights.every((h) => isPlaceholderText(h))) return false;
+  return true;
+}
+
+function buildLlmPrompt(
+  input: SponsoredWatchReportInput,
+  options?: { maxInputTokens?: number },
+): string {
+  const maxInputTokens = options?.maxInputTokens ?? GROQ_INPUT_TOKEN_BUDGET;
+  const eventBudgetTokens = Math.max(500, maxInputTokens - LLM_PROMPT_RESERVED_TOKENS);
+
+  const ranked = [...input.events].sort(
+    (a, b) => (b.significance_score ?? 0) - (a.significance_score ?? 0),
+  );
+
+  const header = [
     "You are ChronicleAI writing a paid sponsored-watch intelligence report.",
     "Return ONLY a JSON object with keys: title (string), summary (string), highlights (string array, 2-8 items), analysis (string markdown-friendly prose), confidence (\"high\"|\"medium\"|\"low\").",
     "Ground every claim in the observed events and user instructions. Do not invent transactions.",
+    "Never use ellipsis-only placeholders (\"...\") for any field. Write real prose.",
     `watchId: ${input.watchId}`,
     `targetContract: ${input.targetContract}`,
     `watchSpecHash: ${input.watchSpecHash}`,
@@ -243,9 +372,28 @@ function buildLlmPrompt(input: SponsoredWatchReportInput): string {
     ...(input.description ? [`userWatchInstructions: "${input.description}"`] : []),
     `window: ${input.startsAt} → ${input.endsAt}`,
     `eventCount: ${input.events.length}`,
-    "events:",
-    eventLines.length > 0 ? eventLines.join("\n") : "(none)",
   ].join("\n");
+
+  const eventLines: string[] = [];
+  let usedTokens = estimateTokens(header) + estimateTokens("events:\n");
+  for (let i = 0; i < ranked.length && eventLines.length < LLM_MAX_EVENT_LINES; i++) {
+    const line = `${eventLines.length + 1}. ${formatEventLine(ranked[i]!)}`;
+    const lineTokens = estimateTokens(line) + 1;
+    if (usedTokens + lineTokens > eventBudgetTokens) break;
+    eventLines.push(line);
+    usedTokens += lineTokens;
+  }
+
+  const omitted = input.events.length - eventLines.length;
+  const eventsBlock =
+    eventLines.length > 0
+      ? eventLines.join("\n") +
+        (omitted > 0
+          ? `\n(… ${omitted} additional matched event(s) omitted for token budget; rank by significance above.)`
+          : "")
+      : "(none)";
+
+  return `${header}\nevents:\n${eventsBlock}`;
 }
 
 async function tryLlmNarrative(
@@ -260,23 +408,21 @@ async function tryLlmNarrative(
   provider: string;
 } | null> {
   const system =
-    "You write precise Web3 market intelligence for paid monitoring campaigns. Respond with JSON only.";
-  const prompt = buildLlmPrompt(input);
+    "You write precise Web3 market intelligence for paid monitoring campaigns. Respond with JSON only. Never emit ellipsis-only placeholder fields.";
 
   for (const provider of LLM_FALLBACK_ORDER) {
     const config = providerConfigs[provider];
     if (!config?.apiKey) continue;
 
+    // Groq input window is ~8k tokens; OpenAI path can take a larger prompt.
+    const maxInputTokens = provider === "groq" ? GROQ_INPUT_TOKEN_BUDGET : 24_000;
+    const prompt = buildLlmPrompt(input, { maxInputTokens });
+
     const caller = LLM_PROVIDER_CALLERS[provider];
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ALERT_GENERATION_TIMEOUT_MS);
     try {
-      const raw = await caller(
-        config,
-        prompt,
-        controller ? controller.signal : new AbortController().signal,
-        system,
-      );
+      const raw = await caller(config, prompt, controller.signal, system);
       const jsonText = extractJsonObject(raw);
       if (!jsonText) continue;
       const parsed = JSON.parse(jsonText) as Record<string, unknown>;
@@ -284,7 +430,9 @@ async function tryLlmNarrative(
       const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
       const analysis = typeof parsed.analysis === "string" ? parsed.analysis.trim() : "";
       const highlights = Array.isArray(parsed.highlights)
-        ? parsed.highlights.filter((h): h is string => typeof h === "string" && h.trim().length > 0)
+        ? parsed.highlights
+            .filter((h): h is string => typeof h === "string" && h.trim().length > 0)
+            .map((h) => h.trim())
         : [];
       const confidenceRaw = parsed.confidence;
       const confidence =
@@ -294,18 +442,22 @@ async function tryLlmNarrative(
             ? "high"
             : "medium";
 
-      if (!title || !summary || !analysis) continue;
-
-      return {
+      const candidate = {
         title,
         summary,
-        highlights: highlights.length > 0 ? highlights.slice(0, 8) : [summary],
         analysis,
+        highlights: highlights.length > 0 ? highlights.slice(0, 8) : summary ? [summary] : [],
+      };
+      // Reject junk ("...", too-short) so we fall through to the deterministic template.
+      if (!isUsableLlmNarrative(candidate)) continue;
+
+      return {
+        ...candidate,
         confidence,
         provider,
       };
     } catch {
-      // Try next provider
+      // Try next provider (timeout, 8k overflow, parse error, …)
     } finally {
       if (timer) clearTimeout(timer);
     }

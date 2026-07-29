@@ -45,6 +45,7 @@ export function createKeeperhubSponsoredWatchRoutes(
         activated: result.activated,
         monitored: result.monitored,
         completed: result.completed,
+        repaired: result.repaired,
         failed: result.failed,
         errors: result.errors,
       });

@@ -15,6 +15,12 @@ export interface SponsoredWatchRepository {
   listActive(): Promise<Result<SponsoredWatchRow[]>>;
   /** Watches past ends_at that still need report generation / publish. */
   listDueForCompletion(nowIso?: string): Promise<Result<SponsoredWatchRow[]>>;
+  /**
+   * Completed campaigns whose narrative fields are missing or placeholder junk
+   * (e.g. LLM emitted "..."). Used by the campaign cycle to backfill copy
+   * without re-running on-chain publish when a report tx already exists.
+   */
+  listCompletedNeedingReportRepair(limit?: number): Promise<Result<SponsoredWatchRow[]>>;
   /** Accepted watches whose starts_at has arrived. */
   listDueForActivation(nowIso?: string): Promise<Result<SponsoredWatchRow[]>>;
   /** Active campaigns currently inside their monitoring window. */
@@ -72,6 +78,21 @@ export function createSponsoredWatchRepository(supabase: SupabaseClient): Sponso
         .in("status", ["accepted", "monitoring"])
         .lte("ends_at", now)
         .order("ends_at", { ascending: true });
+
+      if (error) return failure(mapPostgrestError(error));
+      return success((data ?? []) as unknown as SponsoredWatchRow[]);
+    },
+
+    async listCompletedNeedingReportRepair(limit = 25) {
+      const safeLimit = Math.min(Math.max(limit, 1), 100);
+      // Pull recent completed rows; placeholder detection is applied in the
+      // service layer (PostgREST cannot express "title is '...'" cleanly with
+      // all junk variants without an RPC).
+      const { data, error } = await table()
+        .select("*")
+        .eq("status", "completed")
+        .order("ends_at", { ascending: false })
+        .limit(safeLimit);
 
       if (error) return failure(mapPostgrestError(error));
       return success((data ?? []) as unknown as SponsoredWatchRow[]);

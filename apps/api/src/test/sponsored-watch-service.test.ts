@@ -10,8 +10,9 @@ describe("SponsoredWatchService", () => {
     create: vi.fn(),
     findById: vi.fn(),
     list: vi.fn(),
-      listActive: vi.fn(),
+    listActive: vi.fn(),
     listDueForCompletion: vi.fn(),
+    listCompletedNeedingReportRepair: vi.fn(),
     listDueForActivation: vi.fn(),
     listInMonitoringWindow: vi.fn(),
     update: vi.fn(),
@@ -112,6 +113,7 @@ describe("SponsoredWatchService", () => {
     });
     mockExecLogRepo.append.mockResolvedValue({ ok: true, value: {} });
     mockEventRepo.listInWindow.mockResolvedValue({ ok: true, value: [] });
+    mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({ ok: true, value: [] });
   });
 
   describe("createSponsoredWatch", () => {
@@ -395,6 +397,10 @@ describe("SponsoredWatchService", () => {
         ok: true,
         value: [endedWatch],
       });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
       mockWatchRepo.updateStatus.mockImplementation(async (id: string, status: string) => ({
         ok: true,
         value: { ...mockWatchRow, id, status },
@@ -438,6 +444,7 @@ describe("SponsoredWatchService", () => {
       expect(cycle.activated).toBe(1);
       expect(cycle.monitored).toBe(1);
       expect(cycle.completed).toBe(1);
+      expect(cycle.repaired).toBe(0);
       expect(cycle.failed).toBe(0);
       expect(mockWeb3Client.publishSponsoredReport).toHaveBeenCalled();
       const publishArgs = (mockWeb3Client.publishSponsoredReport as ReturnType<typeof vi.fn>).mock
@@ -447,6 +454,71 @@ describe("SponsoredWatchService", () => {
       expect(typeof publishArgs?.[1]).toBe("string");
       expect(typeof publishArgs?.[2]).toBe("string");
       expect(publishArgs?.[3]).toContain("/premium/watches/");
+    });
+
+    it("repairs completed watches stuck with ellipsis placeholder narrative", async () => {
+      const junkWatch = {
+        ...mockWatchRow,
+        id: "6c71fb9b-f71f-4632-b940-ca65e0ce128b",
+        status: "completed",
+        ends_at: "2026-07-05T00:00:00.000Z",
+        report_tx_hash: "0x" + "b".repeat(64),
+        report_content_hash: "0x" + "d".repeat(64),
+        report_title: "...",
+        report_summary: "...",
+        report_highlights: ["...", "..."],
+        report_analysis: "...",
+        monitored_event_count: 2,
+      };
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [junkWatch],
+      });
+      mockWatchRepo.update.mockImplementation(async (id: string, update: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...junkWatch, id, ...update },
+      }));
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: "evt-1",
+            source: "keeperhub",
+            source_event_id: "src-1",
+            event_type: "large_swap",
+            chain_id: 11155111,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: { value: 100000, unit: "USD" },
+            transaction_hash: "0x" + "11".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-03T12:00:00.000Z",
+            significance_score: 0.9,
+            raw_payload: { address: mockWatchRow.target_contract },
+            status: "qualified",
+            created_at: "2026-07-03T12:00:00.000Z",
+            updated_at: "2026-07-03T12:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await service.processCampaignCycle(new Date("2026-07-28T12:00:00.000Z"));
+
+      expect(cycle.repaired).toBe(1);
+      expect(cycle.failed).toBe(0);
+      expect(mockWatchRepo.update).toHaveBeenCalled();
+      const updateArg = mockWatchRepo.update.mock.calls[0]?.[1] as {
+        report_title?: string;
+        report_summary?: string;
+      };
+      expect(updateArg.report_title).toContain("Sponsored Watch Report");
+      expect(updateArg.report_summary).not.toBe("...");
+      // Must not re-publish on-chain when only repairing narrative
+      expect(mockWeb3Client.publishSponsoredReport).not.toHaveBeenCalled();
     });
   });
 });

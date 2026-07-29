@@ -1092,9 +1092,15 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
   // In-process Loop 4 driver: activate / monitor / complete ended campaigns
   const runSponsoredWatchCycle = () => {
     void watchService.processCampaignCycle().then((result) => {
-      if (result.activated || result.monitored || result.completed || result.failed) {
+      if (
+        result.activated ||
+        result.monitored ||
+        result.completed ||
+        result.repaired ||
+        result.failed
+      ) {
         console.info(
-          `Sponsored watch cycle: activated=${result.activated} monitored=${result.monitored} completed=${result.completed} failed=${result.failed}`,
+          `Sponsored watch cycle: activated=${result.activated} monitored=${result.monitored} completed=${result.completed} repaired=${result.repaired} failed=${result.failed}`,
         );
       }
       if (result.errors.length > 0) {
