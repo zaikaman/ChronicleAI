@@ -1,7 +1,7 @@
 /** IDEA proof-of-publication panel: registry tx, content hash, source hash, gas, KeeperHub status. */
 
 import type { ReactElement, ReactNode } from "react";
-import { formatGasUsed, sepoliaTxUrl, truncateHash } from "../lib/explorer.ts";
+import { formatGasUsed, sepoliaTxUrl, truncateHash, txExplorerUrl } from "../lib/explorer.ts";
 
 export interface PublicationProofProps {
   registryTxHash?: string | null | undefined;
@@ -12,6 +12,7 @@ export interface PublicationProofProps {
   gasUsedWei?: string | null | undefined;
   keeperHubRunId?: string | null | undefined;
   explorerUrl?: string | null | undefined;
+  chainId?: number | null | undefined;
   /** Compact single-row layout for list cards / activity rows. */
   compact?: boolean | undefined;
   "data-testid"?: string | undefined;
@@ -77,6 +78,7 @@ export function PublicationProof({
   gasUsedWei,
   keeperHubRunId,
   explorerUrl,
+  chainId,
   compact = false,
   "data-testid": dataTestId = "publication-proof",
 }: PublicationProofProps): ReactElement | null {
@@ -95,6 +97,13 @@ export function PublicationProof({
   // Registry proofs land on Ethereum Sepolia (ops rail), not Base payment rail.
   const txHref =
     explorerUrl ?? (registryTxHash ? sepoliaTxUrl(registryTxHash) : undefined);
+
+  // Source event (monitored protocol transaction, e.g. Ethereum Mainnet / Sepolia / Base)
+  const rawSourceTx =
+    sourceHash && /^0x[0-9a-fA-F]{64}$/.test(sourceHash) ? sourceHash : null;
+  const sourceTxHref = rawSourceTx
+    ? (txExplorerUrl(chainId ?? 1, rawSourceTx) ?? `https://etherscan.io/tx/${rawSourceTx}`)
+    : undefined;
 
   if (compact) {
     return (
@@ -136,7 +145,11 @@ export function PublicationProof({
         {sourceHash ? (
           <span className="inline-flex items-center gap-1 text-muted-foreground">
             <span>{sourceEventRoot ? "root" : "source"}</span>
-            <MonoValue value={sourceHash} title={sourceHash} />
+            <MonoValue
+              value={sourceHash}
+              title={sourceTxHref ? `${sourceHash} (Source event on block explorer)` : sourceHash}
+              {...(sourceTxHref ? { href: sourceTxHref } : {})}
+            />
           </span>
         ) : null}
         {gasLabel ? (
@@ -205,7 +218,11 @@ export function PublicationProof({
 
       {sourceHash ? (
         <ProofRow label={sourceEventRoot ? "Source event root" : "Source event"}>
-          <MonoValue value={sourceHash} title={sourceHash} />
+          <MonoValue
+            value={sourceHash}
+            title={sourceTxHref ? `${sourceHash} (Source event on block explorer)` : sourceHash}
+            {...(sourceTxHref ? { href: sourceTxHref } : {})}
+          />
         </ProofRow>
       ) : null}
 

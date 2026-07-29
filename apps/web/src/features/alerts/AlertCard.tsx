@@ -7,7 +7,7 @@ import {
   TimestampDisplay,
 } from "../../components/data-primitives.tsx";
 import { PublicationProof } from "../../components/publication-proof.tsx";
-import { chainLabel } from "../../lib/explorer.ts";
+import { chainLabel, txExplorerUrl } from "../../lib/explorer.ts";
 
 interface AlertCardProps {
   alert: PublicAlertResponse;
@@ -135,6 +135,7 @@ export function AlertCard({
         gasUsedWei={alert.gasUsedWei}
         keeperHubRunId={alert.keeperHubRunId}
         explorerUrl={alert.explorerUrl}
+        chainId={alert.chainId}
         compact={linkable}
         data-testid="alert-publication-proof"
       />
@@ -155,14 +156,22 @@ export function AlertCard({
 
         {alert.sourceReferences?.length > 0 ? (
           <div className="flex gap-2 flex-wrap items-center min-[850px]:ml-auto">
-            {alert.sourceReferences.map((ref, i) => (
-              <SourceReference
-                key={i}
-                label="Source"
-                reference={ref}
-                data-testid={`source-ref-${i}`}
-              />
-            ))}
+            {alert.sourceReferences.map((ref, i) => {
+              const txMatch = ref.match(/0x[0-9a-fA-F]{64}/);
+              const refTxHash = txMatch ? txMatch[0] : null;
+              const refHref = refTxHash
+                ? (txExplorerUrl(alert.chainId ?? 1, refTxHash) ?? `https://etherscan.io/tx/${refTxHash}`)
+                : undefined;
+              return (
+                <SourceReference
+                  key={i}
+                  label="Source"
+                  reference={ref}
+                  {...(refHref ? { href: refHref } : {})}
+                  data-testid={`source-ref-${i}`}
+                />
+              );
+            })}
           </div>
         ) : null}
       </div>

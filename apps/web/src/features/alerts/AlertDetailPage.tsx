@@ -6,6 +6,7 @@ import {
   PageBackLink,
 } from "../../components/page-chrome.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { txExplorerUrl } from "../../lib/explorer.ts";
 import { DeskActedBanner } from "../desk/DeskActedBanner.tsx";
 import { useRelatedDeskTicket } from "../desk/use-desk.ts";
 import { AlertCard } from "./AlertCard.tsx";
@@ -68,22 +69,44 @@ export function AlertDetailPage(): ReactElement {
     );
   }
 
+  const sourceTx =
+    state.data.sourceEventHash && /^0x[0-9a-fA-F]{64}$/.test(state.data.sourceEventHash)
+      ? state.data.sourceEventHash
+      : null;
+  const sourceExplorerUrl = sourceTx
+    ? (txExplorerUrl(state.data.chainId ?? 1, sourceTx) ?? `https://etherscan.io/tx/${sourceTx}`)
+    : undefined;
+
   return (
     <Page data-testid="alert-detail">
       <PageBackLink to="/alerts">All alerts</PageBackLink>
       {relatedTicket.ticket ? <DeskActedBanner ticket={relatedTicket.ticket} /> : null}
       <AlertCard alert={state.data} linkable={false} data-testid="alert-detail-card" />
       {state.data.contentUri ? <ContentUriFooter uri={state.data.contentUri} /> : null}
-      {state.data.explorerUrl ? (
-        <div className="mt-3 text-center">
-          <a
-            href={state.data.explorerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            View registry proof on explorer
-          </a>
+      {(state.data.explorerUrl || sourceExplorerUrl) ? (
+        <div className="mt-3 text-center flex items-center justify-center gap-6 flex-wrap text-sm font-medium text-muted-foreground">
+          {sourceExplorerUrl ? (
+            <a
+              href={sourceExplorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors"
+              data-testid="source-explorer-link"
+            >
+              View source transaction on explorer
+            </a>
+          ) : null}
+          {state.data.explorerUrl ? (
+            <a
+              href={state.data.explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors"
+              data-testid="registry-explorer-link"
+            >
+              View registry proof on explorer
+            </a>
+          ) : null}
         </div>
       ) : null}
     </Page>
