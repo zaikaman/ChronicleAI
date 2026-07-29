@@ -21,6 +21,15 @@
 | **All Transactions & Execution Explorer** | [https://chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity) *(Public real-time dashboard displaying all execution logs, transaction hashes, CCTP rebalances, and payout receipts)* |
 | **KeeperHub Stack Coverage** | **6 / 6 Surfaces Fully Implemented** (Workflows, MCP Server, x402/MPP Dual Routing, Smart Gas, Private Routing, Execution Audit Trail) |
 
+### Verified Onchain Transactions Executed via KeeperHub Stack
+
+| Surface / Capability | Network | Contract / Function | Real Transaction Link |
+| :--- | :--- | :--- | :--- |
+| **1. Daily Digest Publication** | Ethereum Sepolia | `ChronicleRegistry.publishDigest` | [`0xe25efe40...2a3c0a`](https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204) |
+| **2. Intelligence Alert Anchor** | Ethereum Sepolia | `ChronicleRegistry.publishAlert` | [`0x1d72ba01...2b23cb`](https://sepolia.etherscan.io/tx/0x1d72ba017d1c47ea8d2b4420c044c541b9a8d068c4740b709a9a84ef12b23cb7) |
+| **3. KeeperHub Operator Authorization** | Ethereum Sepolia | `ChronicleRegistry.setOperator` | [`0xc6106fb4...aa2024`](https://sepolia.etherscan.io/tx/0xc6106fb46f81c3de184875ea77757b24c3236d84615e33dea54d4b469caa2024) |
+| **4. Onchain Registry Contract** | Ethereum Sepolia | `ChronicleRegistry.sol` | [`0xD8Deb447...20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) |
+
 ---
 
 ## Executive Summary
