@@ -61,6 +61,27 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   });
 
   /**
+   * GET /activity/stats/badge
+   * Shields.io dynamic endpoint schema returning live count of total
+   * KeeperHub executions for hackathon verification badge in README.md.
+   */
+  router.get("/activity/stats/badge", async (_req, res, next) => {
+    try {
+      const result = await execLogRepo.listPage({ page: 1, limit: 1 });
+      const count = result.ok ? result.value.total : 0;
+
+      res.json({
+        schemaVersion: 1,
+        label: "KeeperHub Txs",
+        message: `${count} Executed`,
+        color: "blueviolet",
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * GET /activity/execution-logs
    * Page-based KeeperHub execution audit trail.
    * Optional ?entityId= (UUID) and ?entityType= for ticket deep links (Phase 4).
