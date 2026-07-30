@@ -66,6 +66,7 @@ import {
 } from "../desk/index.ts";
 import type { LLMProvider } from "@chronicleai/schemas";
 import { createProviderConfigs, type LLMProviderMap } from "../services/llm-provider-client.ts";
+import { setGroqKeyIndex, registerGroqKeyIndexPersister } from "@chronicleai/config";
 import {
   createDeskSignalRepository,
   createDeskIntentRepository,
@@ -75,6 +76,8 @@ import {
   createDeskHeartbeatRepository,
   createDeskAgentRunRepository,
   createDeskControlStateRepository,
+  createSystemControlStateRepository,
+  createAffiliateAgentJobRepository,
   createServerSupabaseClient,
 } from "@chronicleai/db";
 import {
@@ -202,6 +205,21 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   const deskHeartbeatRepo = createDeskHeartbeatRepository(deskSupabase);
   const deskAgentRunRepo = createDeskAgentRunRepository(deskSupabase);
   const deskControlStateRepo = createDeskControlStateRepository(deskSupabase);
+  const systemControlStateRepo = createSystemControlStateRepository(deskSupabase);
+
+  // Restore Groq key rotation index from database on boot
+  void systemControlStateRepo.get().then((res) => {
+    if (res.ok) {
+      setGroqKeyIndex(res.value.groq_key_index);
+      console.info(`[system] Groq key rotation index restored from database: ${res.value.groq_key_index}`);
+    }
+  });
+
+  // Register persister so whenever advanceAndGetGroqKeyIndex rotates the index, it persists to DB
+  registerGroqKeyIndexPersister((nextIndex) => {
+    void systemControlStateRepo.upsert({ groq_key_index: nextIndex }).catch(() => {});
+  });
+
 
   // LLM providers for desk agent (Gemini → Groq → OpenAI)
   const deskLlmProviders: LLMProviderMap = createProviderConfigs(env);
@@ -1445,9 +1463,17 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
     fxService,
   });
 
+  const agentJobRepo = createAffiliateAgentJobRepository(
+    createServerSupabaseClient({
+      supabaseUrl: env.supabaseUrl,
+      supabaseServiceRoleKey: env.supabaseServiceRoleKey,
+    }),
+  );
+
   const agentService = createAffiliateAgentService({
     dashboardService,
     withdrawalService,
+    jobRepo: agentJobRepo,
     // Real LLM tool-calling (Gemini → Groq → OpenAI); falls back to deterministic tools if no keys.
     providerConfigs: createProviderConfigs(env),
   });

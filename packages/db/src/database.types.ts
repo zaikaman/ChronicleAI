@@ -39,6 +39,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      affiliate_agent_jobs: {
+        Row: {
+          affiliate_wallet: string
+          created_at: string
+          error: string | null
+          id: string
+          request: Json
+          result: Json | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          affiliate_wallet: string
+          created_at?: string
+          error?: string | null
+          id: string
+          request: Json
+          result?: Json | null
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          affiliate_wallet?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          request?: Json
+          result?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       affiliate_earnings: {
         Row: {
           affiliate_wallet: string
@@ -1278,6 +1311,24 @@ export type Database = {
           target_contract?: string
           updated_at?: string
           watch_spec_hash?: string
+        }
+        Relationships: []
+      }
+      system_control_state: {
+        Row: {
+          groq_key_index: number
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          groq_key_index?: number
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          groq_key_index?: number
+          id?: string
+          updated_at?: string
         }
         Relationships: []
       }

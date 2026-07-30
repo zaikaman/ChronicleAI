@@ -717,6 +717,29 @@ function parseOptionalPositiveNumberEnv(name: string): number | undefined {
 }
 
 let currentGroqKeyIndex = 0;
+type GroqKeyIndexPersister = (nextIndex: number) => void;
+let groqKeyIndexPersister: GroqKeyIndexPersister | null = null;
+
+/**
+ * Register a callback to persist the Groq key rotation index to database (e.g. Supabase).
+ */
+export function registerGroqKeyIndexPersister(persister: GroqKeyIndexPersister | null): void {
+  groqKeyIndexPersister = persister;
+}
+
+/**
+ * Explicitly sets the current Groq key rotation index (e.g. loaded from database on boot).
+ */
+export function setGroqKeyIndex(index: number): void {
+  currentGroqKeyIndex = Math.max(0, Math.floor(index));
+}
+
+/**
+ * Returns the current Groq key rotation index.
+ */
+export function getGroqKeyIndex(): number {
+  return currentGroqKeyIndex;
+}
 
 /**
  * Resets the Groq key rotation index back to 0 (useful for testing).
@@ -781,6 +804,13 @@ export function getNextGroqApiKey(
   if (keys.length === 0) return "";
   const key = keys[currentGroqKeyIndex % keys.length];
   currentGroqKeyIndex = (currentGroqKeyIndex + 1) % keys.length;
+  if (groqKeyIndexPersister) {
+    try {
+      groqKeyIndexPersister(currentGroqKeyIndex);
+    } catch {
+      // Ignore background persistence errors
+    }
+  }
   return key ?? "";
 }
 
@@ -791,8 +821,16 @@ export function advanceAndGetGroqKeyIndex(totalKeys: number): number {
   if (totalKeys <= 0) return 0;
   const index = currentGroqKeyIndex % totalKeys;
   currentGroqKeyIndex = (currentGroqKeyIndex + 1) % totalKeys;
+  if (groqKeyIndexPersister) {
+    try {
+      groqKeyIndexPersister(currentGroqKeyIndex);
+    } catch {
+      // Ignore background persistence errors
+    }
+  }
   return index;
 }
+
 
 const DEFAULT_ROUTING_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 

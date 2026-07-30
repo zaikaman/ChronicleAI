@@ -10,6 +10,7 @@ import {
   createChatModelsInOrder,
   invokeToolAgent,
 } from "../agents/langchain/index.ts";
+import type { AffiliateAgentJobRepository } from "@chronicleai/db";
 import type { LLMProviderMap } from "./llm-provider-client.ts";
 import type {
   AffiliateDashboardService,
@@ -72,8 +73,9 @@ export interface AffiliateAgentService {
     history?: AffiliateAgentMessage[];
   }): AffiliateAgentJob;
 
-  getChatJob(jobId: string): AffiliateAgentJob | null;
+  getChatJob(jobId: string): Promise<AffiliateAgentJob | null>;
 }
+
 
 type ToolName =
   | "get_affiliate_stats"
@@ -697,6 +699,7 @@ async function runInjectedLlmChat(
 export function createAffiliateAgentService(deps: {
   dashboardService: AffiliateDashboardService;
   withdrawalService: AffiliateWithdrawalService;
+  jobRepo?: AffiliateAgentJobRepository | null;
   /**
    * Injectable LLM for unit tests (manual tool-call loop).
    * Production: omit this and pass providerConfigs to use LangChain createAgent.
@@ -783,29 +786,74 @@ export function createAffiliateAgentService(deps: {
 
       jobs.set(id, job);
 
+      if (deps.jobRepo) {
+        void deps.jobRepo.create({
+          id,
+          affiliate_wallet: params.affiliateWallet,
+          status: "pending",
+          request: job.request as unknown as Record<string, unknown>,
+          created_at: now,
+          updated_at: now,
+        }).catch((err) => {
+          console.warn("[affiliate-agent] Failed to persist job in DB:", err);
+        });
+      }
+
       // Execute asynchronously in background
       (async () => {
         job.status = "processing";
         job.updatedAt = new Date().toISOString();
+        if (deps.jobRepo) {
+          void deps.jobRepo.update(id, { status: "processing" }).catch(() => {});
+        }
         try {
           const res = await service.chat(params);
           job.status = "completed";
           job.result = res;
           job.updatedAt = new Date().toISOString();
+          if (deps.jobRepo) {
+            void deps.jobRepo.update(id, {
+              status: "completed",
+              result: res as unknown as Record<string, unknown>,
+            }).catch(() => {});
+          }
         } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
           job.status = "failed";
-          job.error = err instanceof Error ? err.message : String(err);
+          job.error = errorMsg;
           job.updatedAt = new Date().toISOString();
+          if (deps.jobRepo) {
+            void deps.jobRepo.update(id, {
+              status: "failed",
+              error: errorMsg,
+            }).catch(() => {});
+          }
         }
       })();
 
       return job;
     },
 
-    getChatJob(jobId) {
-      return jobs.get(jobId) ?? null;
+    async getChatJob(jobId) {
+      const memoryHit = jobs.get(jobId);
+      if (memoryHit) return memoryHit;
+      if (!deps.jobRepo) return null;
+      const dbResult = await deps.jobRepo.getById(jobId);
+      if (!dbResult.ok || !dbResult.value) return null;
+      const row = dbResult.value;
+      return {
+        id: row.id,
+        affiliateWallet: row.affiliate_wallet,
+        status: row.status as AffiliateAgentJobStatus,
+        request: row.request as unknown as AffiliateAgentJob["request"],
+        result: row.result as unknown as AffiliateAgentChatResult | null,
+        error: row.error,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
     },
   };
 
   return service;
 }
+

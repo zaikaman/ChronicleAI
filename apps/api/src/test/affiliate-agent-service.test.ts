@@ -263,7 +263,7 @@ describe("createAffiliateAgentService", () => {
       // Wait briefly for background execution to complete
       await new Promise((r) => setTimeout(r, 50));
 
-      const updated = agent.getChatJob(job.id);
+      const updated = await agent.getChatJob(job.id);
       expect(updated?.status).toBe("completed");
       expect(updated?.result?.reply).toContain("People referred");
     });

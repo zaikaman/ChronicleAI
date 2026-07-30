@@ -1,11 +1,21 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { getNextGroqApiKey, resetGroqKeyIndex, LLM_FALLBACK_ORDER } from "@chronicleai/config";
+import {
+  getNextGroqApiKey,
+  resetGroqKeyIndex,
+  LLM_FALLBACK_ORDER,
+  setGroqKeyIndex,
+  getGroqKeyIndex,
+  registerGroqKeyIndexPersister,
+  advanceAndGetGroqKeyIndex,
+} from "@chronicleai/config";
+import { createInMemorySupabaseClient, createSystemControlStateRepository } from "@chronicleai/db";
 import { createProviderConfigs } from "../services/llm-provider-client.ts";
 import { createChatModelsInOrder } from "../agents/langchain/models.ts";
 
 describe("createProviderConfigs & createChatModelsInOrder Groq Rotation", () => {
   beforeEach(() => {
     resetGroqKeyIndex();
+    registerGroqKeyIndexPersister(null);
     process.env.GROQ_API_KEY = "rot_key_1";
     process.env.GROQ_API_KEY_2 = "rot_key_2";
     process.env.GROQ_API_KEY_3 = "rot_key_3";
@@ -65,5 +75,36 @@ describe("createProviderConfigs & createChatModelsInOrder Groq Rotation", () => 
     expect(models2[1]!.config.apiKey).toBe("rot_key_3");
     expect(models2[2]!.config.apiKey).toBe("rot_key_1");
     expect(models2[3]!.provider).toBe("openai");
+  });
+
+  it("persists key rotation index to database and restores index on boot", async () => {
+    const client = createInMemorySupabaseClient();
+    const repo = createSystemControlStateRepository(client as any);
+
+    let pendingPersist: Promise<any> = Promise.resolve();
+    registerGroqKeyIndexPersister((nextIndex) => {
+      pendingPersist = repo.upsert({ groq_key_index: nextIndex });
+    });
+
+    advanceAndGetGroqKeyIndex(3); // advances index from 0 to 1
+    expect(getGroqKeyIndex()).toBe(1);
+
+    await pendingPersist;
+
+    const saved = await repo.get();
+    expect(saved.ok).toBe(true);
+    if (saved.ok) {
+      expect(saved.value.groq_key_index).toBe(1);
+    }
+
+    // Simulate server restart
+    resetGroqKeyIndex();
+    expect(getGroqKeyIndex()).toBe(0);
+
+    const restored = await repo.get();
+    if (restored.ok) {
+      setGroqKeyIndex(restored.value.groq_key_index);
+    }
+    expect(getGroqKeyIndex()).toBe(1);
   });
 });

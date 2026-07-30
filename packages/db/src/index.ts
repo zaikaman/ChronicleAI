@@ -30,5 +30,8 @@ export * from "./desk-ticket-repository.ts";
 export * from "./desk-heartbeat-repository.ts";
 export * from "./desk-agent-run-repository.ts";
 export * from "./desk-control-state-repository.ts";
+export * from "./system-control-state-repository.ts";
+export * from "./affiliate-agent-job-repository.ts";
 export * from "./cctp-rebalance-repository.ts";
 export type { Database, Json } from "./database.types.ts";
+

@@ -962,3 +962,43 @@ export type CctpRebalanceTransferPatch = Partial<
 > & {
   status?: never;
 };
+
+// ── System Control State (singleton Groq key rotation index) ──
+/** Fixed singleton primary key for system_control_state. */
+export const SYSTEM_CONTROL_STATE_ID = "default" as const;
+
+export interface SystemControlStateRow {
+  id: string;
+  groq_key_index: number;
+  updated_at: string;
+}
+
+export interface SystemControlStateUpsert {
+  groq_key_index?: number;
+}
+
+// ── Affiliate Agent Jobs ───────────────────────────
+export interface AffiliateAgentJobRow {
+  id: string;
+  affiliate_wallet: string;
+  status: string;
+  request: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AffiliateAgentJobInsert {
+  id: string;
+  affiliate_wallet: string;
+  status: string;
+  request: Record<string, unknown>;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type AffiliateAgentJobUpdate = Partial<AffiliateAgentJobInsert>;
+

@@ -414,7 +414,7 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
         return;
       }
 
-      const job = agentService.getChatJob(jobId);
+      const job = await agentService.getChatJob(jobId);
       if (!job) {
         res.status(404).json({ error: "Job not found" });
         return;
