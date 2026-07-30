@@ -31,11 +31,23 @@ interface PayoutLogsTableProps {
 }
 
 function formatCurrency(amount: number): string {
+  if (amount === 0) return "$0";
+  const abs = Math.abs(amount);
+  let maxFractionDigits = 2;
+  let minFractionDigits = 2;
+
+  if (abs < 1) {
+    maxFractionDigits = abs < 0.01 ? 6 : 4;
+    minFractionDigits = 2;
+  } else if (amount % 1 === 0) {
+    minFractionDigits = 0;
+  }
+
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: minFractionDigits,
+    maximumFractionDigits: maxFractionDigits,
   }).format(amount);
 }
 
