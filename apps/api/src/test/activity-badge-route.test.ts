@@ -30,28 +30,29 @@ async function withServer(
   }
 }
 
-describe("GET /activity/stats/badge", () => {
-  it("returns Shields.io dynamic endpoint payload with execution count", async () => {
-    const mockActivityService = {
-      getActivity: async () => ({ success: true, data: {} as any }),
-    } as AgentActivityService;
+describe("GET /activity stats & badge endpoints", () => {
+  const mockActivityService = {
+    getActivity: async () => ({ success: true, data: {} as any }),
+  } as AgentActivityService;
 
-    const mockExecLogRepo = {
-      listPage: async () =>
-        success({
-          items: [],
-          page: 1,
-          limit: 1,
-          total: 42,
-          totalPages: 1,
-          hasNextPage: false,
-          hasPreviousPage: false,
-        }),
-    } as unknown as ExecutionLogRepository;
+  const mockExecLogRepo = {
+    listPage: async () =>
+      success({
+        items: [],
+        page: 1,
+        limit: 1,
+        total: 42,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      }),
+    countHackathonExecutions: async () => success(15),
+  } as unknown as ExecutionLogRepository;
 
-    const mockPaymentRecordRepo = {} as PaymentRecordRepository;
-    const mockPayoutRepo = {} as PayoutRecordRepository;
+  const mockPaymentRecordRepo = {} as PaymentRecordRepository;
+  const mockPayoutRepo = {} as PayoutRecordRepository;
 
+  it("GET /activity/stats/count returns hackathon window count JSON", async () => {
     await withServer(
       (app) => {
         app.use(
@@ -64,15 +65,38 @@ describe("GET /activity/stats/badge", () => {
         );
       },
       async (baseUrl) => {
-        const res = await fetch(`${baseUrl}/activity/stats/badge`);
+        const res = await fetch(`${baseUrl}/activity/stats/count`);
         expect(res.status).toBe(200);
         const data = await res.json();
         expect(data).toEqual({
-          schemaVersion: 1,
-          label: "KeeperHub Txs",
-          message: "42 Executed",
-          color: "blueviolet",
+          count: 15,
+          startDate: "2026-07-27",
+          endDate: "2026-08-13",
+          window: "July 27 - August 13, 2026",
         });
+      },
+    );
+  });
+
+  it("GET /activity/badge.svg returns dynamic SVG image payload", async () => {
+    await withServer(
+      (app) => {
+        app.use(
+          createActivityRoutes({
+            activityService: mockActivityService,
+            execLogRepo: mockExecLogRepo,
+            paymentRecordRepo: mockPaymentRecordRepo,
+            payoutRepo: mockPayoutRepo,
+          }),
+        );
+      },
+      async (baseUrl) => {
+        const res = await fetch(`${baseUrl}/activity/badge.svg`);
+        expect(res.status).toBe(200);
+        expect(res.headers.get("content-type")).toContain("image/svg+xml");
+        const text = await res.text();
+        expect(text).toContain("<svg");
+        expect(text).toContain("15 LIVE");
       },
     );
   });

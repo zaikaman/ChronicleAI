@@ -31,6 +31,10 @@ export interface ExecutionLogRepository {
   listPage(
     params?: ExecutionLogListPageParams,
   ): Promise<Result<PaginatedResult<ExecutionLogRow>>>;
+  countHackathonExecutions?(
+    fromIso?: string,
+    toIso?: string,
+  ): Promise<Result<number>>;
 }
 
 export function createExecutionLogRepository(supabase: SupabaseClient): ExecutionLogRepository {
@@ -156,6 +160,21 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
 
       const items = (rows ?? []) as unknown as ExecutionLogRow[];
       return success(buildPaginatedResult(items, page, limit, count ?? items.length));
+    },
+
+    async countHackathonExecutions(
+      fromIso = "2026-07-27T00:00:00.000Z",
+      toIso = "2026-08-13T23:59:59.999Z",
+    ) {
+      let query = table().select("id", { count: "exact", head: true });
+      if (fromIso) query = query.gte("created_at", fromIso);
+      if (toIso) query = query.lte("created_at", toIso);
+
+      const { count, error } = await query;
+      if (error) {
+        return failure(mapPostgrestError(error));
+      }
+      return success(count ?? 0);
     },
   };
 }

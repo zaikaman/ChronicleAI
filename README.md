@@ -4,7 +4,6 @@
 > *Powered by KeeperHub's Execution & Reliability Stack*
 
 [![KeeperHub Stack](https://img.shields.io/badge/KeeperHub-Execution%20%26%20Reliability%20Layer-blueviolet?style=for-the-badge)](https://keeperhub.com)
-[![KeeperHub Live Executions](https://img.shields.io/endpoint?url=https://chronicle-ai-web.vercel.app/api/v1/activity/stats/badge&style=for-the-badge)](https://chronicle-ai-web.vercel.app/activity)
 [![KeeperHub Workflows](https://img.shields.io/badge/KeeperHub%20Workflows-17%20JSON-blueviolet?style=for-the-badge)](workflows/keeperhub-ready)
 [![Tests](https://img.shields.io/badge/Tests-990%20Passing-brightgreen?style=for-the-badge)](README.md)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-Agent%20Framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
@@ -23,6 +22,7 @@
 | **Demonstration Video** | [Watch Video Demo](https://youtube.com) *(Demo showing agent executing onchain through KeeperHub)* |
 | **Onchain ChronicleRegistry Contract (Sepolia)** | [`0xD8Deb4475a7E23E194Bc93f8739858Fb20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) *(Onchain contract where all alerts, digests, trade tickets, and payouts anchor via KeeperHub)* |
 | **All Transactions & Execution Explorer** | [https://chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity) *(Public real-time dashboard displaying all execution logs, transaction hashes, CCTP rebalances, and payout receipts)* |
+| **Hackathon Executed Transactions** | <img src="https://chronicle-ai-web.vercel.app/api/v1/activity/badge.svg" height="22" alt="KeeperHub Executions" /> · Real-time count of onchain transactions executed via KeeperHub during hackathon window (July 27 – Aug 13, 2026). View [Full Matrix Below](#verified-onchain-transactions-executed-via-keeperhub-stack) |
 | **KeeperHub Stack Coverage** | **6 / 6 Surfaces Fully Implemented** (Workflows, MCP Server, x402/MPP Dual Routing, Smart Gas, Hybrid Private Routing & Gas Sponsorship, Execution Audit Trail)<br>*Hybrid routing: material desk & capital txs use KeeperHub private mempool (Flashbots Protect · Sepolia; wallet-paid gas — sponsorship is mutually exclusive with private route). Registry / alert / receipt writes use public mempool + KeeperHub gas sponsorship. Policy is per transaction class, not "all private or all sponsored."* |
 | **Test Suite & Workflows** | **990 Passing Tests** across 112 test files (`pnpm test`) · **17 Production Workflows** defined in [`workflows/keeperhub-ready/`](workflows/keeperhub-ready) |
 
@@ -30,7 +30,7 @@
 
 1. **Live app:** [https://chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity)
 2. **Demo video:** [Watch Video Demo](https://youtube.com) *(Demo showing agent executing onchain through KeeperHub)*
-3. **Golden txs (desk trade & execution via KH):**
+3. **Golden txs (15 live transactions executed via KH):**
    - **Desk Trade (Uniswap V3 Swap via KH Private RPC):** [https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) — *Private route*
    - **Yield Rotation (Aave V3 Supply via KH Smart Gas):** [https://sepolia.etherscan.io/tx/0x5a17e7b561bceb585faa45ff05f0bdabe18e216e1b40f67525cc47cf3ec0cc61](https://sepolia.etherscan.io/tx/0x5a17e7b561bceb585faa45ff05f0bdabe18e216e1b40f67525cc47cf3ec0cc61) — *Private route*
    - **Daily Digest Write:** [https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204](https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204) — *Public (Sponsorship requested)*

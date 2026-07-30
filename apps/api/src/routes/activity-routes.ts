@@ -61,21 +61,61 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   });
 
   /**
-   * GET /activity/stats/badge
-   * Shields.io dynamic endpoint schema returning live count of total
-   * KeeperHub executions for hackathon verification badge in README.md.
+   * GET /activity/stats/count
+   * Returns live execution count for the hackathon window (July 27 - August 13).
    */
-  router.get("/activity/stats/badge", async (_req, res, next) => {
+  router.get("/activity/stats/count", async (_req, res, next) => {
     try {
-      const result = await execLogRepo.listPage({ page: 1, limit: 1 });
-      const count = result.ok ? result.value.total : 0;
-
+      const result = execLogRepo.countHackathonExecutions
+        ? await execLogRepo.countHackathonExecutions()
+        : await execLogRepo.listPage({ page: 1, limit: 1 }).then((r) =>
+            r.ok ? { ok: true as const, value: r.value.total } : r,
+          );
+      const count = result.ok ? result.value : 0;
       res.json({
-        schemaVersion: 1,
-        label: "KeeperHub Txs",
-        message: `${count} Executed`,
-        color: "blueviolet",
+        count,
+        startDate: "2026-07-27",
+        endDate: "2026-08-13",
+        window: "July 27 - August 13, 2026",
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /activity/badge.svg
+   * Serves a dynamic SVG badge directly from the API.
+   * Updates in real-time when rendered inside GitHub README.md without external dependencies.
+   */
+  router.get("/activity/badge.svg", async (_req, res, next) => {
+    try {
+      const result = execLogRepo.countHackathonExecutions
+        ? await execLogRepo.countHackathonExecutions()
+        : await execLogRepo.listPage({ page: 1, limit: 1 }).then((r) =>
+            r.ok ? { ok: true as const, value: r.value.total } : r,
+          );
+      const count = result.ok ? result.value : 0;
+
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="28" role="img" aria-label="KeeperHub Hackathon Executions: ${count} Live">
+  <linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+  <clipPath id="a"><rect width="220" height="28" rx="4" fill="#fff"/></clipPath>
+  <g clip-path="url(#a)">
+    <rect width="140" height="28" fill="#1C3C3C"/>
+    <rect x="140" width="80" height="28" fill="#7C3AED"/>
+    <rect width="220" height="28" fill="url(#b)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="11">
+    <text x="70" y="18" fill="#010101" fill-opacity=".3">KEEPERHUB EXEC</text>
+    <text x="70" y="17">KEEPERHUB EXEC</text>
+    <text x="180" y="18" fill="#010101" fill-opacity=".3">${count} LIVE</text>
+    <text x="180" y="17">${count} LIVE</text>
+  </g>
+</svg>`;
+
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+      res.send(svg);
     } catch (error) {
       next(error);
     }
