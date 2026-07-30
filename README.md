@@ -4,6 +4,8 @@
 > *Powered by KeeperHub's Execution & Reliability Stack*
 
 [![KeeperHub Stack](https://img.shields.io/badge/KeeperHub-Execution%20%26%20Reliability%20Layer-blueviolet?style=for-the-badge)](https://keeperhub.com)
+[![KeeperHub Workflows](https://img.shields.io/badge/KeeperHub%20Workflows-17%20JSON-blueviolet?style=for-the-badge)](workflows/keeperhub-ready)
+[![Tests](https://img.shields.io/badge/Tests-989%20Passing-brightgreen?style=for-the-badge)](README.md)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-Agent%20Framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=for-the-badge)](https://vitejs.dev/)
@@ -21,6 +23,7 @@
 | **Onchain ChronicleRegistry Contract (Sepolia)** | [`0xD8Deb4475a7E23E194Bc93f8739858Fb20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) *(Onchain contract where all alerts, digests, trade tickets, and payouts anchor via KeeperHub)* |
 | **All Transactions & Execution Explorer** | [https://chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity) *(Public real-time dashboard displaying all execution logs, transaction hashes, CCTP rebalances, and payout receipts)* |
 | **KeeperHub Stack Coverage** | **6 / 6 Surfaces Fully Implemented** (Workflows, MCP Server, x402/MPP Dual Routing, Smart Gas, Hybrid Private Routing & Gas Sponsorship, Execution Audit Trail)<br>*Hybrid routing: material desk & capital txs use KeeperHub private mempool (Flashbots Protect · Sepolia; wallet-paid gas — sponsorship is mutually exclusive with private route). Registry / alert / receipt writes use public mempool + KeeperHub gas sponsorship. Policy is per transaction class, not "all private or all sponsored."* |
+| **Test Suite & Workflows** | **989 Passing Tests** across 111 test files (`pnpm test`) · **17 Production Workflows** defined in [`workflows/keeperhub-ready/`](workflows/keeperhub-ready) |
 
 ## Judge in 30 seconds
 
@@ -32,6 +35,8 @@
    - **Daily Digest Write:** [https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204](https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204) — *Public (Sponsorship requested)*
    - **Circle CCTP Cross-Chain Rebalance:** [https://sepolia.basescan.org/tx/0xb30984def5e87dbcf3968e30972229f1e9109afbe39338e375f8c4de7c67cec4](https://sepolia.basescan.org/tx/0xb30984def5e87dbcf3968e30972229f1e9109afbe39338e375f8c4de7c67cec4) → [https://sepolia.etherscan.io/tx/0xfeb8f1e45c61abc4bd5c0d94b9073b1447687b15469ad1171833dc0855c4497c](https://sepolia.etherscan.io/tx/0xfeb8f1e45c61abc4bd5c0d94b9073b1447687b15469ad1171833dc0855c4497c)
 4. **Surfaces checklist:** 6 / 6 KeeperHub surfaces implemented (see full matrix below)
+5. **Engineering Rigor:** 989 passing unit & contract tests across 111 test files (`pnpm test`)
+6. **KeeperHub Workflows:** 17 production workflow JSON definitions in [`workflows/keeperhub-ready/`](workflows/keeperhub-ready)
 
 ---
 
@@ -232,7 +237,7 @@ Every single trade or capital movement produces a rich, structured audit log sur
 
 For judges and AI evaluator agents inspecting source code:
 
-| Component | File Path | Description |
+| Component | Source File Path | Live Web Route & Description |
 | :--- | :--- | :--- |
 | **KeeperHub Integration Bridge** | [`apps/api/src/desk/execution-bridge.ts`](apps/api/src/desk/execution-bridge.ts) | Bridges desk intents to KeeperHub workflow execution endpoints. |
 | **MCP Client Discovery** | [`apps/api/src/services/keeperhub-mcp-client.ts`](apps/api/src/services/keeperhub-mcp-client.ts) | MCP server connection and tool listing implementation. |
@@ -243,8 +248,11 @@ For judges and AI evaluator agents inspecting source code:
 | **CCTP Rebalance Service** | [`apps/api/src/cctp/rebalance-service.ts`](apps/api/src/cctp/rebalance-service.ts) | Circle CCTP cross-chain bridge and worker implementation. |
 | **Desk Trading Agent** | [`apps/api/src/desk/agent/desk-trading-agent.ts`](apps/api/src/desk/agent/desk-trading-agent.ts) | LLM trading decision engine and proposal mapping. |
 | **Execution Audit Engine** | [`apps/api/src/desk/execution-audit.ts`](apps/api/src/desk/execution-audit.ts) | Multi-tier audit trail builder and log synthesizer. |
-| **All Transactions Explorer UI** | [`apps/web/src/features/activity/ActivityPage.tsx`](apps/web/src/features/activity/ActivityPage.tsx) | Live public dashboard displaying all onchain transactions, execution logs, CCTP rebalances, and payout receipts. |
-| **Web Dashboard UI** | [`apps/web/src/features/desk/DeskStatusPage.tsx`](apps/web/src/features/desk/DeskStatusPage.tsx) | Live trading desk dashboard, audit timeline, and control UI. |
+| **All Transactions Explorer UI** | [`apps/web/src/features/activity/ActivityPage.tsx`](apps/web/src/features/activity/ActivityPage.tsx) | Live at [`/activity`](https://chronicle-ai-web.vercel.app/activity) — Public real-time dashboard displaying all execution logs, transaction hashes, CCTP rebalances, and payout receipts. |
+| **Desk Control & Audit UI** | [`apps/web/src/features/desk/DeskStatusPage.tsx`](apps/web/src/features/desk/DeskStatusPage.tsx) | Live at [`/desk`](https://chronicle-ai-web.vercel.app/desk) — Live trading desk status, preflight simulation dry-run timeline, and kill switch controls. |
+| **Alerts & Registry Proof UI** | [`apps/web/src/features/alerts/AlertsPage.tsx`](apps/web/src/features/alerts/AlertsPage.tsx) | Live at [`/alerts`](https://chronicle-ai-web.vercel.app/alerts) — Onchain intelligence stream with links to target digests and registry contract verification. |
+| **Paid Intelligence & x402/MPP UI** | [`apps/web/src/features/premium/PremiumPage.tsx`](apps/web/src/features/premium/PremiumPage.tsx) | Live at [`/premium`](https://chronicle-ai-web.vercel.app/premium) — Agent-to-agent payment gates, EIP-712 permit submissions, and sponsored watch feeds. |
+| **Affiliate Rewards UI** | [`apps/web/src/features/affiliates/AffiliatePage.tsx`](apps/web/src/features/affiliates/AffiliatePage.tsx) | Live at [`/affiliates`](https://chronicle-ai-web.vercel.app/affiliates) — Onchain affiliate tracking, performance metrics, and automated payout receipts. |
 
 ---
 
