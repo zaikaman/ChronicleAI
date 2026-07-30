@@ -45,6 +45,8 @@ describe("routing-metadata", () => {
       chainId: 11_155_111,
       routingRequested: "private_mempool",
       routingApplied: "unknown",
+      gasSponsorshipRequested: false,
+      gasSponsorshipApplied: "not_applicable",
     });
   });
 
@@ -59,6 +61,8 @@ describe("routing-metadata", () => {
     expect(details.routingRequested).toBe("public");
     expect(details.routingApplied).toBe("public");
     expect(details.routingStrict).toBe(false);
+    expect(details.gasSponsorshipRequested).toBe(true);
+    expect(details.gasSponsorshipApplied).toBe("unknown");
   });
 
   it("kill_switch always private + strict regardless of desk flag", () => {

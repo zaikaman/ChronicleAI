@@ -33,17 +33,15 @@ ChronicleAI is an autonomous on-chain newspaper, paid intelligence feed, and pol
 3. **Calm density** — Surface high signal without shouting. Prefer clear type hierarchy and progressive disclosure over badges, neon, and motion noise.
 4. **Trust through transparency** — Empty, loading, and failure states are honest and recoverable; never fake liveness or hide treasury/execution risk.
 5. **Human first, machine ready** — Optimize scanning and reading for people; keep premium and payment flows unambiguous for wallets and automated clients without compromising the reader experience.
-6. **Honest execution routing** — Desk and material KeeperHub writes on Ethereum Sepolia may use a **private submission path** (Flashbots Protect via KeeperHub private mempool routing). Product copy must say “private route” / “private submission path (Flashbots Protect · Sepolia),” never mainnet-scale sandwich protection, “MEV-proof,” or claims outside Sepolia desk scope. If private routing was only requested (or chain capability is unknown), say so—do not imply applied protection without evidence.
+6. **Honest execution routing & gas sponsorship** — Desk trades and capital moves on Ethereum Sepolia use a **private submission path** (Flashbots Protect via KeeperHub private mempool routing). Public registry writes (alerts, digests, sponsored reports, receipts) use public mempool submission with **KeeperHub gas sponsorship** preferred. Product copy must say “private route” or “Public (Sponsorship requested)” accurately based on on-chain and workflow status.
 
-## Private routing (product note)
+## Hybrid execution routing (product note)
 
-| Fact | Product implication |
-|------|---------------------|
-| Chain | Ethereum Sepolia (`11155111`) only for desk / registry / ops writes |
-| Mechanism | KeeperHub KEEP-137 + Flashbots Protect Sepolia RPC (configured in KeeperHub, not Chronicle) |
-| What readers see | “Private route” badge / execution path copy when routing was requested (and applied when known) |
-| What we never claim | Mainnet MEV economics, CoW venue protection, or guaranteed sandwich immunity on testnet |
-| Ops trade-off | Private route skips gas sponsorship; desk wallet needs Sepolia ETH |
+| Class | Routing | Sponsorship | Product copy |
+|-------|---------|-------------|--------------|
+| **Desk Strategies & Capital** | Private Mempool (Flashbots Protect) | Not applicable | "Private route" / "Private route (requested)" |
+| **Registry & Alerts** | Public Mempool | Preferred / Sponsored | "Public (Sponsorship requested)" / "Public (Sponsored)" |
+| Chain | Ethereum Sepolia (`11155111`) | Org Turnkey Gas Station | Honest badges on Activity and Desk feeds |
 
 Operator and workflow setup: `workflows/keeperhub/README.md` (Private routing section) and `docs/private-routing-implementation-plan.md`.
 

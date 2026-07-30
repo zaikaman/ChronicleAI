@@ -95,6 +95,12 @@ export interface PrivateRoutingPolicy {
   chainId: number;
 }
 
+export type GasSponsorshipApplied =
+  | "unknown"
+  | "sponsored"
+  | "wallet_paid"
+  | "not_applicable";
+
 /** Shape written into execution_logs.details and ticket/intent JSON. */
 export interface RoutingDetails {
   routing: RoutingMode;
@@ -108,6 +114,10 @@ export interface RoutingDetails {
    * is operator-verified at high confidence.
    */
   routingApplied: RoutingApplied;
+  /** Whether gas sponsorship is preferred for public submission. */
+  gasSponsorshipRequested?: boolean;
+  /** On-chain / RPC status of gas sponsorship (Phase 2 honesty). */
+  gasSponsorshipApplied?: GasSponsorshipApplied;
 }
 
 export interface RoutingPolicyEnv {
@@ -336,6 +346,8 @@ export function buildPrivateRoutingDetails(
       chainId,
       routingRequested: "public",
       routingApplied: "public",
+      gasSponsorshipRequested: true,
+      gasSponsorshipApplied: "unknown",
     };
   }
 
@@ -347,6 +359,8 @@ export function buildPrivateRoutingDetails(
     routingRequested: "private_mempool",
     // Phase 2: request-only proof until KH capability verification is solid.
     routingApplied: "unknown",
+    gasSponsorshipRequested: false,
+    gasSponsorshipApplied: "not_applicable",
   };
 }
 
@@ -459,6 +473,22 @@ export function extractRoutingFromDetails(
       ? details.chainId
       : PRIVATE_ROUTING_CHAIN_ID;
 
+  const gasSponsorshipRequested =
+    typeof details.gasSponsorshipRequested === "boolean"
+      ? details.gasSponsorshipRequested
+      : routing === "public";
+
+  const sponsorAppliedRaw = details.gasSponsorshipApplied;
+  const gasSponsorshipApplied: GasSponsorshipApplied =
+    sponsorAppliedRaw === "sponsored" ||
+    sponsorAppliedRaw === "wallet_paid" ||
+    sponsorAppliedRaw === "not_applicable" ||
+    sponsorAppliedRaw === "unknown"
+      ? sponsorAppliedRaw
+      : routing === "private_mempool"
+        ? "not_applicable"
+        : "unknown";
+
   return {
     routing,
     routingStrict: details.routingStrict === true,
@@ -469,6 +499,8 @@ export function extractRoutingFromDetails(
     chainId,
     routingRequested,
     routingApplied,
+    gasSponsorshipRequested,
+    gasSponsorshipApplied,
   };
 }
 
@@ -476,6 +508,15 @@ export function extractRoutingFromDetails(
 export function routingBadgeLabel(details: RoutingDetails | null | undefined): string {
   if (!details) return "Public";
   if (details.routing === "public" || details.routingRequested === "public") {
+    if (details.gasSponsorshipApplied === "sponsored") {
+      return "Public (Sponsored)";
+    }
+    if (
+      details.gasSponsorshipRequested !== false &&
+      (details.gasSponsorshipApplied === "unknown" || !details.gasSponsorshipApplied)
+    ) {
+      return "Public (Sponsorship requested)";
+    }
     return "Public";
   }
   if (

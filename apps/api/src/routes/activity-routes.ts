@@ -10,10 +10,13 @@ import type {
 import { Router, type Router as RouterType } from "express";
 import type { AgentActivityService } from "../services/agent-activity-service.ts";
 import {
+  buildRegistryRoutingDetails,
+  buildTransferRoutingDetails,
   extractRoutingFromDetails,
   flashbotsProtectStatusUrl,
   routingBadgeLabel,
   shouldLinkProtectStatus,
+  type RoutingPolicyEnv,
 } from "../services/routing-metadata.ts";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 
@@ -22,11 +25,18 @@ export interface ActivityRouteDeps {
   execLogRepo: ExecutionLogRepository;
   paymentRecordRepo: PaymentRecordRepository;
   payoutRepo: PayoutRecordRepository;
+  routingEnv?: RoutingPolicyEnv;
 }
 
 export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   const router: RouterType = Router();
   const { activityService, execLogRepo, paymentRecordRepo, payoutRepo } = deps;
+  const activeRoutingEnv: RoutingPolicyEnv = deps.routingEnv ?? {
+    deskUsePrivateMempool: true,
+    deskPrivateMempoolStrict: true,
+    registryUsePrivateMempool: false,
+    routingProviderLabel: "flashbots_protect",
+  };
 
   /**
    * GET /activity
@@ -233,20 +243,21 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
           if (p.registry_tx_hash) payout.registryTxHash = p.registry_tx_hash;
           if (p.keeper_hub_run_id) {
             payout.keeperHubRunId = p.keeper_hub_run_id;
-            // KH-backed payouts use private transfer workflow when configured.
-            payout.routing = "private_mempool";
-            payout.routingRequested = "private_mempool";
-            payout.routingApplied = "unknown";
-            payout.routingLabel = "Private route (requested)";
+            const regRouting = buildRegistryRoutingDetails(activeRoutingEnv);
+            payout.routing = regRouting.routing;
+            payout.routingRequested = regRouting.routingRequested;
+            payout.routingApplied = regRouting.routingApplied;
+            payout.routingLabel = routingBadgeLabel(regRouting);
           }
           if (p.explorer_url) payout.explorerUrl = p.explorer_url;
           if (p.transfer_keeper_hub_run_id) {
             payout.transferKeeperHubRunId = p.transfer_keeper_hub_run_id;
             if (!payout.routing) {
-              payout.routing = "private_mempool";
-              payout.routingRequested = "private_mempool";
-              payout.routingApplied = "unknown";
-              payout.routingLabel = "Private route (requested)";
+              const transferRouting = buildTransferRoutingDetails(activeRoutingEnv);
+              payout.routing = transferRouting.routing;
+              payout.routingRequested = transferRouting.routingRequested;
+              payout.routingApplied = transferRouting.routingApplied;
+              payout.routingLabel = routingBadgeLabel(transferRouting);
             }
           }
           if (p.transfer_explorer_url) {

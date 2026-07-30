@@ -17,10 +17,13 @@ import {
   buildSubscriptionAnalytics,
 } from "./activity-analytics.ts";
 import {
+  buildRegistryRoutingDetails,
+  buildTransferRoutingDetails,
   extractRoutingFromDetails,
   flashbotsProtectStatusUrl,
   routingBadgeLabel,
   shouldLinkProtectStatus,
+  type RoutingPolicyEnv,
 } from "./routing-metadata.ts";
 import type { LiveTreasuryBalances } from "./treasury-balances.ts";
 
@@ -65,6 +68,8 @@ export interface AgentActivityServiceOptions {
    * only on miss — cached responses include treasury as of last full build.
    */
   cacheTtlMs?: number;
+  /** Optional routing policy environment override for badges (default Sepolia defaults). */
+  routingEnv?: RoutingPolicyEnv;
 }
 
 const DEFAULT_CACHE_TTL_MS = 20_000;
@@ -84,6 +89,12 @@ export function createAgentActivityService(
 ): AgentActivityService {
   const cacheTtlMs =
     typeof options?.cacheTtlMs === "number" ? Math.max(0, options.cacheTtlMs) : DEFAULT_CACHE_TTL_MS;
+  const activeRoutingEnv: RoutingPolicyEnv = options?.routingEnv ?? {
+    deskUsePrivateMempool: true,
+    deskPrivateMempoolStrict: true,
+    registryUsePrivateMempool: false,
+    routingProviderLabel: "flashbots_protect",
+  };
 
   let cache: CacheEntry | null = null;
   let inFlight: Promise<{
@@ -323,28 +334,21 @@ export function createAgentActivityService(
         if (p.registry_tx_hash) payout.registryTxHash = p.registry_tx_hash;
         if (p.keeper_hub_run_id) {
           payout.keeperHubRunId = p.keeper_hub_run_id;
-          // KH-backed payouts use private transfer workflow when desk policy is on.
-          // Surface requested routing for Activity badges (Phase 2).
-          payout.routing = "private_mempool";
-          payout.routingRequested = "private_mempool";
-          payout.routingApplied = "unknown";
-          payout.routingLabel = routingBadgeLabel({
-            routing: "private_mempool",
-            routingStrict: true,
-            routingProvider: "flashbots_protect",
-            chainId: 11_155_111,
-            routingRequested: "private_mempool",
-            routingApplied: "unknown",
-          });
+          const regRouting = buildRegistryRoutingDetails(activeRoutingEnv);
+          payout.routing = regRouting.routing;
+          payout.routingRequested = regRouting.routingRequested;
+          payout.routingApplied = regRouting.routingApplied;
+          payout.routingLabel = routingBadgeLabel(regRouting);
         }
         if (p.explorer_url) payout.explorerUrl = p.explorer_url;
         if (p.transfer_keeper_hub_run_id) {
           payout.transferKeeperHubRunId = p.transfer_keeper_hub_run_id;
           if (!payout.routing) {
-            payout.routing = "private_mempool";
-            payout.routingRequested = "private_mempool";
-            payout.routingApplied = "unknown";
-            payout.routingLabel = "Private route (requested)";
+            const transferRouting = buildTransferRoutingDetails(activeRoutingEnv);
+            payout.routing = transferRouting.routing;
+            payout.routingRequested = transferRouting.routingRequested;
+            payout.routingApplied = transferRouting.routingApplied;
+            payout.routingLabel = routingBadgeLabel(transferRouting);
           }
         }
         if (p.transfer_explorer_url) payout.transferExplorerUrl = p.transfer_explorer_url;

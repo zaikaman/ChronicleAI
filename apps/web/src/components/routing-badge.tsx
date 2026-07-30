@@ -16,6 +16,8 @@ export interface RoutingBadgeProps {
    */
   routingApplied?: string | null;
   routingRequested?: string | null;
+  gasSponsorshipRequested?: boolean;
+  gasSponsorshipApplied?: string | null;
   "data-testid"?: string;
   className?: string;
 }
@@ -28,7 +30,18 @@ function resolveLabel(props: RoutingBadgeProps): string {
     props.routingRequested ??
     (props.routingApplied === "private_mempool" ? "private_mempool" : null);
 
-  if (!mode || mode === "public") return "Public";
+  if (!mode || mode === "public") {
+    if (props.gasSponsorshipApplied === "sponsored") {
+      return "Public (Sponsored)";
+    }
+    if (
+      props.gasSponsorshipRequested !== false &&
+      (props.gasSponsorshipApplied === "unknown" || !props.gasSponsorshipApplied)
+    ) {
+      return "Public (Sponsorship requested)";
+    }
+    return "Public";
+  }
   if (mode === "private_mempool") {
     if (
       props.routingApplied === "private_mempool" ||
@@ -51,15 +64,25 @@ function isPrivate(label: string): boolean {
   return label.toLowerCase().includes("private");
 }
 
+function isSponsored(label: string): boolean {
+  return label.toLowerCase().includes("sponsored") && !label.toLowerCase().includes("requested");
+}
+
+function isSponsorshipRequested(label: string): boolean {
+  return label.toLowerCase().includes("sponsorship requested");
+}
+
 /**
  * Badge for Activity execution table, payouts, tickets.
- * Always includes text; optional lock/globe glyph for non-color-only a11y.
+ * Always includes text; optional glyph for accessibility.
  */
 export function RoutingBadge({
   routing,
   label,
   routingApplied,
   routingRequested,
+  gasSponsorshipRequested,
+  gasSponsorshipApplied,
   "data-testid": dataTestId = "routing-badge",
   className,
 }: RoutingBadgeProps): React.ReactElement {
@@ -68,8 +91,12 @@ export function RoutingBadge({
     label,
     routingApplied,
     routingRequested,
+    gasSponsorshipRequested,
+    gasSponsorshipApplied,
   });
   const privateRoute = isPrivate(text);
+  const sponsored = isSponsored(text);
+  const sponsorshipReq = isSponsorshipRequested(text);
 
   const colors = privateRoute
     ? {
@@ -77,11 +104,25 @@ export function RoutingBadge({
         fg: "#60a5fa",
         border: "rgba(59, 130, 246, 0.25)",
       }
-    : {
-        bg: "rgba(113, 113, 122, 0.12)",
-        fg: "#a1a1aa",
-        border: "rgba(113, 113, 122, 0.2)",
-      };
+    : sponsored
+      ? {
+          bg: "rgba(16, 185, 129, 0.12)",
+          fg: "#34d399",
+          border: "rgba(16, 185, 129, 0.25)",
+        }
+      : sponsorshipReq
+        ? {
+            bg: "rgba(245, 158, 11, 0.12)",
+            fg: "#fbbf24",
+            border: "rgba(245, 158, 11, 0.25)",
+          }
+        : {
+            bg: "rgba(113, 113, 122, 0.12)",
+            fg: "#a1a1aa",
+            border: "rgba(113, 113, 122, 0.2)",
+          };
+
+  const glyph = privateRoute ? "🔒" : sponsored || sponsorshipReq ? "⚡" : "○";
 
   return (
     <span
@@ -89,7 +130,11 @@ export function RoutingBadge({
       title={
         privateRoute
           ? "KeeperHub private submission path (Flashbots Protect · Sepolia)"
-          : "Public mempool submission"
+          : sponsored
+            ? "KeeperHub gas sponsorship confirmed on-chain"
+            : sponsorshipReq
+              ? "Public mempool submission with KeeperHub gas sponsorship preferred"
+              : "Public mempool submission"
       }
       className={className}
       style={{
@@ -107,7 +152,7 @@ export function RoutingBadge({
       }}
     >
       <span aria-hidden style={{ fontSize: "0.7em", lineHeight: 1 }}>
-        {privateRoute ? "🔒" : "○"}
+        {glyph}
       </span>
       <span>{text}</span>
     </span>
