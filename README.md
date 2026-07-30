@@ -4,6 +4,7 @@
 > *Powered by KeeperHub's Execution & Reliability Stack*
 
 [![KeeperHub Stack](https://img.shields.io/badge/KeeperHub-Execution%20%26%20Reliability%20Layer-blueviolet?style=for-the-badge)](https://keeperhub.com)
+[![LangChainJS](https://img.shields.io/badge/LangChainJS-Agent%20Framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=for-the-badge)](https://vitejs.dev/)
 [![Express](https://img.shields.io/badge/Express-5.1-green?style=for-the-badge)](https://expressjs.com/)
@@ -76,7 +77,7 @@ Most autonomous agent projects focus solely on **reasoning** — deciding what t
 
 **ChronicleAI** addresses the last mile for desk execution. It is an **autonomous onchain trading desk, capital manager, and intelligence registry** built on top of **KeeperHub**. 
 
-ChronicleAI continuously ingests onchain market signals, fuses intelligence using a dual-provider LLM fallback engine (Groq → OpenAI), maps strategic proposals, and delegates 100% of its onchain operations — trade execution, capital rebalancing, registry publishing, and cross-chain CCTP top-ups — to **KeeperHub**.
+ChronicleAI continuously ingests onchain market signals, fuses intelligence using a dual-provider LLM fallback engine powered by **LangChainJS** (Groq → OpenAI), maps strategic proposals, and delegates 100% of its onchain operations — trade execution, capital rebalancing, registry publishing, and cross-chain CCTP top-ups — to **KeeperHub**.
 
 - **Who:** Operators / agents that need reliable onchain desk execution
 - **What runs unattended:** Arb, yield rotate, sweep, CCTP top-up
@@ -205,8 +206,8 @@ graph TD
 
 ## Core Technical Features & Innovations
 
-### 1. Dual-Provider LLM Fallback Architecture
-ChronicleAI implements a resilient multi-provider LLM fallback hierarchy:
+### 1. Dual-Provider LLM Fallback Architecture (LangChainJS)
+ChronicleAI implements a resilient multi-provider LLM fallback hierarchy built on **LangChainJS**:
 - **Primary**: Groq Qwen 3.6-27b (ultra-low latency, round-robin multi-key rotation with automatic per-key rate-limit fallback)
 - **Secondary**: OpenAI GPT-5-Nano (high-precision edge case resolution when all Groq keys are exhausted)
 
@@ -325,5 +326,6 @@ pnpm test
 Built for **The Last Mile: KeeperHub AI Agent Hackathon 2026**.
 
 - Infrastructure & Execution Layer: [KeeperHub](https://keeperhub.com)
+- Agent Framework: [LangChainJS](https://js.langchain.com)
 - Cross-Chain Transfers: [Circle CCTP](https://www.circle.com)
 - Non-Custodial Wallets: [Para REST SDK](https://getpara.com)

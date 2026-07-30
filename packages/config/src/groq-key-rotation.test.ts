@@ -87,4 +87,18 @@ describe("Groq Key Rotation", () => {
     expect(getNextGroqApiKey(env)).toBe("key_4");
     expect(getNextGroqApiKey(env)).toBe("key_1");
   });
+
+  it("handles double-digit keys (e.g. GROQ_API_KEY_10) and sorts them numerically after 2", () => {
+    const env = {
+      GROQ_API_KEY: "key_1",
+      GROQ_API_KEY_2: "key_2",
+      GROQ_API_KEY_10: "key_10",
+    };
+
+    expect(getGroqApiKeys(env)).toEqual(["key_1", "key_2", "key_10"]);
+    expect(getNextGroqApiKey(env)).toBe("key_1");
+    expect(getNextGroqApiKey(env)).toBe("key_2");
+    expect(getNextGroqApiKey(env)).toBe("key_10");
+    expect(getNextGroqApiKey(env)).toBe("key_1");
+  });
 });
