@@ -15,13 +15,13 @@ const steps = [
     icon: BrainCircuit,
     title: "Reason & Preflight Dry-Run",
     description:
-      "Dual-provider LLMs (Groq Llama-3.3 primary, OpenAI GPT-4o fallback) formulate strategic proposals with automatic Groq key rotation. Before any live transaction, Layer A dry-run preflight (simulate: true) verifies execution logic and computes adaptive gas pricing.",
+      "Dual-provider LLMs (Groq Qwen 3.6-27b primary, OpenAI GPT-4o fallback) formulate strategic proposals with automatic Groq key rotation. Before any live transaction, Layer A dry-run preflight (simulate: true) verifies execution logic and computes adaptive gas pricing.",
   },
   {
     icon: Landmark,
     title: "Execute Privately through KeeperHub",
     description:
-      "Approved trades execute onchain via KeeperHub workflows using Flashbots Protect private mempools (Ethereum Sepolia), shielding capital movements from MEV front-running and sandwich attacks.",
+      "Approved trades execute onchain via KeeperHub workflows using Flashbots Protect private mempools (Ethereum Sepolia) for private transaction submission.",
   },
   {
     icon: ShieldCheck,

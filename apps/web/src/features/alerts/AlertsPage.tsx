@@ -21,19 +21,23 @@ export function AlertsPage(): ReactElement {
     chainId: "",
   });
 
+  const visibleAlerts = useMemo(() => {
+    return alerts.filter((alert) => alert.deliveryStatus !== "draft");
+  }, [alerts]);
+
   const eventTypeOptions = useMemo(() => {
     const types = new Set<string>();
-    for (const alert of alerts) {
+    for (const alert of visibleAlerts) {
       if (alert.eventType) types.add(alert.eventType);
     }
     return [...types]
       .sort()
       .map((value) => ({ value, label: formatEventTypeLabel(value) }));
-  }, [alerts]);
+  }, [visibleAlerts]);
 
   const chainOptions = useMemo(() => {
     const chains = new Set<number>();
-    for (const alert of alerts) {
+    for (const alert of visibleAlerts) {
       if (typeof alert.chainId === "number") chains.add(alert.chainId);
     }
     return [...chains]
@@ -42,10 +46,10 @@ export function AlertsPage(): ReactElement {
         value: String(id),
         label: chainLabel(id),
       }));
-  }, [alerts]);
+  }, [visibleAlerts]);
 
   const filteredAlerts = useMemo(() => {
-    return alerts.filter((alert) => {
+    return visibleAlerts.filter((alert) => {
       if (filters.eventType && alert.eventType !== filters.eventType) {
         return false;
       }
@@ -54,7 +58,7 @@ export function AlertsPage(): ReactElement {
       }
       return true;
     });
-  }, [alerts, filters.eventType, filters.chainId]);
+  }, [visibleAlerts, filters.eventType, filters.chainId]);
 
   const hasActiveFilters = Boolean(filters.eventType || filters.chainId);
 
@@ -66,7 +70,7 @@ export function AlertsPage(): ReactElement {
         meta={
           !isLoading && !error ? (
             <span className="tabular-nums">
-              {pagination.total} alert{pagination.total !== 1 ? "s" : ""}
+              {visibleAlerts.length} alert{visibleAlerts.length !== 1 ? "s" : ""}
               {pagination.totalPages > 1
                 ? ` · page ${pagination.page}/${pagination.totalPages}`
                 : ""}
@@ -89,7 +93,7 @@ export function AlertsPage(): ReactElement {
           onRetry={refetch}
           data-testid="alerts-error"
         />
-      ) : alerts.length === 0 && pagination.page === 1 ? (
+      ) : visibleAlerts.length === 0 && pagination.page === 1 ? (
         <EmptyState
           title="No alerts yet"
           description="Public alerts will appear here when significant on-chain events are detected."

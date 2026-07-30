@@ -17,7 +17,7 @@ x402 / MPP. Pay-per-execution over HTTP, settled onchain, indexed on x402scan.co
 
 Smart Gas Estimation. Intelligent gas pricing that adapts to congestion with exponential backoff, so transactions execute instead of getting stuck.
 
-Private routing. MEV protection via non-public submission paths.
+Private routing. Private mempool routing via non-public submission paths.
 
 Audit trail. Every action logged: trigger, simulation result, submitted transaction, gas used, outcome, timestamp.
 

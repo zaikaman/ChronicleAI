@@ -37,7 +37,7 @@ const logos: LogoItem[] = [
   { node: <span className="text-[1em] font-semibold tracking-tight">Uniswap V3</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">x402 Micropayments</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">MPP Tempo</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Groq Llama-3.3</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Groq Qwen 3.6-27b</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">OpenAI GPT-4o</span> },
 ];
 
