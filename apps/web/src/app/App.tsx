@@ -17,6 +17,7 @@ import { WalletProvider } from "../features/wallet";
  * Landing (`/`) keeps the marketing header + site frame + Lenis smooth scroll.
  * Product routes use the studio-style AppShell (top nav + sidebar) with native
  * nested scrolling — Lenis must stay off there or it eats the wheel.
+ * Includes live activity API integration.
  */
 export function App(): React.ReactElement {
   const location = useLocation();
