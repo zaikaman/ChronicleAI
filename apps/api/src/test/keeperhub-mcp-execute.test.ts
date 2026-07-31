@@ -4,6 +4,7 @@ import {
   defaultWorkflowHints,
   executeViaDeterministicMcp,
   isAlreadyPublishedError,
+  isRpcTimeoutError,
   isSingleExecuteAction,
   mcpActionFromDeskAction,
   pickWorkflowId,
@@ -25,8 +26,7 @@ function mockMcpClient(
     isConnected: () => true,
     connect: async () => {},
     close: async () => {},
-    listServerTools: async () =>
-      Object.keys(handlers).map((name) => ({ name, description: name })),
+    listServerTools: async () => Object.keys(handlers).map((name) => ({ name, description: name })),
     callTool: async (name, args = {}) => {
       callLog?.push({ name, args });
       const handler = handlers[name];
@@ -41,9 +41,7 @@ function mockMcpClient(
       return {
         data: res.data,
         isError: res.isError === true,
-        text:
-          res.text ??
-          (typeof res.data === "string" ? res.data : JSON.stringify(res.data)),
+        text: res.text ?? (typeof res.data === "string" ? res.data : JSON.stringify(res.data)),
       };
     },
   };
@@ -259,11 +257,7 @@ describe("executeViaDeterministicMcp", () => {
 describe("pickWorkflowId / hints", () => {
   it("returns preferred ID immediately when set", () => {
     expect(
-      pickWorkflowId(
-        { workflows: [{ id: "wf_a", name: "alert" }] },
-        ["alert"],
-        "wf_preferred",
-      ),
+      pickWorkflowId({ workflows: [{ id: "wf_a", name: "alert" }] }, ["alert"], "wf_preferred"),
     ).toBe("wf_preferred");
   });
 
@@ -283,6 +277,16 @@ describe("pickWorkflowId / hints", () => {
 });
 
 describe("helpers", () => {
+  it("identifies RPC timeouts but not KeeperHub polling deadlines", () => {
+    expect(
+      isRpcTimeoutError(
+        'Token approval failed: timeout (operation="request.send", reason="timeout", code=TIMEOUT)',
+      ),
+    ).toBe(true);
+    expect(isRpcTimeoutError("Timed out waiting for KeeperHub execution exec_1")).toBe(false);
+    expect(isRpcTimeoutError("contract reverted: insufficient balance")).toBe(false);
+  });
+
   it("isSingleExecuteAction for contentHash registry writes", () => {
     expect(isSingleExecuteAction("publishAlert")).toBe(true);
     expect(isSingleExecuteAction("publishTradeTicket")).toBe(true);

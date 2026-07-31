@@ -10,16 +10,16 @@
 // signing. No PARA_WALLET_PRIVATE_KEY is used in production.
 
 import type { ServerEnv } from "@chronicleai/config";
-import { createParaRestViemAccount } from "@getpara/rest-sdk/viem";
 import { ParaRestClient } from "@getpara/rest-sdk";
+import { createParaRestViemAccount } from "@getpara/rest-sdk/viem";
 import {
+  http,
   type Address,
   type Hash,
   type Hex,
   createPublicClient,
   createWalletClient,
   getAddress,
-  http,
   isAddress,
   parseAbi,
   parseUnits,
@@ -27,31 +27,31 @@ import {
 import { type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
 import { chainFromId } from "../lib/viem-chain.ts";
 import {
+  type KeeperHubMcpWriteOptions,
   createKeeperHubWriteClient,
   isKeeperHubWriteConfigured,
-  type KeeperHubMcpWriteOptions,
   toBytes32Hash,
   toUint64Seconds,
 } from "./keeperhub-write-client.ts";
-import { createProviderConfigs, type LLMProviderMap } from "./llm-provider-client.ts";
+import { type LLMProviderMap, createProviderConfigs } from "./llm-provider-client.ts";
 import {
-  PRIVATE_ROUTING_CHAIN_ID,
-  type PrivateRoutingPolicy,
-  selectTreasuryTransferPath,
-  type TreasuryTransferPath,
-} from "./routing-metadata.ts";
-import {
-  normalizeGasValue,
   type OnChainWriteReceipt,
   type SponsoredWatchWriteReceipt,
+  normalizeGasValue,
 } from "./on-chain-write-receipt.ts";
 import {
+  type ParaTreasuryClient,
   createParaTreasuryClientFromEnv,
   isParaTreasuryConfigured,
   mapNetworkToChainId,
   networkLabelForChainId,
-  type ParaTreasuryClient,
 } from "./para-treasury-client.ts";
+import {
+  PRIVATE_ROUTING_CHAIN_ID,
+  type PrivateRoutingPolicy,
+  type TreasuryTransferPath,
+  selectTreasuryTransferPath,
+} from "./routing-metadata.ts";
 import { decodeSponsoredWatchIdFromLogs } from "./sponsored-watch-id.ts";
 import { resolveTreasuryWallet } from "./treasury-wallet.ts";
 
@@ -264,6 +264,13 @@ function keeperHubWorkflowIdsFromEnv(env: ServerEnv) {
     ...(env.keeperhubWorkflowRecordCapitalMove
       ? { recordCapitalMove: env.keeperhubWorkflowRecordCapitalMove }
       : {}),
+    ...(env.keeperhubWorkflowRecordCapitalMovePublicFallback
+      ? {
+          publicFallbacks: {
+            recordCapitalMove: env.keeperhubWorkflowRecordCapitalMovePublicFallback,
+          },
+        }
+      : {}),
     ...(env.keeperhubWorkflowTransfer ? { transfer: env.keeperhubWorkflowTransfer } : {}),
   };
 }
@@ -298,9 +305,7 @@ function llmProvidersFromEnv(env: ServerEnv): LLMProviderMap {
 function keeperHubMcpOptionsFromEnv(env: ServerEnv): KeeperHubMcpWriteOptions {
   return {
     enabled: env.keeperhubMcpEnabled !== false,
-    ...(env.keeperhubMcpUrl?.trim()
-      ? { mcpUrl: env.keeperhubMcpUrl.trim() }
-      : {}),
+    ...(env.keeperhubMcpUrl?.trim() ? { mcpUrl: env.keeperhubMcpUrl.trim() } : {}),
     llmProviders: llmProvidersFromEnv(env),
     langchainAgent: env.keeperhubMcpLangchainAgent !== false,
     restFallback: env.keeperhubMcpRestFallback !== false,
@@ -312,10 +317,7 @@ export function isKeeperHubTransferConfigured(env: ServerEnv): boolean {
   const workflow = env.keeperhubWorkflowTransfer?.trim();
   const usdc = env.deskUsdcAddress?.trim();
   return Boolean(
-    workflow &&
-      usdc &&
-      /^0x[0-9a-fA-F]{40}$/.test(usdc) &&
-      isKeeperHubWriteConfigured(env),
+    workflow && usdc && /^0x[0-9a-fA-F]{40}$/.test(usdc) && isKeeperHubWriteConfigured(env),
   );
 }
 
@@ -420,9 +422,7 @@ function createHybridParaKeeperHubWeb3Client(
       if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) {
         throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
       }
-      console.info(
-        `[web3] Treasury transfer ${amountUsdc} USDC → public KeeperHub workflow path`,
-      );
+      console.info(`[web3] Treasury transfer ${amountUsdc} USDC → public KeeperHub workflow path`);
       return kh.sendTransfer(to, amountUsdc);
     },
 
@@ -552,10 +552,7 @@ function createParaWeb3Client(
         toUint64Seconds(startsAt),
         toUint64Seconds(endsAt),
       ]);
-      const watchId = decodeSponsoredWatchIdFromLogs(
-        receipt.logs,
-        "Para createSponsoredWatch",
-      );
+      const watchId = decodeSponsoredWatchIdFromLogs(receipt.logs, "Para createSponsoredWatch");
       return {
         ...receiptWithGas(receipt, network),
         watchId,
@@ -929,9 +926,7 @@ export function createWeb3Client(
   options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
 ): Web3Client | null {
   const paraClient = createParaTreasuryClientFromEnv(env);
-  const affiliateParaClient = paraClient
-    ? createParaTreasuryClientFromEnv(env, "x402")
-    : null;
+  const affiliateParaClient = paraClient ? createParaTreasuryClientFromEnv(env, "x402") : null;
   const keeperHub = isKeeperHubWriteConfigured(env);
   const isProduction = env.nodeEnv === "production";
   const logOpts = options?.execLogRepo !== undefined ? { execLogRepo: options.execLogRepo } : {};

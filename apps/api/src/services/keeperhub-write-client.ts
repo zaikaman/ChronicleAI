@@ -13,34 +13,32 @@
 //   publishTradeTicket(ticketHash, signalHash, intentHash, contentUri) — desk proof
 //   recordCapitalMove(moveId, from, to, amount, reasonHash) — desk capital audit
 
-import { keccak256, parseUnits, stringToBytes } from "viem";
 import type { ExecutionLogRepository } from "@chronicleai/db";
+import { keccak256, parseUnits, stringToBytes } from "viem";
 import {
   isAlreadyPublishedError,
   publishViaKeeperHubMcp,
 } from "../agents/langchain/keeperhub-mcp-publication-agent.ts";
+import { actionTypeForWriteMethod, withKeeperHubLog } from "./keeperhub-execution-log.ts";
 import { resolveKeeperHubMcpUrl } from "./keeperhub-mcp-client.ts";
 import {
+  type McpWriteAction,
   executeViaKeeperHubMcp,
   isAlreadyPublishedError as isAlreadyPublishedErrorShared,
+  isRpcTimeoutError,
   isSingleExecuteAction,
   mcpActionFromWriteMethod,
   summarizeMcpToolCalls,
-  type McpWriteAction,
 } from "./keeperhub-mcp-execute.ts";
 import type { LLMProviderMap } from "./llm-provider-client.ts";
 import {
-  extractGasFromKeeperHubPayload,
   type OnChainWriteReceipt,
+  extractGasFromKeeperHubPayload,
 } from "./on-chain-write-receipt.ts";
 import {
-  actionTypeForWriteMethod,
-  withKeeperHubLog,
-} from "./keeperhub-execution-log.ts";
-import {
-  buildPrivateRoutingDetails,
   type PrivateRoutingPolicy,
   type RoutingDetails,
+  buildPrivateRoutingDetails,
 } from "./routing-metadata.ts";
 import {
   fetchAndDecodeWatchIdFromTxHash,
@@ -60,6 +58,17 @@ export interface KeeperHubWriteReceipt extends OnChainWriteReceipt {
  * Pre-imported KeeperHub workflow IDs. Every write method requires its
  * corresponding ID — there is no Direct Execution fallback.
  */
+export type KeeperHubWriteAction =
+  | "publishAlert"
+  | "publishDigest"
+  | "createSponsoredWatch"
+  | "publishSponsoredReport"
+  | "publishPremiumReceipt"
+  | "recordPayout"
+  | "publishTradeTicket"
+  | "recordCapitalMove"
+  | "transfer";
+
 export interface KeeperHubWorkflowIds {
   publishAlert?: string;
   publishDigest?: string;
@@ -70,6 +79,8 @@ export interface KeeperHubWorkflowIds {
   publishTradeTicket?: string;
   recordCapitalMove?: string;
   transfer?: string;
+  /** Public workflow IDs used only after an RPC timeout on a private workflow. */
+  publicFallbacks?: Partial<Record<KeeperHubWriteAction, string>>;
 }
 
 export interface KeeperHubMcpWriteOptions {
@@ -263,7 +274,7 @@ interface ExecuteStatusResponse {
   gasUsedWei?: string | number;
 }
 
-const WORKFLOW_ACTION_ENV: Record<keyof KeeperHubWorkflowIds, string> = {
+const WORKFLOW_ACTION_ENV: Record<KeeperHubWriteAction, string> = {
   publishAlert: "KEEPERHUB_WORKFLOW_PUBLISH_ALERT",
   publishDigest: "KEEPERHUB_WORKFLOW_PUBLISH_DIGEST",
   createSponsoredWatch: "KEEPERHUB_WORKFLOW_CREATE_SPONSORED_WATCH",
@@ -277,7 +288,7 @@ const WORKFLOW_ACTION_ENV: Record<keyof KeeperHubWorkflowIds, string> = {
 
 function requireWorkflowId(
   workflowIds: KeeperHubWorkflowIds,
-  action: keyof KeeperHubWorkflowIds,
+  action: KeeperHubWriteAction,
 ): string {
   const id = workflowIds[action]?.trim();
   if (!id) {
@@ -317,19 +328,11 @@ function extractTx(status: ExecuteStatusResponse): { txHash?: string; explorerUr
 }
 
 function isTerminalSuccess(body: ExecuteStatusResponse): boolean {
-  return (
-    body.completed === true ||
-    body.status === "success" ||
-    body.status === "completed"
-  );
+  return body.completed === true || body.status === "success" || body.status === "completed";
 }
 
 function isTerminalFailure(body: ExecuteStatusResponse): boolean {
-  return (
-    body.status === "error" ||
-    body.status === "failed" ||
-    body.status === "cancelled"
-  );
+  return body.status === "error" || body.status === "failed" || body.status === "cancelled";
 }
 
 function receiptFromStatus(
@@ -339,9 +342,7 @@ function receiptFromStatus(
 ): KeeperHubWriteReceipt {
   const { txHash, explorerUrl } = extractTx(body);
   if (!txHash) {
-    throw new Error(
-      `KeeperHub execution ${executionId} completed without a transaction hash`,
-    );
+    throw new Error(`KeeperHub execution ${executionId} completed without a transaction hash`);
   }
   const gas = extractGasFromKeeperHubPayload(body);
   return {
@@ -393,17 +394,29 @@ export function createKeeperHubWriteClient(
   // MCP is opt-in via config.mcp (web3 client passes this from env when enabled).
   // Existing REST-only unit tests omit mcp and keep the pure workflow execute path.
   const mcpOpts = config.mcp ?? null;
-  const mcpEnabled =
-    mcpOpts != null &&
-    mcpOpts.enabled !== false &&
-    Boolean(config.apiKey?.trim());
+  const mcpEnabled = mcpOpts != null && mcpOpts.enabled !== false && Boolean(config.apiKey?.trim());
   const mcpUrl = resolveKeeperHubMcpUrl(baseUrl, mcpOpts?.mcpUrl);
   const mcpRestFallback = mcpOpts?.restFallback !== false;
   const mcpLangchainAgent = mcpOpts?.langchainAgent !== false;
 
   function routingDetailsForMethod(
-    method: keyof typeof WORKFLOW_ACTION_ENV,
+    method: KeeperHubWriteAction,
+    publicFallback = false,
   ): RoutingDetails | null {
+    if (publicFallback) {
+      const policy =
+        method === "recordPayout"
+          ? (config.transferRoutingPolicy ?? config.routingPolicy)
+          : config.routingPolicy;
+      return policy
+        ? buildPrivateRoutingDetails({
+            ...policy,
+            enabled: false,
+            strict: false,
+            provider: "public",
+          })
+        : null;
+    }
     if (method === "transfer") {
       const policy = config.transferRoutingPolicy ?? config.routingPolicy;
       return policy
@@ -419,9 +432,7 @@ export function createKeeperHubWriteClient(
       const policy = config.transferRoutingPolicy ?? config.routingPolicy;
       return policy ? buildPrivateRoutingDetails(policy) : null;
     }
-    return config.routingPolicy
-      ? buildPrivateRoutingDetails(config.routingPolicy)
-      : null;
+    return config.routingPolicy ? buildPrivateRoutingDetails(config.routingPolicy) : null;
   }
 
   /**
@@ -429,7 +440,7 @@ export function createKeeperHubWriteClient(
    * Alert/digest may use LangChain ReAct; all others use deterministic MCP.
    */
   async function runViaMcpOrRest(
-    method: keyof typeof WORKFLOW_ACTION_ENV,
+    method: KeeperHubWriteAction,
     workflowId: string,
     input: Record<string, unknown>,
     idempotencyKey: string,
@@ -444,9 +455,70 @@ export function createKeeperHubWriteClient(
 
     const mcpAction: McpWriteAction = mcpActionFromWriteMethod(method);
     const useLangChain =
-      mcpLangchainAgent &&
-      (method === "publishAlert" || method === "publishDigest");
+      mcpLangchainAgent && (method === "publishAlert" || method === "publishDigest");
     const routing = routingDetailsForMethod(method);
+    const publicFallbackWorkflowId = workflowIds.publicFallbacks?.[method]?.trim();
+    const logContextDetails: Record<string, unknown> = {
+      workflowId,
+      network: config.network,
+      executionPath: "mcp",
+      execution_surface: useLangChain ? "langchain_mcp" : "deterministic_mcp",
+      mcp_url: mcpUrl,
+      ...(routing ?? {}),
+      ...(logDetails ?? {}),
+    };
+
+    const executeViaMcp = async (
+      preferredWorkflowId: string,
+      preferredIdempotencyKey = idempotencyKey,
+    ): Promise<KeeperHubWriteReceipt> => {
+      if (useLangChain) {
+        const mcpReceipt = await publishViaKeeperHubMcp({
+          action: method as "publishAlert" | "publishDigest",
+          input,
+          preferredWorkflowId,
+          mcp: {
+            mcpUrl,
+            apiKey: config.apiKey,
+          },
+          llmProviders: mcpOpts?.llmProviders ?? null,
+          network: config.network,
+          pollIntervalMs,
+          pollTimeoutMs,
+          idempotencyKey: preferredIdempotencyKey,
+        });
+        console.info(
+          `[keeperhub-mcp] ${method} succeeded via ${mcpReceipt.mode}` +
+            (mcpReceipt.provider ? ` (provider=${mcpReceipt.provider})` : "") +
+            ` run=${mcpReceipt.keeperHubRunId} tx=${mcpReceipt.txHash}`,
+        );
+        return mcpReceiptToWriteReceipt(mcpReceipt);
+      }
+
+      const mcpReceipt = await executeViaKeeperHubMcp({
+        action: mcpAction,
+        workflowInput: input,
+        preferredWorkflowId,
+        mcp: {
+          mcpUrl,
+          apiKey: config.apiKey,
+        },
+        network: config.network,
+        pollIntervalMs,
+        pollTimeoutMs,
+        idempotencyKey: preferredIdempotencyKey,
+        singleExecute: isSingleExecuteAction(mcpAction),
+        wait: true,
+      });
+      console.info(
+        `[keeperhub-mcp] ${method} succeeded via ${mcpReceipt.mode}` +
+          ` run=${mcpReceipt.keeperHubRunId} tx=${mcpReceipt.txHash}` +
+          ` tools=${summarizeMcpToolCalls(mcpReceipt.toolCalls)
+            .map((t) => t.name)
+            .join(",")}`,
+      );
+      return mcpReceiptToWriteReceipt(mcpReceipt);
+    };
 
     return withKeeperHubLog(
       execLogRepo,
@@ -455,67 +527,13 @@ export function createKeeperHubWriteClient(
         entityType: "keeperhub_workflow",
         entityId: null,
         method,
-        details: {
-          workflowId,
-          network: config.network,
-          executionPath: "mcp",
-          execution_surface: useLangChain ? "langchain_mcp" : "deterministic_mcp",
-          mcp_url: mcpUrl,
-          ...(routing ?? {}),
-          ...(logDetails ?? {}),
-        },
+        details: logContextDetails,
       },
       async () => {
         try {
-          if (useLangChain) {
-            const mcpReceipt = await publishViaKeeperHubMcp({
-              action: method as "publishAlert" | "publishDigest",
-              input,
-              preferredWorkflowId: workflowId,
-              mcp: {
-                mcpUrl,
-                apiKey: config.apiKey,
-              },
-              llmProviders: mcpOpts?.llmProviders ?? null,
-              network: config.network,
-              pollIntervalMs,
-              pollTimeoutMs,
-              idempotencyKey,
-            });
-            console.info(
-              `[keeperhub-mcp] ${method} succeeded via ${mcpReceipt.mode}` +
-                (mcpReceipt.provider ? ` (provider=${mcpReceipt.provider})` : "") +
-                ` run=${mcpReceipt.keeperHubRunId} tx=${mcpReceipt.txHash}`,
-            );
-            return mcpReceiptToWriteReceipt(mcpReceipt);
-          }
-
-          const mcpReceipt = await executeViaKeeperHubMcp({
-            action: mcpAction,
-            workflowInput: input,
-            preferredWorkflowId: workflowId,
-            mcp: {
-              mcpUrl,
-              apiKey: config.apiKey,
-            },
-            network: config.network,
-            pollIntervalMs,
-            pollTimeoutMs,
-            idempotencyKey,
-            singleExecute: isSingleExecuteAction(mcpAction),
-            wait: true,
-          });
-          console.info(
-            `[keeperhub-mcp] ${method} succeeded via ${mcpReceipt.mode}` +
-              ` run=${mcpReceipt.keeperHubRunId} tx=${mcpReceipt.txHash}` +
-              ` tools=${summarizeMcpToolCalls(mcpReceipt.toolCalls)
-                .map((t) => t.name)
-                .join(",")}`,
-          );
-          return mcpReceiptToWriteReceipt(mcpReceipt);
+          return await executeViaMcp(workflowId);
         } catch (mcpError) {
-          const message =
-            mcpError instanceof Error ? mcpError.message : String(mcpError);
+          const message = mcpError instanceof Error ? mcpError.message : String(mcpError);
 
           // Registry already has this contentHash. REST re-submit will only
           // burn gas and fail again with the same revert.
@@ -529,6 +547,39 @@ export function createKeeperHubWriteClient(
               : new Error(`KeeperHub MCP ${method} failed: ${message}`);
           }
 
+          if (isRpcTimeoutError(mcpError) && publicFallbackWorkflowId) {
+            const fallbackIdempotencyKey = `${idempotencyKey}-public-fallback`;
+            Object.assign(logContextDetails, {
+              workflowId: publicFallbackWorkflowId,
+              fallbackWorkflowId: publicFallbackWorkflowId,
+              fallbackReason: "private_rpc_timeout",
+              fallbackFromWorkflowId: workflowId,
+              ...(routingDetailsForMethod(method, true) ?? {}),
+            });
+            console.warn(
+              `[keeperhub-mcp] ${method} private workflow timed out; ` +
+                `retrying public fallback workflow ${publicFallbackWorkflowId}`,
+            );
+            try {
+              return await executeViaMcp(publicFallbackWorkflowId, fallbackIdempotencyKey);
+            } catch (fallbackMcpError) {
+              const fallbackMessage =
+                fallbackMcpError instanceof Error
+                  ? fallbackMcpError.message
+                  : String(fallbackMcpError);
+              if (alreadyPublished(fallbackMessage) || !mcpRestFallback) {
+                throw fallbackMcpError instanceof Error
+                  ? fallbackMcpError
+                  : new Error(`KeeperHub MCP ${method} public fallback failed: ${fallbackMessage}`);
+              }
+              console.warn(
+                `[keeperhub-mcp] ${method} public fallback MCP failed, ` +
+                  `falling back to public REST workflow: ${fallbackMessage}`,
+              );
+              return runWorkflow(publicFallbackWorkflowId, input, fallbackIdempotencyKey);
+            }
+          }
+
           if (!mcpRestFallback) {
             throw mcpError instanceof Error
               ? mcpError
@@ -539,7 +590,21 @@ export function createKeeperHubWriteClient(
           );
           // Inside withKeeperHubLog — call raw runWorkflow to avoid double-log rows.
           // Mark path as rest for the success receipt details merge below via extra.
-          const receipt = await runWorkflow(workflowId, input, idempotencyKey);
+          const receipt = await runWorkflowWithPublicFallback(
+            method,
+            workflowId,
+            input,
+            idempotencyKey,
+            (fallbackWorkflowId) => {
+              Object.assign(logContextDetails, {
+                workflowId: fallbackWorkflowId,
+                fallbackWorkflowId,
+                fallbackReason: "private_rpc_timeout",
+                fallbackFromWorkflowId: workflowId,
+                ...(routingDetailsForMethod(method, true) ?? {}),
+              });
+            },
+          );
           return receipt;
         }
       },
@@ -613,8 +678,7 @@ export function createKeeperHubWriteClient(
         if (isTerminalFailure(body)) {
           const err = (body as any).errorContext?.error ?? body.error;
           throw new Error(
-            err ??
-              `KeeperHub execution ${executionId} ended with status ${body.status}`,
+            err ?? `KeeperHub execution ${executionId} ended with status ${body.status}`,
           );
         }
 
@@ -668,14 +732,42 @@ export function createKeeperHubWriteClient(
     return pollUntilComplete(executionId);
   }
 
+  async function runWorkflowWithPublicFallback(
+    method: KeeperHubWriteAction,
+    workflowId: string,
+    input: Record<string, unknown>,
+    idempotencyKey: string,
+    onFallback?: (fallbackWorkflowId: string) => void,
+  ): Promise<KeeperHubWriteReceipt> {
+    try {
+      return await runWorkflow(workflowId, input, idempotencyKey);
+    } catch (error) {
+      const fallbackWorkflowId = workflowIds.publicFallbacks?.[method]?.trim();
+      if (!fallbackWorkflowId || !isRpcTimeoutError(error)) throw error;
+      onFallback?.(fallbackWorkflowId);
+      console.warn(
+        `[keeperhub] ${method} private workflow timed out; ` +
+          `retrying public fallback workflow ${fallbackWorkflowId}`,
+      );
+      return runWorkflow(fallbackWorkflowId, input, `${idempotencyKey}-public-fallback`);
+    }
+  }
+
   async function runWorkflowLogged(
-    method: keyof typeof WORKFLOW_ACTION_ENV,
+    method: KeeperHubWriteAction,
     workflowId: string,
     input: Record<string, unknown>,
     idempotencyKey: string,
     logDetails?: Record<string, unknown>,
   ): Promise<KeeperHubWriteReceipt> {
     const routing = routingDetailsForMethod(method);
+    const logContextDetails: Record<string, unknown> = {
+      workflowId,
+      network: config.network,
+      executionPath: "rest",
+      ...(routing ?? {}),
+      ...(logDetails ?? {}),
+    };
     return withKeeperHubLog(
       execLogRepo,
       {
@@ -685,15 +777,24 @@ export function createKeeperHubWriteClient(
         entityType: "keeperhub_workflow",
         entityId: null,
         method,
-        details: {
-          workflowId,
-          network: config.network,
-          executionPath: "rest",
-          ...(routing ?? {}),
-          ...(logDetails ?? {}),
-        },
+        details: logContextDetails,
       },
-      () => runWorkflow(workflowId, input, idempotencyKey),
+      () =>
+        runWorkflowWithPublicFallback(
+          method,
+          workflowId,
+          input,
+          idempotencyKey,
+          (fallbackWorkflowId) => {
+            Object.assign(logContextDetails, {
+              workflowId: fallbackWorkflowId,
+              fallbackWorkflowId,
+              fallbackReason: "private_rpc_timeout",
+              fallbackFromWorkflowId: workflowId,
+              ...(routingDetailsForMethod(method, true) ?? {}),
+            });
+          },
+        ),
       {
         receiptFromResult: (receipt) => ({
           keeperHubRunId: receipt.keeperHubRunId,
@@ -779,10 +880,7 @@ export function createKeeperHubWriteClient(
         fromPayload = parseWatchId(receipt);
       }
       if (fromPayload === undefined && receipt.txHash) {
-        fromPayload = await fetchAndDecodeWatchIdFromTxHash(
-          receipt.txHash,
-          config.network,
-        );
+        fromPayload = await fetchAndDecodeWatchIdFromTxHash(receipt.txHash, config.network);
       }
 
       const watchId = requireOnChainWatchId(
@@ -838,10 +936,7 @@ export function createKeeperHubWriteClient(
       const periodBytes = toBytes32Hash(payoutPeriodHash);
       const reasonBytes = toBytes32Hash(reasonHash);
       // Registry amount is USDC base units (6 decimals), matching payment accounting.
-      const amountRaw = parseUnits(
-        String(amount),
-        config.usdcDecimals ?? 6,
-      ).toString();
+      const amountRaw = parseUnits(String(amount), config.usdcDecimals ?? 6).toString();
       const workflowId = requireWorkflowId(workflowIds, "recordPayout");
       return runViaMcpOrRest(
         "recordPayout",
@@ -883,10 +978,7 @@ export function createKeeperHubWriteClient(
     async recordCapitalMove(moveId, from, to, amountUsdc, reasonHash) {
       const moveBytes = toBytes32Hash(moveId);
       const reasonBytes = toBytes32Hash(reasonHash);
-      const amountRaw = parseUnits(
-        String(amountUsdc),
-        config.usdcDecimals ?? 6,
-      ).toString();
+      const amountRaw = parseUnits(String(amountUsdc), config.usdcDecimals ?? 6).toString();
       const workflowId = requireWorkflowId(workflowIds, "recordCapitalMove");
       return runViaMcpOrRest(
         "recordCapitalMove",

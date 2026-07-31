@@ -11,16 +11,13 @@
  * that path reuses the same poll / receipt helpers here.
  */
 
-import type { KeeperHubMcpClient } from "./keeperhub-mcp-client.ts";
-import {
-  createKeeperHubMcpClient,
-  type KeeperHubMcpClientConfig,
-} from "./keeperhub-mcp-client.ts";
-import {
-  extractGasFromKeeperHubPayload,
-  type OnChainWriteReceipt,
-} from "./on-chain-write-receipt.ts";
 import type { KeeperHubMcpToolCallRecord } from "../agents/langchain/keeperhub-mcp-tools.ts";
+import type { KeeperHubMcpClient } from "./keeperhub-mcp-client.ts";
+import { type KeeperHubMcpClientConfig, createKeeperHubMcpClient } from "./keeperhub-mcp-client.ts";
+import {
+  type OnChainWriteReceipt,
+  extractGasFromKeeperHubPayload,
+} from "./on-chain-write-receipt.ts";
 
 /** All production write classes that can run through KeeperHub MCP. */
 export type McpWriteAction =
@@ -177,16 +174,10 @@ function extractTxFromRecord(rec: Record<string, unknown>): {
     );
   }
 
-  if (
-    typeof rec.txHash === "string" &&
-    rec.txHash.length > 0 &&
-    !hashes.includes(rec.txHash)
-  ) {
+  if (typeof rec.txHash === "string" && rec.txHash.length > 0 && !hashes.includes(rec.txHash)) {
     hashes.unshift(rec.txHash);
     explorers.unshift(
-      typeof rec.explorerUrl === "string" && rec.explorerUrl.length > 0
-        ? rec.explorerUrl
-        : "",
+      typeof rec.explorerUrl === "string" && rec.explorerUrl.length > 0 ? rec.explorerUrl : "",
     );
   }
 
@@ -288,19 +279,13 @@ function receiptFromStatus(
   }
 
   if (requireTx && !extracted.txHash) {
-    throw new Error(
-      `KeeperHub MCP execution ${executionId} completed without a transaction hash`,
-    );
+    throw new Error(`KeeperHub MCP execution ${executionId} completed without a transaction hash`);
   }
 
   const txHash = extracted.txHash ?? "";
   const hashes = extracted.txHashes ?? (txHash ? [txHash] : []);
   const explorers = (extracted.explorerUrls ?? []).map((url, i) =>
-    url && url.length > 0
-      ? url
-      : hashes[i]
-        ? buildFallbackExplorerUrl(hashes[i]!, network)
-        : "",
+    url && url.length > 0 ? url : hashes[i] ? buildFallbackExplorerUrl(hashes[i]!, network) : "",
   );
   const gas = extractGasFromKeeperHubPayload(statusPayload);
   const statusStr =
@@ -313,9 +298,7 @@ function receiptFromStatus(
   return {
     keeperHubRunId: executionId,
     txHash,
-    explorerUrl:
-      extracted.explorerUrl ??
-      (txHash ? buildFallbackExplorerUrl(txHash, network) : ""),
+    explorerUrl: extracted.explorerUrl ?? (txHash ? buildFallbackExplorerUrl(txHash, network) : ""),
     mode,
     toolCalls,
     result: statusPayload.result ?? statusPayload.output ?? statusPayload.data ?? statusPayload,
@@ -342,33 +325,15 @@ export function defaultWorkflowHints(action: McpWriteAction): string[] {
         "sponsored_watch",
       ];
     case "publishSponsoredReport":
-      return [
-        "publish-sponsored-report",
-        "publishSponsoredReport",
-        "sponsored-report",
-      ];
+      return ["publish-sponsored-report", "publishSponsoredReport", "sponsored-report"];
     case "publishPremiumReceipt":
-      return [
-        "publish-premium-receipt",
-        "publishPremiumReceipt",
-        "premium-receipt",
-      ];
+      return ["publish-premium-receipt", "publishPremiumReceipt", "premium-receipt"];
     case "recordPayout":
       return ["record-payout", "recordPayout", "payout"];
     case "publishTradeTicket":
-      return [
-        "publish-trade-ticket",
-        "publishTradeTicket",
-        "trade-ticket",
-        "trade_ticket",
-      ];
+      return ["publish-trade-ticket", "publishTradeTicket", "trade-ticket", "trade_ticket"];
     case "recordCapitalMove":
-      return [
-        "record-capital-move",
-        "recordCapitalMove",
-        "capital-move",
-        "capital_move",
-      ];
+      return ["record-capital-move", "recordCapitalMove", "capital-move", "capital_move"];
     case "transfer":
       return ["transfer", "usdc-transfer", "treasury-transfer"];
     case "deskSweep":
@@ -513,9 +478,40 @@ export function isAlreadyPublishedError(message: string): boolean {
   );
 }
 
-export function collectExecutionIds(
-  toolCalls: KeeperHubMcpToolCallRecord[],
-): string[] {
+/**
+ * Identify an RPC transport timeout without treating KeeperHub's own polling
+ * deadline as retryable. A workflow may have submitted a transaction before a
+ * polling deadline, so only viem/RPC timeout-shaped errors may switch routes.
+ */
+export function isRpcTimeoutError(error: unknown): boolean {
+  const messages: string[] = [];
+  if (typeof error === "string") messages.push(error);
+  const seen = new Set<object>();
+  let current: unknown = error;
+
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    if (current instanceof Error) {
+      messages.push(current.message);
+    }
+    const record = current as Record<string, unknown>;
+    for (const key of ["message", "reason", "code", "error", "details"]) {
+      const value = record[key];
+      if (typeof value === "string") messages.push(value);
+    }
+    current = record.cause;
+  }
+
+  const message = messages.join(" ");
+  if (/timed out waiting for keeperhub/i.test(message)) return false;
+  return (
+    /\bTIMEOUT\b/i.test(message) ||
+    /operation\s*=\s*["']?request\.send/i.test(message) ||
+    /rpc failed[^\n]*\btimeout\b/i.test(message)
+  );
+}
+
+export function collectExecutionIds(toolCalls: KeeperHubMcpToolCallRecord[]): string[] {
   const ids: string[] = [];
   const seen = new Set<string>();
   for (const tc of toolCalls) {
@@ -616,27 +612,17 @@ export async function pollExecutionViaMcp(
           const logsParsed = parseJsonish(logsRes.data);
           const logsRec = asRecord(logsParsed);
           const richStatus = asRecord(logsRec?.status) ?? status;
-          return receiptFromStatus(
-            executionId,
-            richStatus,
-            opts.network,
-            opts.mode,
-            toolCalls,
-            { requireTxHash: opts.requireTxHash },
-          );
+          return receiptFromStatus(executionId, richStatus, opts.network, opts.mode, toolCalls, {
+            requireTxHash: opts.requireTxHash,
+          });
         }
       } catch {
         /* soft-fail logs */
       }
 
-      return receiptFromStatus(
-        executionId,
-        status,
-        opts.network,
-        opts.mode,
-        toolCalls,
-        { requireTxHash: opts.requireTxHash },
-      );
+      return receiptFromStatus(executionId, status, opts.network, opts.mode, toolCalls, {
+        requireTxHash: opts.requireTxHash,
+      });
     }
 
     await sleep(opts.pollIntervalMs);
@@ -667,10 +653,7 @@ export async function executeViaDeterministicMcp(
   params: ExecuteViaKeeperHubMcpParams,
 ): Promise<KeeperHubMcpExecuteReceipt> {
   const toolCalls: KeeperHubMcpToolCallRecord[] = [];
-  const hints = [
-    ...(params.workflowHints ?? []),
-    ...defaultWorkflowHints(params.action),
-  ];
+  const hints = [...(params.workflowHints ?? []), ...defaultWorkflowHints(params.action)];
   const pollIntervalMs = params.pollIntervalMs ?? 2_000;
   const pollTimeoutMs = params.pollTimeoutMs ?? 120_000;
   const wait = params.wait !== false;
@@ -689,8 +672,7 @@ export async function executeViaDeterministicMcp(
     isError: listRes.isError,
   });
   if (!listRes.isError) {
-    workflowId =
-      pickWorkflowId(listRes.data, hints, params.preferredWorkflowId) ?? workflowId;
+    workflowId = pickWorkflowId(listRes.data, hints, params.preferredWorkflowId) ?? workflowId;
   }
 
   // preferred ID always wins when provided
@@ -714,9 +696,7 @@ export async function executeViaDeterministicMcp(
     isError: getRes.isError,
   });
   if (getRes.isError) {
-    throw new Error(
-      `KeeperHub MCP get_workflow failed for ${workflowId}: ${getRes.text}`,
-    );
+    throw new Error(`KeeperHub MCP get_workflow failed for ${workflowId}: ${getRes.text}`);
   }
 
   // Exactly one execute_workflow per deterministic session (single-execute guard).
@@ -736,16 +716,12 @@ export async function executeViaDeterministicMcp(
     isError: execRes.isError,
   });
   if (execRes.isError) {
-    throw new Error(
-      `KeeperHub MCP execute_workflow failed: ${execRes.text}`,
-    );
+    throw new Error(`KeeperHub MCP execute_workflow failed: ${execRes.text}`);
   }
 
   const executionId = extractExecutionId(execRes.data);
   if (!executionId) {
-    throw new Error(
-      "KeeperHub MCP execute_workflow response missing executionId",
-    );
+    throw new Error("KeeperHub MCP execute_workflow response missing executionId");
   }
 
   if (!wait) {

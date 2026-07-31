@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-13T00:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Record Capital Move (Registry Write) (Public Fallback)",
+    "description": "Material write: recordCapitalMove(moveId, from, to, amount, reasonHash) on Chronicle Registry. Audits desk top-up / sweep / emergency-return capital flows (USDC base units). Uses public mempool submission when the private RPC times out."
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": {
+        "x": 100,
+        "y": 200
+      },
+      "data": {
+        "type": "trigger",
+        "label": "Manual / API Trigger",
+        "config": {
+          "triggerType": "Manual"
+        }
+      }
+    },
+    {
+      "id": "write-record-capital-move",
+      "type": "action",
+      "position": {
+        "x": 420,
+        "y": 200
+      },
+      "data": {
+        "type": "action",
+        "label": "recordCapitalMove on Chronicle Registry",
+        "config": {
+          "actionType": "web3/write-contract",
+          "network": "11155111",
+          "contractAddress": "0xD8Deb4475a7E23E194Bc93f8739858Fb20744111",
+          "abiFunction": "recordCapitalMove",
+          "functionArgs": "[\"{{@trigger-manual:Manual / API Trigger.moveId}}\",\"{{@trigger-manual:Manual / API Trigger.from}}\",\"{{@trigger-manual:Manual / API Trigger.to}}\",\"{{@trigger-manual:Manual / API Trigger.amount}}\",\"{{@trigger-manual:Manual / API Trigger.reasonHash}}\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"moveId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"reasonHash\",\"type\":\"bytes32\"}],\"name\":\"recordCapitalMove\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+          "usePrivateMempool": false,
+          "strict": false
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-manual",
+      "target": "write-record-capital-move"
+    }
+  ],
+  "integrationBindings": []
+}
+

@@ -7,8 +7,8 @@ import {
   CCTP_FORWARDING_FALLBACK_MS,
   CCTP_MAX_FEE_USDC,
   CCTP_MAX_IN_FLIGHT,
-  CCTP_MIN_FINALITY_THRESHOLD,
   CCTP_MINT_MAX_ATTEMPTS,
+  CCTP_MIN_FINALITY_THRESHOLD,
   CCTP_POLL_INTERVAL_MS,
   CCTP_POLL_TIMEOUT_MS,
   CCTP_REBALANCE_CHUNK_USDC,
@@ -28,20 +28,24 @@ import {
   DESK_EVENT_MICROTRADE_ENABLED,
   DESK_EVENT_MICROTRADE_LOOKBACK_MS,
   DESK_EVENT_MICROTRADE_USDC,
-  DESK_MAINTENANCE_NOTIONAL_USDC,
   DESK_FAILED_RUN_COOLDOWN_MS,
   DESK_GAS_ELEVATED_GWEI,
   DESK_HF_CRITICAL,
   DESK_HF_WARN,
+  DESK_INVENTORY_TOPUP_USDC,
+  DESK_KH_SIMULATE_PREFLIGHT,
+  DESK_KH_SIMULATE_STRICT,
+  DESK_KH_SIMULATE_TIMEOUT_MS,
   DESK_KILL_HEARTBEAT_MS,
+  DESK_MAINTENANCE_NOTIONAL_USDC,
   DESK_MAX_AUM_USDC,
   DESK_MAX_TRADE_USDC,
-  DESK_INVENTORY_TOPUP_USDC,
   DESK_MIN_AUM_USDC,
   DESK_MIN_FREE_USDC,
   DESK_ORACLE_MAX_STALENESS_MS,
-  DESK_PREFER_UNWIND_FOR_FREE_USDC,
   DESK_POST_MAINTENANCE_SWEEP_COOLDOWN_MS,
+  DESK_PREFER_UNWIND_FOR_FREE_USDC,
+  DESK_PRIVATE_MEMPOOL_STRICT,
   DESK_PROFIT_SWEEP_USDC,
   DESK_REBALANCE_INTERVAL_MS,
   DESK_SCHEDULE_INTERVAL_MS,
@@ -49,10 +53,6 @@ import {
   DESK_TOPUP_CHUNK_USDC,
   DESK_TOPUP_COOLDOWN_MS,
   DESK_USE_PRIVATE_MEMPOOL,
-  DESK_PRIVATE_MEMPOOL_STRICT,
-  DESK_KH_SIMULATE_PREFLIGHT,
-  DESK_KH_SIMULATE_STRICT,
-  DESK_KH_SIMULATE_TIMEOUT_MS,
   DIGEST_SCHEDULE_CHECK_INTERVAL_MS,
   PREMIUM_DESK_FEED_PRICE_USDC,
   REGISTRY_USE_PRIVATE_MEMPOOL,
@@ -332,6 +332,8 @@ export interface ServerEnv {
   keeperhubWorkflowPublishTradeTicket: string | undefined;
   /** Desk capital-move registry write (chronicle-record-capital-move.workflow.json). */
   keeperhubWorkflowRecordCapitalMove: string | undefined;
+  /** Public workflow variant used only after a private RPC timeout. */
+  keeperhubWorkflowRecordCapitalMovePublicFallback: string | undefined;
   keeperhubWorkflowTransfer: string | undefined;
   /** Desk strategy / capital KeeperHub workflow IDs (fail hard when execute path needs them). */
   keeperhubWorkflowDeskSweep: string | undefined;
@@ -339,6 +341,10 @@ export interface ServerEnv {
   keeperhubWorkflowDeskRotate: string | undefined;
   keeperhubWorkflowDeskOracleArb: string | undefined;
   keeperhubWorkflowDeskKillSwitch: string | undefined;
+  keeperhubWorkflowDeskDefendPublicFallback: string | undefined;
+  keeperhubWorkflowDeskRotatePublicFallback: string | undefined;
+  keeperhubWorkflowDeskOracleArbPublicFallback: string | undefined;
+  keeperhubWorkflowDeskKillSwitchPublicFallback: string | undefined;
   /** Monitoring path (Event/Block trackers; optional ops references) */
   keeperhubWorkflowAaveLiquidation: string | undefined;
   keeperhubWorkflowCowTrade: string | undefined;
@@ -348,7 +354,7 @@ export interface ServerEnv {
   /**
    * KeeperHub desk execution wallet (public address only).
    * Never put a desk EOA private key in env — production forbids DESK_*_PRIVATE_KEY.
-  */
+   */
   deskWalletAddress: string | undefined;
   /**
    * Base Sepolia KeeperHub wallet funded with accrued affiliate rewards.
@@ -622,9 +628,7 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
   }
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(
-      `Invalid ${name}: expected a positive integer, got ${JSON.stringify(raw)}`,
-    );
+    throw new Error(`Invalid ${name}: expected a positive integer, got ${JSON.stringify(raw)}`);
   }
   return parsed;
 }
@@ -636,9 +640,7 @@ function parseNonNegativeIntEnv(name: string, fallback: number): number {
   }
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(
-      `Invalid ${name}: expected a non-negative integer, got ${JSON.stringify(raw)}`,
-    );
+    throw new Error(`Invalid ${name}: expected a non-negative integer, got ${JSON.stringify(raw)}`);
   }
   return parsed;
 }
@@ -650,9 +652,7 @@ function parsePositiveNumberEnv(name: string, fallback: number): number {
   }
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(
-      `Invalid ${name}: expected a positive number, got ${JSON.stringify(raw)}`,
-    );
+    throw new Error(`Invalid ${name}: expected a positive number, got ${JSON.stringify(raw)}`);
   }
   return parsed;
 }
@@ -678,9 +678,7 @@ function parseUnitIntervalEnv(name: string, fallback: number): number {
   }
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
-    throw new Error(
-      `Invalid ${name}: expected a number in [0, 1], got ${JSON.stringify(raw)}`,
-    );
+    throw new Error(`Invalid ${name}: expected a number in [0, 1], got ${JSON.stringify(raw)}`);
   }
   return parsed;
 }
@@ -692,9 +690,7 @@ function parseNonNegativeNumberEnv(name: string, fallback: number): number {
   }
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(
-      `Invalid ${name}: expected a non-negative number, got ${JSON.stringify(raw)}`,
-    );
+    throw new Error(`Invalid ${name}: expected a non-negative number, got ${JSON.stringify(raw)}`);
   }
   return parsed;
 }
@@ -730,9 +726,7 @@ function parseOptionalPositiveNumberEnv(name: string): number | undefined {
   }
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(
-      `Invalid ${name}: expected a positive number, got ${JSON.stringify(raw)}`,
-    );
+    throw new Error(`Invalid ${name}: expected a positive number, got ${JSON.stringify(raw)}`);
   }
   return parsed;
 }
@@ -773,9 +767,7 @@ export function resetGroqKeyIndex(): void {
  * Returns all configured Groq API keys from process.env (or provided map).
  * Scans GROQ_API_KEY, GROQ_API_KEY_1, GROQ_API_KEY_2, GROQ_API_KEY_3, ...
  */
-export function getGroqApiKeys(
-  envMap: Record<string, string | undefined> = process.env,
-): string[] {
+export function getGroqApiKeys(envMap: Record<string, string | undefined> = process.env): string[] {
   const keys: string[] = [];
 
   const addIfValid = (val: string | undefined) => {
@@ -802,8 +794,8 @@ export function getGroqApiKeys(
   const numberedKeyNames = Object.keys(envMap)
     .filter((k) => /^GROQ_API_KEY_\d+$/i.test(k))
     .sort((a, b) => {
-      const numA = parseInt(a.replace(/^GROQ_API_KEY_/i, ""), 10);
-      const numB = parseInt(b.replace(/^GROQ_API_KEY_/i, ""), 10);
+      const numA = Number.parseInt(a.replace(/^GROQ_API_KEY_/i, ""), 10);
+      const numB = Number.parseInt(b.replace(/^GROQ_API_KEY_/i, ""), 10);
       return numA - numB;
     });
 
@@ -852,7 +844,6 @@ export function advanceAndGetGroqKeyIndex(totalKeys: number): number {
   return index;
 }
 
-
 const DEFAULT_ROUTING_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
@@ -890,18 +881,14 @@ export function assertProductionReadiness(env: ServerEnv): void {
   }
 
   if (env.revenueFxMode === "static" && env.revenueEthPerCurrencyUnit == null) {
-    errors.push(
-      "REVENUE_FX_MODE=static requires REVENUE_ETH_PER_CURRENCY_UNIT > 0",
-    );
+    errors.push("REVENUE_FX_MODE=static requires REVENUE_ETH_PER_CURRENCY_UNIT > 0");
   }
 
   if (env.revenueFxMode === "oracle" && !env.rpcUrl?.trim()) {
     errors.push("REVENUE_FX_MODE=oracle requires RPC_URL for Chainlink ETH/USD");
   }
 
-  if (
-    env.creatorRecoveryShare + env.referralRewardShare > 1 + 1e-9
-  ) {
+  if (env.creatorRecoveryShare + env.referralRewardShare > 1 + 1e-9) {
     errors.push(
       `CREATOR_RECOVERY_SHARE (${env.creatorRecoveryShare}) + REFERRAL_REWARD_SHARE (${env.referralRewardShare}) must be ≤ 1`,
     );
@@ -909,9 +896,7 @@ export function assertProductionReadiness(env: ServerEnv): void {
 
   // Direct ethers keys must never be the production spend path
   if (env.allowDirectEthersWrites) {
-    errors.push(
-      "ALLOW_DIRECT_ETHERS_WRITES must not be true in production",
-    );
+    errors.push("ALLOW_DIRECT_ETHERS_WRITES must not be true in production");
   }
   if (env.treasuryWalletPrivateKey?.trim() || env.paraWalletPrivateKey?.trim()) {
     errors.push(
@@ -973,9 +958,7 @@ export function assertProductionReadiness(env: ServerEnv): void {
   }
 
   if (errors.length > 0) {
-    throw new Error(
-      `Production environment is not ready:\n- ${errors.join("\n- ")}`,
-    );
+    throw new Error(`Production environment is not ready:\n- ${errors.join("\n- ")}`);
   }
 }
 
@@ -985,9 +968,7 @@ export function loadServerEnv(): ServerEnv {
   const creatorRecoveryShare = parseUnitIntervalEnv("CREATOR_RECOVERY_SHARE", 0.8);
   const referralRewardShare = parseUnitIntervalEnv("REFERRAL_REWARD_SHARE", 0.2);
   const revenueFxMode = parseRevenueFxMode(optionalEnv("REVENUE_FX_MODE", "auto"));
-  const revenueEthPerCurrencyUnit = parseOptionalPositiveNumberEnv(
-    "REVENUE_ETH_PER_CURRENCY_UNIT",
-  );
+  const revenueEthPerCurrencyUnit = parseOptionalPositiveNumberEnv("REVENUE_ETH_PER_CURRENCY_UNIT");
 
   if (revenueFxMode === "static" && revenueEthPerCurrencyUnit == null) {
     // Development convenience: static mode without explicit value uses demo scale.
@@ -1012,20 +993,11 @@ export function loadServerEnv(): ServerEnv {
   const telegramSendBotToken = optionalEnv("TELEGRAM_SEND_BOT_TOKEN");
 
   // Desk policy knobs — validate ranges once at load (not only in production).
-  const deskTargetAumUsdc = parsePositiveNumberEnv(
-    "DESK_TARGET_AUM_USDC",
-    DESK_TARGET_AUM_USDC,
-  );
+  const deskTargetAumUsdc = parsePositiveNumberEnv("DESK_TARGET_AUM_USDC", DESK_TARGET_AUM_USDC);
   const deskMaxAumUsdc = parsePositiveNumberEnv("DESK_MAX_AUM_USDC", DESK_MAX_AUM_USDC);
   const deskMinAumUsdc = parsePositiveNumberEnv("DESK_MIN_AUM_USDC", DESK_MIN_AUM_USDC);
-  const deskTopupChunkUsdc = parsePositiveNumberEnv(
-    "DESK_TOPUP_CHUNK_USDC",
-    DESK_TOPUP_CHUNK_USDC,
-  );
-  const deskMinFreeUsdc = parsePositiveNumberEnv(
-    "DESK_MIN_FREE_USDC",
-    DESK_MIN_FREE_USDC,
-  );
+  const deskTopupChunkUsdc = parsePositiveNumberEnv("DESK_TOPUP_CHUNK_USDC", DESK_TOPUP_CHUNK_USDC);
+  const deskMinFreeUsdc = parsePositiveNumberEnv("DESK_MIN_FREE_USDC", DESK_MIN_FREE_USDC);
   const deskInventoryTopupUsdc = parsePositiveNumberEnv(
     "DESK_INVENTORY_TOPUP_USDC",
     DESK_INVENTORY_TOPUP_USDC,
@@ -1041,10 +1013,7 @@ export function loadServerEnv(): ServerEnv {
     "DESK_PROFIT_SWEEP_USDC",
     DESK_PROFIT_SWEEP_USDC,
   );
-  const deskTopupCooldownMs = parsePositiveIntEnv(
-    "DESK_TOPUP_COOLDOWN_MS",
-    DESK_TOPUP_COOLDOWN_MS,
-  );
+  const deskTopupCooldownMs = parsePositiveIntEnv("DESK_TOPUP_COOLDOWN_MS", DESK_TOPUP_COOLDOWN_MS);
   const deskPostMaintenanceSweepCooldownMs = parsePositiveIntEnv(
     "DESK_POST_MAINTENANCE_SWEEP_COOLDOWN_MS",
     DESK_POST_MAINTENANCE_SWEEP_COOLDOWN_MS,
@@ -1053,14 +1022,8 @@ export function loadServerEnv(): ServerEnv {
   const deskHfCritical = parsePositiveNumberEnv("DESK_HF_CRITICAL", DESK_HF_CRITICAL);
   const deskBasisBps = parsePositiveIntEnv("DESK_BASIS_BPS", DESK_BASIS_BPS);
   const deskApyDeltaBps = parsePositiveIntEnv("DESK_APY_DELTA_BPS", DESK_APY_DELTA_BPS);
-  const deskMaxTradeUsdc = parsePositiveNumberEnv(
-    "DESK_MAX_TRADE_USDC",
-    DESK_MAX_TRADE_USDC,
-  );
-  const deskKillHeartbeatMs = parsePositiveIntEnv(
-    "DESK_KILL_HEARTBEAT_MS",
-    DESK_KILL_HEARTBEAT_MS,
-  );
+  const deskMaxTradeUsdc = parsePositiveNumberEnv("DESK_MAX_TRADE_USDC", DESK_MAX_TRADE_USDC);
+  const deskKillHeartbeatMs = parsePositiveIntEnv("DESK_KILL_HEARTBEAT_MS", DESK_KILL_HEARTBEAT_MS);
   const deskFailedRunCooldownMs = parsePositiveIntEnv(
     "DESK_FAILED_RUN_COOLDOWN_MS",
     DESK_FAILED_RUN_COOLDOWN_MS,
@@ -1073,10 +1036,7 @@ export function loadServerEnv(): ServerEnv {
     "DESK_APY_CONSECUTIVE_POLLS",
     DESK_APY_CONSECUTIVE_POLLS,
   );
-  const deskApyAbsurdBps = parsePositiveIntEnv(
-    "DESK_APY_ABSURD_BPS",
-    DESK_APY_ABSURD_BPS,
-  );
+  const deskApyAbsurdBps = parsePositiveIntEnv("DESK_APY_ABSURD_BPS", DESK_APY_ABSURD_BPS);
   const deskRebalanceIntervalMs = parsePositiveIntEnv(
     "DESK_REBALANCE_INTERVAL_MS",
     DESK_REBALANCE_INTERVAL_MS,
@@ -1112,8 +1072,7 @@ export function loadServerEnv(): ServerEnv {
     "PREMIUM_DESK_FEED_PRICE_USDC",
     PREMIUM_DESK_FEED_PRICE_USDC,
   );
-  const deskPaused =
-    (optionalEnv("DESK_PAUSED", "false") ?? "false").toLowerCase() === "true";
+  const deskPaused = (optionalEnv("DESK_PAUSED", "false") ?? "false").toLowerCase() === "true";
 
   const deskWalletRaw = optionalEnv("DESK_WALLET_ADDRESS")?.trim();
   if (deskWalletRaw && !EVM_ADDRESS_RE.test(deskWalletRaw)) {
@@ -1122,8 +1081,7 @@ export function loadServerEnv(): ServerEnv {
     );
   }
   const affiliateFundingWalletRaw =
-    optionalEnv("KEEPERHUB_AFFILIATE_FUNDING_WALLET_ADDRESS")?.trim() ||
-    deskWalletRaw;
+    optionalEnv("KEEPERHUB_AFFILIATE_FUNDING_WALLET_ADDRESS")?.trim() || deskWalletRaw;
   if (affiliateFundingWalletRaw && !EVM_ADDRESS_RE.test(affiliateFundingWalletRaw)) {
     throw new Error(
       `Invalid KEEPERHUB_AFFILIATE_FUNDING_WALLET_ADDRESS: expected a 0x-prefixed 40-hex EVM address, got ${JSON.stringify(affiliateFundingWalletRaw)}`,
@@ -1141,9 +1099,7 @@ export function loadServerEnv(): ServerEnv {
     );
   }
   if (deskHfCritical >= deskHfWarn) {
-    throw new Error(
-      `DESK_HF_CRITICAL (${deskHfCritical}) must be < DESK_HF_WARN (${deskHfWarn})`,
-    );
+    throw new Error(`DESK_HF_CRITICAL (${deskHfCritical}) must be < DESK_HF_WARN (${deskHfWarn})`);
   }
   if (deskTopupChunkUsdc > deskMaxAumUsdc) {
     throw new Error(
@@ -1217,13 +1173,9 @@ export function loadServerEnv(): ServerEnv {
     referralRewardShare,
     referralRewardCap: parseNonNegativeNumberEnv("REFERRAL_REWARD_CAP", 1000),
     maxPayoutShare: parseUnitIntervalEnv("MAX_PAYOUT_SHARE", 0.5),
-    routingIntervalMs: parsePositiveIntEnv(
-      "ROUTING_INTERVAL_MS",
-      DEFAULT_ROUTING_INTERVAL_MS,
-    ),
+    routingIntervalMs: parsePositiveIntEnv("ROUTING_INTERVAL_MS", DEFAULT_ROUTING_INTERVAL_MS),
     treasuryCheckScheduleEnabled:
-      (optionalEnv("TREASURY_CHECK_SCHEDULE_ENABLED", "true") ?? "true").toLowerCase() !==
-      "false",
+      (optionalEnv("TREASURY_CHECK_SCHEDULE_ENABLED", "true") ?? "true").toLowerCase() !== "false",
     treasuryCheckScheduleIntervalMs: parsePositiveIntEnv(
       "TREASURY_CHECK_SCHEDULE_INTERVAL_MS",
       TREASURY_CHECK_SCHEDULE_INTERVAL_MS,
@@ -1233,8 +1185,7 @@ export function loadServerEnv(): ServerEnv {
       TREASURY_CHECK_MIN_INTERVAL_MS,
     ),
     revenueRoutingScheduleEnabled:
-      (optionalEnv("REVENUE_ROUTING_SCHEDULE_ENABLED", "true") ?? "true").toLowerCase() !==
-      "false",
+      (optionalEnv("REVENUE_ROUTING_SCHEDULE_ENABLED", "true") ?? "true").toLowerCase() !== "false",
     revenueRoutingScheduleIntervalMs: parsePositiveIntEnv(
       "REVENUE_ROUTING_SCHEDULE_INTERVAL_MS",
       REVENUE_ROUTING_SCHEDULE_INTERVAL_MS,
@@ -1263,10 +1214,7 @@ export function loadServerEnv(): ServerEnv {
       "UTILITY_COST_PER_REGISTRY_WRITE_USDC",
       UTILITY_COST_PER_REGISTRY_WRITE_USDC,
     ),
-    treasuryUsdcOperatingReserve: parseNonNegativeNumberEnv(
-      "TREASURY_USDC_OPERATING_RESERVE",
-      0,
-    ),
+    treasuryUsdcOperatingReserve: parseNonNegativeNumberEnv("TREASURY_USDC_OPERATING_RESERVE", 0),
     revenueMinDistributableUsdc: parseNonNegativeNumberEnv(
       "REVENUE_MIN_DISTRIBUTABLE_USDC",
       REVENUE_MIN_DISTRIBUTABLE_USDC,
@@ -1278,16 +1226,18 @@ export function loadServerEnv(): ServerEnv {
     chronicleRegistryAddress: optionalEnv("CHRONICLE_REGISTRY_ADDRESS"),
     rpcUrl: optionalEnv("RPC_URL"),
     mainnetRpcUrl:
-      optionalEnv("MAINNET_RPC_URL")?.trim() ||
-      optionalEnv("ETH_RPC_URL")?.trim() ||
-      undefined,
+      optionalEnv("MAINNET_RPC_URL")?.trim() || optionalEnv("ETH_RPC_URL")?.trim() || undefined,
     baseRpcUrl: optionalEnv("BASE_RPC_URL")?.trim() || undefined,
     paraApiKey: optionalEnv("PARA_API_KEY"),
     paraEnvironment: parseParaEnvironment(optionalEnv("PARA_ENVIRONMENT", "BETA")),
-    paraTreasuryUserIdentifier:
-      optionalEnv("PARA_TREASURY_USER_IDENTIFIER", "chronicleai-treasury") as string,
-    paraTreasuryUserIdentifierType:
-      optionalEnv("PARA_TREASURY_USER_IDENTIFIER_TYPE", "CUSTOM_ID") as string,
+    paraTreasuryUserIdentifier: optionalEnv(
+      "PARA_TREASURY_USER_IDENTIFIER",
+      "chronicleai-treasury",
+    ) as string,
+    paraTreasuryUserIdentifierType: optionalEnv(
+      "PARA_TREASURY_USER_IDENTIFIER_TYPE",
+      "CUSTOM_ID",
+    ) as string,
     paraWalletId: optionalEnv("PARA_WALLET_ID"),
     paraWalletPrivateKey: optionalEnv("PARA_WALLET_PRIVATE_KEY"),
     allowDirectEthersWrites:
@@ -1298,20 +1248,15 @@ export function loadServerEnv(): ServerEnv {
     // Default ON: all material writes prefer KeeperHub MCP when KH is configured.
     // Opt out with KEEPERHUB_MCP_ENABLED=false for REST-only workflow execute.
     keeperhubMcpEnabled:
-      (optionalEnv("KEEPERHUB_MCP_ENABLED", "true") ?? "true").toLowerCase() !==
-      "false",
+      (optionalEnv("KEEPERHUB_MCP_ENABLED", "true") ?? "true").toLowerCase() !== "false",
     keeperhubMcpUrl: optionalEnv("KEEPERHUB_MCP_URL"),
     keeperhubMcpRestFallback:
-      (optionalEnv("KEEPERHUB_MCP_REST_FALLBACK", "true") ?? "true").toLowerCase() !==
-      "false",
+      (optionalEnv("KEEPERHUB_MCP_REST_FALLBACK", "true") ?? "true").toLowerCase() !== "false",
     keeperhubMcpLangchainAgent:
-      (optionalEnv("KEEPERHUB_MCP_LANGCHAIN_AGENT", "true") ?? "true").toLowerCase() !==
-      "false",
+      (optionalEnv("KEEPERHUB_MCP_LANGCHAIN_AGENT", "true") ?? "true").toLowerCase() !== "false",
     keeperhubWorkflowPublishAlert: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_ALERT"),
     keeperhubWorkflowPublishDigest: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_DIGEST"),
-    keeperhubWorkflowCreateSponsoredWatch: optionalEnv(
-      "KEEPERHUB_WORKFLOW_CREATE_SPONSORED_WATCH",
-    ),
+    keeperhubWorkflowCreateSponsoredWatch: optionalEnv("KEEPERHUB_WORKFLOW_CREATE_SPONSORED_WATCH"),
     keeperhubWorkflowPublishSponsoredReport: optionalEnv(
       "KEEPERHUB_WORKFLOW_PUBLISH_SPONSORED_REPORT",
     ),
@@ -1319,11 +1264,10 @@ export function loadServerEnv(): ServerEnv {
       "KEEPERHUB_WORKFLOW_PUBLISH_PREMIUM_RECEIPT",
     ),
     keeperhubWorkflowRecordPayout: optionalEnv("KEEPERHUB_WORKFLOW_RECORD_PAYOUT"),
-    keeperhubWorkflowPublishTradeTicket: optionalEnv(
-      "KEEPERHUB_WORKFLOW_PUBLISH_TRADE_TICKET",
-    ),
-    keeperhubWorkflowRecordCapitalMove: optionalEnv(
-      "KEEPERHUB_WORKFLOW_RECORD_CAPITAL_MOVE",
+    keeperhubWorkflowPublishTradeTicket: optionalEnv("KEEPERHUB_WORKFLOW_PUBLISH_TRADE_TICKET"),
+    keeperhubWorkflowRecordCapitalMove: optionalEnv("KEEPERHUB_WORKFLOW_RECORD_CAPITAL_MOVE"),
+    keeperhubWorkflowRecordCapitalMovePublicFallback: optionalEnv(
+      "KEEPERHUB_WORKFLOW_RECORD_CAPITAL_MOVE_PUBLIC_FALLBACK",
     ),
     keeperhubWorkflowTransfer: optionalEnv("KEEPERHUB_WORKFLOW_TRANSFER"),
     keeperhubWorkflowDeskSweep: optionalEnv("KEEPERHUB_WORKFLOW_DESK_SWEEP"),
@@ -1331,41 +1275,46 @@ export function loadServerEnv(): ServerEnv {
     keeperhubWorkflowDeskRotate: optionalEnv("KEEPERHUB_WORKFLOW_DESK_ROTATE"),
     keeperhubWorkflowDeskOracleArb: optionalEnv("KEEPERHUB_WORKFLOW_DESK_ORACLE_ARB"),
     keeperhubWorkflowDeskKillSwitch: optionalEnv("KEEPERHUB_WORKFLOW_DESK_KILL_SWITCH"),
+    keeperhubWorkflowDeskDefendPublicFallback: optionalEnv(
+      "KEEPERHUB_WORKFLOW_DESK_DEFEND_PUBLIC_FALLBACK",
+    ),
+    keeperhubWorkflowDeskRotatePublicFallback: optionalEnv(
+      "KEEPERHUB_WORKFLOW_DESK_ROTATE_PUBLIC_FALLBACK",
+    ),
+    keeperhubWorkflowDeskOracleArbPublicFallback: optionalEnv(
+      "KEEPERHUB_WORKFLOW_DESK_ORACLE_ARB_PUBLIC_FALLBACK",
+    ),
+    keeperhubWorkflowDeskKillSwitchPublicFallback: optionalEnv(
+      "KEEPERHUB_WORKFLOW_DESK_KILL_SWITCH_PUBLIC_FALLBACK",
+    ),
     keeperhubWorkflowAaveLiquidation: optionalEnv("KEEPERHUB_WORKFLOW_AAVE_LIQUIDATION"),
     keeperhubWorkflowCowTrade: optionalEnv("KEEPERHUB_WORKFLOW_COW_TRADE"),
-    keeperhubWorkflowUniswapUsdcWethSwap: optionalEnv(
-      "KEEPERHUB_WORKFLOW_UNISWAP_USDC_WETH_SWAP",
-    ),
-    keeperhubWorkflowUniswapPoolCreated: optionalEnv(
-      "KEEPERHUB_WORKFLOW_UNISWAP_POOL_CREATED",
-    ),
+    keeperhubWorkflowUniswapUsdcWethSwap: optionalEnv("KEEPERHUB_WORKFLOW_UNISWAP_USDC_WETH_SWAP"),
+    keeperhubWorkflowUniswapPoolCreated: optionalEnv("KEEPERHUB_WORKFLOW_UNISWAP_POOL_CREATED"),
     keeperhubWorkflowGasVolumeBlock: optionalEnv("KEEPERHUB_WORKFLOW_GAS_VOLUME_BLOCK"),
     deskWalletAddress: deskWalletRaw,
     keeperhubAffiliateFundingWalletAddress: affiliateFundingWalletRaw,
     deskUsePrivateMempool:
-      (optionalEnv(
-        "DESK_USE_PRIVATE_MEMPOOL",
-        DESK_USE_PRIVATE_MEMPOOL ? "true" : "false",
-      ) ?? (DESK_USE_PRIVATE_MEMPOOL ? "true" : "false")).toLowerCase() !== "false",
+      (
+        optionalEnv("DESK_USE_PRIVATE_MEMPOOL", DESK_USE_PRIVATE_MEMPOOL ? "true" : "false") ??
+        (DESK_USE_PRIVATE_MEMPOOL ? "true" : "false")
+      ).toLowerCase() !== "false",
     deskPrivateMempoolStrict:
-      (optionalEnv(
-        "DESK_PRIVATE_MEMPOOL_STRICT",
-        DESK_PRIVATE_MEMPOOL_STRICT ? "true" : "false",
-      ) ?? (DESK_PRIVATE_MEMPOOL_STRICT ? "true" : "false")).toLowerCase() !==
-      "false",
-    deskKhSimulatePreflight:
       (
         optionalEnv(
-          "DESK_KH_SIMULATE_PREFLIGHT",
-          DESK_KH_SIMULATE_PREFLIGHT ? "true" : "false",
-        ) ?? (DESK_KH_SIMULATE_PREFLIGHT ? "true" : "false")
+          "DESK_PRIVATE_MEMPOOL_STRICT",
+          DESK_PRIVATE_MEMPOOL_STRICT ? "true" : "false",
+        ) ?? (DESK_PRIVATE_MEMPOOL_STRICT ? "true" : "false")
+      ).toLowerCase() !== "false",
+    deskKhSimulatePreflight:
+      (
+        optionalEnv("DESK_KH_SIMULATE_PREFLIGHT", DESK_KH_SIMULATE_PREFLIGHT ? "true" : "false") ??
+        (DESK_KH_SIMULATE_PREFLIGHT ? "true" : "false")
       ).toLowerCase() === "true",
     deskKhSimulateStrict:
       (
-        optionalEnv(
-          "DESK_KH_SIMULATE_STRICT",
-          DESK_KH_SIMULATE_STRICT ? "true" : "false",
-        ) ?? (DESK_KH_SIMULATE_STRICT ? "true" : "false")
+        optionalEnv("DESK_KH_SIMULATE_STRICT", DESK_KH_SIMULATE_STRICT ? "true" : "false") ??
+        (DESK_KH_SIMULATE_STRICT ? "true" : "false")
       ).toLowerCase() === "true",
     deskKhSimulateTimeoutMs: parsePositiveIntEnv(
       "DESK_KH_SIMULATE_TIMEOUT_MS",
@@ -1376,11 +1325,12 @@ export function loadServerEnv(): ServerEnv {
       TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC,
     ),
     registryUsePrivateMempool:
-      (optionalEnv(
-        "REGISTRY_USE_PRIVATE_MEMPOOL",
-        REGISTRY_USE_PRIVATE_MEMPOOL ? "true" : "false",
-      ) ?? (REGISTRY_USE_PRIVATE_MEMPOOL ? "true" : "false")).toLowerCase() !==
-      "false",
+      (
+        optionalEnv(
+          "REGISTRY_USE_PRIVATE_MEMPOOL",
+          REGISTRY_USE_PRIVATE_MEMPOOL ? "true" : "false",
+        ) ?? (REGISTRY_USE_PRIVATE_MEMPOOL ? "true" : "false")
+      ).toLowerCase() !== "false",
     routingProviderLabel:
       optionalEnv("ROUTING_PROVIDER_LABEL", ROUTING_PROVIDER_LABEL)?.trim() ||
       ROUTING_PROVIDER_LABEL,
@@ -1432,10 +1382,7 @@ export function loadServerEnv(): ServerEnv {
       );
     })(),
     deskAgentModel: optionalEnv("DESK_AGENT_MODEL")?.trim() || undefined,
-    deskAgentTimeoutMs: parsePositiveIntEnv(
-      "DESK_AGENT_TIMEOUT_MS",
-      DESK_AGENT_TIMEOUT_MS,
-    ),
+    deskAgentTimeoutMs: parsePositiveIntEnv("DESK_AGENT_TIMEOUT_MS", DESK_AGENT_TIMEOUT_MS),
     deskAgentTemperature: (() => {
       const raw = optionalEnv("DESK_AGENT_TEMPERATURE");
       if (raw === undefined || raw === "") return DESK_AGENT_TEMPERATURE;
@@ -1447,10 +1394,7 @@ export function loadServerEnv(): ServerEnv {
       }
       return n;
     })(),
-    deskAgentMaxSignals: parsePositiveIntEnv(
-      "DESK_AGENT_MAX_SIGNALS",
-      DESK_AGENT_MAX_SIGNALS,
-    ),
+    deskAgentMaxSignals: parsePositiveIntEnv("DESK_AGENT_MAX_SIGNALS", DESK_AGENT_MAX_SIGNALS),
     deskAgentMinConfidence: (() => {
       const raw = optionalEnv("DESK_AGENT_MIN_CONFIDENCE");
       if (raw === undefined || raw === "") return DESK_AGENT_MIN_CONFIDENCE;
@@ -1474,18 +1418,9 @@ export function loadServerEnv(): ServerEnv {
     smtpUser: optionalEnv("SMTP_USER"),
     smtpPass: optionalEnv("SMTP_PASS"),
     smtpFromAddress: optionalEnv("SMTP_FROM_ADDRESS"),
-    newsletterMonthlyPriceUsdc: parsePositiveNumberEnv(
-      "NEWSLETTER_MONTHLY_PRICE_USDC",
-      2,
-    ),
-    newsletterBillingPeriodDays: parsePositiveIntEnv(
-      "NEWSLETTER_BILLING_PERIOD_DAYS",
-      30,
-    ),
-    newsletterGracePeriodDays: parseNonNegativeIntEnv(
-      "NEWSLETTER_GRACE_PERIOD_DAYS",
-      3,
-    ),
+    newsletterMonthlyPriceUsdc: parsePositiveNumberEnv("NEWSLETTER_MONTHLY_PRICE_USDC", 2),
+    newsletterBillingPeriodDays: parsePositiveIntEnv("NEWSLETTER_BILLING_PERIOD_DAYS", 30),
+    newsletterGracePeriodDays: parseNonNegativeIntEnv("NEWSLETTER_GRACE_PERIOD_DAYS", 3),
     telegramIngestBotToken,
     telegramSendBotToken,
     telegramBotToken: telegramIngestBotToken,
@@ -1494,22 +1429,19 @@ export function loadServerEnv(): ServerEnv {
     telegramIngestChatId: optionalEnv("TELEGRAM_INGEST_CHAT_ID"),
     publicApiBaseUrl: optionalEnv("PUBLIC_API_BASE_URL"),
     digestScheduleEnabled:
-      (optionalEnv("DIGEST_SCHEDULE_ENABLED", "true") ?? "true").toLowerCase() !==
-      "false",
+      (optionalEnv("DIGEST_SCHEDULE_ENABLED", "true") ?? "true").toLowerCase() !== "false",
     digestScheduleIntervalMs: parsePositiveIntEnv(
       "DIGEST_SCHEDULE_INTERVAL_MS",
       DIGEST_SCHEDULE_CHECK_INTERVAL_MS,
     ),
     cctpRebalanceEnabled:
-      (optionalEnv("CCTP_REBALANCE_ENABLED", "false") ?? "false").toLowerCase() ===
-      "true",
+      (optionalEnv("CCTP_REBALANCE_ENABLED", "false") ?? "false").toLowerCase() === "true",
     cctpIrisBaseUrl: (
       optionalEnv("CCTP_IRIS_BASE_URL", "https://iris-api-sandbox.circle.com") ??
       "https://iris-api-sandbox.circle.com"
     ).replace(/\/+$/, ""),
     cctpUseForwarding:
-      (optionalEnv("CCTP_USE_FORWARDING", "true") ?? "true").toLowerCase() !==
-      "false",
+      (optionalEnv("CCTP_USE_FORWARDING", "true") ?? "true").toLowerCase() !== "false",
     cctpTokenMessenger: parseEvmAddressEnv(
       "CCTP_TOKEN_MESSENGER",
       "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
@@ -1543,14 +1475,8 @@ export function loadServerEnv(): ServerEnv {
     cctpMaxInFlight: parsePositiveIntEnv("CCTP_MAX_IN_FLIGHT", CCTP_MAX_IN_FLIGHT),
     cctpCooldownMs: parsePositiveIntEnv("CCTP_COOLDOWN_MS", CCTP_COOLDOWN_MS),
     cctpMaxFeeUsdc: parseNonNegativeNumberEnv("CCTP_MAX_FEE_USDC", CCTP_MAX_FEE_USDC),
-    cctpPollIntervalMs: parsePositiveIntEnv(
-      "CCTP_POLL_INTERVAL_MS",
-      CCTP_POLL_INTERVAL_MS,
-    ),
-    cctpPollTimeoutMs: parsePositiveIntEnv(
-      "CCTP_POLL_TIMEOUT_MS",
-      CCTP_POLL_TIMEOUT_MS,
-    ),
+    cctpPollIntervalMs: parsePositiveIntEnv("CCTP_POLL_INTERVAL_MS", CCTP_POLL_INTERVAL_MS),
+    cctpPollTimeoutMs: parsePositiveIntEnv("CCTP_POLL_TIMEOUT_MS", CCTP_POLL_TIMEOUT_MS),
     treasurySepoliaMinGasEth: parseNonNegativeNumberEnv(
       "TREASURY_SEPOLIA_MIN_GAS_ETH",
       TREASURY_SEPOLIA_MIN_GAS_ETH,
@@ -1559,10 +1485,7 @@ export function loadServerEnv(): ServerEnv {
       "TREASURY_BASE_MIN_GAS_ETH",
       TREASURY_BASE_MIN_GAS_ETH,
     ),
-    cctpMintMaxAttempts: parsePositiveIntEnv(
-      "CCTP_MINT_MAX_ATTEMPTS",
-      CCTP_MINT_MAX_ATTEMPTS,
-    ),
+    cctpMintMaxAttempts: parsePositiveIntEnv("CCTP_MINT_MAX_ATTEMPTS", CCTP_MINT_MAX_ATTEMPTS),
     cctpForwardingFallbackMs: parsePositiveIntEnv(
       "CCTP_FORWARDING_FALLBACK_MS",
       CCTP_FORWARDING_FALLBACK_MS,
@@ -1572,8 +1495,7 @@ export function loadServerEnv(): ServerEnv {
       CCTP_REBALANCE_SCHEDULE_INTERVAL_MS,
     ),
     cctpForceOnDeskStarvation:
-      (optionalEnv("CCTP_FORCE_ON_DESK_STARVATION", "false") ?? "false").toLowerCase() ===
-      "true",
+      (optionalEnv("CCTP_FORCE_ON_DESK_STARVATION", "false") ?? "false").toLowerCase() === "true",
     cctpOperatorPrivateKey: optionalEnv("CCTP_OPERATOR_PRIVATE_KEY")?.trim() || undefined,
     frontendOrigin: requireEnv("FRONTEND_ORIGIN"),
     port: Number(optionalEnv("PORT", "4000")),

@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  createExecutionBridge,
-  isDeskWorkflowExecutionError,
-} from "../desk/execution-bridge.ts";
+import { createExecutionBridge, isDeskWorkflowExecutionError } from "../desk/execution-bridge.ts";
 
 vi.mock("../services/keeperhub-mcp-execute.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/keeperhub-mcp-execute.ts")>();
@@ -26,9 +23,9 @@ describe("execution-bridge", () => {
       workflowIds: {},
     });
 
-    await expect(
-      bridge.execute("defend", { intentId: "x" }),
-    ).rejects.toThrow(/KEEPERHUB_WORKFLOW_DESK_DEFEND/);
+    await expect(bridge.execute("defend", { intentId: "x" })).rejects.toThrow(
+      /KEEPERHUB_WORKFLOW_DESK_DEFEND/,
+    );
   });
 
   it("POSTs workflow execute and polls to completion", async () => {
@@ -99,6 +96,92 @@ describe("execution-bridge", () => {
 
     const logsCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/logs"));
     expect(logsCalls).toHaveLength(1);
+  });
+
+  it("switches to the public workflow after a private RPC timeout", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/workflows/wf-defend-private/execute")) {
+        return new Response(JSON.stringify({ executionId: "exec-private" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/workflows/wf-defend-public/execute")) {
+        return new Response(JSON.stringify({ executionId: "exec-public" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/executions/exec-private/wait")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-private",
+            status: "failed",
+            completed: true,
+            error:
+              'Token approval failed: timeout (operation="request.send", reason="timeout", code=TIMEOUT)',
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (u.includes("/executions/exec-public/wait")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-public",
+            status: "completed",
+            completed: true,
+            transactionHash: "0xpublic",
+            transactionLink: "https://sepolia.etherscan.io/tx/0xpublic",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (u.includes("/logs")) {
+        return new Response(JSON.stringify({ execution: { id: "exec-public" }, logs: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      routingPolicy: {
+        enabled: true,
+        strict: true,
+        provider: "flashbots_protect",
+        chainId: 11_155_111,
+      },
+      workflowIds: {
+        defend: "wf-defend-private",
+        publicFallbacks: { defend: "wf-defend-public" },
+      },
+    });
+
+    const receipt = await bridge.execute(
+      "defend",
+      { intentId: "intent-timeout", legs: [] },
+      { idempotencyKey: "desk-defend-timeout" },
+    );
+
+    expect(receipt.keeperHubRunId).toBe("exec-public");
+    expect(receipt.executionAudit?.submit.workflowId).toBe("wf-defend-public");
+    expect(receipt.executionAudit?.submit.routing).toBe("public");
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes("/workflows/wf-defend-public/execute"),
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes("/workflows/wf-defend-private/execute"),
+      ),
+    ).toBe(true);
   });
 
   it("after poll success, fetches /logs once and attaches run nodes", async () => {
@@ -181,9 +264,7 @@ describe("execution-bridge", () => {
     expect(receipt.executionAudit?.outcome?.logsFetched).toBe(true);
     expect(receipt.executionAudit?.outcome?.runNodes).toHaveLength(2);
     // Sorted ascending by startedAt: approve then swap.
-    expect(receipt.executionAudit?.outcome?.runNodes?.[0]?.nodeName).toBe(
-      "Approve USDC",
-    );
+    expect(receipt.executionAudit?.outcome?.runNodes?.[0]?.nodeName).toBe("Approve USDC");
     expect(receipt.executionAudit?.outcome?.runNodes?.[1]?.nodeName).toBe("Swap");
     expect(receipt.executionAudit?.outcome?.runNodes?.[1]?.gasUsedUnits).toBe("61234");
     // Derived gas units when wait payload had none.
@@ -370,9 +451,7 @@ describe("execution-bridge", () => {
         expect(error.executionAudit.submit.status).toBe("started");
         expect(error.executionAudit.submit.keeperHubRunId).toBe("exec-err");
         expect(error.executionAudit.outcome?.status).toBe("failed");
-        expect(error.executionAudit.outcome?.errorMessage).toMatch(
-          /Contract call failed/,
-        );
+        expect(error.executionAudit.outcome?.errorMessage).toMatch(/Contract call failed/);
         expect(error.executionAudit.outcome?.logsFetched).toBe(true);
         expect(error.executionAudit.outcome?.runNodes?.[0]?.nodeId).toBe("fail-node");
       }
@@ -420,9 +499,7 @@ describe("execution-bridge", () => {
     expect(receipt.executionAudit?.submit.keeperHubRunId).toBe("exec-async");
     expect(receipt.executionAudit?.submit.routing).toBe("private_mempool");
     expect(receipt.executionAudit?.outcome).toBeUndefined();
-    expect(fetchMock.mock.calls.every((c) => !String(c[0]).includes("/wait"))).toBe(
-      true,
-    );
+    expect(fetchMock.mock.calls.every((c) => !String(c[0]).includes("/wait"))).toBe(true);
   });
 
   it("logs desk_workflow started + succeeded when execLogRepo is set", async () => {
@@ -471,11 +548,7 @@ describe("execution-bridge", () => {
     });
 
     const intentUuid = "22222222-2222-4222-8222-222222222222";
-    await bridge.execute(
-      "defend",
-      { intentId: intentUuid },
-      { idempotencyKey: "k1" },
-    );
+    await bridge.execute("defend", { intentId: intentUuid }, { idempotencyKey: "k1" });
 
     expect(append).toHaveBeenCalledTimes(2);
     expect(append.mock.calls[0]?.[0]).toMatchObject({
@@ -561,9 +634,7 @@ describe("execution-bridge", () => {
   });
 
   it("prefers MCP for desk defend with same input shape and executionPath mcp", async () => {
-    const { executeViaKeeperHubMcp } = await import(
-      "../services/keeperhub-mcp-execute.ts"
-    );
+    const { executeViaKeeperHubMcp } = await import("../services/keeperhub-mcp-execute.ts");
     const mcpMock = vi.mocked(executeViaKeeperHubMcp);
     mcpMock.mockResolvedValue({
       keeperHubRunId: "exec_mcp_defend",
@@ -638,9 +709,7 @@ describe("execution-bridge", () => {
     expect(call.idempotencyKey).toBe("desk-defend-mcp");
 
     // No REST workflow execute on success path.
-    expect(
-      fetchMock.mock.calls.some((c) => String(c[0]).includes("/execute")),
-    ).toBe(false);
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/execute"))).toBe(false);
 
     expect(append.mock.calls[0]?.[0]).toMatchObject({
       details: expect.objectContaining({
@@ -652,9 +721,7 @@ describe("execution-bridge", () => {
   });
 
   it("falls back to REST when MCP fails and restFallback is true", async () => {
-    const { executeViaKeeperHubMcp } = await import(
-      "../services/keeperhub-mcp-execute.ts"
-    );
+    const { executeViaKeeperHubMcp } = await import("../services/keeperhub-mcp-execute.ts");
     const mcpMock = vi.mocked(executeViaKeeperHubMcp);
     mcpMock.mockRejectedValue(new Error("MCP transport down"));
 
