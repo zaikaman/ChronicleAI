@@ -1,6 +1,56 @@
-import { type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type ReactElement,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import type { AgentChatMessage } from "./use-affiliate.ts";
+
+const INLINE_MARKDOWN_PATTERN = /(\*\*(.+?)\*\*|\*(.+?)\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))/g;
+
+function renderAffiliateMessage(content: string): ReactNode {
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+
+  for (const match of content.matchAll(INLINE_MARKDOWN_PATTERN)) {
+    const index = match.index ?? 0;
+    if (index > cursor) {
+      nodes.push(content.slice(cursor, index));
+    }
+
+    const token = match[0];
+    if (token.startsWith("[")) {
+      nodes.push(
+        <a
+          key={`message-link-${nodes.length}`}
+          href={match[5]}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 hover:opacity-80"
+        >
+          {match[4]}
+        </a>,
+      );
+    } else {
+      nodes.push(
+        <strong key={`message-bold-${nodes.length}`} className="font-semibold">
+          {match[2] ?? match[3]}
+        </strong>,
+      );
+    }
+
+    cursor = index + token.length;
+  }
+
+  if (cursor < content.length) {
+    nodes.push(content.slice(cursor));
+  }
+
+  return nodes;
+}
 
 interface AffiliateAgentChatProps {
   messages: AgentChatMessage[];
@@ -73,7 +123,7 @@ export function AffiliateAgentChat({
                   : "bg-muted text-foreground border border-border"
               }`}
             >
-              {m.content}
+              {m.role === "assistant" ? renderAffiliateMessage(m.content) : m.content}
             </div>
           </div>
         ))}

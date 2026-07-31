@@ -155,6 +155,49 @@ describe("createKeeperHubWriteClient", () => {
     ).toBe(false);
   });
 
+  it("supports affiliate transfers on Base Sepolia with the Base USDC contract", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/workflows/wf_transfer/execute") && init?.method === "POST") {
+        return new Response(JSON.stringify({ executionId: "exec_base_xfer", status: "running" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/workflows/executions/exec_base_xfer/wait")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec_base_xfer",
+            status: "success",
+            completed: true,
+            transactionHash: "0x" + "de".repeat(32),
+            transactionLink: "https://sepolia.basescan.org/tx/0x" + "de".repeat(32),
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = createKeeperHubWriteClient({
+      ...baseConfig,
+      network: "base-sepolia",
+      usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      workflowIds: { transfer: "wf_transfer" },
+    });
+
+    const receipt = await client.sendTransfer("0x" + "33".repeat(20), 0.1);
+    const xferCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/api/workflows/wf_transfer/execute"),
+    );
+    const xferBody = JSON.parse(String((xferCall?.[1] as RequestInit).body));
+
+    expect(xferBody.input.network).toBe("base-sepolia");
+    expect(xferBody.input.tokenAddress).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
+    expect(receipt.explorerUrl).toContain("sepolia.basescan.org");
+  });
+
   it("falls back to workflow status poll when wait is non-terminal", async () => {
     let waitCalls = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

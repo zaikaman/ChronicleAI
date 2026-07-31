@@ -107,6 +107,14 @@ export function mapNetworkToChainId(network: string, fallbackChainId: number): n
   return fallbackChainId;
 }
 
+export function networkLabelForChainId(chainId: number): string {
+  if (chainId === 8453) return "base";
+  if (chainId === 84_532) return "base-sepolia";
+  if (chainId === 11_155_111) return "sepolia";
+  if (chainId === 1) return "mainnet";
+  return String(chainId);
+}
+
 function explorerUrlFor(txHash: string, chainId: number, networkLabel?: string): string {
   if (chainId === 8453 || networkLabel === "base") {
     return `https://basescan.org/tx/${txHash}`;
@@ -432,13 +440,18 @@ export function createParaTreasuryClient(config: ParaTreasuryClientConfig): Para
 /**
  * Build a production Para treasury client from server env, or null if not configured.
  */
-export function createParaTreasuryClientFromEnv(env: ServerEnv): ParaTreasuryClient | null {
+export function createParaTreasuryClientFromEnv(
+  env: ServerEnv,
+  rail: "desk" | "x402" = "desk",
+): ParaTreasuryClient | null {
   if (!isParaTreasuryConfigured(env)) {
     return null;
   }
 
-  // Para treasury client signs desk/ops USDC on Ethereum Sepolia (not Base x402).
-  const chainId = mapNetworkToChainId(env.keeperhubNetwork, 11_155_111);
+  const isX402Rail = rail === "x402";
+  const chainId = isX402Rail
+    ? env.x402ChainId
+    : mapNetworkToChainId(env.keeperhubNetwork, 11_155_111);
 
   return createParaTreasuryClient({
     apiKey: env.paraApiKey as string,
@@ -447,9 +460,11 @@ export function createParaTreasuryClientFromEnv(env: ServerEnv): ParaTreasuryCli
     userIdentifierType: env.paraTreasuryUserIdentifierType,
     ...(env.paraWalletId?.trim() ? { walletId: env.paraWalletId.trim() } : {}),
     chainId,
-    networkLabel: env.keeperhubNetwork,
-    usdcAddress: env.deskUsdcAddress,
+    networkLabel: isX402Rail ? networkLabelForChainId(chainId) : env.keeperhubNetwork,
+    usdcAddress: isX402Rail ? env.x402UsdcAddress : env.deskUsdcAddress,
     usdcDecimals: 6,
-    ...(env.rpcUrl?.trim() ? { rpcUrl: env.rpcUrl.trim() } : {}),
+    ...((isX402Rail ? env.x402RpcUrl : env.rpcUrl)?.trim()
+      ? { rpcUrl: (isX402Rail ? env.x402RpcUrl : env.rpcUrl)!.trim() }
+      : {}),
   });
 }

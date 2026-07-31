@@ -49,6 +49,7 @@ import {
   createParaTreasuryClientFromEnv,
   isParaTreasuryConfigured,
   mapNetworkToChainId,
+  networkLabelForChainId,
   type ParaTreasuryClient,
 } from "./para-treasury-client.ts";
 import { decodeSponsoredWatchIdFromLogs } from "./sponsored-watch-id.ts";
@@ -165,6 +166,9 @@ export interface Web3Client {
    * Production: Para MPC ERC-20 transfer when configured, else KeeperHub transfer.
    */
   sendTransfer(to: string, amountUsdc: number): Promise<OnChainWriteReceipt>;
+
+  /** Send an affiliate payout on the x402 payment rail (Base Sepolia by default). */
+  sendAffiliateTransfer?(to: string, amountUsdc: number): Promise<OnChainWriteReceipt>;
 }
 
 /** Full ABI used by Para / direct-EOA paths (includes view helpers). */
@@ -359,6 +363,17 @@ function createHybridParaKeeperHubWeb3Client(
     transferRoutingPolicy: routing.transferRoutingPolicy,
     mcp,
   });
+  const affiliateKh = createKeeperHubWriteClient({
+    apiBaseUrl: env.keeperhubApiBaseUrl as string,
+    apiKey: env.keeperhubApiKey as string,
+    network: networkLabelForChainId(env.x402ChainId),
+    registryAddress: env.chronicleRegistryAddress as string,
+    usdcAddress: env.x402UsdcAddress,
+    workflowIds: { transfer: env.keeperhubWorkflowTransfer },
+    execLogRepo: options?.execLogRepo ?? null,
+    transferRoutingPolicy: routing.transferRoutingPolicy,
+    mcp,
+  });
 
   return {
     async getSignerAddress() {
@@ -410,6 +425,8 @@ function createHybridParaKeeperHubWeb3Client(
       );
       return kh.sendTransfer(to, amountUsdc);
     },
+
+    sendAffiliateTransfer: (to, amountUsdc) => affiliateKh.sendTransfer(to, amountUsdc),
   };
 }
 
@@ -417,7 +434,11 @@ function createHybridParaKeeperHubWeb3Client(
  * Full Para production client — registry + treasury via Para REST viem account.
  * Used when PARA_API_KEY is set but KeeperHub is not.
  */
-function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): Web3Client {
+function createParaWeb3Client(
+  env: ServerEnv,
+  paraClient: ParaTreasuryClient,
+  affiliateParaClient: ParaTreasuryClient | null,
+): Web3Client {
   if (!env.rpcUrl || !env.chronicleRegistryAddress) {
     throw new Error(
       "Para-only web3 client requires RPC_URL and CHRONICLE_REGISTRY_ADDRESS for registry writes",
@@ -592,6 +613,12 @@ function createParaWeb3Client(env: ServerEnv, paraClient: ParaTreasuryClient): W
     },
 
     sendTransfer: (to, amountUsdc) => paraClient.sendTransfer(to, amountUsdc),
+    ...(affiliateParaClient
+      ? {
+          sendAffiliateTransfer: (to: string, amountUsdc: number) =>
+            affiliateParaClient.sendTransfer(to, amountUsdc),
+        }
+      : {}),
   };
 }
 
@@ -618,6 +645,17 @@ function createKeeperHubBackedWeb3Client(
     workflowIds: keeperHubWorkflowIdsFromEnv(env),
     execLogRepo: options?.execLogRepo ?? null,
     routingPolicy: routing.routingPolicy,
+    transferRoutingPolicy: routing.transferRoutingPolicy,
+    mcp,
+  });
+  const affiliateKh = createKeeperHubWriteClient({
+    apiBaseUrl: env.keeperhubApiBaseUrl as string,
+    apiKey: env.keeperhubApiKey as string,
+    network: networkLabelForChainId(env.x402ChainId),
+    registryAddress: env.chronicleRegistryAddress as string,
+    usdcAddress: env.x402UsdcAddress,
+    workflowIds: { transfer: env.keeperhubWorkflowTransfer },
+    execLogRepo: options?.execLogRepo ?? null,
     transferRoutingPolicy: routing.transferRoutingPolicy,
     mcp,
   });
@@ -662,6 +700,7 @@ function createKeeperHubBackedWeb3Client(
     recordCapitalMove: (moveId, from, to, amountUsdc, reasonHash) =>
       kh.recordCapitalMove(moveId, from, to, amountUsdc, reasonHash),
     sendTransfer: (to, amountUsdc) => kh.sendTransfer(to, amountUsdc),
+    sendAffiliateTransfer: (to, amountUsdc) => affiliateKh.sendTransfer(to, amountUsdc),
   };
 }
 
@@ -890,6 +929,9 @@ export function createWeb3Client(
   options?: { execLogRepo?: import("@chronicleai/db").ExecutionLogRepository | null },
 ): Web3Client | null {
   const paraClient = createParaTreasuryClientFromEnv(env);
+  const affiliateParaClient = paraClient
+    ? createParaTreasuryClientFromEnv(env, "x402")
+    : null;
   const keeperHub = isKeeperHubWriteConfigured(env);
   const isProduction = env.nodeEnv === "production";
   const logOpts = options?.execLogRepo !== undefined ? { execLogRepo: options.execLogRepo } : {};
@@ -912,7 +954,7 @@ export function createWeb3Client(
     console.info(
       "[web3] Development/test compatibility path: Para MPC registry writes and treasury transfers",
     );
-    return createParaWeb3Client(env, paraClient);
+    return createParaWeb3Client(env, paraClient, affiliateParaClient);
   }
 
   if (paraClient && !keeperHub) {
