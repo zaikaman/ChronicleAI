@@ -68,6 +68,7 @@ export function PaymentRequiredModal({
         }
       }}
       onClick={handleBackdropClick}
+      style={{ display: open ? "flex" : "none" }}
       className="fixed inset-0 m-0 flex h-full w-full max-w-none items-center justify-center bg-transparent p-4 text-foreground backdrop:bg-black/60 sm:p-6"
       data-testid="payment-required-modal"
     >
