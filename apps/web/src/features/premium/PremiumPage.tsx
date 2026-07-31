@@ -3,13 +3,13 @@ import { StatusBadge } from "../../components/data-primitives.tsx";
 import { Page, PageHeader, PageSection } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { useWallet } from "../wallet";
 import { AgentPaymentsPanel } from "./AgentPaymentsPanel.tsx";
-import { PaymentChallengePanel } from "./PaymentChallengePanel.tsx";
+import { PaymentRequiredModal } from "./PaymentRequiredModal.tsx";
 import { PremiumContentView } from "./PremiumContentView.tsx";
 import { PremiumTeaserCard } from "./PremiumTeaserCard.tsx";
 import { SponsoredWatchList } from "./SponsoredWatchList.tsx";
 import { SponsoredWatchRequestForm } from "./SponsoredWatchRequestForm.tsx";
-import { useWallet } from "../wallet";
 import {
   loadPremiumAccessReceipt,
   storePremiumAccessReceipt,
@@ -52,6 +52,7 @@ export function PremiumPage(): ReactElement {
   const [currentItemCurrency, setCurrentItemCurrency] = useState("USDC");
   const [showContent, setShowContent] = useState(false);
   const [settledPaymentId, setSettledPaymentId] = useState<string | null>(null);
+  const [paymentPromptDismissed, setPaymentPromptDismissed] = useState(false);
   /** Re-render when receipts are stored so cards flip to Purchased. */
   const [receiptVersion, setReceiptVersion] = useState(0);
   /** Expand agent MPP guide (dual CTA + panel toggle). */
@@ -98,6 +99,7 @@ export function PremiumPage(): ReactElement {
       setShowPaymentPanel(false);
       setShowContent(false);
       setSettledPaymentId(null);
+      setPaymentPromptDismissed(false);
 
       const item = items.find((i) => i.id === itemId);
       if (item) {
@@ -128,6 +130,8 @@ export function PremiumPage(): ReactElement {
   }, [paymentChallenge]);
 
   const handleShowAgentGuide = useCallback(() => {
+    setPaymentPromptDismissed(true);
+    setShowPaymentPanel(false);
     setAgentGuideOpen(true);
     // Scroll after layout paints the expanded panel.
     window.requestAnimationFrame(() => {
@@ -142,6 +146,7 @@ export function PremiumPage(): ReactElement {
     (paymentRecordId: string, accessReceipt?: string) => {
       setSettledPaymentId(paymentRecordId);
       setShowPaymentPanel(false);
+      setPaymentPromptDismissed(true);
 
       if (selectedItemId && accessReceipt) {
         storePremiumAccessReceipt(selectedItemId, accessReceipt);
@@ -159,9 +164,7 @@ export function PremiumPage(): ReactElement {
   );
 
   const reportTitle =
-    (premiumContent &&
-      typeof premiumContent.title === "string" &&
-      premiumContent.title.trim()) ||
+    (premiumContent && typeof premiumContent.title === "string" && premiumContent.title.trim()) ||
     currentItemTitle;
 
   return (
@@ -198,49 +201,22 @@ export function PremiumPage(): ReactElement {
         </div>
       ) : null}
 
-      {showPaymentPanel && paymentChallenge ? (
-        <div className="mb-8">
-          <PaymentChallengePanel
-            premiumItemId={paymentChallenge.premiumItemId}
-            priceAmount={currentItemPrice}
-            priceCurrency={currentItemCurrency}
-            onSettled={handleSettled}
-            onClose={() => setShowPaymentPanel(false)}
-            onShowAgentGuide={handleShowAgentGuide}
-          />
-        </div>
-      ) : null}
-
-      {isPaymentRequired && !showPaymentPanel ? (
-        <div
-          className="p-6 sm:p-8 bg-frame border border-border rounded-2xl mb-8 text-center"
-          data-testid="payment-required-cta"
-        >
-          <p className="text-muted-foreground text-sm mb-1">
-            Payment is required to access this content.
-          </p>
-          <p className="text-xs text-muted-foreground mb-5 max-w-md mx-auto leading-relaxed">
-            Wallet checkout uses x402. Automated agents should use MPP via the API guide below.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={handleShowPayment}
-              className="px-5 py-2.5 bg-accent hover:opacity-90 text-black rounded-xl font-semibold text-sm cursor-pointer transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              data-testid="pay-x402-cta"
-            >
-              Pay {currentItemPrice} {currentItemCurrency} with wallet (x402)
-            </button>
-            <button
-              type="button"
-              onClick={handleShowAgentGuide}
-              className="px-5 py-2.5 border border-border bg-background hover:border-accent/40 text-foreground rounded-xl font-semibold text-sm cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              data-testid="pay-mpp-agent-cta"
-            >
-              Agent / MPP purchase
-            </button>
-          </div>
-        </div>
+      {paymentChallenge ? (
+        <PaymentRequiredModal
+          open={isPaymentRequired && !paymentPromptDismissed}
+          showPaymentPanel={showPaymentPanel}
+          itemTitle={currentItemTitle}
+          priceAmount={currentItemPrice}
+          priceCurrency={currentItemCurrency}
+          paymentChallenge={paymentChallenge}
+          onShowPayment={handleShowPayment}
+          onShowAgentGuide={handleShowAgentGuide}
+          onSettled={handleSettled}
+          onClose={() => {
+            setShowPaymentPanel(false);
+            setPaymentPromptDismissed(true);
+          }}
+        />
       ) : null}
 
       {accessError && !isPaymentRequired ? (
