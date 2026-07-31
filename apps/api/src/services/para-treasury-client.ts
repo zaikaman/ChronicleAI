@@ -55,7 +55,11 @@ export interface ParaTreasuryClient {
    * Broadcast a USDC ERC-20 transfer from the Para MPC wallet.
    * @param amountUsdc Human USDC units (e.g. 12.5), not base units.
    */
-  sendTransfer(to: string, amountUsdc: number): Promise<OnChainWriteReceipt>;
+  sendTransfer(
+    to: string,
+    amountUsdc: number,
+    idempotencyKey?: string,
+  ): Promise<OnChainWriteReceipt>;
   /** Chain ID used for Para EVM operations. */
   getChainId(): number;
 }
@@ -343,7 +347,7 @@ export function createParaTreasuryClient(config: ParaTreasuryClientConfig): Para
       return Number(formatUnits(amount, decimals));
     },
 
-    async sendTransfer(to: string, amountUsdc: number) {
+    async sendTransfer(to: string, amountUsdc: number, idempotencyKey?: string) {
       if (!ADDRESS_RE.test(to)) {
         throw new Error(`Invalid transfer recipient address: ${to}`);
       }
@@ -407,7 +411,9 @@ export function createParaTreasuryClient(config: ParaTreasuryClientConfig): Para
             broadcast: true,
           },
           {
-            idempotencyKey: `usdc-${wallet.walletId}-${checksumTo}-${amountRaw.toString()}-${nonce}`,
+            idempotencyKey:
+              idempotencyKey?.trim() ||
+              `usdc-${wallet.walletId}-${checksumTo}-${amountRaw.toString()}-${nonce}`,
             signal: AbortSignal.timeout(60_000),
           },
         );

@@ -7,6 +7,10 @@ import type { PaymentRoute } from "@chronicleai/schemas";
 import { badRequest } from "../errors.ts";
 import type { PaymentAdapter, SettlementVerificationResult } from "../payments/payment-adapter.ts";
 import type { AffiliateEarningsService } from "./affiliate-earnings-service.ts";
+import type {
+  AffiliateFundingResult,
+  AffiliateFundingService,
+} from "./affiliate-funding-service.ts";
 
 export interface SettlementResult {
   settled: boolean;
@@ -20,6 +24,8 @@ export interface SettlementResult {
     rewardAmount: number;
     reason?: string;
   };
+  /** Funding status for the KeeperHub affiliate execution float. */
+  affiliateFunding?: AffiliateFundingResult;
 }
 
 /** Fallback when a legacy record has no expires_at (matches x402 challenge window). */
@@ -65,6 +71,7 @@ export class PaymentSettlementService {
   private readonly execLogRepo: ExecutionLogRepository;
   private readonly adapters: Map<PaymentRoute, PaymentAdapter>;
   private readonly earningsService: AffiliateEarningsService | null;
+  private readonly fundingService: AffiliateFundingService | null;
 
   constructor(params: {
     paymentRecordRepo: PaymentRecordRepository;
@@ -72,11 +79,14 @@ export class PaymentSettlementService {
     adapters: Map<PaymentRoute, PaymentAdapter>;
     /** When set, credits affiliate USDC ledger on successful settlement. */
     earningsService?: AffiliateEarningsService | null;
+    /** When set, moves credited affiliate rewards into the KeeperHub float. */
+    fundingService?: AffiliateFundingService | null;
   }) {
     this.paymentRecordRepo = params.paymentRecordRepo;
     this.execLogRepo = params.execLogRepo;
     this.adapters = params.adapters;
     this.earningsService = params.earningsService ?? null;
+    this.fundingService = params.fundingService ?? null;
   }
 
   /**
@@ -264,9 +274,11 @@ export class PaymentSettlementService {
       );
     }
 
-    // Credit affiliate ledger when payer is attributed (agent withdraws later — not auto-routed).
-    // Earnings service resolves affiliate from referral_attributions even if referral_address is null.
+    // Credit the affiliate ledger when payer is attributed. The reward remains
+    // withdrawable only by the affiliate agent; funding the KeeperHub float is
+    // a separate, idempotent treasury movement.
     let affiliateReward: SettlementResult["affiliateReward"];
+    let affiliateFunding: SettlementResult["affiliateFunding"];
     if (this.earningsService) {
       try {
         const credit = await this.earningsService.creditFromSettledPayment(settleWrite.value);
@@ -275,6 +287,19 @@ export class PaymentSettlementService {
           rewardAmount: credit.rewardAmount,
           ...(credit.reason ? { reason: credit.reason } : {}),
         };
+        if (credit.credited && credit.earningId && this.fundingService) {
+          const funding = await this.fundingService.fundEarning({
+            earningId: credit.earningId,
+            amount: credit.rewardAmount,
+            currency: settleWrite.value.currency ?? "USDC",
+          });
+          affiliateFunding = funding;
+          if (funding.status === "failed") {
+            console.error(
+              `[affiliate-funding] failed earning=${credit.earningId}: ${funding.errorMessage ?? "unknown"}`,
+            );
+          }
+        }
         if (!credit.credited) {
           console.warn(
             `[affiliate-earnings] credit skipped payment=${settleWrite.value.id}: ${credit.reason ?? "unknown"}`,
@@ -310,6 +335,7 @@ export class PaymentSettlementService {
         payerReference: settleWrite.value.payer_reference ?? payerReference,
         referralAddress: settleWrite.value.referral_address,
         affiliateReward,
+        affiliateFunding,
         // Prefer settlement tx hash when the adapter returns a 0x hash.
         ...(typeof params.settlementReference === "string" &&
         /^0x[0-9a-fA-F]{64}$/.test(params.settlementReference)
@@ -344,6 +370,7 @@ export class PaymentSettlementService {
       verification: verificationWithPayer,
       isSponsoredWatch: false, // Caller determines this from the premium item type
       ...(affiliateReward ? { affiliateReward } : {}),
+      ...(affiliateFunding ? { affiliateFunding } : {}),
     };
   }
 }

@@ -764,6 +764,8 @@ export interface US2Dependencies {
   affiliateRepo: AffiliateRepository;
   /** Credits affiliate USDC ledger when newsletter x402 settlements succeed. */
   earningsService: import("../services/affiliate-earnings-service.ts").AffiliateEarningsService;
+  /** Funds credited affiliate rewards into the KeeperHub execution wallet. */
+  fundingService?: import("../services/affiliate-funding-service.ts").AffiliateFundingService | null;
   /** Optional: mints period deep dives + structured feeds after digest runs. */
   premiumProductizer?: import("../services/premium-productizer-service.ts").PremiumProductizerService | null;
 }
@@ -816,6 +818,7 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
     adapters: new Map([["x402", x402Adapter]]),
     // Same ledger path as premium payments — newsletter settlements must credit affiliates.
     earningsService: deps.earningsService,
+    fundingService: deps.fundingService ?? null,
   });
 
   const newsletterService = createNewsletterSubscriptionService({
@@ -982,6 +985,8 @@ export interface US3Dependencies {
   attributionRepo: import("@chronicleai/db").ReferralAttributionRepository;
   /** Credits affiliate USDC ledger on settlement. */
   earningsService: import("../services/affiliate-earnings-service.ts").AffiliateEarningsService;
+  /** Funds credited affiliate rewards into the KeeperHub execution wallet. */
+  fundingService?: import("../services/affiliate-funding-service.ts").AffiliateFundingService | null;
 }
 
 /** Interval for automated sponsored-watch activate / monitor / complete (Loop 4). */
@@ -1106,6 +1111,7 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
       affiliateRepo: deps.affiliateRepo,
       attributionRepo: deps.attributionRepo,
       earningsService: deps.earningsService,
+      fundingService: deps.fundingService ?? null,
       secureCookies: env.nodeEnv === "production",
       frontendOrigin: env.frontendOrigin,
       strictContentUri: env.nodeEnv === "production",

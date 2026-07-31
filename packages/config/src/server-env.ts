@@ -348,8 +348,13 @@ export interface ServerEnv {
   /**
    * KeeperHub desk execution wallet (public address only).
    * Never put a desk EOA private key in env — production forbids DESK_*_PRIVATE_KEY.
-   */
+  */
   deskWalletAddress: string | undefined;
+  /**
+   * Base Sepolia KeeperHub wallet funded with accrued affiliate rewards.
+   * Defaults to DESK_WALLET_ADDRESS when unset.
+   */
+  keeperhubAffiliateFundingWalletAddress: string | undefined;
   /**
    * Prefer private mempool routing for desk strategy KH executions.
    * Workflow JSON sets usePrivateMempool; this is Chronicle policy for logs/UI.
@@ -1116,6 +1121,14 @@ export function loadServerEnv(): ServerEnv {
       `Invalid DESK_WALLET_ADDRESS: expected a 0x-prefixed 40-hex EVM address, got ${JSON.stringify(deskWalletRaw)}`,
     );
   }
+  const affiliateFundingWalletRaw =
+    optionalEnv("KEEPERHUB_AFFILIATE_FUNDING_WALLET_ADDRESS")?.trim() ||
+    deskWalletRaw;
+  if (affiliateFundingWalletRaw && !EVM_ADDRESS_RE.test(affiliateFundingWalletRaw)) {
+    throw new Error(
+      `Invalid KEEPERHUB_AFFILIATE_FUNDING_WALLET_ADDRESS: expected a 0x-prefixed 40-hex EVM address, got ${JSON.stringify(affiliateFundingWalletRaw)}`,
+    );
+  }
 
   if (deskMinAumUsdc > deskTargetAumUsdc) {
     throw new Error(
@@ -1328,6 +1341,7 @@ export function loadServerEnv(): ServerEnv {
     ),
     keeperhubWorkflowGasVolumeBlock: optionalEnv("KEEPERHUB_WORKFLOW_GAS_VOLUME_BLOCK"),
     deskWalletAddress: deskWalletRaw,
+    keeperhubAffiliateFundingWalletAddress: affiliateFundingWalletRaw,
     deskUsePrivateMempool:
       (optionalEnv(
         "DESK_USE_PRIVATE_MEMPOOL",

@@ -615,6 +615,41 @@ export interface AffiliateEarningInsert {
   currency?: string;
 }
 
+// ── Affiliate Funding Transfers (treasury → KeeperHub float) ───────────────
+export type AffiliateFundingTransferStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed";
+
+export interface AffiliateFundingTransferRow {
+  id: string;
+  affiliate_earning_id: string;
+  amount: number;
+  currency: string;
+  destination_wallet: string;
+  chain_id: number;
+  token_address: string;
+  status: AffiliateFundingTransferStatus;
+  attempt_count: number;
+  tx_hash: string | null;
+  explorer_url: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface AffiliateFundingTransferInsert {
+  affiliate_earning_id: string;
+  amount: number;
+  currency?: string;
+  destination_wallet: string;
+  chain_id: number;
+  token_address: string;
+  status?: AffiliateFundingTransferStatus;
+}
+
 // ── Affiliate Withdrawals (agent-initiated) ─────────────
 export type AffiliateWithdrawalStatus =
   | "pending"
@@ -1001,4 +1036,3 @@ export interface AffiliateAgentJobInsert {
 }
 
 export type AffiliateAgentJobUpdate = Partial<AffiliateAgentJobInsert>;
-

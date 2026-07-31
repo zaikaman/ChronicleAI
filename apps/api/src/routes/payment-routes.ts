@@ -26,6 +26,7 @@ import {
   type PremiumAccessReceiptService,
 } from "../services/premium-access-receipt-service.ts";
 import type { AffiliateEarningsService } from "../services/affiliate-earnings-service.ts";
+import type { AffiliateFundingService } from "../services/affiliate-funding-service.ts";
 import { PaymentChallengeService } from "../services/payment-challenge-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
 import {
@@ -64,6 +65,8 @@ export function createPaymentRoutes(params: {
   attributionRepo?: ReferralAttributionRepository | null;
   /** Credits affiliate ledger on settle. */
   earningsService?: AffiliateEarningsService | null;
+  /** Funds the KeeperHub affiliate execution wallet from the x402 treasury. */
+  fundingService?: AffiliateFundingService | null;
   /** When true, Set-Cookie includes Secure (production / HTTPS). */
   secureCookies?: boolean;
   /** Public SPA origin for HTTPS sponsored-report / premium-receipt content URIs. */
@@ -101,6 +104,7 @@ export function createPaymentRoutes(params: {
     execLogRepo: params.execLogRepo,
     adapters: params.adapters,
     earningsService: params.earningsService ?? null,
+    fundingService: params.fundingService ?? null,
   });
 
   const registryService =

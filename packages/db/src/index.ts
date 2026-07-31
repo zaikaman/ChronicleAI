@@ -20,6 +20,7 @@ export * from "./newsletter-subscription-repository.ts";
 export * from "./affiliate-repository.ts";
 export * from "./referral-attribution-repository.ts";
 export * from "./affiliate-earning-repository.ts";
+export * from "./affiliate-funding-transfer-repository.ts";
 export * from "./affiliate-withdrawal-repository.ts";
 export * from "./desk-ticket.ts";
 export * from "./desk-signal-repository.ts";
@@ -34,4 +35,3 @@ export * from "./system-control-state-repository.ts";
 export * from "./affiliate-agent-job-repository.ts";
 export * from "./cctp-rebalance-repository.ts";
 export type { Database, Json } from "./database.types.ts";
-

@@ -108,6 +108,68 @@ export type Database = {
         }
         Relationships: []
       }
+      affiliate_funding_transfers: {
+        Row: {
+          affiliate_earning_id: string
+          amount: number
+          attempt_count: number
+          chain_id: number
+          completed_at: string | null
+          created_at: string
+          currency: string
+          destination_wallet: string
+          error_message: string | null
+          explorer_url: string | null
+          id: string
+          status: string
+          token_address: string
+          tx_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          affiliate_earning_id: string
+          amount: number
+          attempt_count?: number
+          chain_id: number
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          destination_wallet: string
+          error_message?: string | null
+          explorer_url?: string | null
+          id?: string
+          status?: string
+          token_address: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          affiliate_earning_id?: string
+          amount?: number
+          attempt_count?: number
+          chain_id?: number
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          destination_wallet?: string
+          error_message?: string | null
+          explorer_url?: string | null
+          id?: string
+          status?: string
+          token_address?: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_funding_transfers_earning_fkey"
+            columns: ["affiliate_earning_id"]
+            isOneToOne: true
+            referencedRelation: "affiliate_earnings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       affiliate_withdrawal_nonces: {
         Row: {
           affiliate_wallet: string

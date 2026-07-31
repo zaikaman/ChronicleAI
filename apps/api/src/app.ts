@@ -1,6 +1,7 @@
 import { assertProductionReadiness, loadServerEnv } from "@chronicleai/config";
 import {
   createAffiliateEarningRepository,
+  createAffiliateFundingTransferRepository,
   createAffiliateRepository,
   createAffiliateWithdrawalRepository,
   createDailyDigestRepository,
@@ -20,6 +21,8 @@ import {
   createTreasurySnapshotRepository,
 } from "@chronicleai/db";
 import { createAffiliateEarningsService } from "./services/affiliate-earnings-service.ts";
+import { createAffiliateFundingService } from "./services/affiliate-funding-service.ts";
+import { createParaTreasuryClientFromEnv } from "./services/para-treasury-client.ts";
 import { createPremiumProductizerService } from "./services/premium-productizer-service.ts";
 import { createProviderConfigs } from "./services/llm-provider-client.ts";
 import express, { type Express } from "express";
@@ -42,6 +45,8 @@ import {
 
 const app: Express = express();
 const isProduction = (process.env["NODE_ENV"] ?? "development") === "production";
+const isTestRuntime =
+  process.env["NODE_ENV"] === "test" || process.env["VITEST"] === "true";
 
 // Trust reverse-proxy (Heroku) so req.ip / rate-limit keys use X-Forwarded-For.
 app.set("trust proxy", 1);
@@ -100,6 +105,7 @@ try {
   const affiliateRepo = createAffiliateRepository(supabase);
   const attributionRepo = createReferralAttributionRepository(supabase);
   const earningRepo = createAffiliateEarningRepository(supabase);
+  const affiliateFundingRepo = createAffiliateFundingTransferRepository(supabase);
   const withdrawalRepo = createAffiliateWithdrawalRepository(supabase);
 
   const earningsService = createAffiliateEarningsService(
@@ -114,6 +120,34 @@ try {
       referralRewardCapPerPayment: env.referralRewardCap,
     },
   );
+
+  const affiliateFundingService = createAffiliateFundingService({
+    repository: affiliateFundingRepo,
+    treasuryClient: createParaTreasuryClientFromEnv(env, "x402"),
+    destinationWallet: env.keeperhubAffiliateFundingWalletAddress,
+    chainId: env.x402ChainId,
+    tokenAddress: env.x402UsdcAddress,
+  });
+  if (affiliateFundingService.isConfigured() && !isTestRuntime) {
+    console.info(
+      "[affiliate-funding] enabled: settled affiliate rewards fund the KeeperHub wallet on the x402 rail",
+    );
+    const runAffiliateFundingRetry = () => {
+      void affiliateFundingService.retryPending().then((result) => {
+        if (result.attempted > 0) {
+          console.info(
+            `[affiliate-funding] retry attempted=${result.attempted} completed=${result.completed} failed=${result.failed}`,
+          );
+        }
+      });
+    };
+    runAffiliateFundingRetry();
+    setInterval(runAffiliateFundingRetry, 60_000).unref?.();
+  } else {
+    console.warn(
+      "[affiliate-funding] disabled: set PARA_API_KEY and DESK_WALLET_ADDRESS (or KEEPERHUB_AFFILIATE_FUNDING_WALLET_ADDRESS) to fund the KeeperHub affiliate float",
+    );
+  }
 
   // Auto-mint deep dives / structured / historical feeds from real monitored activity.
   // Deep dives + historical narratives use Gemini → Groq → OpenAI (same stack as alerts).
@@ -162,6 +196,7 @@ try {
     paymentRecordRepo,
     affiliateRepo,
     earningsService,
+    fundingService: affiliateFundingService,
     premiumProductizer,
   });
 
@@ -175,6 +210,7 @@ try {
     affiliateRepo,
     attributionRepo,
     earningsService,
+    fundingService: affiliateFundingService,
   });
 
   // US4: Public agent activity, treasury & revenue payouts + affiliate registry
