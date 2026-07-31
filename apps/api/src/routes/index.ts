@@ -33,7 +33,10 @@ import type {
 import { BlockIngestionHandler } from "../keeperhub/block-ingestion-handler.ts";
 import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
 import { createEventNormalizer } from "../monitoring/event-normalizer.ts";
-import { createOnChainBlockService } from "../monitoring/on-chain-block-service.ts";
+import {
+  blockRpcUrlsFromEnv,
+  createOnChainBlockService,
+} from "../monitoring/on-chain-block-service.ts";
 import { createPriceOracle } from "../monitoring/price-oracle-service.ts";
 import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 import { createNewsletterSubscriptionService } from "../services/newsletter-subscription-service.ts";
@@ -178,7 +181,11 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     timeoutMs: 6_000,
   });
   const eventNormalizer = createEventNormalizer(priceOracle);
-  const blockService = createOnChainBlockService(env.rpcUrl);
+  // Block analysis must use the RPC for the payload chainId. Mainnet gas monitors
+  // (chain 1, e.g. block ~25.6M) fail if routed to Sepolia RPC_URL.
+  const blockService = createOnChainBlockService({
+    rpcUrlsByChainId: blockRpcUrlsFromEnv(env),
+  });
   const blockHandler = new BlockIngestionHandler(blockService, handler, deps.execLogRepo);
 
   // Phase 9–10: desk rails — signal ingest, capital, tick, kill, public/product HTTP

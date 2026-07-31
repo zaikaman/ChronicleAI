@@ -240,7 +240,22 @@ export interface ServerEnv {
    */
   revenueEthPerCurrencyUnit: number | undefined;
   chronicleRegistryAddress: string | undefined;
+  /**
+   * Ethereum Sepolia JSON-RPC (desk / registry / Chainlink / Para reads).
+   * Do not point this at mainnet — newspaper block monitors use mainnetRpcUrl.
+   */
   rpcUrl: string | undefined;
+  /**
+   * Ethereum mainnet JSON-RPC for newspaper gas/volume block analysis (chainId 1).
+   * Required when gas-volume-block-monitor (or any chainId=1 block ingest) is live.
+   * Override with MAINNET_RPC_URL / ETH_RPC_URL.
+   */
+  mainnetRpcUrl: string | undefined;
+  /**
+   * Base mainnet JSON-RPC for chainId 8453 block analysis (optional).
+   * Override with BASE_RPC_URL.
+   */
+  baseRpcUrl: string | undefined;
   /**
    * Production Para partner API key (server-side only).
    * Enables real Para MPC treasury wallets via @getpara/rest-sdk.
@@ -1252,6 +1267,11 @@ export function loadServerEnv(): ServerEnv {
       (revenueFxMode === "static" || revenueFxMode === "auto" ? 0.000001 : undefined),
     chronicleRegistryAddress: optionalEnv("CHRONICLE_REGISTRY_ADDRESS"),
     rpcUrl: optionalEnv("RPC_URL"),
+    mainnetRpcUrl:
+      optionalEnv("MAINNET_RPC_URL")?.trim() ||
+      optionalEnv("ETH_RPC_URL")?.trim() ||
+      undefined,
+    baseRpcUrl: optionalEnv("BASE_RPC_URL")?.trim() || undefined,
     paraApiKey: optionalEnv("PARA_API_KEY"),
     paraEnvironment: parseParaEnvironment(optionalEnv("PARA_ENVIRONMENT", "BETA")),
     paraTreasuryUserIdentifier:

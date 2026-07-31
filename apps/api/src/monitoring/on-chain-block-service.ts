@@ -1,6 +1,14 @@
-// Fetch real block data via JSON-RPC and produce Chronicle-ready events
+// Fetch real block data via JSON-RPC and produce Chronicle-ready events.
+// RPC is resolved per payload.chainId so mainnet gas monitors never hit desk Sepolia.
 
-import { BLOCK_MONITORING } from "@chronicleai/config";
+import {
+  BLOCK_MONITORING,
+  CHAIN_ID_BASE,
+  CHAIN_ID_BASE_SEPOLIA,
+  CHAIN_ID_ETHEREUM,
+  CHAIN_ID_SEPOLIA,
+  chainLabel,
+} from "@chronicleai/config";
 import type { BlockIngestionPayload, EventIngestionPayload } from "@chronicleai/schemas";
 import {
   type Hash,
@@ -21,11 +29,97 @@ export interface OnChainBlockService {
   analyzeBlock(payload: BlockIngestionPayload): Promise<BlockAnalysisResult>;
 }
 
+/**
+ * Per-chain JSON-RPC endpoints for block analysis.
+ * Keys are EVM chain IDs. Values are HTTP RPC URLs (trimmed non-empty).
+ */
+export type BlockRpcUrlsByChainId = Partial<Record<number, string | undefined>>;
+
+export interface OnChainBlockServiceOptions {
+  /**
+   * Explicit RPC URL per chainId. Preferred over a single shared URL so
+   * newspaper mainnet monitors (chain 1) never query desk Sepolia RPC_URL.
+   */
+  rpcUrlsByChainId?: BlockRpcUrlsByChainId;
+  /**
+   * Legacy single-URL mode: used only when `rpcUrlsByChainId` is empty/undefined.
+   * Prefer the multi-chain map in production.
+   */
+  rpcUrl?: string | undefined;
+}
+
+/** Env var name operators should set for a given chainId (for error messages). */
+export function rpcEnvHintForChain(chainId: number): string {
+  switch (chainId) {
+    case CHAIN_ID_ETHEREUM:
+      return "MAINNET_RPC_URL";
+    case CHAIN_ID_SEPOLIA:
+      return "RPC_URL";
+    case CHAIN_ID_BASE_SEPOLIA:
+      return "X402_RPC_URL (or BASE_SEPOLIA_RPC_URL)";
+    case CHAIN_ID_BASE:
+      return "BASE_RPC_URL";
+    default:
+      return `RPC URL for chain ${chainId}`;
+  }
+}
+
+/**
+ * Resolve the HTTP RPC URL for a block-analysis chainId.
+ * Empty / whitespace values are treated as unset.
+ */
+export function resolveBlockRpcUrl(
+  chainId: number,
+  options: OnChainBlockServiceOptions,
+): string | undefined {
+  const fromMap = options.rpcUrlsByChainId?.[chainId]?.trim();
+  if (fromMap) return fromMap;
+
+  const hasAnyMapped = Object.values(options.rpcUrlsByChainId ?? {}).some(
+    (v) => typeof v === "string" && v.trim().length > 0,
+  );
+  // Multi-chain mode is active: do not fall back to a foreign-chain default URL.
+  // That was the bug — mainnet block 25_650_600 queried against Sepolia RPC_URL.
+  if (hasAnyMapped) return undefined;
+
+  const legacy = options.rpcUrl?.trim();
+  return legacy || undefined;
+}
+
+/**
+ * Build the production RPC map from ServerEnv-shaped fields.
+ * Keeps route wiring free of chain-id literals.
+ */
+export function blockRpcUrlsFromEnv(env: {
+  rpcUrl?: string | undefined;
+  mainnetRpcUrl?: string | undefined;
+  x402RpcUrl?: string | undefined;
+  baseRpcUrl?: string | undefined;
+}): BlockRpcUrlsByChainId {
+  return {
+    [CHAIN_ID_ETHEREUM]: env.mainnetRpcUrl,
+    [CHAIN_ID_SEPOLIA]: env.rpcUrl,
+    [CHAIN_ID_BASE_SEPOLIA]: env.x402RpcUrl,
+    [CHAIN_ID_BASE]: env.baseRpcUrl,
+  };
+}
+
 export function createOnChainBlockService(
-  rpcUrl: string | undefined,
+  rpcConfig: string | OnChainBlockServiceOptions | undefined,
   volumeWindow = new TransactionVolumeWindow(),
 ): OnChainBlockService {
-  if (!rpcUrl) {
+  const options: OnChainBlockServiceOptions =
+    typeof rpcConfig === "string" || rpcConfig === undefined
+      ? { rpcUrl: rpcConfig }
+      : rpcConfig;
+
+  const anyRpcConfigured =
+    Boolean(options.rpcUrl?.trim()) ||
+    Object.values(options.rpcUrlsByChainId ?? {}).some(
+      (v) => typeof v === "string" && v.trim().length > 0,
+    );
+
+  if (!anyRpcConfigured) {
     return {
       async analyzeBlock() {
         throw new Error(
@@ -35,8 +129,7 @@ export function createOnChainBlockService(
     };
   }
 
-  // Chain is resolved per payload.chainId so multi-chain ingest can share the helper.
-  function clientFor(chainId: number) {
+  function clientFor(chainId: number, rpcUrl: string) {
     return createPublicClient({
       chain: chainFromId(chainId),
       transport: http(rpcUrl),
@@ -45,12 +138,41 @@ export function createOnChainBlockService(
 
   return {
     async analyzeBlock(payload: BlockIngestionPayload): Promise<BlockAnalysisResult> {
-      const client = clientFor(payload.chainId);
-      const block = await client.getBlock({
-        blockNumber: BigInt(payload.blockNumber),
-      });
+      const rpcUrl = resolveBlockRpcUrl(payload.chainId, options);
+      if (!rpcUrl) {
+        const label = chainLabel(payload.chainId);
+        const hint = rpcEnvHintForChain(payload.chainId);
+        throw new Error(
+          `No RPC URL configured for chain ${payload.chainId} (${label}). ` +
+            `Set ${hint} so block ${payload.blockNumber} is fetched on the correct network.`,
+        );
+      }
+
+      const client = clientFor(payload.chainId, rpcUrl);
+      let block;
+      try {
+        block = await client.getBlock({
+          blockNumber: BigInt(payload.blockNumber),
+        });
+      } catch (error) {
+        const raw = error instanceof Error ? error.message : String(error);
+        // Surface chain + RPC mismatch clearly (viem: Block at number "N" could not be found).
+        if (/could not be found/i.test(raw) || /Block at number/i.test(raw)) {
+          throw new Error(
+            `Block ${payload.blockNumber} not found on chain ${payload.chainId} (${chainLabel(payload.chainId)}). ` +
+              `Confirm the workflow chainId matches the RPC (${rpcEnvHintForChain(payload.chainId)}). ` +
+              `Underlying: ${raw}`,
+          );
+        }
+        throw error instanceof Error
+          ? error
+          : new Error(`Block fetch failed: ${raw}`);
+      }
+
       if (!block) {
-        throw new Error(`Block ${payload.blockNumber} not found on RPC`);
+        throw new Error(
+          `Block ${payload.blockNumber} not found on chain ${payload.chainId} (${chainLabel(payload.chainId)})`,
+        );
       }
 
       const createdContracts = await scanDeployments(
