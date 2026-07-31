@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  createAffiliateAgentService,
   type AffiliateAgentLlm,
+  affiliateWithdrawalAmountSchema,
+  createAffiliateAgentService,
 } from "../services/affiliate-agent-service.ts";
 import type { AffiliateDashboardStats } from "../services/affiliate-dashboard-service.ts";
 
@@ -30,6 +31,11 @@ function baseStats(overrides?: Partial<AffiliateDashboardStats>): AffiliateDashb
 }
 
 describe("createAffiliateAgentService", () => {
+  it("accepts numeric strings emitted by LLM tool callers", () => {
+    expect(affiliateWithdrawalAmountSchema.parse("2.5")).toBe("2.5");
+    expect(affiliateWithdrawalAmountSchema.parse("all")).toBe("all");
+  });
+
   describe("deterministic fallback (no LLM)", () => {
     it("returns help text for help queries", async () => {
       const agent = createAffiliateAgentService({
@@ -130,6 +136,40 @@ describe("createAffiliateAgentService", () => {
 
       expect(withdraw).toHaveBeenCalledWith(
         expect.objectContaining({ amountUsdc: 2.5 }),
+      );
+    });
+
+    it("uses the signed amount for a full-balance withdrawal", async () => {
+      const stats = baseStats({ availableUsdc: 8 });
+      const withdrawalAuthorization = {
+        wallet: WALLET,
+        amount: "5500000",
+        nonce: `0x${"33".repeat(32)}`,
+        expiry: Math.floor(Date.now() / 1000) + 300,
+        action: "withdraw_usdc",
+        signature: `0x${"44".repeat(65)}`,
+      };
+      const withdraw = vi.fn().mockResolvedValue({ ok: true, txHash: "0x1" });
+      const agent = createAffiliateAgentService({
+        dashboardService: {
+          getStats: vi.fn().mockResolvedValue(stats),
+          getAvailableBalanceUsdc: vi.fn(),
+        },
+        withdrawalService: { withdraw },
+        llm: null,
+      });
+
+      await agent.chat({
+        affiliateWallet: WALLET,
+        message: "withdraw all",
+        withdrawalAuthorization,
+      });
+
+      expect(withdraw).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amountUsdc: 5.5,
+          authorization: withdrawalAuthorization,
+        }),
       );
     });
   });

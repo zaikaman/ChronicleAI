@@ -123,7 +123,13 @@ export function useAffiliateAgent(walletAddress: string | null | undefined, avai
         const lower = trimmed.toLowerCase();
         const isWithdrawal = /\b(withdraw|claim|cash\s*out|pay\s*me|send\s+(me\s+)?(my\s+)?(money|usdc|funds|rewards?))\b/.test(lower);
         const amountMatch = lower.match(/(?:withdraw|claim|send|transfer|cash\s*out)\s*(?:me\s+)?(?:about\s+)?(\d+(?:\.\d+)?)\s*(?:usdc|usd)?/);
-        const requestedAmount = amountMatch ? Number(amountMatch[1]) : availableUsdc;
+        const freshStats = isWithdrawal
+          ? await apiGetJson<AffiliateStats>("/affiliates/me", {
+              params: { wallet: address },
+            })
+          : null;
+        const authorizationBalance = freshStats?.availableUsdc ?? availableUsdc;
+        const requestedAmount = amountMatch ? Number(amountMatch[1]) : authorizationBalance;
         const nonce = keccak256(stringToBytes(`${address}:${Date.now()}:${Math.random()}`));
         const expiry = Math.floor(Date.now() / 1000) + 600;
         const withdrawalAuthorization = {
@@ -213,7 +219,7 @@ export function useAffiliateAgent(walletAddress: string | null | undefined, avai
         setIsSending(false);
       }
     },
-    [walletAddress],
+    [availableUsdc, wallet.chainId, wallet.signTypedData, walletAddress],
   );
 
   const resetChat = useCallback(() => {

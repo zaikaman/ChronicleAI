@@ -5,7 +5,7 @@
 
 [![KeeperHub Stack](https://img.shields.io/badge/KeeperHub-Execution%20%26%20Reliability%20Layer-blueviolet?style=for-the-badge)](https://keeperhub.com)
 [![KeeperHub Workflows](https://img.shields.io/badge/KeeperHub%20Workflows-28%20JSON-blueviolet?style=for-the-badge)](workflows/keeperhub-ready)
-[![Tests](https://img.shields.io/badge/Tests-1011%20Passing-brightgreen?style=for-the-badge)](README.md)
+[![Tests](https://img.shields.io/badge/Tests-1013%20Passing-brightgreen?style=for-the-badge)](README.md)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-Agent%20Framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=for-the-badge)](https://vitejs.dev/)
@@ -24,7 +24,7 @@
 | **All Transactions & Execution Explorer** | [https://chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity) *(Public real-time dashboard displaying all execution logs, transaction hashes, CCTP rebalances, and payout receipts)* |
 | **Hackathon Executed Transactions** | <img src="https://chronicleai-76fcd1c06def.herokuapp.com/activity/badge.svg" height="22" alt="KeeperHub Executions" /> · Real-time count of onchain transactions executed via KeeperHub during hackathon window (July 27 – Aug 13, 2026). View [Full Matrix Below](#verified-onchain-transactions-executed-via-keeperhub-stack) |
 | **KeeperHub Stack Coverage** | **6 / 6 Surfaces Fully Implemented** (Workflows, MCP Server, x402/MPP Dual Routing, Smart Gas, Hybrid Private Routing & Gas Sponsorship, Execution Audit Trail)<br>*Hybrid routing: material desk & capital txs use KeeperHub private mempool (Flashbots Protect · Sepolia; wallet-paid gas — sponsorship is mutually exclusive with private route). Registry / alert / receipt writes use public mempool + KeeperHub gas sponsorship. Policy is per transaction class, not "all private or all sponsored."* |
-| **Test Suite & Workflows** | **1011 Passing Tests** across 124 test files (`pnpm test`) · **28 Production Workflows** defined in [`workflows/keeperhub-ready/`](workflows/keeperhub-ready) |
+| **Test Suite & Workflows** | **1013 Passing Tests** across 124 test files (`pnpm test`) · **28 Production Workflows** defined in [`workflows/keeperhub-ready/`](workflows/keeperhub-ready) |
 
 ## Judge in 30 seconds
 
@@ -36,7 +36,7 @@
    - **Daily Digest Write:** [https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204](https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204) — *Public (Sponsorship requested)*
    - **Circle CCTP Cross-Chain Rebalance:** [https://sepolia.basescan.org/tx/0xb30984def5e87dbcf3968e30972229f1e9109afbe39338e375f8c4de7c67cec4](https://sepolia.basescan.org/tx/0xb30984def5e87dbcf3968e30972229f1e9109afbe39338e375f8c4de7c67cec4) → [https://sepolia.etherscan.io/tx/0xfeb8f1e45c61abc4bd5c0d94b9073b1447687b15469ad1171833dc0855c4497c](https://sepolia.etherscan.io/tx/0xfeb8f1e45c61abc4bd5c0d94b9073b1447687b15469ad1171833dc0855c4497c)
 4. **Surfaces checklist:** 6 / 6 KeeperHub surfaces implemented (see full matrix below)
-5. **Engineering Rigor:** 1011 passing unit & contract tests across 124 test files (`pnpm test`)
+5. **Engineering Rigor:** 1013 passing unit & contract tests across 124 test files (`pnpm test`)
 6. **KeeperHub Workflows:** 28 production workflow JSON definitions in [`workflows/keeperhub-ready/`](workflows/keeperhub-ready)
 
 ---

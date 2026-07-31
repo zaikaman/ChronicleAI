@@ -94,6 +94,18 @@ const TOOL_NAMES = new Set<string>([
   "help",
 ]);
 
+/**
+ * LLM providers sometimes serialize numeric tool arguments as strings even
+ * when the tool schema advertises a JSON number. Keep the input strict while
+ * accepting that provider variation and the explicit full-balance sentinel.
+ */
+export const affiliateWithdrawalAmountSchema = z
+  .union([
+    z.number().finite().min(0.01),
+    z.string().trim().regex(/^(?:all|\d+(?:\.\d{1,6})?)$/i),
+  ])
+  .describe('USDC amount as a JSON number, a numeric string, or the string "all"');
+
 const MAX_TOOL_ROUNDS = 5;
 const LLM_TIMEOUT_MS = 300_000;
 
@@ -133,6 +145,23 @@ function formatUsdc(n: number): string {
   return `${s} USDC`;
 }
 
+function authorizedAmountUsdc(
+  authorization?: AffiliateWithdrawalAuthorization,
+): number | null {
+  const raw = authorization?.amount;
+  if (typeof raw !== "string" || !/^\d+$/.test(raw)) return null;
+
+  try {
+    const atomic = BigInt(raw);
+    if (atomic > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    const amount = Number(atomic) / 1_000_000;
+    if (!Number.isFinite(amount)) return null;
+    return Math.round(amount * 1_000_000) / 1_000_000;
+  } catch {
+    return null;
+  }
+}
+
 function helpText(): string {
   return [
     "I'm the ChronicleAI affiliate payout agent. I can check your stats and send earned USDC on-chain through KeeperHub.",
@@ -156,7 +185,7 @@ function buildSystemPrompt(wallet: string): string {
     `- The authenticated affiliate wallet is ${wallet}. Never send funds to any other address.`,
     "- You MUST call tools for live balances, stats, or withdrawals. Never invent balances, tx hashes, or KeeperHub run ids.",
     "- withdraw_usdc performs a real on-chain transfer via KeeperHub. Only call it when the user clearly wants to withdraw.",
-    '- For full balance, pass amount "all". For partial, pass a positive USDC number.',
+    '- For full balance, pass amount "all". For partial, pass a positive USDC number. Numeric strings are also accepted.',
     "- If a tool fails, explain the error honestly. Do not claim a transfer succeeded unless the tool returned ok: true with a tx hash.",
     "- Be concise, calm, and technical — ChronicleAI editorial voice. No hype.",
     "- Prefer short paragraphs. Include explorer links / tx hashes from tool results when present.",
@@ -227,10 +256,15 @@ async function executeTool(
 
   let amount: number;
   const raw = args.amount;
-  if (raw === "all" || raw === undefined || raw === null) {
-    amount = stats.availableUsdc;
-  } else if (typeof raw === "string" && raw.toLowerCase() === "all") {
-    amount = stats.availableUsdc;
+  const signedAmount = authorizedAmountUsdc(withdrawalAuthorization);
+  const isAll =
+    raw === "all" ||
+    (typeof raw === "string" && raw.trim().toLowerCase() === "all");
+  if (isAll || raw === undefined || raw === null) {
+    // Bind "all" to the amount the wallet actually signed. The dashboard can
+    // change while an async LLM job is running, and the authorization must
+    // remain the source of truth for the requested amount.
+    amount = signedAmount ?? stats.availableUsdc;
   } else {
     amount = Number(raw);
   }
@@ -309,18 +343,20 @@ function buildLangChainTools(params: {
     ),
     tool(
       async ({ amount }) => {
-        const args: Record<string, unknown> = { amount };
+        const normalizedAmount =
+          typeof amount === "string" && amount.trim().toLowerCase() !== "all"
+            ? Number(amount)
+            : typeof amount === "string"
+              ? "all"
+              : amount;
+        const args: Record<string, unknown> = { amount: normalizedAmount };
         return run("withdraw_usdc", args);
       },
       {
         name: "withdraw_usdc",
         description:
           'Execute a real on-chain USDC-denominated payout to the authenticated affiliate wallet through KeeperHub. Only call this when the user clearly wants to withdraw. Use amount "all" for full available balance, or a positive number for a partial amount.',
-        schema: z.object({
-          amount: z
-            .union([z.number().min(0.01), z.literal("all")])
-            .describe('USDC amount as a number, or the string "all"'),
-        }),
+        schema: z.object({ amount: affiliateWithdrawalAmountSchema }),
       },
     ),
     tool(
