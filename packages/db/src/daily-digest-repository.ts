@@ -2,7 +2,15 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
-import { buildInsertPayload, buildUpdatePayload, mapPostgrestError } from "./repository-utils.ts";
+import {
+  buildInsertPayload,
+  buildPaginatedResult,
+  buildUpdatePayload,
+  mapPostgrestError,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationParams,
+} from "./repository-utils.ts";
 import type { DailyDigestInsert, DailyDigestRow, DailyDigestUpdate } from "./types.ts";
 
 export interface DailyDigestRepository {
@@ -29,6 +37,8 @@ export interface DailyDigestRepository {
     },
   ): Promise<Result<DailyDigestRow>>;
   list(limitParam?: number): Promise<Result<DailyDigestRow[]>>;
+  /** Page-based public published digests (newest first). */
+  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<DailyDigestRow>>>;
 }
 
 export function createDailyDigestRepository(supabase: SupabaseClient): DailyDigestRepository {
@@ -159,6 +169,27 @@ export function createDailyDigestRepository(supabase: SupabaseClient): DailyDige
       }
 
       return success(rows as unknown as DailyDigestRow[]);
+    },
+
+    async listPage(params) {
+      const { page, limit, offset } = normalizePagination(params, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+
+      const { data: rows, error, count } = await table()
+        .select("*", { count: "exact" })
+        .eq("audience", "public")
+        .not("published_at", "is", null)
+        .order("published_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        return failure(mapPostgrestError(error));
+      }
+
+      const items = (rows ?? []) as unknown as DailyDigestRow[];
+      return success(buildPaginatedResult(items, page, limit, count ?? items.length));
     },
   };
 }

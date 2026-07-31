@@ -17,4 +17,9 @@ export * from "./rebalance-worker.ts";
 export * from "./create-from-env.ts";
 export * from "./activity-events.ts";
 export * from "./desk-starvation.ts";
-export * from "./cctp-service-bridge.ts";
+export {
+  getCctpRebalanceRepo,
+  getCctpService,
+  registerCctpRebalanceRepo,
+  registerCctpService,
+} from "./cctp-service-bridge.ts";

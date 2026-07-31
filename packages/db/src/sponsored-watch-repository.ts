@@ -3,7 +3,14 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, ValidationError, failure, success } from "./errors.ts";
-import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
+import {
+  buildPaginatedResult,
+  mapPostgrestError,
+  maybeRow,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationParams,
+} from "./repository-utils.ts";
 import type { SponsoredWatchInsert, SponsoredWatchRow, SponsoredWatchUpdate } from "./types.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -12,6 +19,8 @@ export interface SponsoredWatchRepository {
   create(watch: SponsoredWatchInsert): Promise<Result<SponsoredWatchRow>>;
   findById(id: string): Promise<Result<SponsoredWatchRow | null>>;
   list(): Promise<Result<SponsoredWatchRow[]>>;
+  /** Page-based public campaign list (newest first). */
+  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<SponsoredWatchRow>>>;
   listActive(): Promise<Result<SponsoredWatchRow[]>>;
   /** Watches past ends_at that still need report generation / publish. */
   listDueForCompletion(nowIso?: string): Promise<Result<SponsoredWatchRow[]>>;
@@ -59,6 +68,21 @@ export function createSponsoredWatchRepository(supabase: SupabaseClient): Sponso
 
       if (error) return failure(mapPostgrestError(error));
       return success((data ?? []) as unknown as SponsoredWatchRow[]);
+    },
+
+    async listPage(params) {
+      const { page, limit, offset } = normalizePagination(params, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      const { data, error, count } = await table()
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) return failure(mapPostgrestError(error));
+      const items = (data ?? []) as unknown as SponsoredWatchRow[];
+      return success(buildPaginatedResult(items, page, limit, count ?? items.length));
     },
 
     async listActive() {

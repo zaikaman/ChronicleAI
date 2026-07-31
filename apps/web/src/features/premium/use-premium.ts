@@ -1,9 +1,10 @@
 // Premium data hooks — React Query for lists; imperative access for payment gating
 
-import type { PremiumItemTeaserResponse } from "@chronicleai/schemas";
+import type { PaginationMeta, PremiumItemTeaserResponse } from "@chronicleai/schemas";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { API_BASE, apiGetJson, apiPostJson, toErrorMessage } from "../../lib/api.ts";
+import { EMPTY_PAGINATION, normalizePaginationMeta } from "../../lib/pagination.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
 
 const RECEIPT_STORAGE_PREFIX = "chronicle_premium_receipt:";
@@ -35,6 +36,9 @@ export function clearPremiumAccessReceipt(itemId: string): void {
 export interface PremiumTeasersState {
   items: PremiumItemTeaserResponse[];
   unlockedItemIds: string[];
+  pagination: PaginationMeta;
+  page: number;
+  setPage: (page: number) => void;
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
@@ -59,20 +63,30 @@ export interface PremiumItemAccessResult {
 }
 
 /**
- * Hook to fetch premium item teasers.
+ * Hook to fetch premium item teasers (page-based).
  */
-export function usePremiumTeasers(payerAddress?: string): PremiumTeasersState {
+export function usePremiumTeasers(
+  payerAddress?: string,
+  limit = 20,
+): PremiumTeasersState {
+  const [page, setPage] = useState(1);
+
   const query = useQuery({
-    queryKey: [...queryKeys.premium.teasers, payerAddress],
+    queryKey: queryKeys.premium.teasers(page, limit, payerAddress),
     queryFn: async ({ signal }) => {
-      const url = payerAddress
-        ? `/premium/items?payer=${encodeURIComponent(payerAddress)}`
-        : "/premium/items";
       const data = await apiGetJson<{
         items: PremiumItemTeaserResponse[];
+        pagination?: unknown;
         unlockedItemIds?: string[];
         receipts?: Record<string, string>;
-      }>(url, { signal });
+      }>("/premium/items", {
+        signal,
+        params: {
+          page,
+          limit,
+          ...(payerAddress ? { payer: payerAddress } : {}),
+        },
+      });
 
       if (data.receipts) {
         for (const [itemId, token] of Object.entries(data.receipts)) {
@@ -82,17 +96,31 @@ export function usePremiumTeasers(payerAddress?: string): PremiumTeasersState {
         }
       }
 
+      const items = data.items ?? [];
       return {
-        items: data.items ?? [],
+        items,
         unlockedItemIds: data.unlockedItemIds ?? [],
+        pagination: normalizePaginationMeta(data.pagination, {
+          page,
+          limit,
+          itemCount: items.length,
+        }),
       };
     },
+    placeholderData: (previous) => previous,
     staleTime: 30_000,
   });
+
+  const handleSetPage = useCallback((next: number) => {
+    setPage(Math.max(1, next));
+  }, []);
 
   return {
     items: query.data?.items ?? [],
     unlockedItemIds: query.data?.unlockedItemIds ?? [],
+    pagination: query.data?.pagination ?? { ...EMPTY_PAGINATION, limit },
+    page,
+    setPage: handleSetPage,
     isLoading: query.isLoading || (query.isFetching && !query.data),
     error: query.error ? toErrorMessage(query.error, "Failed to load premium items") : null,
     refetch: () => {
@@ -260,30 +288,54 @@ export interface SponsoredWatchSummary {
   [key: string]: unknown;
 }
 
-/**
- * Hook to fetch active sponsored watches.
- */
-export function useSponsoredWatches(): {
+export interface SponsoredWatchesState {
   watches: SponsoredWatchSummary[];
+  pagination: PaginationMeta;
+  page: number;
+  setPage: (page: number) => void;
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
-} {
+}
+
+/**
+ * Hook to fetch sponsored watches (page-based).
+ */
+export function useSponsoredWatches(limit = 20): SponsoredWatchesState {
+  const [page, setPage] = useState(1);
+
   const query = useQuery({
-    queryKey: queryKeys.premium.watches,
+    queryKey: queryKeys.premium.watches(page, limit),
     queryFn: async ({ signal }) => {
-      const data = await apiGetJson<{ watches: SponsoredWatchSummary[] }>(
-        "/premium/watches",
-        { signal },
-      );
-      return data.watches ?? [];
+      const data = await apiGetJson<{
+        items?: SponsoredWatchSummary[];
+        watches?: SponsoredWatchSummary[];
+        pagination?: unknown;
+      }>("/premium/watches", { signal, params: { page, limit } });
+      const items = data.items ?? data.watches ?? [];
+      return {
+        watches: items,
+        pagination: normalizePaginationMeta(data.pagination, {
+          page,
+          limit,
+          itemCount: items.length,
+        }),
+      };
     },
+    placeholderData: (previous) => previous,
     staleTime: 5_000,
     refetchInterval: 5_000,
   });
 
+  const handleSetPage = useCallback((next: number) => {
+    setPage(Math.max(1, next));
+  }, []);
+
   return {
-    watches: query.data ?? [],
+    watches: query.data?.watches ?? [],
+    pagination: query.data?.pagination ?? { ...EMPTY_PAGINATION, limit },
+    page,
+    setPage: handleSetPage,
     isLoading: query.isLoading || (query.isFetching && !query.data),
     error: query.error
       ? toErrorMessage(query.error, "Failed to load sponsored watches")

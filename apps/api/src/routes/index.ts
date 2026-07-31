@@ -88,7 +88,9 @@ import {
   cctpExplorerUrls,
   deployableToDeskUsdc,
   evaluateDeskCctpStarvation,
+  getCctpRebalanceRepo,
   getCctpService,
+  registerCctpRebalanceRepo,
   registerCctpService,
   tryCreateCctpRebalanceStackFromEnv,
   type CctpRebalanceService,
@@ -579,6 +581,9 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   const cctpService = cctpStack.service;
   cctpServiceRef = cctpService;
   registerCctpService(cctpService);
+  registerCctpRebalanceRepo(
+    cctpService && "repo" in cctpStack ? cctpStack.repo : null,
+  );
   let cctpWorker: ReturnType<typeof createCctpRebalanceWorker> | null = null;
 
   if (cctpService) {
@@ -1499,6 +1504,7 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
       execLogRepo: deps.execLogRepo,
       paymentRecordRepo: deps.paymentRecordRepo,
       payoutRepo: deps.payoutRepo,
+      cctpRebalanceRepo: getCctpRebalanceRepo(),
     }),
   );
 

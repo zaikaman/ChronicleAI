@@ -8,6 +8,7 @@ export const queryKeys = {
   },
   digests: {
     all: ["digests"] as const,
+    list: (page: number, limit: number) => ["digests", "list", page, limit] as const,
     latest: ["digests", "latest"] as const,
     detail: (digestId: string) => ["digests", "detail", digestId] as const,
   },
@@ -32,6 +33,8 @@ export const queryKeys = {
       ["activity", "payments", page, limit] as const,
     payouts: (page: number, limit: number) =>
       ["activity", "payouts", page, limit] as const,
+    cctpRebalances: (page: number, limit: number) =>
+      ["activity", "cctp-rebalances", page, limit] as const,
   },
   desk: {
     all: ["desk"] as const,
@@ -46,11 +49,14 @@ export const queryKeys = {
   },
   premium: {
     all: ["premium"] as const,
-    teasers: ["premium", "teasers"] as const,
-    watches: ["premium", "watches"] as const,
+    teasers: (page: number, limit: number, payer?: string) =>
+      ["premium", "teasers", page, limit, payer ?? null] as const,
+    watches: (page: number, limit: number) =>
+      ["premium", "watches", page, limit] as const,
   },
   affiliates: {
     all: ["affiliates"] as const,
+    list: (page: number, limit: number) => ["affiliates", "list", page, limit] as const,
     me: (wallet: string) => ["affiliates", "me", wallet.toLowerCase()] as const,
   },
 } as const;

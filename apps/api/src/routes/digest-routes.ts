@@ -1,14 +1,47 @@
-// Digest routes: GET /digests/latest, GET /digests/:id
+// Digest routes: GET /digests, GET /digests/latest, GET /digests/:id
 // Returns published public digests for feed + HTTPS content URI resolution
 
 import type { DailyDigestRepository, DailyDigestRow } from "@chronicleai/db";
 import type { DigestSections } from "@chronicleai/schemas";
 import { Router, type Router as RouterType } from "express";
 import { notFound } from "../errors.ts";
+import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 import { parseSectionsFromAnalysis } from "../services/digest-generation-service.ts";
 
 export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterType {
   const router: RouterType = Router();
+
+  /**
+   * GET /digests
+   *
+   * List published public digests (page-based, newest first).
+   * Query: page (default 1), limit (default 20, max 100).
+   */
+  router.get("/digests", async (req, res, next) => {
+    try {
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+
+      const result = await digestRepo.listPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
+      if (!result.ok) {
+        res.status(500).json({ error: result.error.message });
+        return;
+      }
+
+      res.json(fromDbPage(result.value, formatDigestResponse));
+    } catch (error) {
+      next(error);
+    }
+  });
 
   /**
    * GET /digests/latest

@@ -3,11 +3,13 @@
 // GET /activity/execution-logs|payments|payouts — page-based list endpoints
 
 import type {
+  CctpRebalanceRepository,
   ExecutionLogRepository,
   PaymentRecordRepository,
   PayoutRecordRepository,
 } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
+import { cctpExplorerUrls } from "../cctp/explorers.ts";
 import type { AgentActivityService } from "../services/agent-activity-service.ts";
 import {
   buildRegistryRoutingDetails,
@@ -25,12 +27,20 @@ export interface ActivityRouteDeps {
   execLogRepo: ExecutionLogRepository;
   paymentRecordRepo: PaymentRecordRepository;
   payoutRepo: PayoutRecordRepository;
+  /** Optional — when present, exposes GET /activity/cctp-rebalances. */
+  cctpRebalanceRepo?: CctpRebalanceRepository | null;
   routingEnv?: RoutingPolicyEnv;
 }
 
 export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   const router: RouterType = Router();
-  const { activityService, execLogRepo, paymentRecordRepo, payoutRepo } = deps;
+  const {
+    activityService,
+    execLogRepo,
+    paymentRecordRepo,
+    payoutRepo,
+    cctpRebalanceRepo,
+  } = deps;
   const activeRoutingEnv: RoutingPolicyEnv = deps.routingEnv ?? {
     deskUsePrivateMempool: true,
     deskPrivateMempoolStrict: true,
@@ -325,6 +335,84 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
             payout.transferExplorerUrl = p.transfer_explorer_url;
           }
           return payout;
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /activity/cctp-rebalances
+   * Page-based Circle CCTP rebalance transfer trail (newest first).
+   */
+  router.get("/activity/cctp-rebalances", async (req, res, next) => {
+    try {
+      if (!cctpRebalanceRepo) {
+        res.json(
+          fromDbPage(
+            {
+              items: [],
+              page: 1,
+              limit: 15,
+              total: 0,
+              totalPages: 0,
+              hasNextPage: false,
+              hasPreviousPage: false,
+            },
+            (row) => row,
+          ),
+        );
+        return;
+      }
+
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 15,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+
+      const result = await cctpRebalanceRepo.listPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
+      if (!result.ok) {
+        res.status(500).json({ error: result.error.message });
+        return;
+      }
+
+      res.json(
+        fromDbPage(result.value, (row) => {
+          const explorers = cctpExplorerUrls({
+            burnTxHash: row.burn_tx_hash,
+            mintTxHash: row.mint_tx_hash,
+          });
+          let durationMs: number | null = null;
+          if (row.burned_at && row.minted_at) {
+            const a = Date.parse(row.burned_at);
+            const b = Date.parse(row.minted_at);
+            if (Number.isFinite(a) && Number.isFinite(b) && b >= a) {
+              durationMs = b - a;
+            }
+          }
+          return {
+            id: row.id,
+            status: row.status,
+            amountUsdc: row.amount_usdc,
+            mode: row.mode,
+            burnTxHash: row.burn_tx_hash ?? null,
+            mintTxHash: row.mint_tx_hash ?? null,
+            burnExplorerUrl: explorers.burnExplorerUrl ?? null,
+            mintExplorerUrl: explorers.mintExplorerUrl ?? null,
+            errorMessage: row.error_message ?? null,
+            burnedAt: row.burned_at ?? null,
+            mintedAt: row.minted_at ?? null,
+            createdAt: row.created_at,
+            durationMs,
+          };
         }),
       );
     } catch (error) {

@@ -49,6 +49,7 @@ describe("DigestPublicationService treasury gate", () => {
       findByWindow: vi.fn(),
       findLatestPublic: vi.fn(),
       list: vi.fn(),
+      listPage: vi.fn(),
       updatePublicationStatus: vi.fn().mockResolvedValue({ ok: true, value: row }),
       updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: row }),
     };
@@ -165,6 +166,7 @@ describe("DigestPublicationService treasury gate", () => {
       findByWindow: vi.fn(),
       findLatestPublic: vi.fn(),
       list: vi.fn(),
+      listPage: vi.fn(),
       updatePublicationStatus: vi.fn().mockResolvedValue({ ok: true, value: row }),
       updateRegistryMetadata: vi.fn().mockResolvedValue({ ok: true, value: row }),
     };

@@ -38,6 +38,27 @@ function makePremiumRepo(seed: PremiumIntelligenceItemRow[] = []) {
     async listTeasers() {
       return { ok: true, value: items.filter((i) => i.status === "available") };
     },
+    async listTeasersPage(params) {
+      const page = Math.max(1, params?.page ?? 1);
+      const limit = Math.max(1, params?.limit ?? 20);
+      const available = items.filter((i) => i.status === "available");
+      const offset = (page - 1) * limit;
+      const slice = available.slice(offset, offset + limit);
+      const total = available.length;
+      const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+      return {
+        ok: true,
+        value: {
+          items: slice,
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage: totalPages > 0 && page < totalPages,
+          hasPreviousPage: page > 1 && totalPages > 0,
+        },
+      };
+    },
     async findBySlug(slug) {
       return {
         ok: true,

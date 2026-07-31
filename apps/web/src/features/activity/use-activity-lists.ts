@@ -194,3 +194,31 @@ export function useActivityPayouts(
     options,
   );
 }
+
+export interface CctpRebalanceItem {
+  id: string;
+  status: string;
+  amountUsdc: number;
+  mode: string;
+  burnTxHash?: string | null;
+  mintTxHash?: string | null;
+  burnExplorerUrl?: string | null;
+  mintExplorerUrl?: string | null;
+  errorMessage?: string | null;
+  burnedAt?: string | null;
+  mintedAt?: string | null;
+  createdAt: string;
+  durationMs?: number | null;
+}
+
+export function useActivityCctpRebalances(
+  limit = 15,
+  options: ProgressiveListOptions = {},
+): PaginatedListState<CctpRebalanceItem> {
+  return usePaginatedList<CctpRebalanceItem>(
+    "/activity/cctp-rebalances",
+    limit,
+    ["activity", "cctp-rebalances"] as const,
+    options,
+  );
+}

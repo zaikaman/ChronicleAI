@@ -3,7 +3,14 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
-import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
+import {
+  buildPaginatedResult,
+  mapPostgrestError,
+  maybeRow,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationParams,
+} from "./repository-utils.ts";
 import type {
   PremiumIntelligenceItemInsert,
   PremiumIntelligenceItemRow,
@@ -14,7 +21,7 @@ import type {
 export const PREMIUM_TEASER_COLUMNS =
   "id, slug, title, content_type, summary_public, source_event_ids, price_amount, price_currency, payment_routes, status, created_at, updated_at" as const;
 
-/** Cap for public teaser lists. */
+/** Cap for public teaser lists (legacy non-page callers). */
 export const PREMIUM_TEASER_LIST_LIMIT = 50;
 
 /**
@@ -29,6 +36,10 @@ export type PremiumIntelligenceTeaserRow = Omit<
 export interface PremiumIntelligenceRepository {
   /** Public catalog teasers (bounded, no content_private). */
   listTeasers(limitParam?: number): Promise<Result<PremiumIntelligenceTeaserRow[]>>;
+  /** Page-based public catalog teasers (no content_private). */
+  listTeasersPage(
+    params?: PaginationParams,
+  ): Promise<Result<PaginatedResult<PremiumIntelligenceTeaserRow>>>;
   findBySlug(slug: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
   findById(id: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
   findPrivateContent(id: string): Promise<Result<unknown | null>>;
@@ -65,6 +76,24 @@ export function createPremiumIntelligenceRepository(
 
       if (error) return failure(mapPostgrestError(error));
       return success((data ?? []) as unknown as PremiumIntelligenceTeaserRow[]);
+    },
+
+    async listTeasersPage(params) {
+      const { page, limit, offset } = normalizePagination(params, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      const { data, error, count } = await table()
+        .select(PREMIUM_TEASER_COLUMNS, { count: "exact" })
+        .eq("status", "available")
+        .neq("content_type", "monthly_newsletter")
+        .neq("slug", "chronicle-desk-feed")
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) return failure(mapPostgrestError(error));
+      const items = (data ?? []) as unknown as PremiumIntelligenceTeaserRow[];
+      return success(buildPaginatedResult(items, page, limit, count ?? items.length));
     },
 
     async findBySlug(slug) {

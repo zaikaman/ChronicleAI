@@ -7,6 +7,7 @@ import type {
 } from "@chronicleai/db";
 import { normalizeAffiliateWallet } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
+import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 import type { AffiliateAgentService } from "../services/affiliate-agent-service.ts";
 import type { AffiliateDashboardService } from "../services/affiliate-dashboard-service.ts";
 
@@ -132,21 +133,35 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
 
   /**
    * GET /affiliates
-   * List approved affiliates (public directory).
+   * List approved affiliates (public directory, page-based).
+   * Query: page (default 1), limit (default 20, max 100).
+   * Response: { items, pagination } (also mirrors `affiliates` for older clients).
    */
   router.get("/affiliates", async (req, res, next) => {
     try {
-      const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : 100;
-      const limit = Number.isFinite(limitRaw) ? limitRaw : 100;
-      const result = await affiliateRepo.listApproved(limit);
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+
+      const result = await affiliateRepo.listApprovedPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
 
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });
         return;
       }
 
+      const envelope = fromDbPage(result.value, toAffiliateResponse);
       res.status(200).json({
-        affiliates: result.value.map(toAffiliateResponse),
+        ...envelope,
+        affiliates: envelope.items,
       });
     } catch (error) {
       next(error);

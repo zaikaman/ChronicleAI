@@ -180,6 +180,7 @@ describe("Agent Activity Integration", () => {
       findApprovedByWalletOrCode: vi.fn(),
       listApprovedWallets: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
       listApproved: vi.fn(),
+      listApprovedPage: vi.fn(),
       register: vi.fn(),
       update: vi.fn(),
       setStatus: vi.fn(),

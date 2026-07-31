@@ -5,9 +5,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, ValidationError, failure, success } from "./errors.ts";
 import {
   buildInsertPayload,
+  buildPaginatedResult,
   buildUpdatePayload,
   mapPostgrestError,
   maybeRow,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationParams,
 } from "./repository-utils.ts";
 import type { AffiliateInsert, AffiliateRow, AffiliateUpdate } from "./types.ts";
 
@@ -54,6 +58,10 @@ export interface AffiliateRepository {
    */
   listApprovedWallets(): Promise<Result<string[]>>;
   listApproved(limit?: number): Promise<Result<AffiliateRow[]>>;
+  /** Page-based approved affiliate directory. */
+  listApprovedPage(
+    params?: PaginationParams,
+  ): Promise<Result<PaginatedResult<AffiliateRow>>>;
   /**
    * Register or re-activate an affiliate for the product website.
    * New partners default to `approved` (open affiliate program).
@@ -163,6 +171,22 @@ export function createAffiliateRepository(
 
       if (error) return failure(mapPostgrestError(error));
       return success((data ?? []) as AffiliateRow[]);
+    },
+
+    async listApprovedPage(params) {
+      const { page, limit, offset } = normalizePagination(params, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      const { data, error, count } = await table()
+        .select("*", { count: "exact" })
+        .eq("status", "approved")
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) return failure(mapPostgrestError(error));
+      const items = (data ?? []) as AffiliateRow[];
+      return success(buildPaginatedResult(items, page, limit, count ?? items.length));
     },
 
     async register(input) {

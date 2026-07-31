@@ -26,7 +26,10 @@ import { ReferralAttributionPanel } from "./ReferralAttributionPanel.tsx";
 import { SponsoredWatchesPanel } from "./SponsoredWatchesPanel.tsx";
 import { SubscriptionAnalyticsPanel } from "./SubscriptionAnalyticsPanel.tsx";
 import { TreasuryStatusPanel } from "./TreasuryStatusPanel.tsx";
+import { useDigests } from "../digests/use-digests.ts";
+import { useSponsoredWatches } from "../premium/use-premium.ts";
 import {
+  useActivityCctpRebalances,
   useActivityPayments,
   useActivityPayouts,
   useExecutionLogs,
@@ -258,6 +261,144 @@ function mapExecutionLog(log: {
   if (protectStatusUrl) entry.protectStatusUrl = protectStatusUrl;
   if (executionAuditSummary) entry.executionAuditSummary = executionAuditSummary;
   return entry;
+}
+
+function CctpRebalancesSection({
+  cctpEnabled,
+}: {
+  cctpEnabled?: boolean;
+}): ReactElement | null {
+  const page = useActivityCctpRebalances(15);
+  const hasRows = page.items.length > 0 || page.pagination.total > 0;
+  if (!page.isLoading && !page.error && !hasRows && !cctpEnabled) {
+    return null;
+  }
+  return (
+    <PageSection
+      title="CCTP rebalances"
+      description="Circle CCTP burns Base Sepolia USDC and mints native Ethereum Sepolia USDC into the same treasury. Burn and mint explorer links are chain-correct."
+    >
+      {page.isLoading ? (
+        <SkeletonPanel rows={3} data-testid="cctp-rebalances-loading" />
+      ) : page.error ? (
+        <Surface className="p-6 text-sm text-muted-foreground">{page.error}</Surface>
+      ) : (
+        <>
+          <CctpRebalancesPanel transfers={page.items} />
+          <PaginationControls
+            pagination={page.pagination}
+            onPageChange={page.setPage}
+            disabled={page.isLoading}
+            data-testid="cctp-rebalances-pagination"
+          />
+        </>
+      )}
+    </PageSection>
+  );
+}
+
+function DigestsProofSection(): ReactElement {
+  const digestsPage = useDigests(8);
+  return (
+    <>
+      {digestsPage.isLoading ? (
+        <SkeletonPanel rows={3} data-testid="digests-proof-loading" />
+      ) : digestsPage.error ? (
+        <Surface className="p-6 text-sm text-muted-foreground">{digestsPage.error}</Surface>
+      ) : digestsPage.digests.length === 0 ? (
+        <Surface className="p-6 text-sm text-muted-foreground">
+          No digests with registry receipts yet.
+        </Surface>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            {digestsPage.digests.map((digest) => (
+              <Surface
+                as="article"
+                key={digest.id}
+                className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <Link
+                    to={`/digests/${digest.id}`}
+                    className="font-medium text-foreground hover:text-muted-foreground transition-colors truncate block"
+                  >
+                    {digest.title}
+                  </Link>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Report date {digest.reportDate}
+                    {digest.publishedAt ? (
+                      <>
+                        {" · "}
+                        <TimestampDisplay timestamp={digest.publishedAt} />
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-2 flex-shrink-0 w-full sm:w-auto">
+                  <div className="flex items-center gap-3">
+                    <StatusBadge
+                      label={digest.publicationStatus}
+                      variant={
+                        digest.publicationStatus === "published"
+                          ? "success"
+                          : digest.publicationStatus === "partial_failure"
+                            ? "warning"
+                            : "default"
+                      }
+                    />
+                    {!digest.registryTxHash ? (
+                      <span className="text-xs text-muted-foreground">No tx yet</span>
+                    ) : null}
+                  </div>
+                  <PublicationProof
+                    registryTxHash={digest.registryTxHash}
+                    contentHash={digest.contentHash}
+                    sourceEventRoot={digest.sourceEventRoot}
+                    gasUsed={digest.gasUsed}
+                    gasUsedWei={digest.gasUsedWei}
+                    keeperHubRunId={digest.keeperHubRunId}
+                    explorerUrl={digest.explorerUrl}
+                    compact
+                    data-testid={`digest-proof-${digest.id}`}
+                  />
+                </div>
+              </Surface>
+            ))}
+          </div>
+          <PaginationControls
+            pagination={digestsPage.pagination}
+            onPageChange={digestsPage.setPage}
+            disabled={digestsPage.isLoading}
+            data-testid="digests-pagination"
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+function SponsoredWatchesSection(): ReactElement {
+  const watchesPage = useSponsoredWatches(12);
+  return (
+    <>
+      {watchesPage.isLoading ? (
+        <SkeletonPanel rows={3} data-testid="sponsored-watches-loading" />
+      ) : watchesPage.error ? (
+        <Surface className="p-6 text-sm text-muted-foreground">{watchesPage.error}</Surface>
+      ) : (
+        <>
+          <SponsoredWatchesPanel watches={watchesPage.watches} />
+          <PaginationControls
+            pagination={watchesPage.pagination}
+            onPageChange={watchesPage.setPage}
+            disabled={watchesPage.isLoading}
+            data-testid="activity-sponsored-watches-pagination"
+          />
+        </>
+      )}
+    </>
+  );
 }
 
 function CapitalMovesSection(): ReactElement {
@@ -605,15 +746,9 @@ export function ActivityPage(): ReactElement {
             <TreasuryStatusPanel treasury={data.treasury} />
           </PageSection>
 
-          {(data.cctpRebalances && data.cctpRebalances.length > 0) ||
-          data.treasury.cctpEnabled ? (
-            <PageSection
-              title="CCTP rebalances"
-              description="Circle CCTP burns Base Sepolia USDC and mints native Ethereum Sepolia USDC into the same treasury. Burn and mint explorer links are chain-correct."
-            >
-              <CctpRebalancesPanel transfers={data.cctpRebalances ?? []} />
-            </PageSection>
-          ) : null}
+          <ProgressivePanel placeholder="Loading CCTP rebalances…">
+            {() => <CctpRebalancesSection cctpEnabled={data.treasury.cctpEnabled} />}
+          </ProgressivePanel>
 
           <PageSection
             title="Desk capital moves"
@@ -671,67 +806,9 @@ export function ActivityPage(): ReactElement {
             title="On-chain publication proofs"
             action={<SectionLink to="/digests/latest">Open digest →</SectionLink>}
           >
-            {data.digests.length === 0 ? (
-              <Surface className="p-6 text-sm text-muted-foreground">
-                No digests with registry receipts yet.
-              </Surface>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {data.digests.slice(0, 8).map((digest) => (
-                  <Surface
-                    as="article"
-                    key={digest.id}
-                    className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <Link
-                        to={`/digests/${digest.id}`}
-                        className="font-medium text-foreground hover:text-muted-foreground transition-colors truncate block"
-                      >
-                        {digest.title}
-                      </Link>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Report date {digest.reportDate}
-                        {digest.publishedAt ? (
-                          <>
-                            {" · "}
-                            <TimestampDisplay timestamp={digest.publishedAt} />
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0 w-full sm:w-auto">
-                      <div className="flex items-center gap-3">
-                        <StatusBadge
-                          label={digest.publicationStatus}
-                          variant={
-                            digest.publicationStatus === "published"
-                              ? "success"
-                              : digest.publicationStatus === "partial_failure"
-                                ? "warning"
-                                : "default"
-                          }
-                        />
-                        {!digest.registryTxHash ? (
-                          <span className="text-xs text-muted-foreground">No tx yet</span>
-                        ) : null}
-                      </div>
-                      <PublicationProof
-                        registryTxHash={digest.registryTxHash}
-                        contentHash={digest.contentHash}
-                        sourceEventRoot={digest.sourceEventRoot}
-                        gasUsed={digest.gasUsed}
-                        gasUsedWei={digest.gasUsedWei}
-                        keeperHubRunId={digest.keeperHubRunId}
-                        explorerUrl={digest.explorerUrl}
-                        compact
-                        data-testid={`digest-proof-${digest.id}`}
-                      />
-                    </div>
-                  </Surface>
-                ))}
-              </div>
-            )}
+            <ProgressivePanel placeholder="Loading digests…">
+              {() => <DigestsProofSection />}
+            </ProgressivePanel>
           </PageSection>
 
           <PageSection
@@ -812,7 +889,9 @@ export function ActivityPage(): ReactElement {
             description="Paid monitoring jobs with dual on-chain audit trails (createSponsoredWatch + publishSponsoredReport)."
             action={<SectionLink to="/premium">Open premium →</SectionLink>}
           >
-            <SponsoredWatchesPanel watches={data.activeSponsoredWatches ?? []} />
+            <ProgressivePanel placeholder="Loading sponsored watches…">
+              {() => <SponsoredWatchesSection />}
+            </ProgressivePanel>
           </PageSection>
 
           <PageSection title="Revenue routing payouts">

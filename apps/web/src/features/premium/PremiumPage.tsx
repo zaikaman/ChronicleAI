@@ -1,6 +1,7 @@
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { Page, PageHeader, PageSection } from "../../components/page-chrome.tsx";
+import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { AgentPaymentsPanel } from "./AgentPaymentsPanel.tsx";
 import { PaymentChallengePanel } from "./PaymentChallengePanel.tsx";
@@ -19,9 +20,15 @@ import {
 
 export function PremiumPage(): ReactElement {
   const wallet = useWallet();
-  const { items, unlockedItemIds, isLoading, error, refetch } = usePremiumTeasers(
-    wallet.address ?? undefined,
-  );
+  const {
+    items,
+    unlockedItemIds,
+    pagination: itemsPagination,
+    setPage: setItemsPage,
+    isLoading,
+    error,
+    refetch,
+  } = usePremiumTeasers(wallet.address ?? undefined, 12);
   const {
     isLoading: isAccessLoading,
     error: accessError,
@@ -32,9 +39,11 @@ export function PremiumPage(): ReactElement {
   } = usePremiumItemAccess();
   const {
     watches: sponsoredWatches,
+    pagination: watchesPagination,
+    setPage: setWatchesPage,
     isLoading: watchesLoading,
     refetch: refetchWatches,
-  } = useSponsoredWatches();
+  } = useSponsoredWatches(10);
 
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -268,18 +277,26 @@ export function PremiumPage(): ReactElement {
             data-testid="premium-empty"
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {items.map((item) => (
-              <PremiumTeaserCard
-                key={item.id}
-                item={item}
-                unlocked={unlockedIds.has(item.id)}
-                isLoading={isAccessLoading && selectedItemId === item.id}
-                onAccess={handleAccessItem}
-                data-testid={`premium-card-${item.id}`}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {items.map((item) => (
+                <PremiumTeaserCard
+                  key={item.id}
+                  item={item}
+                  unlocked={unlockedIds.has(item.id)}
+                  isLoading={isAccessLoading && selectedItemId === item.id}
+                  onAccess={handleAccessItem}
+                  data-testid={`premium-card-${item.id}`}
+                />
+              ))}
+            </div>
+            <PaginationControls
+              pagination={itemsPagination}
+              onPageChange={setItemsPage}
+              disabled={isLoading}
+              data-testid="premium-items-pagination"
+            />
+          </>
         )}
       </PageSection>
 
@@ -301,6 +318,12 @@ export function PremiumPage(): ReactElement {
         className="pt-2 border-t border-border"
       >
         <SponsoredWatchList watches={sponsoredWatches} isLoading={watchesLoading} />
+        <PaginationControls
+          pagination={watchesPagination}
+          onPageChange={setWatchesPage}
+          disabled={watchesLoading}
+          data-testid="sponsored-watches-pagination"
+        />
       </PageSection>
     </Page>
   );

@@ -82,6 +82,20 @@ describe("DigestRunHandler", () => {
     async list() {
       return { ok: true, value: [] };
     },
+    async listPage() {
+      return {
+        ok: true,
+        value: {
+          items: [],
+          page: 1,
+          limit: 20,
+          total: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      };
+    },
   };
 
   const mockEventRepo: MonitoredEventRepository = {

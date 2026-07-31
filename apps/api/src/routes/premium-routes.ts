@@ -9,12 +9,56 @@ import type {
   SponsoredWatchRepository,
 } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
+import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 import {
   extractAccessReceiptFromRequest,
   type PremiumAccessReceiptService,
 } from "../services/premium-access-receipt-service.ts";
 import { PaymentRequiredError, PremiumAccessService } from "../services/premium-access-service.ts";
 import { PremiumContentVisibilityService } from "../services/premium-content-visibility-service.ts";
+
+function formatWatchListItem(watch: {
+  id: string;
+  target_contract: string;
+  watch_spec_hash: string;
+  starts_at: string;
+  ends_at: string;
+  status: string;
+  on_chain_watch_id?: number | null;
+  create_tx_hash?: string | null;
+  report_tx_hash?: string | null;
+  create_explorer_url?: string | null;
+  report_explorer_url?: string | null;
+  source_event_root?: string | null;
+  report_content_hash?: string | null;
+  monitored_event_count?: number | null;
+  last_monitored_at?: string | null;
+}) {
+  return {
+    id: watch.id,
+    targetContract: watch.target_contract,
+    watchSpecHash: watch.watch_spec_hash,
+    startsAt: watch.starts_at,
+    endsAt: watch.ends_at,
+    status: watch.status,
+    onChainWatchId: watch.on_chain_watch_id ?? undefined,
+    createTxHash: watch.create_tx_hash ?? undefined,
+    reportTxHash: watch.report_tx_hash ?? undefined,
+    createExplorerUrl: watch.create_explorer_url ?? undefined,
+    reportExplorerUrl: watch.report_explorer_url ?? undefined,
+    sourceEventRoot: watch.source_event_root ?? undefined,
+    reportContentHash: watch.report_content_hash ?? undefined,
+    monitoredEventCount: watch.monitored_event_count ?? 0,
+    lastMonitoredAt: watch.last_monitored_at ?? undefined,
+    auditTrail: {
+      createTxHash: watch.create_tx_hash ?? null,
+      createExplorerUrl: watch.create_explorer_url ?? null,
+      reportTxHash: watch.report_tx_hash ?? null,
+      reportExplorerUrl: watch.report_explorer_url ?? null,
+      sourceEventRoot: watch.source_event_root ?? null,
+    },
+  };
+}
 
 export function createPremiumRoutes(params: {
   premiumRepo: PremiumIntelligenceRepository;
@@ -36,40 +80,35 @@ export function createPremiumRoutes(params: {
   /**
    * GET /premium/watches
    *
-   * List active sponsored watch campaigns.
+   * List sponsored watch campaigns (page-based, newest first).
+   * Query: page (default 1), limit (default 20, max 100).
+   * Response: { items, pagination } (also mirrors `watches` for older clients).
    */
-  router.get("/premium/watches", async (_req, res, next) => {
+  router.get("/premium/watches", async (req, res, next) => {
     try {
-      const result = await params.watchRepo.list();
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+
+      const result = await params.watchRepo.listPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });
         return;
       }
+
+      const envelope = fromDbPage(result.value, formatWatchListItem);
       res.json({
-        watches: result.value.map((watch) => ({
-          id: watch.id,
-          targetContract: watch.target_contract,
-          watchSpecHash: watch.watch_spec_hash,
-          startsAt: watch.starts_at,
-          endsAt: watch.ends_at,
-          status: watch.status,
-          onChainWatchId: watch.on_chain_watch_id ?? undefined,
-          createTxHash: watch.create_tx_hash ?? undefined,
-          reportTxHash: watch.report_tx_hash ?? undefined,
-          createExplorerUrl: watch.create_explorer_url ?? undefined,
-          reportExplorerUrl: watch.report_explorer_url ?? undefined,
-          sourceEventRoot: watch.source_event_root ?? undefined,
-          reportContentHash: watch.report_content_hash ?? undefined,
-          monitoredEventCount: watch.monitored_event_count ?? 0,
-          lastMonitoredAt: watch.last_monitored_at ?? undefined,
-          auditTrail: {
-            createTxHash: watch.create_tx_hash ?? null,
-            createExplorerUrl: watch.create_explorer_url ?? null,
-            reportTxHash: watch.report_tx_hash ?? null,
-            reportExplorerUrl: watch.report_explorer_url ?? null,
-            sourceEventRoot: watch.source_event_root ?? null,
-          },
-        })),
+        ...envelope,
+        // Back-compat for clients still reading `watches`.
+        watches: envelope.items,
       });
     } catch (error) {
       next(error);
@@ -145,20 +184,34 @@ export function createPremiumRoutes(params: {
    * GET /premium/items
    *
    * List available premium intelligence item teasers (public-safe fields only).
+   * Query: page (default 1), limit (default 20, max 100), optional payer.
    *
    * Responses:
-   *   200 - { items: PremiumItemTeaser[] }
+   *   200 - { items: PremiumItemTeaser[], pagination, unlockedItemIds?, receipts? }
    */
   router.get("/premium/items", async (req, res, next) => {
     try {
-      const result = await params.premiumRepo.listTeasers();
+      const parsed = parsePaginationQuery(req.query, {
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+
+      const result = await params.premiumRepo.listTeasersPage({
+        page: parsed.page,
+        limit: parsed.limit,
+      });
 
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });
         return;
       }
 
-      const items = visibilityService.toTeaserList(result.value);
+      const page = result.value;
+      const items = visibilityService.toTeaserList(page.items);
 
       const rawPayer =
         (typeof req.query.payer === "string" ? req.query.payer.trim() : null) ||
@@ -184,7 +237,19 @@ export function createPremiumRoutes(params: {
         }
       }
 
-      res.json({ items, unlockedItemIds, receipts });
+      res.json({
+        items,
+        pagination: {
+          page: page.page,
+          limit: page.limit,
+          total: page.total,
+          totalPages: page.totalPages,
+          hasNextPage: page.hasNextPage,
+          hasPreviousPage: page.hasPreviousPage,
+        },
+        unlockedItemIds,
+        receipts,
+      });
     } catch (error) {
       next(error);
     }
