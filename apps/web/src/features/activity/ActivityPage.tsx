@@ -661,6 +661,16 @@ function ExecutionLogsSection({
   );
 }
 
+type ActivityTab = "overview" | "trading" | "proofs" | "financials" | "all";
+
+const TABS: { id: ActivityTab; label: string; badge?: (stats: { alerts: number; digests: number; anchoredDigests: number; settledPayments: number; succeededLogs: number; failedLogs: number; payouts: number }) => string | number | null }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "trading", label: "Desk & Trading" },
+  { id: "proofs", label: "Proofs & Logs", badge: (s) => `${s.succeededLogs + s.failedLogs}` },
+  { id: "financials", label: "Financials & Revenue", badge: (s) => `${s.settledPayments}` },
+  { id: "all", label: "All Activity" },
+];
+
 export function ActivityPage(): ReactElement {
   // Primary aggregate only — secondary list endpoints load as panels enter view (P1-3).
   const { data, isLoading, error, refetch } = useAgentActivity();
@@ -670,6 +680,23 @@ export function ActivityPage(): ReactElement {
   const entityId = UUID_RE.test(entityIdRaw) ? entityIdRaw : null;
   const entityTypeRaw = searchParams.get("entityType")?.trim() ?? "";
   const entityType = entityTypeRaw.length > 0 ? entityTypeRaw : null;
+
+  const tabParam = searchParams.get("tab") as ActivityTab | null;
+  const activeTab: ActivityTab = tabParam && ["overview", "trading", "proofs", "financials", "all"].includes(tabParam)
+    ? tabParam
+    : entityId
+      ? "proofs"
+      : "overview";
+
+  const handleTabChange = (newTab: ActivityTab) => {
+    const next = new URLSearchParams(searchParams);
+    if (newTab === "overview") {
+      next.delete("tab");
+    } else {
+      next.set("tab", newTab);
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     if (!entityId) return;
@@ -738,188 +765,248 @@ export function ActivityPage(): ReactElement {
         />
       ) : (
         <>
-          <PageSection
-            title="Agent treasury"
-            description="Dual-rail capital plane: Base USDC from x402 payments, Sepolia USDC for desk top-ups after Circle CCTP. Gas health is Sepolia ETH vs the safety buffer."
-            action={<SectionLink to="/desk">Desk book →</SectionLink>}
-          >
-            <LowBalanceBanner treasury={data.treasury} />
-            <TreasuryStatusPanel treasury={data.treasury} />
-          </PageSection>
-
-          <ProgressivePanel placeholder="Loading CCTP rebalances…">
-            {() => <CctpRebalancesSection cctpEnabled={data.treasury.cctpEnabled} />}
-          </ProgressivePanel>
-
-          <PageSection
-            title="Desk capital moves"
-            description="Treasury ↔ desk top-ups, profit sweeps, and emergency returns with explorer proofs. Top-ups use Sepolia USDC only — never Base float."
-            action={<SectionLink to="/desk">Desk status →</SectionLink>}
-          >
-            <ProgressivePanel placeholder="Loading capital moves…">
-              {() => <CapitalMovesSection />}
-            </ProgressivePanel>
-          </PageSection>
-
-          <PageSection
-            title="Trade tickets"
-            description="Registry-anchored desk executions: signal → decision → legs → proofs."
-            action={<SectionLink to="/desk/intents">All intents →</SectionLink>}
-          >
-            <ProgressivePanel placeholder="Loading trade tickets…">
-              {() => <DeskTicketsSection />}
-            </ProgressivePanel>
-          </PageSection>
-
-          {stats ? (
-            <PageSection title="At a glance">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                <StatTile label="Public alerts" value={stats.alerts} />
-                <StatTile label="Daily digests" value={stats.digests} />
-                <StatTile label="On-chain anchors" value={stats.anchoredDigests} />
-                <StatTile label="Settled payments" value={stats.settledPayments} />
-                <StatTile label="Executions OK" value={stats.succeededLogs} />
-                <StatTile label="Executions failed" value={stats.failedLogs} />
-                <StatTile label="Payout records" value={stats.payouts} />
-              </div>
-            </PageSection>
-          ) : null}
-
-          {data.subscriptionAnalytics ? (
-            <PageSection
-              title="Subscription analytics"
-              description="Public MRR from entitled newsletter agreements, paywall conversion, and settled volume by payment rail."
-            >
-              <SubscriptionAnalyticsPanel analytics={data.subscriptionAnalytics} />
-            </PageSection>
-          ) : null}
-
-          {data.referralAttribution ? (
-            <PageSection
-              title="Referral attribution"
-              description="Settled volume and newsletter intents attributed to referral partner wallets from payment intent metadata."
-            >
-              <ReferralAttributionPanel attribution={data.referralAttribution} />
-            </PageSection>
-          ) : null}
-
-          <PageSection
-            title="On-chain publication proofs"
-            action={<SectionLink to="/digests/latest">Open digest →</SectionLink>}
-          >
-            <ProgressivePanel placeholder="Loading digests…">
-              {() => <DigestsProofSection />}
-            </ProgressivePanel>
-          </PageSection>
-
-          <PageSection
-            title="Recent public alerts"
-            action={<SectionLink to="/alerts">All alerts →</SectionLink>}
-          >
-            {data.alerts.length === 0 ? (
-              <Surface className="p-6 text-sm text-muted-foreground">
-                No alerts published yet.
-              </Surface>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {data.alerts.slice(0, 6).map((alert) => (
-                  <Surface as="article" key={alert.id} className="p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                      <Link
-                        to={`/alerts/${alert.id}`}
-                        className="font-medium text-foreground hover:text-muted-foreground transition-colors"
+          {/* Category Tab Navigation Bar */}
+          <div className="-mx-4 px-4 py-2.5 border-b border-border/50 mb-6 transition-colors">
+            <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar" aria-label="Activity category tabs">
+              {TABS.map((tab) => {
+                const isActive = activeTab === tab.id;
+                const countBadge = stats ? tab.badge?.(stats) : null;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                    data-testid={`activity-tab-${tab.id}`}
+                  >
+                    {tab.label}
+                    {countBadge != null ? (
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono leading-none ${
+                          isActive
+                            ? "bg-primary-foreground/20 text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
                       >
-                        {alert.title}
-                      </Link>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge label={alert.deliveryStatus} variant="info" />
-                        <TimestampDisplay timestamp={alert.publishedAt} />
-                      </div>
+                        {countBadge}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Tab Content Section Container */}
+          <div className="space-y-10 sm:space-y-14">
+            {/* TAB 1: OVERVIEW */}
+            {(activeTab === "overview" || activeTab === "all") && (
+              <>
+                <PageSection
+                  title="Agent treasury"
+                  description="Dual-rail capital plane: Base USDC from x402 payments, Sepolia USDC for desk top-ups after Circle CCTP. Gas health is Sepolia ETH vs the safety buffer."
+                  action={<SectionLink to="/desk">Desk book →</SectionLink>}
+                >
+                  <LowBalanceBanner treasury={data.treasury} />
+                  <TreasuryStatusPanel treasury={data.treasury} />
+                </PageSection>
+
+                {stats ? (
+                  <PageSection title="At a glance">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                      <StatTile label="Public alerts" value={stats.alerts} />
+                      <StatTile label="Daily digests" value={stats.digests} />
+                      <StatTile label="On-chain anchors" value={stats.anchoredDigests} />
+                      <StatTile label="Settled payments" value={stats.settledPayments} />
+                      <StatTile label="Executions OK" value={stats.succeededLogs} />
+                      <StatTile label="Executions failed" value={stats.failedLogs} />
+                      <StatTile label="Payout records" value={stats.payouts} />
                     </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {alert.summary.length > 160
-                        ? `${alert.summary.slice(0, 160)}…`
-                        : alert.summary}
-                    </p>
-                    <div className="mt-3 flex flex-col gap-2">
-                      <div className="flex flex-wrap items-center gap-3">
-                        {alert.generationProvider ? (
-                          <p className="text-[11px] text-muted-foreground">
-                            Generated by{" "}
-                            <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
-                              {alert.generationProvider}
-                            </code>
+                  </PageSection>
+                ) : null}
+              </>
+            )}
+
+            {/* TAB 2: TRADING & DESK */}
+            {(activeTab === "trading" || activeTab === "all") && (
+              <>
+                <PageSection
+                  title="Desk capital moves"
+                  description="Treasury ↔ desk top-ups, profit sweeps, and emergency returns with explorer proofs. Top-ups use Sepolia USDC only — never Base float."
+                  action={<SectionLink to="/desk">Desk status →</SectionLink>}
+                >
+                  <ProgressivePanel placeholder="Loading capital moves…">
+                    {() => <CapitalMovesSection />}
+                  </ProgressivePanel>
+                </PageSection>
+
+                <PageSection
+                  title="Trade tickets"
+                  description="Registry-anchored desk executions: signal → decision → legs → proofs."
+                  action={<SectionLink to="/desk/intents">All intents →</SectionLink>}
+                >
+                  <ProgressivePanel placeholder="Loading trade tickets…">
+                    {() => <DeskTicketsSection />}
+                  </ProgressivePanel>
+                </PageSection>
+
+                <ProgressivePanel placeholder="Loading CCTP rebalances…">
+                  {() => <CctpRebalancesSection cctpEnabled={data.treasury.cctpEnabled} />}
+                </ProgressivePanel>
+              </>
+            )}
+
+            {/* TAB 3: PROOFS & LOGS */}
+            {(activeTab === "proofs" || activeTab === "all") && (
+              <>
+                <PageSection
+                  title="KeeperHub execution log"
+                  description="Full audit trail of monitoring, generation, publication, and treasury actions — including failures and retries."
+                >
+                  {/* Deep-link filter loads immediately so scroll + data are ready. */}
+                  {entityId ? (
+                    <ExecutionLogsSection
+                      entityId={entityId}
+                      entityType={entityType}
+                      onClearFilter={clearEntityFilter}
+                    />
+                  ) : (
+                    <ProgressivePanel placeholder="Loading execution logs…">
+                      {() => <ExecutionLogsSection />}
+                    </ProgressivePanel>
+                  )}
+                </PageSection>
+
+                <PageSection
+                  title="On-chain publication proofs"
+                  action={<SectionLink to="/digests/latest">Open digest →</SectionLink>}
+                >
+                  <ProgressivePanel placeholder="Loading digests…">
+                    {() => <DigestsProofSection />}
+                  </ProgressivePanel>
+                </PageSection>
+
+                <PageSection
+                  title="Recent public alerts"
+                  action={<SectionLink to="/alerts">All alerts →</SectionLink>}
+                >
+                  {data.alerts.length === 0 ? (
+                    <Surface className="p-6 text-sm text-muted-foreground">
+                      No alerts published yet.
+                    </Surface>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {data.alerts.slice(0, 6).map((alert) => (
+                        <Surface as="article" key={alert.id} className="p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+                            <Link
+                              to={`/alerts/${alert.id}`}
+                              className="font-medium text-foreground hover:text-muted-foreground transition-colors"
+                            >
+                              {alert.title}
+                            </Link>
+                            <div className="flex items-center gap-2">
+                              <StatusBadge label={alert.deliveryStatus} variant="info" />
+                              <TimestampDisplay timestamp={alert.publishedAt} />
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            {alert.summary.length > 160
+                              ? `${alert.summary.slice(0, 160)}…`
+                              : alert.summary}
                           </p>
-                        ) : null}
-                        <Link
-                          to={`/alerts/${alert.id}`}
-                          className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors ml-auto"
-                        >
-                          View alert →
-                        </Link>
-                      </div>
-                      <PublicationProof
-                        registryTxHash={alert.registryTxHash}
-                        contentHash={alert.contentHash}
-                        sourceEventHash={alert.sourceEventHash}
-                        gasUsed={alert.gasUsed}
-                        gasUsedWei={alert.gasUsedWei}
-                        keeperHubRunId={alert.keeperHubRunId}
-                        explorerUrl={alert.explorerUrl}
-                        compact
-                        data-testid={`alert-proof-${alert.id}`}
-                      />
+                          <div className="mt-3 flex flex-col gap-2">
+                            <div className="flex flex-wrap items-center gap-3">
+                              {alert.generationProvider ? (
+                                <p className="text-[11px] text-muted-foreground">
+                                  Generated by{" "}
+                                  <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
+                                    {alert.generationProvider}
+                                  </code>
+                                </p>
+                              ) : null}
+                              <Link
+                                to={`/alerts/${alert.id}`}
+                                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors ml-auto"
+                              >
+                                View alert →
+                              </Link>
+                            </div>
+                            <PublicationProof
+                              registryTxHash={alert.registryTxHash}
+                              contentHash={alert.contentHash}
+                              sourceEventHash={alert.sourceEventHash}
+                              gasUsed={alert.gasUsed}
+                              gasUsedWei={alert.gasUsedWei}
+                              keeperHubRunId={alert.keeperHubRunId}
+                              explorerUrl={alert.explorerUrl}
+                              compact
+                              data-testid={`alert-proof-${alert.id}`}
+                            />
+                          </div>
+                        </Surface>
+                      ))}
                     </div>
-                  </Surface>
-                ))}
-              </div>
+                  )}
+                </PageSection>
+              </>
             )}
-          </PageSection>
 
-          <PageSection
-            title="Payment settlements"
-            action={<SectionLink to="/premium">Unlock premium →</SectionLink>}
-          >
-            <ProgressivePanel placeholder="Loading payments…">
-              {() => <PaymentsSection />}
-            </ProgressivePanel>
-          </PageSection>
+            {/* TAB 4: FINANCIALS & REVENUE */}
+            {(activeTab === "financials" || activeTab === "all") && (
+              <>
+                <PageSection
+                  title="Payment settlements"
+                  action={<SectionLink to="/premium">Unlock premium →</SectionLink>}
+                >
+                  <ProgressivePanel placeholder="Loading payments…">
+                    {() => <PaymentsSection />}
+                  </ProgressivePanel>
+                </PageSection>
 
-          <PageSection
-            title="Sponsored watch campaigns"
-            description="Paid monitoring jobs with dual on-chain audit trails (createSponsoredWatch + publishSponsoredReport)."
-            action={<SectionLink to="/premium">Open premium →</SectionLink>}
-          >
-            <ProgressivePanel placeholder="Loading sponsored watches…">
-              {() => <SponsoredWatchesSection />}
-            </ProgressivePanel>
-          </PageSection>
+                <PageSection title="Revenue routing payouts">
+                  <ProgressivePanel placeholder="Loading payouts…">
+                    {() => <PayoutsSection />}
+                  </ProgressivePanel>
+                </PageSection>
 
-          <PageSection title="Revenue routing payouts">
-            <ProgressivePanel placeholder="Loading payouts…">
-              {() => <PayoutsSection />}
-            </ProgressivePanel>
-          </PageSection>
+                {data.subscriptionAnalytics ? (
+                  <PageSection
+                    title="Subscription analytics"
+                    description="Public MRR from entitled newsletter agreements, paywall conversion, and settled volume by payment rail."
+                  >
+                    <SubscriptionAnalyticsPanel analytics={data.subscriptionAnalytics} />
+                  </PageSection>
+                ) : null}
 
-          <PageSection
-            title="KeeperHub execution log"
-            description="Full audit trail of monitoring, generation, publication, and treasury actions — including failures and retries."
-          >
-            {/* Deep-link filter loads immediately so scroll + data are ready. */}
-            {entityId ? (
-              <ExecutionLogsSection
-                entityId={entityId}
-                entityType={entityType}
-                onClearFilter={clearEntityFilter}
-              />
-            ) : (
-              <ProgressivePanel placeholder="Loading execution logs…">
-                {() => <ExecutionLogsSection />}
-              </ProgressivePanel>
+                {data.referralAttribution ? (
+                  <PageSection
+                    title="Referral attribution"
+                    description="Settled volume and newsletter intents attributed to referral partner wallets from payment intent metadata."
+                  >
+                    <ReferralAttributionPanel attribution={data.referralAttribution} />
+                  </PageSection>
+                ) : null}
+
+                <PageSection
+                  title="Sponsored watch campaigns"
+                  description="Paid monitoring jobs with dual on-chain audit trails (createSponsoredWatch + publishSponsoredReport)."
+                  action={<SectionLink to="/premium">Open premium →</SectionLink>}
+                >
+                  <ProgressivePanel placeholder="Loading sponsored watches…">
+                    {() => <SponsoredWatchesSection />}
+                  </ProgressivePanel>
+                </PageSection>
+              </>
             )}
-          </PageSection>
+          </div>
         </>
       )}
     </Page>
   );
 }
+

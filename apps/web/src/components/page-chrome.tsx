@@ -118,9 +118,9 @@ export function PageSection({
   "data-testid": dataTestId,
 }: PageSectionProps): ReactNode {
   return (
-    <section data-testid={dataTestId} className={`mb-10 last:mb-0 ${className}`}>
+    <section data-testid={dataTestId} className={`mb-12 sm:mb-14 last:mb-0 ${className}`}>
       {(title || action) && (
-        <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex items-start justify-between gap-4 mb-4 pt-2">
           <div className="min-w-0">
             {title ? (
               <h2 className="text-base font-semibold text-foreground tracking-tight">{title}</h2>
