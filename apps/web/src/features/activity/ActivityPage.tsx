@@ -277,6 +277,7 @@ function CctpRebalancesSection({
     <PageSection
       title="CCTP rebalances"
       description="Circle CCTP burns Base Sepolia USDC and mints native Ethereum Sepolia USDC into the same treasury. Burn and mint explorer links are chain-correct."
+      className="!mb-10"
     >
       {page.isLoading ? (
         <SkeletonPanel rows={3} data-testid="cctp-rebalances-loading" />
