@@ -51,6 +51,7 @@ export interface AgentActivityData {
     premiumItemId: string;
     paymentRoute: string;
     status: string;
+    failureReason?: string;
     settlementReference?: string;
     amountRequested?: number;
     amountSettled?: number;

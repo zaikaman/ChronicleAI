@@ -1,7 +1,6 @@
 import { type ReactElement, type ReactNode, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
-import { PaginationControls } from "../../components/pagination-controls.tsx";
 import {
   Page,
   PageHeader,
@@ -10,14 +9,17 @@ import {
   StatTile,
   Surface,
 } from "../../components/page-chrome.tsx";
+import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { PublicationProof } from "../../components/publication-proof.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { SkeletonPanel } from "../../components/ui/skeleton.tsx";
-import { baseSepoliaAddressUrl, baseSepoliaTxUrl, sepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
+import { baseSepoliaAddressUrl, sepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
 import { useInView } from "../../lib/use-in-view.ts";
 import { CapitalMovesPanel } from "../desk/CapitalMovesPanel.tsx";
 import { DeskTicketsPanel } from "../desk/DeskTicketsPanel.tsx";
 import { useDeskCapitalMoves, useDeskTickets } from "../desk/use-desk.ts";
+import { useDigests } from "../digests/use-digests.ts";
+import { useSponsoredWatches } from "../premium/use-premium.ts";
 import { CctpRebalancesPanel } from "./CctpRebalancesPanel.tsx";
 import { ExecutionLogTable } from "./ExecutionLogTable.tsx";
 import { LowBalanceBanner } from "./LowBalanceBanner.tsx";
@@ -26,8 +28,6 @@ import { ReferralAttributionPanel } from "./ReferralAttributionPanel.tsx";
 import { SponsoredWatchesPanel } from "./SponsoredWatchesPanel.tsx";
 import { SubscriptionAnalyticsPanel } from "./SubscriptionAnalyticsPanel.tsx";
 import { TreasuryStatusPanel } from "./TreasuryStatusPanel.tsx";
-import { useDigests } from "../digests/use-digests.ts";
-import { useSponsoredWatches } from "../premium/use-premium.ts";
 import {
   useActivityCctpRebalances,
   useActivityPayments,
@@ -48,11 +48,7 @@ function ProgressivePanel({
   placeholder?: string;
 }): ReactElement {
   const { ref, inView } = useInView<HTMLDivElement>({ rootMargin: "280px 0px", once: true });
-  return (
-    <div ref={ref}>
-      {inView ? children(true) : <SkeletonPanel rows={3} />}
-    </div>
-  );
+  return <div ref={ref}>{inView ? children(true) : <SkeletonPanel rows={3} />}</div>;
 }
 
 /** Explorer link helper for payment settlements (x402 & MPP). */
@@ -69,7 +65,7 @@ function PaymentProofLink({
   // 1. Explicit published receipt explorerUrl
   if (payment.explorerUrl) {
     const raw = payment.registryTxHash ?? payment.settlementReference ?? "";
-    const cleanHash = raw.includes(":") ? raw.split(":").pop()! : raw;
+    const cleanHash = raw.includes(":") ? (raw.split(":").pop() ?? raw) : raw;
     const formattedHash = cleanHash.startsWith("0x") ? cleanHash : `0x${cleanHash}`;
     return (
       <a
@@ -184,8 +180,7 @@ function mapExecutionLog(log: {
               : typeof details?.transfer_explorer_url === "string"
                 ? details.transfer_explorer_url
                 : undefined;
-  const executedViaKeeperHub =
-    details?.executedViaKeeperHub === true || Boolean(keeperHubRunId);
+  const executedViaKeeperHub = details?.executedViaKeeperHub === true || Boolean(keeperHubRunId);
 
   const routingFromTop =
     typeof log.routing === "string"
@@ -193,10 +188,7 @@ function mapExecutionLog(log: {
       : typeof details?.routing === "string"
         ? details.routing
         : undefined;
-  const routingLabel =
-    typeof log.routingLabel === "string"
-      ? log.routingLabel
-      : undefined;
+  const routingLabel = typeof log.routingLabel === "string" ? log.routingLabel : undefined;
   const routingApplied =
     typeof log.routingApplied === "string"
       ? log.routingApplied
@@ -448,6 +440,28 @@ function DeskTicketsSection(): ReactElement {
   );
 }
 
+function humanizePaymentStatus(status: string): {
+  label: string;
+  variant: "success" | "warning" | "error";
+} {
+  switch (status) {
+    case "settled":
+      return { label: "Settled", variant: "success" };
+    case "failed":
+      return { label: "Not completed", variant: "error" };
+    case "underpaid":
+      return { label: "Underpaid", variant: "warning" };
+    case "expired":
+      return { label: "Expired", variant: "error" };
+    case "pending":
+      return { label: "Pending", variant: "warning" };
+    case "challenge_issued":
+      return { label: "Awaiting payment", variant: "warning" };
+    default:
+      return { label: status.replaceAll("_", " "), variant: "warning" };
+  }
+}
+
 function PaymentsSection(): ReactElement {
   const paymentsPage = useActivityPayments(20);
   return (
@@ -469,46 +483,51 @@ function PaymentsSection(): ReactElement {
                   ? payment.amountSettled
                   : payment.amountRequested;
               const currency = payment.currency ?? "USDC";
+              const status = humanizePaymentStatus(payment.status);
+              const reasonTone =
+                payment.status === "underpaid"
+                  ? "border-amber-500/20 bg-amber-500/5"
+                  : "border-red-500/20 bg-red-500/5";
               return (
-                <Surface
-                  key={payment.id}
-                  className="px-4 py-3 flex flex-wrap items-center justify-between gap-2"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge label={payment.paymentRoute.toUpperCase()} variant="info" />
-                    <span className="text-xs font-mono text-muted-foreground">
-                      item {payment.premiumItemId.slice(0, 12)}…
-                    </span>
-                    {typeof amount === "number" ? (
-                      <span className="text-xs tabular-nums text-foreground">
-                        {amount} {currency}
+                <Surface key={payment.id} className="px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge label={payment.paymentRoute.toUpperCase()} variant="info" />
+                      <span className="text-xs font-mono text-muted-foreground">
+                        item {payment.premiumItemId.slice(0, 12)}…
                       </span>
-                    ) : null}
-                    {payment.referralAddress ? (
-                      <a
-                        href={baseSepoliaAddressUrl(payment.referralAddress)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors"
-                        title={`Referral ${payment.referralAddress}`}
-                      >
-                        ref {truncateHash(payment.referralAddress, 6, 4)}
-                      </a>
-                    ) : null}
+                      {typeof amount === "number" ? (
+                        <span className="text-xs tabular-nums text-foreground">
+                          {amount} {currency}
+                        </span>
+                      ) : null}
+                      {payment.referralAddress ? (
+                        <a
+                          href={baseSepoliaAddressUrl(payment.referralAddress)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+                          title={`Referral ${payment.referralAddress}`}
+                        >
+                          ref {truncateHash(payment.referralAddress, 6, 4)}
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <StatusBadge label={status.label} variant={status.variant} />
+                      <PaymentProofLink payment={payment} />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <StatusBadge
-                      label={payment.status}
-                      variant={
-                        payment.status === "settled"
-                          ? "success"
-                          : payment.status === "failed" || payment.status === "expired"
-                            ? "error"
-                            : "warning"
-                      }
-                    />
-                    <PaymentProofLink payment={payment} />
-                  </div>
+                  {payment.failureReason ? (
+                    <div
+                      className={`mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border px-3 py-2 text-xs leading-relaxed ${reasonTone}`}
+                    >
+                      <p className="min-w-0 flex-1 text-muted-foreground">
+                        <span className="font-medium text-foreground">Why: </span>
+                        {payment.failureReason}
+                      </p>
+                    </div>
+                  ) : null}
                 </Surface>
               );
             })}
@@ -587,8 +606,7 @@ function PayoutsSection(): ReactElement {
   );
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function ExecutionLogsSection({
   entityId,
@@ -625,8 +643,7 @@ function ExecutionLogsSection({
             {entityType ? (
               <>
                 {" "}
-                · type{" "}
-                <span className="font-medium text-foreground">{entityType}</span>
+                · type <span className="font-medium text-foreground">{entityType}</span>
               </>
             ) : null}
           </p>
@@ -663,7 +680,19 @@ function ExecutionLogsSection({
 
 type ActivityTab = "overview" | "trading" | "proofs" | "financials" | "all";
 
-const TABS: { id: ActivityTab; label: string; badge?: (stats: { alerts: number; digests: number; anchoredDigests: number; settledPayments: number; succeededLogs: number; failedLogs: number; payouts: number }) => string | number | null }[] = [
+const TABS: {
+  id: ActivityTab;
+  label: string;
+  badge?: (stats: {
+    alerts: number;
+    digests: number;
+    anchoredDigests: number;
+    settledPayments: number;
+    succeededLogs: number;
+    failedLogs: number;
+    payouts: number;
+  }) => string | number | null;
+}[] = [
   { id: "overview", label: "Overview" },
   { id: "trading", label: "Desk & Trading" },
   { id: "proofs", label: "Proofs & Logs", badge: (s) => `${s.succeededLogs + s.failedLogs}` },
@@ -682,11 +711,12 @@ export function ActivityPage(): ReactElement {
   const entityType = entityTypeRaw.length > 0 ? entityTypeRaw : null;
 
   const tabParam = searchParams.get("tab") as ActivityTab | null;
-  const activeTab: ActivityTab = tabParam && ["overview", "trading", "proofs", "financials", "all"].includes(tabParam)
-    ? tabParam
-    : entityId
-      ? "proofs"
-      : "overview";
+  const activeTab: ActivityTab =
+    tabParam && ["overview", "trading", "proofs", "financials", "all"].includes(tabParam)
+      ? tabParam
+      : entityId
+        ? "proofs"
+        : "overview";
 
   const handleTabChange = (newTab: ActivityTab) => {
     const next = new URLSearchParams(searchParams);
@@ -767,7 +797,10 @@ export function ActivityPage(): ReactElement {
         <>
           {/* Category Tab Navigation Bar */}
           <div className="-mx-4 px-4 py-2.5 border-b border-border/50 mb-6 transition-colors">
-            <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar" aria-label="Activity category tabs">
+            <nav
+              className="flex items-center gap-1.5 overflow-x-auto no-scrollbar"
+              aria-label="Activity category tabs"
+            >
               {TABS.map((tab) => {
                 const isActive = activeTab === tab.id;
                 const countBadge = stats ? tab.badge?.(stats) : null;
@@ -961,6 +994,7 @@ export function ActivityPage(): ReactElement {
               <>
                 <PageSection
                   title="Payment settlements"
+                  description="Settled charges include their on-chain proof. Incomplete attempts include the reason we could identify, so a wallet issue does not look like a platform outage."
                   action={<SectionLink to="/premium">Unlock premium →</SectionLink>}
                 >
                   <ProgressivePanel placeholder="Loading payments…">
@@ -1009,4 +1043,3 @@ export function ActivityPage(): ReactElement {
     </Page>
   );
 }
-

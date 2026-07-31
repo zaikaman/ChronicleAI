@@ -10,15 +10,16 @@ import type {
 } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import { cctpExplorerUrls } from "../cctp/explorers.ts";
+import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 import type { AgentActivityService } from "../services/agent-activity-service.ts";
+import { paymentFailureReason } from "../services/payment-status-copy.ts";
+import { serializePublicActivityLog } from "../services/public-activity-serializer.ts";
 import {
+  type RoutingPolicyEnv,
   buildRegistryRoutingDetails,
   buildTransferRoutingDetails,
   routingBadgeLabel,
-  type RoutingPolicyEnv,
 } from "../services/routing-metadata.ts";
-import { serializePublicActivityLog } from "../services/public-activity-serializer.ts";
-import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 
 export interface ActivityRouteDeps {
   activityService: AgentActivityService;
@@ -32,13 +33,7 @@ export interface ActivityRouteDeps {
 
 export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   const router: RouterType = Router();
-  const {
-    activityService,
-    execLogRepo,
-    paymentRecordRepo,
-    payoutRepo,
-    cctpRebalanceRepo,
-  } = deps;
+  const { activityService, execLogRepo, paymentRecordRepo, payoutRepo, cctpRebalanceRepo } = deps;
   const activeRoutingEnv: RoutingPolicyEnv = deps.routingEnv ?? {
     deskUsePrivateMempool: true,
     deskPrivateMempoolStrict: true,
@@ -76,9 +71,9 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
     try {
       const result = execLogRepo.countHackathonExecutions
         ? await execLogRepo.countHackathonExecutions()
-        : await execLogRepo.listPage({ page: 1, limit: 1 }).then((r) =>
-            r.ok ? { ok: true as const, value: r.value.total } : r,
-          );
+        : await execLogRepo
+            .listPage({ page: 1, limit: 1 })
+            .then((r) => (r.ok ? { ok: true as const, value: r.value.total } : r));
       const count = result.ok ? result.value : 0;
       res.json({
         count,
@@ -100,9 +95,9 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
     try {
       const result = execLogRepo.countHackathonExecutions
         ? await execLogRepo.countHackathonExecutions()
-        : await execLogRepo.listPage({ page: 1, limit: 1 }).then((r) =>
-            r.ok ? { ok: true as const, value: r.value.total } : r,
-          );
+        : await execLogRepo
+            .listPage({ page: 1, limit: 1 })
+            .then((r) => (r.ok ? { ok: true as const, value: r.value.total } : r));
       const count = result.ok ? result.value : 0;
 
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="28" role="img" aria-label="KeeperHub Hackathon Executions: ${count} Live">
@@ -145,13 +140,10 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
         return;
       }
 
-      const entityIdRaw =
-        typeof req.query.entityId === "string" ? req.query.entityId.trim() : "";
+      const entityIdRaw = typeof req.query.entityId === "string" ? req.query.entityId.trim() : "";
       const entityId =
         entityIdRaw &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          entityIdRaw,
-        )
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entityIdRaw)
           ? entityIdRaw
           : undefined;
       const entityTypeRaw =
@@ -169,9 +161,7 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
         return;
       }
 
-      res.json(
-        fromDbPage(result.value, serializePublicActivityLog),
-      );
+      res.json(fromDbPage(result.value, serializePublicActivityLog));
     } catch (error) {
       next(error);
     }
@@ -201,31 +191,60 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
         return;
       }
 
-      res.json(
-        fromDbPage(result.value, (p) => {
-          const payment: Record<string, unknown> = {
-            id: p.id,
-            premiumItemId: p.premium_item_id,
-            paymentRoute: p.payment_route,
-            status: p.status,
+      const paymentsWithReasons = await Promise.all(
+        result.value.items.map(async (p) => {
+          if (p.status === "underpaid" || p.status === "expired") {
+            return { payment: p, failureReason: paymentFailureReason(p) };
+          }
+
+          if (p.status !== "failed") {
+            return { payment: p, failureReason: undefined };
+          }
+
+          const logs = await execLogRepo.listByEntity("payment_record", p.id, 10).catch(() => null);
+          const failedLog = logs?.ok
+            ? logs.value.find((log) => log.status === "failed")
+            : undefined;
+
+          return {
+            payment: p,
+            failureReason: paymentFailureReason(p, failedLog),
           };
-          if (p.settlement_reference) payment.settlementReference = p.settlement_reference;
-          if (typeof p.amount_requested === "number") {
-            payment.amountRequested = p.amount_requested;
-          }
-          if (typeof p.amount_settled === "number") {
-            payment.amountSettled = p.amount_settled;
-          }
-          if (p.currency) payment.currency = p.currency;
-          if (p.referral_address) payment.referralAddress = p.referral_address;
-          if (p.requested_at) payment.requestedAt = p.requested_at;
-          if (p.settled_at) payment.settledAt = p.settled_at;
-          if (p.registry_tx_hash) payment.registryTxHash = p.registry_tx_hash;
-          if (p.keeper_hub_run_id) payment.keeperHubRunId = p.keeper_hub_run_id;
-          if (p.explorer_url) payment.explorerUrl = p.explorer_url;
-          if (p.content_uri) payment.contentUri = p.content_uri;
-          return payment;
         }),
+      );
+
+      res.json(
+        fromDbPage(
+          {
+            ...result.value,
+            items: paymentsWithReasons,
+          },
+          ({ payment: p, failureReason }) => {
+            const payment: Record<string, unknown> = {
+              id: p.id,
+              premiumItemId: p.premium_item_id,
+              paymentRoute: p.payment_route,
+              status: p.status,
+            };
+            if (p.settlement_reference) payment.settlementReference = p.settlement_reference;
+            if (typeof p.amount_requested === "number") {
+              payment.amountRequested = p.amount_requested;
+            }
+            if (typeof p.amount_settled === "number") {
+              payment.amountSettled = p.amount_settled;
+            }
+            if (p.currency) payment.currency = p.currency;
+            if (p.referral_address) payment.referralAddress = p.referral_address;
+            if (p.requested_at) payment.requestedAt = p.requested_at;
+            if (p.settled_at) payment.settledAt = p.settled_at;
+            if (p.registry_tx_hash) payment.registryTxHash = p.registry_tx_hash;
+            if (p.keeper_hub_run_id) payment.keeperHubRunId = p.keeper_hub_run_id;
+            if (p.explorer_url) payment.explorerUrl = p.explorer_url;
+            if (p.content_uri) payment.contentUri = p.content_uri;
+            if (failureReason) payment.failureReason = failureReason;
+            return payment;
+          },
+        ),
       );
     } catch (error) {
       next(error);

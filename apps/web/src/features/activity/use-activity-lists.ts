@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { apiGetJson, toErrorMessage } from "../../lib/api.ts";
 import { EMPTY_PAGINATION, normalizePaginationMeta } from "../../lib/pagination.ts";
-import { queryKeys } from "../../lib/query-keys.ts";
 
 export interface ExecutionLogItem {
   id: string;
@@ -31,6 +30,7 @@ export interface PaymentItem {
   premiumItemId: string;
   paymentRoute: string;
   status: string;
+  failureReason?: string;
   settlementReference?: string;
   amountRequested?: number;
   amountSettled?: number;
@@ -150,9 +150,7 @@ export function useExecutionLogs(
   const entityIdTrimmed =
     typeof entityId === "string" && entityId.trim().length > 0 ? entityId.trim() : null;
   const entityTypeTrimmed =
-    typeof entityType === "string" && entityType.trim().length > 0
-      ? entityType.trim()
-      : null;
+    typeof entityType === "string" && entityType.trim().length > 0 ? entityType.trim() : null;
   const extraParams: Record<string, string | undefined> = {};
   if (entityIdTrimmed) extraParams.entityId = entityIdTrimmed;
   if (entityTypeTrimmed) extraParams.entityType = entityTypeTrimmed;
@@ -160,12 +158,7 @@ export function useExecutionLogs(
   return usePaginatedList<ExecutionLogItem>(
     "/activity/execution-logs",
     limit,
-    [
-      "activity",
-      "execution-logs",
-      entityIdTrimmed,
-      entityTypeTrimmed,
-    ] as const,
+    ["activity", "execution-logs", entityIdTrimmed, entityTypeTrimmed] as const,
     listOptions,
     Object.keys(extraParams).length > 0 ? extraParams : undefined,
   );
