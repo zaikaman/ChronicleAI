@@ -224,7 +224,8 @@ export function createChatModelsInOrder(
     if (!config) continue;
 
     if (provider === "groq") {
-      const groqKeys = getGroqApiKeys(process.env);
+      const groqKeys =
+        config.rotateGroqKeys === false ? [] : getGroqApiKeys(process.env);
       if (groqKeys.length > 0) {
         const startIndex = advanceAndGetGroqKeyIndex(groqKeys.length);
         for (let i = 0; i < groqKeys.length; i++) {

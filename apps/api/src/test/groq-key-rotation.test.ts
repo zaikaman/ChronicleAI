@@ -77,6 +77,23 @@ describe("createProviderConfigs & createChatModelsInOrder Groq Rotation", () => 
     expect(models2[3]!.provider).toBe("openai");
   });
 
+  it("uses an explicitly supplied Groq key without process-level rotation", () => {
+    const providerConfigs = {
+      gemini: { apiKey: "", model: "gemini-2.0-flash" },
+      openai: { apiKey: "", model: "gpt-4o-mini" },
+      groq: {
+        apiKey: "affiliate_key",
+        model: "llama-3.3-70b-versatile",
+        rotateGroqKeys: false,
+      },
+    };
+
+    const models = createChatModelsInOrder(providerConfigs, ["groq"]);
+
+    expect(models).toHaveLength(1);
+    expect(models[0]!.config.apiKey).toBe("affiliate_key");
+  });
+
   it("persists key rotation index to database and restores index on boot", async () => {
     const client = createInMemorySupabaseClient();
     const repo = createSystemControlStateRepository(client as any);

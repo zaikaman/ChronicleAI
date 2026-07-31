@@ -871,8 +871,14 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
 
   const windowService = createDigestWindowService(deps.digestRepo);
   const eventSelectionService = createDigestEventSelectionService(deps.eventRepo);
+  const digestProviderConfigs = createProviderConfigs(env);
+  digestProviderConfigs.groq = {
+    ...digestProviderConfigs.groq,
+    apiKey: env.groqAffiliateApiKey,
+    rotateGroqKeys: false,
+  };
   const generationService = createDigestGenerationService(
-    createProviderConfigs(env),
+    digestProviderConfigs,
     deps.llmAttemptRepo,
   );
   const publicationService = createDigestPublicationService(

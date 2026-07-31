@@ -240,6 +240,45 @@ describe("DigestGenerationService", () => {
     expect(result.highlights.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("rejects ellipsis and bracket placeholders from the LLM", async () => {
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    const invokeSpy = vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({
+      structured: {
+        title: "ChronicleAI Daily Digest — [data-derived report date]",
+        summary: "...",
+        highlights: ["...", "[data-derived takeaway 2]"],
+        analysis: "[data-derived analysis]",
+        confidence: "high",
+        sections: {
+          capitalDirection: "...",
+          exchangeAndProtocolFlows: "[data-derived exchange and protocol flows]",
+          stressBoard: "...",
+          storyOfTheDay: "...",
+          coverageNote: "...",
+        },
+      },
+      rawText: "",
+      toolCallCount: 0,
+    });
+
+    const service = createDigestGenerationService(
+      {
+        gemini: { apiKey: "", model: "gemini-2.0-flash" },
+        openai: { apiKey: "", model: "gpt-4o-mini" },
+        groq: { apiKey: "groq-key", model: "llama-3.3-70b-versatile", rotateGroqKeys: false },
+      },
+      createMockLlmAttemptRepo(),
+    );
+
+    await expect(
+      service.generateDigest({
+        ...baseParams,
+        events: sampleEvents,
+      }),
+    ).rejects.toBeInstanceOf(DigestGenerationError);
+    expect(invokeSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("throws DigestGenerationError when all LLM providers fail", async () => {
     // Mock LangChain structured agent so unit tests do not hang on SDK network paths.
     vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);

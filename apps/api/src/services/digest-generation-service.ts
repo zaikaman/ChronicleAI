@@ -423,24 +423,33 @@ function buildDigestPrompt(params: DigestGenerationParams, stats: DigestStats): 
     "- Never invent entity names not present in event labels.",
     "- When naming a chain, use the provided network= label for that event only.",
     "",
-    "Respond ONLY with JSON (no markdown fences) using this shape:",
+    "Respond ONLY with JSON (no markdown fences) using this shape. The values below are schema examples only; replace every value with specific content derived from the provided stats and events. Never copy the example values literally:",
     JSON.stringify({
-      title: "ChronicleAI Daily Digest — …",
-      summary: "…",
-      highlights: ["…", "…"],
-      analysis: "…",
+      title: "ChronicleAI Daily Digest — [data-derived report date]",
+      summary: "[2–4 data-derived sentences]",
+      highlights: ["[data-derived takeaway 1]", "[data-derived takeaway 2]"],
+      analysis: "[data-derived analysis]",
       sections: {
-        capitalDirection: "…",
-        exchangeAndProtocolFlows: "…",
-        stressBoard: "…",
-        storyOfTheDay: "…",
-        coverageNote: "…",
+        capitalDirection: "[data-derived capital direction]",
+        exchangeAndProtocolFlows: "[data-derived exchange and protocol flows]",
+        stressBoard: "[data-derived stress board]",
+        storyOfTheDay: "[data-derived story of the day]",
+        coverageNote: "[data-derived coverage note]",
       },
       confidence: "high|medium|low",
     }),
   );
 
   return lines.join("\n");
+}
+
+function isPlaceholderOnly(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) return true;
+  if (/^(?:[.\u2026\s]+|[\[<].*[\]>])$/.test(normalized)) return true;
+  if (/^replace(?:[_ -]?with)?\b/i.test(normalized)) return true;
+  if (/^(?:tbd|todo|n\/a)$/i.test(normalized)) return true;
+  return false;
 }
 
 // ── Validation ──────────────────────────────────────────
@@ -457,7 +466,7 @@ function parseSections(raw: unknown): DigestSections | null {
   ] as const;
   const out: Partial<DigestSections> = {};
   for (const k of keys) {
-    if (typeof s[k] === "string" && s[k].trim().length > 0) {
+    if (typeof s[k] === "string" && !isPlaceholderOnly(s[k])) {
       out[k] = String(s[k]).trim().slice(0, 4000);
     }
   }
@@ -492,13 +501,17 @@ function validateDigestResponse(
       return null;
     }
 
+    if (isPlaceholderOnly(parsed.title) || isPlaceholderOnly(parsed.summary)) {
+      return null;
+    }
+
     const confidence = parsed.confidence;
     if (!["high", "medium", "low"].includes(confidence)) {
       return null;
     }
 
     const highlights = parsed.highlights
-      .filter((h): h is string => typeof h === "string" && h.trim().length > 0)
+      .filter((h): h is string => typeof h === "string" && !isPlaceholderOnly(h))
       .map((h) => h.trim().slice(0, 500))
       .slice(0, 10);
 
@@ -508,7 +521,7 @@ function validateDigestResponse(
 
     let sections = parseSections(parsed.sections);
     let analysis =
-      typeof parsed.analysis === "string" && parsed.analysis.trim().length > 0
+      typeof parsed.analysis === "string" && !isPlaceholderOnly(parsed.analysis)
         ? parsed.analysis.trim().slice(0, 8000)
         : undefined;
 

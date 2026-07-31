@@ -19,6 +19,8 @@ export interface LLMProviderConfig {
   apiKey: string;
   model: string;
   baseUrl?: string | undefined;
+  /** Use process-level GROQ_API_KEY rotation when true (the default). */
+  rotateGroqKeys?: boolean | undefined;
   /** Optional max tokens when a provider supports it. */
   maxTokens?: number | undefined;
   /** Sampling temperature (provider default when unset). */
@@ -78,7 +80,8 @@ async function callViaLangChain(
   const userContent = fitted.userPrompt;
 
   if (provider === "groq") {
-    const groqKeys = getGroqApiKeys(process.env);
+    const groqKeys =
+      config.rotateGroqKeys === false ? [] : getGroqApiKeys(process.env);
     const keysToTry = groqKeys.length > 0 ? groqKeys : (config.apiKey ? [config.apiKey] : []);
     const startIndex = advanceAndGetGroqKeyIndex(keysToTry.length);
     let lastError: unknown;
