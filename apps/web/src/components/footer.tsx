@@ -27,7 +27,7 @@ const footerLinks = {
     },
   ],
   social: [
-    { label: "Twitter / X", href: "https://twitter.com/chronicle_ai" },
+    { label: "Telegram Alerts", href: "https://t.me/chronicleaialerts" },
     { label: "GitHub", href: "https://github.com/zaikaman/ChronicleAI" },
   ],
 };
