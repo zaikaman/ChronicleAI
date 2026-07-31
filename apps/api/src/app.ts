@@ -51,10 +51,9 @@ app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 app.use(requestIdMiddleware);
 app.use(timingMiddleware);
-// P2-3: per-IP limits on public GETs + tighter caps on LLM-adjacent / write paths
-app.use(publicAndLlmRateLimitMiddleware());
-app.use(publicGetCacheMiddleware);
 
+// CORS must run before any middleware that can terminate a request (including
+// rate limiting), otherwise browser clients cannot read error responses.
 // CORS — production must set FRONTEND_ORIGIN (no silent localhost fallback).
 const frontendOrigin = process.env["FRONTEND_ORIGIN"];
 if (!frontendOrigin) {
@@ -65,6 +64,10 @@ if (!frontendOrigin) {
   }
 }
 app.use(corsMiddleware(frontendOrigin || "http://localhost:5173"));
+
+// P2-3: per-IP limits on public GETs + tighter caps on LLM-adjacent / write paths
+app.use(publicAndLlmRateLimitMiddleware());
+app.use(publicGetCacheMiddleware);
 
 // Register API routes
 registerRoutes(app);

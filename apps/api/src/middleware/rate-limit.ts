@@ -147,6 +147,14 @@ export function publicAndLlmRateLimitMiddleware() {
   ];
 
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Browser preflight requests are transport negotiation, not API work.
+    // They must never consume an LLM quota or be rejected with a rate-limit
+    // response before the CORS middleware can complete the preflight.
+    if (req.method === "OPTIONS") {
+      next();
+      return;
+    }
+
     // Health checks never rate-limited
     if (req.path === "/health" || req.path === "/") {
       next();
