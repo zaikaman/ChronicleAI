@@ -93,6 +93,26 @@ export function PremiumPage(): ReactElement {
     }
   }, [premiumContent, isAccessLoading]);
 
+  useEffect(() => {
+    if (!showContent || !premiumContent) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const report = document.getElementById("premium-unlocked-report");
+      if (!report || typeof report.scrollIntoView !== "function") return;
+
+      const prefersReducedMotion =
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+      report.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [showContent, premiumContent]);
+
   const handleAccessItem = useCallback(
     async (itemId: string) => {
       setSelectedItemId(itemId);

@@ -1,8 +1,11 @@
 // Premium content view — full paid report after settlement.
 // API returns PremiumItemFull with nested contentPrivate; unwrap and render editorially.
 
+import type { PaginationMeta } from "@chronicleai/schemas";
 import type React from "react";
+import { useState } from "react";
 import { StatusBadge } from "../../components/data-primitives.tsx";
+import { PaginationControls } from "../../components/pagination-controls.tsx";
 
 interface PremiumContentViewProps {
   content: Record<string, unknown>;
@@ -39,6 +42,29 @@ function formatContentType(raw: unknown): string | null {
 function shortTx(hash: string): string {
   if (hash.length <= 14) return hash;
   return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
+}
+
+const TABLE_PAGE_SIZE = 10;
+
+function getPageSlice<T>(
+  rows: T[],
+  requestedPage: number,
+  limit = TABLE_PAGE_SIZE,
+): { rows: T[]; pagination: PaginationMeta } {
+  const totalPages = Math.max(1, Math.ceil(rows.length / limit));
+  const page = Math.min(Math.max(requestedPage, 1), totalPages);
+
+  return {
+    rows: rows.slice((page - 1) * limit, page * limit),
+    pagination: {
+      page,
+      limit,
+      total: rows.length,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
 }
 
 function SectionBlock({ section }: { section: ContentSection }): React.ReactElement | null {
@@ -82,8 +108,10 @@ function SectionBlock({ section }: { section: ContentSection }): React.ReactElem
 }
 
 function EventsTable({ events }: { events: unknown[] }): React.ReactElement | null {
+  const [page, setPage] = useState(1);
   const rows = events.filter(isRecord);
   if (rows.length === 0) return null;
+  const pageSlice = getPageSlice(rows, page);
 
   return (
     <section className="mt-2">
@@ -103,7 +131,7 @@ function EventsTable({ events }: { events: unknown[] }): React.ReactElement | nu
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => {
+            {pageSlice.rows.map((row, idx) => {
               const eventType = String(row.eventType ?? row.event_type ?? "—");
               const protocol = String(row.protocol ?? "—");
               const network = String(row.network ?? row.chainId ?? "—");
@@ -141,15 +169,22 @@ function EventsTable({ events }: { events: unknown[] }): React.ReactElement | nu
           </tbody>
         </table>
       </div>
+      <PaginationControls
+        pagination={pageSlice.pagination}
+        onPageChange={setPage}
+        data-testid="premium-source-events-pagination"
+      />
     </section>
   );
 }
 
 function FeedEntriesTable({ entries }: { entries: unknown[] }): React.ReactElement | null {
+  const [page, setPage] = useState(1);
   const rows = entries.filter(isRecord);
   if (rows.length === 0) return null;
   const columns = Object.keys(rows[0] ?? {});
   if (columns.length === 0) return null;
+  const pageSlice = getPageSlice(rows, page);
 
   return (
     <section className="mt-2">
@@ -169,7 +204,7 @@ function FeedEntriesTable({ entries }: { entries: unknown[] }): React.ReactEleme
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => (
+            {pageSlice.rows.map((row, idx) => (
               <tr
                 // biome-ignore lint/suspicious/noArrayIndexKey: ordered feed rows
                 key={idx}
@@ -193,6 +228,11 @@ function FeedEntriesTable({ entries }: { entries: unknown[] }): React.ReactEleme
           </tbody>
         </table>
       </div>
+      <PaginationControls
+        pagination={pageSlice.pagination}
+        onPageChange={setPage}
+        data-testid="premium-feed-entries-pagination"
+      />
     </section>
   );
 }
@@ -342,8 +382,8 @@ function SponsoredWatchDetails({
         <section className="p-5 rounded-xl border border-border bg-card space-y-3">
           <h4 className="text-base font-semibold text-foreground">Campaign Key Takeaways</h4>
           <ul className="space-y-2 text-sm text-muted-foreground list-none p-0 m-0">
-            {reportHighlights.map((highlight, idx) => (
-              <li key={idx} className="flex gap-2.5 items-start">
+            {reportHighlights.map((highlight) => (
+              <li key={highlight} className="flex gap-2.5 items-start">
                 <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
                 <span>{highlight}</span>
               </li>
