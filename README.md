@@ -122,7 +122,7 @@ ChronicleAI natively integrates all six core surfaces of the KeeperHub execution
 | **2. MCP Server & Tooling** | Remote Tool Discovery & Dynamic Invocation | [`apps/api/src/services/keeperhub-mcp-client.ts`](apps/api/src/services/keeperhub-mcp-client.ts)<br>[`apps/api/scripts/keeperhub-stack-smoke.ts`](apps/api/scripts/keeperhub-stack-smoke.ts) | Connects to KeeperHub MCP Server over SSE/HTTP, dynamically listing available execution tools (`listServerTools`) with automatic REST fallback. |
 | **3. x402 / MPP Agent Payments** | Dual-Protocol HTTP Settlement | [`apps/api/src/payments/x402-payment-adapter.ts`](apps/api/src/payments/x402-payment-adapter.ts)<br>[`apps/api/src/payments/mpp-payment-adapter.ts`](apps/api/src/payments/mpp-payment-adapter.ts) | Serves premium intelligence feeds & newsletter subscriptions over HTTP via auto-routing challenge selection between x402 (EIP-712 USDC permits) and MPP. |
 | **4. Smart Gas & Preflight** | Simulation & Adaptive Backoff | [`apps/api/src/desk/kh-simulate-preflight.ts`](apps/api/src/desk/kh-simulate-preflight.ts) | Layer A preflight dry-run (`simulate: true`) runs before every strategy execution to verify revert conditions and calculate adaptive congestion pricing. |
-| **5. Hybrid Private Routing & Gas Sponsorship** | Private mempool and sponsored public path | [`apps/api/src/services/keeperhub-private-capability.ts`](apps/api/src/services/keeperhub-private-capability.ts)<br>[`apps/api/src/services/routing-metadata.ts`](apps/api/src/services/routing-metadata.ts)<br>`workflow usePrivateMempool flags` | Desk/capital: private + strict (Private route). Registry: public + sponsorship requested. Audit badges show Private route vs Public (Sponsorship requested/Sponsored). |
+| **5. Hybrid Routing & Gas Sponsorship** | Private desk path and public treasury/registry path | [`apps/api/src/services/keeperhub-private-capability.ts`](apps/api/src/services/keeperhub-private-capability.ts)<br>[`apps/api/src/services/routing-metadata.ts`](apps/api/src/services/routing-metadata.ts)<br>`workflow usePrivateMempool flags` | Desk/kill-switch: private + strict (Private route). Treasury/revenue transfers and registry writes: public, with sponsorship preferred where supported. Audit badges show Private route vs Public. |
 | **6. Execution Audit Trail** | Multi-Tier Log Tracing & LLM Narrative | [`apps/api/src/desk/execution-audit.ts`](apps/api/src/desk/execution-audit.ts)<br>[`apps/api/src/desk/agent/failure-classifier.ts`](apps/api/src/desk/agent/failure-classifier.ts) | Correlates Layer A simulations, Layer B KeeperHub logs, and Layer C onchain receipts, running LLM failure classification and generating natural-language narratives. |
 
 ---
@@ -133,10 +133,10 @@ ChronicleAI natively integrates all six core surfaces of the KeeperHub execution
 |----------|-----------------|-----|-------|
 | Desk strategies (`oracle_arb`, `rotate_yield`, …) | Private mempool (`strict`) | Wallet ETH | Private route |
 | Kill-switch residual | Private mempool (`strict`, always) | Wallet ETH | Private route |
-| Large treasury transfer (≥ `TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC`) | Private via KH | Wallet ETH | Private route |
+| Treasury/revenue transfer | Public via KeeperHub workflow | Wallet ETH | Public route |
 | Registry publish / digests / receipts / sponsored watches | Public mempool | Sponsorship preferred | Public (Sponsorship requested) |
 
-*Private routing and gas sponsorship are **mutually exclusive on the same tx**. Chronicle splits by class so we use **both** KeeperHub surfaces where each wins.*
+*Private routing and gas sponsorship are **mutually exclusive on the same tx**. Chronicle keeps private routing for desk/kill-switch execution and uses the public KeeperHub path for treasury/revenue transfers and registry writes.*
 
 ---
 

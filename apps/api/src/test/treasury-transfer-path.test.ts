@@ -1,5 +1,5 @@
 /**
- * Phase 3: Para hole closure — large treasury spends force KeeperHub private path.
+ * Treasury transfers use the public KeeperHub workflow path.
  */
 import { describe, expect, it, vi } from "vitest";
 import { createCapitalManager } from "../desk/capital-manager.ts";
@@ -94,9 +94,9 @@ describe("resolveTreasuryTransferPath / isKeeperHubTransferConfigured", () => {
     ).toBe(false);
   });
 
-  it("selects keeperhub_private at threshold when fully configured", () => {
+  it("selects public KeeperHub at every amount when fully configured", () => {
     expect(resolveTreasuryTransferPath(baseEnv(), 50, { paraAvailable: true })).toBe(
-      "keeperhub_private",
+      "keeperhub",
     );
     expect(resolveTreasuryTransferPath(baseEnv(), 12, { paraAvailable: true })).toBe(
       "keeperhub",

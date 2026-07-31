@@ -57,7 +57,7 @@ export const DESK_KH_SIMULATE_PREFLIGHT = true;
 export const DESK_KH_SIMULATE_STRICT = false;
 /** Abort KH dry-run wait after this many ms. Env: DESK_KH_SIMULATE_TIMEOUT_MS */
 export const DESK_KH_SIMULATE_TIMEOUT_MS = 15_000;
-/** USDC notional at/above this forces KH private transfer (Phase 3 path select). */
+/** Legacy compatibility default; treasury transfers use the public KH path. */
 export const TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC = 50;
 /** Registry publish/record: false = public/sponsorship-friendly labeling. */
 export const REGISTRY_USE_PRIVATE_MEMPOOL = false;

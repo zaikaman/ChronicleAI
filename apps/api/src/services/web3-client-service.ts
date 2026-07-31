@@ -277,8 +277,8 @@ function routingPoliciesFromEnv(env: ServerEnv): {
       chainId: PRIVATE_ROUTING_CHAIN_ID,
     },
     transferRoutingPolicy: {
-      enabled: env.deskUsePrivateMempool !== false,
-      strict: env.deskPrivateMempoolStrict !== false,
+      enabled: false,
+      strict: false,
       provider,
       chainId: PRIVATE_ROUTING_CHAIN_ID,
     },
@@ -303,7 +303,7 @@ function keeperHubMcpOptionsFromEnv(env: ServerEnv): KeeperHubMcpWriteOptions {
   };
 }
 
-/** True when KH transfer workflow + USDC address are ready for private path. */
+/** True when KH transfer workflow + USDC address are ready for the public path. */
 export function isKeeperHubTransferConfigured(env: ServerEnv): boolean {
   const workflow = env.keeperhubWorkflowTransfer?.trim();
   const usdc = env.deskUsdcAddress?.trim();
@@ -405,12 +405,9 @@ function createHybridParaKeeperHubWeb3Client(
       if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) {
         throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
       }
-      if (amountUsdc >= env.treasuryPrivateTransferThresholdUsdc) {
-        console.info(
-          `[web3] Treasury transfer ${amountUsdc} USDC ≥ threshold ` +
-            `${env.treasuryPrivateTransferThresholdUsdc} — KeeperHub workflow path`,
-        );
-      }
+      console.info(
+        `[web3] Treasury transfer ${amountUsdc} USDC → public KeeperHub workflow path`,
+      );
       return kh.sendTransfer(to, amountUsdc);
     },
   };

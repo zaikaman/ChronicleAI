@@ -117,12 +117,12 @@ export interface KeeperHubWriteClientConfig {
    */
   execLogRepo?: ExecutionLogRepository | null;
   /**
-   * Private routing policy for registry / transfer logs (Phase 2).
+   * Routing policy for registry logs (Phase 2).
    * When set, execution_logs.details include routing metadata.
-   * Transfer methods use transferRouting when provided; else this policy.
+   * Treasury transfers always override this with public routing metadata.
    */
   routingPolicy?: PrivateRoutingPolicy | null;
-  /** Override routing for sendTransfer / recordPayout (KH transfer path). */
+  /** Override routing for recordPayout; sendTransfer is always public. */
   transferRoutingPolicy?: PrivateRoutingPolicy | null;
   /**
    * KeeperHub MCP preferred path for all material writes.
@@ -404,7 +404,18 @@ export function createKeeperHubWriteClient(
   function routingDetailsForMethod(
     method: keyof typeof WORKFLOW_ACTION_ENV,
   ): RoutingDetails | null {
-    if (method === "transfer" || method === "recordPayout") {
+    if (method === "transfer") {
+      const policy = config.transferRoutingPolicy ?? config.routingPolicy;
+      return policy
+        ? buildPrivateRoutingDetails({
+            ...policy,
+            enabled: false,
+            strict: false,
+            provider: "public",
+          })
+        : null;
+    }
+    if (method === "recordPayout") {
       const policy = config.transferRoutingPolicy ?? config.routingPolicy;
       return policy ? buildPrivateRoutingDetails(policy) : null;
     }

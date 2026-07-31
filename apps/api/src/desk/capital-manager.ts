@@ -13,10 +13,7 @@ import { capitalLog } from "../lib/logger.ts";
 import type { ChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import { softAppendExecutionLog } from "../services/keeperhub-execution-log.ts";
 import type { ParaTreasuryClient } from "../services/para-treasury-client.ts";
-import {
-  isAmountAtOrAbovePrivateTransferThreshold,
-  type TreasuryTransferPath,
-} from "../services/routing-metadata.ts";
+import type { TreasuryTransferPath } from "../services/routing-metadata.ts";
 import type { Web3Client } from "../services/web3-client-service.ts";
 import {
   computeUnwindableInventoryUsdc,
@@ -70,12 +67,12 @@ export interface CapitalManagerDeps {
   capitalMoves: DeskCapitalMoveRepository;
   /**
    * Para MPC treasury client (small top-ups when web3 hybrid is absent, or
-   * when amount is below TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC).
+   * when the KeeperHub-backed public transfer path is unavailable).
    */
   paraTreasury?: ParaTreasuryClient | null;
   /**
-   * Preferred treasury transfer surface. Hybrid web3 applies Phase 3 path
-   * selection (large → KH private; small → Para). Use when configured.
+   * Preferred treasury transfer surface. Hybrid web3 uses the public KeeperHub
+   * transfer workflow when configured. Use when available.
    */
   web3?: Web3Client | null;
   /** KH bridge for desk → treasury sweep / emergency (always private + strict). */
@@ -879,19 +876,10 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
       let keeperHubRunId: string | undefined;
       let transferPath: TreasuryTransferPath | "web3" | "para" | undefined;
 
-      const threshold = deps.treasuryPrivateTransferThresholdUsdc ?? 50;
       // Every demo-visible top-up uses the KeeperHub-backed Web3 facade when it
       // is available; Para is only a fallback for non-KeeperHub dev/test clients.
-      const forcePrivateTopup =
-        isAmountAtOrAbovePrivateTransferThreshold(amountUsdc, threshold) &&
-        Boolean(web3?.isKeeperHubBacked());
-
-      if (web3 && (web3.isKeeperHubBacked() || forcePrivateTopup || !paraTreasury)) {
-        transferPath = forcePrivateTopup
-          ? "keeperhub_private"
-          : web3.isKeeperHubBacked()
-            ? "keeperhub"
-            : "web3";
+      if (web3 && (web3.isKeeperHubBacked() || !paraTreasury)) {
+        transferPath = web3.isKeeperHubBacked() ? "keeperhub" : "web3";
         const receipt = await web3.sendTransfer(desk, amountUsdc);
         txHash = receipt.txHash;
         explorerUrl = receipt.explorerUrl;
@@ -971,7 +959,6 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
           registry_tx_hash: registryTxHash ?? null,
           executedViaKeeperHub: Boolean(keeperHubRunId),
           transfer_path: transferPath ?? null,
-          private_transfer_threshold_usdc: threshold,
         },
       });
 

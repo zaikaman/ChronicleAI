@@ -53,9 +53,9 @@ After import, set the five `KEEPERHUB_WORKFLOW_DESK_*` env vars on Chronicle API
 
 Each successful write stores `keeper_hub_run_id`, `tx_hash`, and `explorer_url`. Activity page shows **Executed via KeeperHub** with run id + tx.
 
-## Private routing (Flashbots Protect · Ethereum Sepolia)
+## Routing policy (Ethereum Sepolia)
 
-ChronicleAI desk and material on-chain writes target **Ethereum Sepolia only** (`11155111`). Private routing uses KeeperHub’s KEEP-137 surface: per write-node `usePrivateMempool` so transactions submit via a **private mempool RPC** (Flashbots Protect on Sepolia) instead of the public mempool.
+ChronicleAI desk and material on-chain writes target **Ethereum Sepolia only** (`11155111`). Desk and kill-switch workflows use KeeperHub’s KEEP-137 private route where configured. Treasury/revenue transfer workflows use the public mempool because the private RPC is too slow for reliable payouts.
 
 **Product honesty:** This is a **private submission path** and full use of KeeperHub’s routing surface on Sepolia. It is **not** a claim of mainnet-scale sandwich economics or “MEV-proof” markets. Prefer copy like “Private route” / “private submission path (Flashbots Protect · Sepolia)” over “MEV-protected.”
 
@@ -63,7 +63,7 @@ Full implementation plan: [`docs/private-routing-implementation-plan.md`](../../
 
 ### Workflow node flags
 
-On every material write node (`web3/write-contract`, `web3/transfer-token`, `web3/approve-token`, `uniswap/*`, `aave-v3/*`, …):
+On private desk and kill-switch write nodes (`web3/write-contract`, `web3/approve-token`, `uniswap/*`, `aave-v3/*`, …):
 
 ```json
 "usePrivateMempool": true,
@@ -73,6 +73,7 @@ On every material write node (`web3/write-contract`, `web3/transfer-token`, `web
 | Flag | Meaning |
 |------|---------|
 | `usePrivateMempool: true` | KeeperHub swaps the primary RPC to the chain’s private mempool URL when the chain supports it |
+| `usePrivateMempool: false` | KeeperHub submits through the normal public mempool; used by revenue/treasury transfer workflows |
 | `strict: true` (default true) | Private RPC failure does **not** fall back to the public mempool — the step fails closed |
 
 ### Sepolia Flashbots Protect RPC
@@ -145,7 +146,7 @@ Documented in `apps/api/.env.example`. Defaults for maximum Sepolia surface usag
 |----------|---------|---------|
 | `DESK_USE_PRIVATE_MEMPOOL` | `true` | Prefer private routing for desk KH workflows |
 | `DESK_PRIVATE_MEMPOOL_STRICT` | `true` | Expectation for workflow `strict`; kill-switch always strict |
-| `TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC` | `50` | At/above this, force KH private transfer (not Para alone) |
+| `TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC` | `50` | Legacy compatibility setting; treasury/revenue transfers use the public KH path |
 | `REGISTRY_USE_PRIVATE_MEMPOOL` | `true` | Registry writes request private when workflows carry the flag |
 | `ROUTING_PROVIDER_LABEL` | `flashbots_protect` | Label for UI / execution_logs |
 
@@ -154,23 +155,22 @@ Documented in `apps/api/.env.example`. Defaults for maximum Sepolia surface usag
 Hybrid production path (`PARA_API_KEY` + KeeperHub):
 
 ```
-if amountUsdc >= TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC
-  AND KEEPERHUB_WORKFLOW_TRANSFER configured
-  → KeeperHub sendTransfer (workflow usePrivateMempool; run id + private routing metadata)
+if KEEPERHUB_WORKFLOW_TRANSFER configured
+  → KeeperHub sendTransfer (workflow usePrivateMempool=false; run id + public routing metadata)
 else
-  → Para MPC (small spends) or existing single-path client
+  → Para MPC fallback or existing single-path client
 ```
 
-- Capital manager top-ups use the same rule (large → KH-backed web3, not Para alone).
+- Capital manager top-ups use the same public KH transfer workflow when configured.
 - Desk sweeps and kill-switch residual always go through KH workflows (private + strict); policy cannot disable kill-switch private routing.
-- Do **not** fall back to Para after a forced KH private transfer failure (re-opens the public-broadcast hole).
-- Large KH transfers spend from the KeeperHub execution wallet — fund it with Sepolia USDC when operating above the threshold.
+- Do **not** describe revenue/treasury transfers as private; the workflow intentionally uses the public mempool.
+- KH transfers spend from the KeeperHub execution wallet — fund it with Sepolia USDC.
 
 ### Operator checklist (enable end-to-end)
 
 1. **KeeperHub chain config** — Set Sepolia private mempool RPC as above; confirm `GET /api/chains` for `11155111`.
 2. **Fund desk wallet** — Sepolia ETH on the KeeperHub execution wallet (`DESK_WALLET_ADDRESS`). Private route has no gas sponsorship.
-3. **Workflow JSON** — Ensure write nodes include `"usePrivateMempool": true` (and preferably `"strict": true`). Keep `workflows/keeperhub/` and `workflows/keeperhub-ready/` in sync.
+3. **Workflow JSON** — Keep private desk/kill-switch nodes at `"usePrivateMempool": true`; keep revenue/treasury transfer nodes at `"usePrivateMempool": false`. Keep `workflows/keeperhub/` and `workflows/keeperhub-ready/` in sync.
 4. **Re-import** — After JSON changes, re-import into KeeperHub (or patch each write node: Network → “Sepolia (Flashbots)” / private mempool toggle). If import creates **new** workflow IDs, re-bind all `KEEPERHUB_WORKFLOW_*` env vars on Chronicle API.
 5. **Chronicle policy env** — Set the private-routing vars from the table above (see `.env.example`).
 6. **Smoke** — Execute a dust `transfer-token` or registry write on Sepolia; confirm tx lands; after product Phase 2, confirm Activity shows private-route metadata.

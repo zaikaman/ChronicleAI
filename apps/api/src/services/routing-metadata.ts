@@ -136,19 +136,17 @@ export type RoutingTransactionClass =
   | "kill_switch";
 
 /**
- * Treasury spend path after Phase 3 policy selection.
- * - `keeperhub_private` — amount ≥ threshold and KH transfer workflow configured
- * - `para` — Para MPC public broadcast (small spends / ops simplicity)
- * - `keeperhub` — KH transfer without forced private-threshold escalation
+ * Treasury spend path after policy selection.
+ * - `para` — Para MPC public broadcast (fallback only)
+ * - `keeperhub` — KeeperHub transfer workflow on the public mempool
  */
 export type TreasuryTransferPath =
-  | "keeperhub_private"
   | "para"
   | "keeperhub";
 
 export interface SelectTreasuryTransferPathInput {
   amountUsdc: number;
-  /** TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC (default 50). */
+  /** Legacy compatibility input; no longer affects routing. */
   thresholdUsdc: number;
   /** True when KEEPERHUB_WORKFLOW_TRANSFER (+ USDC address) is set. */
   keeperHubTransferConfigured: boolean;
@@ -157,45 +155,17 @@ export interface SelectTreasuryTransferPathInput {
 }
 
 /**
- * Whether notional meets/exceeds the private-transfer threshold.
- * Invalid amounts never force private path.
- */
-export function isAmountAtOrAbovePrivateTransferThreshold(
-  amountUsdc: number,
-  thresholdUsdc: number,
-): boolean {
-  if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) return false;
-  const threshold =
-    Number.isFinite(thresholdUsdc) && thresholdUsdc > 0 ? thresholdUsdc : 50;
-  return amountUsdc >= threshold;
-}
-
-/**
  * Path selection for treasury `sendTransfer` (revenue, affiliate, capital top-up).
  *
- * Policy (Phase 3 Para hole closure):
- *   if amountUsdc >= TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC
- *     AND KeeperHub transfer workflow configured
- *     → keeperhub_private (workflow already usePrivateMempool)
- *   else if KH transfer configured → keeperhub
+ * Policy: use the configured KeeperHub transfer workflow on the public mempool.
  *   Para is never a direct demo-visible execution path.
  *   else throw
- *
- * Never invents hashes. Callers must not fall back Para→public after a
- * keeperhub_private failure (re-opens the hole).
  */
 export function selectTreasuryTransferPath(
   input: SelectTreasuryTransferPathInput,
 ): TreasuryTransferPath {
-  const forcePrivate =
-    isAmountAtOrAbovePrivateTransferThreshold(
-      input.amountUsdc,
-      input.thresholdUsdc,
-    ) && input.keeperHubTransferConfigured;
-
-  if (forcePrivate) {
-    return "keeperhub_private";
-  }
+  void input.amountUsdc;
+  void input.thresholdUsdc;
   if (input.keeperHubTransferConfigured) {
     return "keeperhub";
   }
@@ -211,7 +181,7 @@ export function selectTreasuryTransferPath(
 
 /** Whether selected path routes the spend through KeeperHub (not Para alone). */
 export function isKeeperHubTransferPath(path: TreasuryTransferPath): boolean {
-  return path === "keeperhub_private" || path === "keeperhub";
+  return path === "keeperhub";
 }
 
 const PRIVATE_STRICT: ExecutionRouting = {
@@ -228,7 +198,7 @@ const PUBLIC_SPONSORED: ExecutionRouting = { mode: "public_sponsored" };
  * 1. Kill switch → private strict always
  * 2. Desk write (oracle_amm / yield_rotation / risk_defend) → private strict if DESK_USE_PRIVATE_MEMPOOL
  * 3. Registry → per REGISTRY_USE_PRIVATE_MEMPOOL
- * 4. Small treasury → public_sponsored (Para / sponsored OK); large + KH transfer → private strict
+ * 4. Treasury transfers → public_sponsored (KeeperHub workflow)
  */
 export function resolveExecutionRouting(
   input: ResolveExecutionRoutingInput,
@@ -250,17 +220,11 @@ export function resolveExecutionRouting(
     return env.registryUsePrivateMempool ? PRIVATE_STRICT : PUBLIC_SPONSORED;
   }
 
-  // treasury_transfer
-  const threshold =
-    typeof env.treasuryPrivateTransferThresholdUsdc === "number" &&
-    Number.isFinite(env.treasuryPrivateTransferThresholdUsdc) &&
-    env.treasuryPrivateTransferThresholdUsdc > 0
-      ? env.treasuryPrivateTransferThresholdUsdc
-      : 50;
-  const forcePrivate =
-    isAmountAtOrAbovePrivateTransferThreshold(subject.amountUsdc, threshold) &&
-    env.keeperHubTransferConfigured === true;
-  return forcePrivate ? PRIVATE_STRICT : PUBLIC_SPONSORED;
+  // Treasury/revenue transfers use the public KeeperHub workflow path.
+  void subject.amountUsdc;
+  void env.treasuryPrivateTransferThresholdUsdc;
+  void env.keeperHubTransferConfigured;
+  return PUBLIC_SPONSORED;
 }
 
 /** Map control-plane enum → workflow-facing private routing policy. */
@@ -384,10 +348,19 @@ export function routingPolicyForClass(
     };
   }
 
-  if (txClass === "desk" || txClass === "transfer") {
+  if (txClass === "desk") {
     return {
       enabled: env.deskUsePrivateMempool,
       strict: env.deskPrivateMempoolStrict,
+      provider,
+      chainId,
+    };
+  }
+
+  if (txClass === "transfer") {
+    return {
+      enabled: false,
+      strict: false,
       provider,
       chainId,
     };
@@ -414,7 +387,7 @@ export function buildRegistryRoutingDetails(
   return buildPrivateRoutingDetails(routingPolicyForClass(env, "registry"));
 }
 
-/** Convenience: treasury transfer (KH path). */
+/** Convenience: treasury transfer (public KH path). */
 export function buildTransferRoutingDetails(
   env: RoutingPolicyEnv,
 ): RoutingDetails {

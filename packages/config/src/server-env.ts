@@ -351,7 +351,7 @@ export interface ServerEnv {
    */
   deskWalletAddress: string | undefined;
   /**
-   * Prefer private mempool routing for desk strategy/capital KH executions.
+   * Prefer private mempool routing for desk strategy KH executions.
    * Workflow JSON sets usePrivateMempool; this is Chronicle policy for logs/UI.
    * Default true. Env: DESK_USE_PRIVATE_MEMPOOL.
    */
@@ -374,7 +374,8 @@ export interface ServerEnv {
   /** Abort KH dry-run wait after this many ms. Env: DESK_KH_SIMULATE_TIMEOUT_MS. */
   deskKhSimulateTimeoutMs: number;
   /**
-   * USDC notional at/above this forces KeeperHub private transfer path (Phase 3).
+   * Legacy transfer threshold retained for environment compatibility; treasury
+   * and revenue transfers now use the public KeeperHub workflow path.
    * Env: TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC.
    */
   treasuryPrivateTransferThresholdUsdc: number;
