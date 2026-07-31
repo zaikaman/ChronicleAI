@@ -14,12 +14,10 @@ import type { AgentActivityService } from "../services/agent-activity-service.ts
 import {
   buildRegistryRoutingDetails,
   buildTransferRoutingDetails,
-  extractRoutingFromDetails,
-  flashbotsProtectStatusUrl,
   routingBadgeLabel,
-  shouldLinkProtectStatus,
   type RoutingPolicyEnv,
 } from "../services/routing-metadata.ts";
+import { serializePublicActivityLog } from "../services/public-activity-serializer.ts";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 
 export interface ActivityRouteDeps {
@@ -172,48 +170,7 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
       }
 
       res.json(
-        fromDbPage(result.value, (l) => {
-          const details =
-            l.details && typeof l.details === "object" && !Array.isArray(l.details)
-              ? (l.details as Record<string, unknown>)
-              : null;
-          const routingMeta = extractRoutingFromDetails(details);
-          const entry: Record<string, unknown> = {
-            id: l.id,
-            actionType: l.action_type,
-            entityType: l.entity_type,
-            entityId: l.entity_id,
-            status: l.status,
-            message: l.message,
-            details: l.details,
-            createdAt: l.created_at,
-          };
-          if (routingMeta) {
-            entry.routing = routingMeta.routing;
-            entry.routingStrict = routingMeta.routingStrict;
-            entry.routingProvider = routingMeta.routingProvider;
-            entry.routingRequested = routingMeta.routingRequested;
-            entry.routingApplied = routingMeta.routingApplied;
-            entry.routingLabel = routingBadgeLabel(routingMeta);
-          }
-          const txHash =
-            typeof details?.txHash === "string"
-              ? details.txHash
-              : typeof details?.transactionHash === "string"
-                ? details.transactionHash
-                : null;
-          if (
-            txHash &&
-            shouldLinkProtectStatus(routingMeta) &&
-            flashbotsProtectStatusUrl(txHash, routingMeta?.chainId)
-          ) {
-            entry.protectStatusUrl = flashbotsProtectStatusUrl(
-              txHash,
-              routingMeta?.chainId,
-            );
-          }
-          return entry;
-        }),
+        fromDbPage(result.value, serializePublicActivityLog),
       );
     } catch (error) {
       next(error);

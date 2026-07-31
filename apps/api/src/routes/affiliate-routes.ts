@@ -10,6 +10,7 @@ import { Router, type Router as RouterType } from "express";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 import type { AffiliateAgentService } from "../services/affiliate-agent-service.ts";
 import type { AffiliateDashboardService } from "../services/affiliate-dashboard-service.ts";
+import type { AffiliateWithdrawalAuthorization } from "../services/affiliate-withdrawal-auth.ts";
 
 function toAffiliateResponse(row: {
   id: string;
@@ -362,7 +363,7 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
   /**
    * POST /affiliates/agent/chat
    * Start asynchronous affiliate agent chat job.
-   * Body: { walletAddress, message, history? } — no signature required.
+   * Body: { walletAddress, message, withdrawalAuthorization, history? }.
    * Returns: HTTP 202 { jobId, status } immediately to avoid router timeouts.
    */
   router.post("/affiliates/agent/chat", async (req, res, next) => {
@@ -386,6 +387,13 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
         return;
       }
 
+      const rawAuthorization = body.withdrawalAuthorization;
+      if (!rawAuthorization || typeof rawAuthorization !== "object") {
+        res.status(401).json({ error: "withdrawalAuthorization is required" });
+        return;
+      }
+      const withdrawalAuthorization = rawAuthorization as AffiliateWithdrawalAuthorization;
+
       const ensured = await ensureAffiliate(affiliateRepo, wallet);
       if (!ensured.ok) {
         res.status(ensured.status).json({ error: ensured.error });
@@ -404,6 +412,7 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
 
       const job = agentService.startChatJob({
         affiliateWallet: wallet,
+        withdrawalAuthorization,
         message,
         history,
       });

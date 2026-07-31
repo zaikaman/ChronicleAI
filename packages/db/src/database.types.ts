@@ -108,6 +108,27 @@ export type Database = {
         }
         Relationships: []
       }
+      affiliate_withdrawal_nonces: {
+        Row: {
+          affiliate_wallet: string
+          created_at: string
+          expires_at: string
+          nonce: string
+        }
+        Insert: {
+          affiliate_wallet: string
+          created_at?: string
+          expires_at: string
+          nonce: string
+        }
+        Update: {
+          affiliate_wallet?: string
+          created_at?: string
+          expires_at?: string
+          nonce?: string
+        }
+        Relationships: []
+      }
       affiliate_withdrawals: {
         Row: {
           affiliate_wallet: string

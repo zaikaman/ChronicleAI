@@ -865,13 +865,9 @@ export function assertProductionReadiness(env: ServerEnv): void {
     Boolean(env.keeperhubApiBaseUrl?.trim()) &&
     Boolean(env.chronicleRegistryAddress?.trim());
 
-  const hasPara = Boolean(env.paraApiKey?.trim());
-  const hasParaRegistry =
-    hasPara && Boolean(env.rpcUrl?.trim()) && Boolean(env.chronicleRegistryAddress?.trim());
-
-  if (!hasKeeperHub && !hasParaRegistry) {
+  if (!hasKeeperHub) {
     errors.push(
-      "On-chain write path required: configure KeeperHub (KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL + CHRONICLE_REGISTRY_ADDRESS) and/or Para MPC registry path (PARA_API_KEY + RPC_URL + CHRONICLE_REGISTRY_ADDRESS)",
+      "KeeperHub is required in production: configure KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL + CHRONICLE_REGISTRY_ADDRESS; Para MPC may only provide custody/signing behind KeeperHub workflows",
     );
   }
 

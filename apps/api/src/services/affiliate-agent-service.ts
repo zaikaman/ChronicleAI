@@ -17,6 +17,7 @@ import type {
   AffiliateDashboardStats,
 } from "./affiliate-dashboard-service.ts";
 import type { AffiliateWithdrawalService } from "./affiliate-withdrawal-service.ts";
+import type { AffiliateWithdrawalAuthorization } from "./affiliate-withdrawal-auth.ts";
 
 export interface AffiliateAgentMessage {
   role: "user" | "assistant" | "system" | "tool";
@@ -52,6 +53,7 @@ export interface AffiliateAgentJob {
   status: AffiliateAgentJobStatus;
   request: {
     message: string;
+    withdrawalAuthorization?: AffiliateWithdrawalAuthorization;
     history?: AffiliateAgentMessage[];
   };
   result?: AffiliateAgentChatResult | null;
@@ -63,12 +65,14 @@ export interface AffiliateAgentJob {
 export interface AffiliateAgentService {
   chat(params: {
     affiliateWallet: string;
+    withdrawalAuthorization?: AffiliateWithdrawalAuthorization;
     message: string;
     history?: AffiliateAgentMessage[];
   }): Promise<AffiliateAgentChatResult>;
 
   startChatJob(params: {
     affiliateWallet: string;
+    withdrawalAuthorization?: AffiliateWithdrawalAuthorization;
     message: string;
     history?: AffiliateAgentMessage[];
   }): AffiliateAgentJob;
@@ -176,6 +180,7 @@ async function executeTool(
     withdrawalService: AffiliateWithdrawalService;
   },
   statsRef: { current: AffiliateDashboardStats | null | undefined },
+  withdrawalAuthorization?: AffiliateWithdrawalAuthorization,
 ): Promise<unknown> {
   if (name === "help") {
     return { text: helpText() };
@@ -241,6 +246,7 @@ async function executeTool(
   const result = await deps.withdrawalService.withdraw({
     affiliateWallet: wallet,
     amountUsdc: amount,
+    authorization: withdrawalAuthorization,
     agentMessage: userMessage,
   });
 
@@ -266,6 +272,7 @@ function buildLangChainTools(params: {
   };
   statsRef: { current: AffiliateDashboardStats | null | undefined };
   toolCalls: AffiliateAgentToolCall[];
+  withdrawalAuthorization?: AffiliateWithdrawalAuthorization;
 }) {
   const run = async (name: ToolName, args: Record<string, unknown>) => {
     const result = await executeTool(
@@ -275,6 +282,7 @@ function buildLangChainTools(params: {
       params.userMessage,
       params.deps,
       params.statsRef,
+      params.withdrawalAuthorization,
     );
     params.toolCalls.push({ name, arguments: args, result });
     return JSON.stringify(result);
@@ -405,7 +413,7 @@ function formatStatsReply(stats: AffiliateDashboardStats): string {
 }
 
 async function runFallbackChat(
-  params: { affiliateWallet: string; message: string },
+  params: { affiliateWallet: string; message: string; withdrawalAuthorization?: AffiliateWithdrawalAuthorization },
   deps: {
     dashboardService: AffiliateDashboardService;
     withdrawalService: AffiliateWithdrawalService;
@@ -427,6 +435,7 @@ async function runFallbackChat(
       params.message,
       deps,
       statsRef,
+      params.withdrawalAuthorization,
     );
     toolCalls.push({ name: plannedTool.name, arguments: plannedTool.args, result });
 
@@ -495,7 +504,7 @@ export function createAffiliateAgentLlm(
 }
 
 async function runLangChainChat(
-  params: { affiliateWallet: string; message: string; history?: AffiliateAgentMessage[] },
+  params: { affiliateWallet: string; message: string; withdrawalAuthorization?: AffiliateWithdrawalAuthorization; history?: AffiliateAgentMessage[] },
   deps: {
     dashboardService: AffiliateDashboardService;
     withdrawalService: AffiliateWithdrawalService;
@@ -536,6 +545,7 @@ async function runLangChainChat(
     deps,
     statsRef,
     toolCalls,
+    withdrawalAuthorization: params.withdrawalAuthorization,
   });
 
   const historyMessages = (params.history ?? [])
@@ -590,7 +600,7 @@ async function runLangChainChat(
 }
 
 async function runInjectedLlmChat(
-  params: { affiliateWallet: string; message: string; history?: AffiliateAgentMessage[] },
+  params: { affiliateWallet: string; message: string; withdrawalAuthorization?: AffiliateWithdrawalAuthorization; history?: AffiliateAgentMessage[] },
   deps: {
     dashboardService: AffiliateDashboardService;
     withdrawalService: AffiliateWithdrawalService;
@@ -670,6 +680,7 @@ async function runInjectedLlmChat(
         params.message,
         deps,
         statsRef,
+        params.withdrawalAuthorization,
       );
       toolCalls.push({
         name: call.name,
@@ -776,6 +787,7 @@ export function createAffiliateAgentService(deps: {
         status: "pending",
         request: {
           message: params.message,
+          withdrawalAuthorization: params.withdrawalAuthorization,
           history: params.history,
         },
         result: null,

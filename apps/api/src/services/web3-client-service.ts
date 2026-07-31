@@ -1,8 +1,8 @@
 // Web3 write facade for Chronicle Registry + treasury transfers.
 //
 // Production priority:
-// 1. Para MPC treasury + KeeperHub registry (hybrid) — preferred for demo/prod
-// 2. Para MPC only (registry + transfers via Para viem REST account)
+// 1. KeeperHub workflows for every registry and treasury write, optionally
+//    backed by Para MPC custody/signing
 // 3. KeeperHub only (registry + transfers via org wallet)
 // 4. Direct viem EOA — ALLOW_DIRECT_ETHERS_WRITES=true and never in production
 //
@@ -230,8 +230,9 @@ function isDirectEthersAllowed(env: ServerEnv): boolean {
 }
 
 /**
- * Hybrid: KeeperHub for registry writes; treasury transfers use Phase 3 path
- * selection (large notional → KH private transfer; small → Para MPC).
+ * Hybrid: KeeperHub workflows for registry writes and treasury transfers;
+ * Para MPC is available only as the custody/signing provider behind this
+ * KeeperHub-backed client.
  */
 function keeperHubWorkflowIdsFromEnv(env: ServerEnv) {
   return {
@@ -399,30 +400,18 @@ function createHybridParaKeeperHubWeb3Client(
     recordCapitalMove: (moveId, from, to, amountUsdc, reasonHash) =>
       kh.recordCapitalMove(moveId, from, to, amountUsdc, reasonHash),
 
-    /**
-     * Phase 3 Para hole closure:
-     * amount ≥ TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC and KH transfer configured
-     * → KeeperHub private transfer (workflow usePrivateMempool).
-     * Below threshold → Para MPC (ops simplicity / sponsorship-friendly).
-     * Never fall back Para after a forced KH private failure.
-     */
+    /** Every demo-visible treasury transfer must execute through KeeperHub. */
     async sendTransfer(to, amountUsdc) {
       if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) {
         throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
       }
-      const path = resolveTreasuryTransferPath(env, amountUsdc, {
-        paraAvailable: true,
-      });
-      if (path === "keeperhub_private" || path === "keeperhub") {
-        if (path === "keeperhub_private") {
-          console.info(
-            `[web3] Treasury transfer ${amountUsdc} USDC ≥ threshold ` +
-              `${env.treasuryPrivateTransferThresholdUsdc} — KeeperHub private path`,
-          );
-        }
-        return kh.sendTransfer(to, amountUsdc);
+      if (amountUsdc >= env.treasuryPrivateTransferThresholdUsdc) {
+        console.info(
+          `[web3] Treasury transfer ${amountUsdc} USDC ≥ threshold ` +
+            `${env.treasuryPrivateTransferThresholdUsdc} — KeeperHub workflow path`,
+        );
       }
-      return paraClient.sendTransfer(to, amountUsdc);
+      return kh.sendTransfer(to, amountUsdc);
     },
   };
 }
@@ -893,9 +882,9 @@ function createDirectEoaWeb3Client(env: ServerEnv): Web3Client {
  * Create the production Web3 client.
  *
  * Priority:
- * 1. Para MPC + KeeperHub hybrid (PARA_API_KEY + KEEPERHUB_*)
- * 2. Para MPC only (PARA_API_KEY + RPC + registry)
- * 3. KeeperHub only
+ * 1. Para MPC custody + KeeperHub workflows (PARA_API_KEY + KEEPERHUB_*)
+ * 2. KeeperHub only
+ * 3. Para MPC only (development/test compatibility only)
  * 4. Direct EOA — only when ALLOW_DIRECT_ETHERS_WRITES=true and not production
  * 5. null — no write path configured (dev/test only; production fail-hard)
  */
@@ -908,6 +897,12 @@ export function createWeb3Client(
   const isProduction = env.nodeEnv === "production";
   const logOpts = options?.execLogRepo !== undefined ? { execLogRepo: options.execLogRepo } : {};
 
+  if (isProduction && !keeperHub) {
+    throw new Error(
+      "KeeperHub is required in production — configure KEEPERHUB_API_KEY, KEEPERHUB_API_BASE_URL, and CHRONICLE_REGISTRY_ADDRESS. Para MPC may only back KeeperHub workflows.",
+    );
+  }
+
   if (paraClient && keeperHub) {
     console.info(
       "[web3] Production path: Para MPC + KeeperHub hybrid " +
@@ -916,9 +911,9 @@ export function createWeb3Client(
     return createHybridParaKeeperHubWeb3Client(env, paraClient, logOpts);
   }
 
-  if (paraClient && env.rpcUrl && env.chronicleRegistryAddress) {
+  if (!isProduction && paraClient && env.rpcUrl && env.chronicleRegistryAddress) {
     console.info(
-      "[web3] Production path: Para MPC for registry writes and treasury transfers",
+      "[web3] Development/test compatibility path: Para MPC registry writes and treasury transfers",
     );
     return createParaWeb3Client(env, paraClient);
   }
@@ -927,9 +922,7 @@ export function createWeb3Client(
     const msg =
       "[web3] PARA_API_KEY is set but CHRONICLE_REGISTRY_ADDRESS/RPC_URL missing and KeeperHub is not configured — treasury-only Para client unavailable for full Web3Client";
     if (isProduction) {
-      throw new Error(
-        `${msg}. Production refuses soft-null Web3; complete KeeperHub or Para registry config.`,
-      );
+      throw new Error(`${msg}. Configure KeeperHub for production.`);
     }
     console.warn(msg);
   }
@@ -961,13 +954,13 @@ export function createWeb3Client(
 
   if (isParaTreasuryConfigured(env) && env.nodeEnv !== "test") {
     console.warn(
-      "[web3] PARA_API_KEY present but incomplete write path. Add KEEPERHUB_* for hybrid, or RPC_URL + CHRONICLE_REGISTRY_ADDRESS for Para-only registry writes.",
+      "[web3] PARA_API_KEY present but incomplete write path. Add KEEPERHUB_*; Para is only a custody/signing provider behind KeeperHub workflows in production.",
     );
   }
 
   if (isProduction) {
     throw new Error(
-      "Web3 client not configured in production — set PARA_API_KEY + KeeperHub (or Para + RPC_URL + CHRONICLE_REGISTRY_ADDRESS). Soft-null on-chain path is not allowed.",
+      "Web3 client not configured in production — set KeeperHub (KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL + CHRONICLE_REGISTRY_ADDRESS).",
     );
   }
 

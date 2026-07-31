@@ -99,7 +99,7 @@ describe("resolveTreasuryTransferPath / isKeeperHubTransferConfigured", () => {
       "keeperhub_private",
     );
     expect(resolveTreasuryTransferPath(baseEnv(), 12, { paraAvailable: true })).toBe(
-      "para",
+      "keeperhub",
     );
   });
 });
@@ -144,12 +144,16 @@ describe("capital manager top-up path selection", () => {
     expect(result.txHash).toBe("0xabc");
   });
 
-  it("allows Para for small top-ups when both clients exist", async () => {
+  it("routes small top-ups through KeeperHub when both clients exist", async () => {
     const paraSend = vi.fn().mockResolvedValue({
       txHash: "0xpara",
       explorerUrl: "https://sepolia.etherscan.io/tx/0xpara",
     });
-    const web3Send = vi.fn();
+    const web3Send = vi.fn().mockResolvedValue({
+      txHash: "0xkeeperhub-small",
+      explorerUrl: "https://sepolia.etherscan.io/tx/0xkeeperhub-small",
+      keeperHubRunId: "run-kh-small",
+    });
 
     const manager = createCapitalManager({
       config: policy(),
@@ -167,8 +171,8 @@ describe("capital manager top-up path selection", () => {
 
     const result = await manager.executeTopup(10, "test_small_topup");
     expect(result.errorMessage).toBeUndefined();
-    expect(paraSend).toHaveBeenCalledWith(desk.toLowerCase(), 10);
-    expect(web3Send).not.toHaveBeenCalled();
+    expect(web3Send).toHaveBeenCalledWith(desk.toLowerCase(), 10);
+    expect(paraSend).not.toHaveBeenCalled();
   });
 
   it("uses web3 when Para is absent even for small amounts", async () => {

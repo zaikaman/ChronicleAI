@@ -172,7 +172,7 @@ describe("routing-metadata", () => {
       ).toBe("keeperhub_private");
     });
 
-    it("allows Para below threshold when Para is available", () => {
+    it("routes every configured transfer through KeeperHub, including below threshold", () => {
       expect(
         selectTreasuryTransferPath({
           amountUsdc: 12.5,
@@ -180,7 +180,7 @@ describe("routing-metadata", () => {
           keeperHubTransferConfigured: true,
           paraAvailable: true,
         }),
-      ).toBe("para");
+      ).toBe("keeperhub");
       expect(
         selectTreasuryTransferPath({
           amountUsdc: 49.99,
@@ -188,18 +188,18 @@ describe("routing-metadata", () => {
           keeperHubTransferConfigured: true,
           paraAvailable: true,
         }),
-      ).toBe("para");
+      ).toBe("keeperhub");
     });
 
-    it("falls back to Para above threshold when KH transfer is not configured", () => {
-      expect(
+    it("throws when Para is the only direct transfer path", () => {
+      expect(() =>
         selectTreasuryTransferPath({
           amountUsdc: 100,
           thresholdUsdc: threshold,
           keeperHubTransferConfigured: false,
           paraAvailable: true,
         }),
-      ).toBe("para");
+      ).toThrow(/KeeperHub transfer workflow is required/);
     });
 
     it("uses keeperhub when Para unavailable and KH transfer configured", () => {

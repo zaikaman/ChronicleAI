@@ -1473,6 +1473,7 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
     registryService,
     web3Client,
     fxService,
+    withdrawalChainId: env.x402ChainId,
   });
 
   const agentJobRepo = createAffiliateAgentJobRepository(

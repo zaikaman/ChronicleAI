@@ -880,12 +880,13 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
       let transferPath: TreasuryTransferPath | "web3" | "para" | undefined;
 
       const threshold = deps.treasuryPrivateTransferThresholdUsdc ?? 50;
-      // Phase 3: large top-ups must not use Para alone when KH-backed web3 exists.
+      // Every demo-visible top-up uses the KeeperHub-backed Web3 facade when it
+      // is available; Para is only a fallback for non-KeeperHub dev/test clients.
       const forcePrivateTopup =
         isAmountAtOrAbovePrivateTransferThreshold(amountUsdc, threshold) &&
         Boolean(web3?.isKeeperHubBacked());
 
-      if (web3 && (forcePrivateTopup || !paraTreasury)) {
+      if (web3 && (web3.isKeeperHubBacked() || forcePrivateTopup || !paraTreasury)) {
         transferPath = forcePrivateTopup
           ? "keeperhub_private"
           : web3.isKeeperHubBacked()

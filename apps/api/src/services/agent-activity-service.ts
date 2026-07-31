@@ -19,12 +19,10 @@ import {
 import {
   buildRegistryRoutingDetails,
   buildTransferRoutingDetails,
-  extractRoutingFromDetails,
-  flashbotsProtectStatusUrl,
   routingBadgeLabel,
-  shouldLinkProtectStatus,
   type RoutingPolicyEnv,
 } from "./routing-metadata.ts";
+import { serializePublicActivityLog } from "./public-activity-serializer.ts";
 import type { LiveTreasuryBalances } from "./treasury-balances.ts";
 
 export interface AgentActivityService {
@@ -280,45 +278,7 @@ export function createAgentActivityService(
         return payment;
       });
 
-      const executionLogs = data.recentLogs.map((l) => {
-        const details =
-          l.details && typeof l.details === "object" && !Array.isArray(l.details)
-            ? (l.details as Record<string, unknown>)
-            : null;
-        const routingMeta = extractRoutingFromDetails(details);
-        const entry: Record<string, unknown> = {
-          id: l.id,
-          actionType: l.action_type,
-          entityType: l.entity_type,
-          entityId: l.entity_id,
-          status: l.status,
-          message: l.message,
-          details: l.details,
-          createdAt: l.created_at,
-        };
-        if (routingMeta) {
-          entry.routing = routingMeta.routing;
-          entry.routingStrict = routingMeta.routingStrict;
-          entry.routingProvider = routingMeta.routingProvider;
-          entry.routingRequested = routingMeta.routingRequested;
-          entry.routingApplied = routingMeta.routingApplied;
-          entry.routingLabel = routingBadgeLabel(routingMeta);
-        }
-        const txHash =
-          typeof details?.txHash === "string"
-            ? details.txHash
-            : typeof details?.transactionHash === "string"
-              ? details.transactionHash
-              : null;
-        if (txHash && shouldLinkProtectStatus(routingMeta)) {
-          const protectUrl = flashbotsProtectStatusUrl(
-            txHash,
-            routingMeta?.chainId,
-          );
-          if (protectUrl) entry.protectStatusUrl = protectUrl;
-        }
-        return entry;
-      });
+      const executionLogs = data.recentLogs.map(serializePublicActivityLog);
 
       const payouts = data.recentPayouts.map((p) => {
         const payout: Record<string, unknown> = {

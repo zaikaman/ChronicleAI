@@ -16,6 +16,7 @@ import type {
 } from "./types.ts";
 
 export interface AffiliateWithdrawalRepository {
+  consumeAuthorizationNonce?(params: { nonce: string; affiliate_wallet: string; expires_at: string }): Promise<Result<boolean>>;
   create(input: AffiliateWithdrawalInsert): Promise<Result<AffiliateWithdrawalRow>>;
   findById(id: string): Promise<Result<AffiliateWithdrawalRow | null>>;
   listByAffiliate(
@@ -67,6 +68,16 @@ export function createAffiliateWithdrawalRepository(
   }
 
   return {
+    async consumeAuthorizationNonce(params) {
+      const { error } = await supabase.from("affiliate_withdrawal_nonces").insert({
+        nonce: params.nonce,
+        affiliate_wallet: normalizeAffiliateWallet(params.affiliate_wallet),
+        expires_at: params.expires_at,
+      });
+      if (!error) return success(true);
+      if (error.code === "23505") return success(false);
+      return failure(mapPostgrestError(error));
+    },
     async create(input) {
       const affiliate = normalizeAffiliateWallet(input.affiliate_wallet);
       if (!affiliate) {

@@ -39,7 +39,7 @@ export function AffiliatePage(): ReactElement {
   const { stats, isLoading, error: dashError, refresh, setStats } =
     useAffiliateDashboard(address);
   const { messages, send, isSending, error: chatError, resetChat } =
-    useAffiliateAgent(address);
+    useAffiliateAgent(address, stats?.availableUsdc ?? 0);
 
   const [copied, setCopied] = useState(false);
   const [connecting, setConnecting] = useState(false);

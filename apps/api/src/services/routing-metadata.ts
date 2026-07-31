@@ -177,8 +177,8 @@ export function isAmountAtOrAbovePrivateTransferThreshold(
  *   if amountUsdc >= TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC
  *     AND KeeperHub transfer workflow configured
  *     → keeperhub_private (workflow already usePrivateMempool)
- *   else if Para available → para
  *   else if KH transfer configured → keeperhub
+ *   Para is never a direct demo-visible execution path.
  *   else throw
  *
  * Never invents hashes. Callers must not fall back Para→public after a
@@ -196,11 +196,13 @@ export function selectTreasuryTransferPath(
   if (forcePrivate) {
     return "keeperhub_private";
   }
-  if (input.paraAvailable) {
-    return "para";
-  }
   if (input.keeperHubTransferConfigured) {
     return "keeperhub";
+  }
+  if (input.paraAvailable) {
+    throw new Error(
+      "KeeperHub transfer workflow is required for demo-visible treasury transfers; Para cannot broadcast directly",
+    );
   }
   throw new Error(
     "No treasury transfer path configured — set PARA_API_KEY and/or KEEPERHUB_WORKFLOW_TRANSFER",

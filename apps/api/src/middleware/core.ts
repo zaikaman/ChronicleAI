@@ -72,7 +72,6 @@ const PUBLIC_GET_CACHE_RULES: Array<{ prefix: string; maxAge: number; swr: numbe
   { prefix: "/desk/intents", maxAge: 15, swr: 60 },
   { prefix: "/desk/tickets", maxAge: 15, swr: 60 },
   { prefix: "/desk/capital-moves", maxAge: 15, swr: 60 },
-  { prefix: "/premium/items", maxAge: 30, swr: 120 },
   { prefix: "/premium/watches", maxAge: 30, swr: 120 },
 ];
 

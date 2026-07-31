@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { apiGetJson, apiPostJson, toErrorMessage } from "../../lib/api.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
+import { keccak256, stringToBytes } from "viem";
+import { useWallet } from "../wallet";
 
 export interface AffiliateStats {
   affiliate: {
@@ -95,7 +97,8 @@ export function useAffiliateDashboard(walletAddress: string | null | undefined) 
   };
 }
 
-export function useAffiliateAgent(walletAddress: string | null | undefined) {
+export function useAffiliateAgent(walletAddress: string | null | undefined, availableUsdc = 0) {
+  const wallet = useWallet();
   const [messages, setMessages] = useState<AgentChatMessage[]>([
     { role: "assistant", content: WELCOME },
   ]);
@@ -117,6 +120,33 @@ export function useAffiliateAgent(walletAddress: string | null | undefined) {
       setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
 
       try {
+        const lower = trimmed.toLowerCase();
+        const isWithdrawal = /\b(withdraw|claim|cash\s*out|pay\s*me|send\s+(me\s+)?(my\s+)?(money|usdc|funds|rewards?))\b/.test(lower);
+        const amountMatch = lower.match(/(?:withdraw|claim|send|transfer|cash\s*out)\s*(?:me\s+)?(?:about\s+)?(\d+(?:\.\d+)?)\s*(?:usdc|usd)?/);
+        const requestedAmount = amountMatch ? Number(amountMatch[1]) : availableUsdc;
+        const nonce = keccak256(stringToBytes(`${address}:${Date.now()}:${Math.random()}`));
+        const expiry = Math.floor(Date.now() / 1000) + 600;
+        const withdrawalAuthorization = {
+          wallet: address,
+          amount: String(Math.round(requestedAmount * 1_000_000)),
+          nonce,
+          expiry,
+          action: "withdraw_usdc",
+          signature: isWithdrawal
+            ? await wallet.signTypedData({
+                domain: { name: "ChronicleAI Affiliate Withdrawal", version: "1", chainId: wallet.chainId ?? 84532 },
+                types: { AffiliateWithdrawal: [
+                  { name: "wallet", type: "address" },
+                  { name: "amount", type: "uint256" },
+                  { name: "nonce", type: "bytes32" },
+                  { name: "expiry", type: "uint256" },
+                  { name: "action", type: "string" },
+                ] },
+                primaryType: "AffiliateWithdrawal",
+                message: { wallet: address, amount: BigInt(Math.round(requestedAmount * 1_000_000)), nonce, expiry: BigInt(expiry), action: "withdraw_usdc" },
+              })
+            : "0x",
+        };
         const jobBody = await apiPostJson<{
           jobId?: string;
           status?: "pending" | "processing" | "completed" | "failed";
@@ -129,6 +159,7 @@ export function useAffiliateAgent(walletAddress: string | null | undefined) {
         }>("/affiliates/agent/chat", {
           walletAddress: address,
           message: trimmed,
+          withdrawalAuthorization,
         });
 
         let finalResult = jobBody;

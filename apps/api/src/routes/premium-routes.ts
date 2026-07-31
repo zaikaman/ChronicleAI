@@ -68,6 +68,15 @@ export function createPremiumRoutes(params: {
   receiptService: PremiumAccessReceiptService;
 }): RouterType {
   const router: RouterType = Router();
+
+  // Premium item responses can contain payer-specific receipts or paid content.
+  // Set this before any handler runs so success and error responses are never
+  // eligible for the global public GET cache.
+  router.use("/premium/items", (_req, res, next) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    next();
+  });
+
   const visibilityService = new PremiumContentVisibilityService();
   const accessService = new PremiumAccessService({
     premiumRepo: params.premiumRepo,

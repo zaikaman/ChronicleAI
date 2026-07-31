@@ -13,6 +13,8 @@ import type { ChronicleRegistryService } from "./chronicle-registry-service.ts";
 import type { AffiliateDashboardService } from "./affiliate-dashboard-service.ts";
 import type { Web3Client } from "./web3-client-service.ts";
 import type { RevenueFxService } from "./revenue-fx-service.ts";
+import type { AffiliateWithdrawalAuthorization } from "./affiliate-withdrawal-auth.ts";
+import { verifyAffiliateWithdrawalAuthorization } from "./affiliate-withdrawal-auth.ts";
 
 export interface AffiliateWithdrawalResult {
   ok: boolean;
@@ -27,6 +29,7 @@ export interface AffiliateWithdrawalService {
   withdraw(params: {
     affiliateWallet: string;
     amountUsdc: number;
+    authorization?: AffiliateWithdrawalAuthorization;
     agentMessage?: string;
   }): Promise<AffiliateWithdrawalResult>;
 }
@@ -59,6 +62,7 @@ export function createAffiliateWithdrawalService(deps: {
   fxService?: RevenueFxService;
   /** Minimum withdrawal in USDC (human units). */
   minWithdrawalUsdc?: number;
+  withdrawalChainId: number;
 }): AffiliateWithdrawalService {
   const minWithdrawal = deps.minWithdrawalUsdc ?? 0.01;
 
@@ -85,6 +89,28 @@ export function createAffiliateWithdrawalService(deps: {
           errorMessage: `Withdrawal amount must be at least ${minWithdrawal} USDC`,
         };
       }
+
+      if (!params.authorization) {
+        return { ok: false, errorMessage: "Withdrawal requires a wallet signature" };
+      }
+
+      const authorization = await verifyAffiliateWithdrawalAuthorization({
+        authorization: params.authorization,
+        expectedWallet: wallet,
+        expectedAmountUsdc: amount,
+        chainId: deps.withdrawalChainId,
+      });
+      if (!authorization.ok) return { ok: false, errorMessage: authorization.error };
+      if (!deps.withdrawalRepo.consumeAuthorizationNonce) {
+        return { ok: false, errorMessage: "Withdrawal nonce storage is not configured" };
+      }
+      const nonceResult = await deps.withdrawalRepo.consumeAuthorizationNonce({
+        nonce: authorization.nonce,
+        affiliate_wallet: wallet,
+        expires_at: new Date(params.authorization.expiry * 1000).toISOString(),
+      });
+      if (!nonceResult.ok) return { ok: false, errorMessage: nonceResult.error.message };
+      if (!nonceResult.value) return { ok: false, errorMessage: "Withdrawal authorization nonce was already used" };
 
       const affiliate = await deps.affiliateRepo.findByWallet(wallet);
       if (!affiliate.ok || !affiliate.value) {
