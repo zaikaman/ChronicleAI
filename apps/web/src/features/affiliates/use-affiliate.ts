@@ -72,12 +72,11 @@ export function useAffiliateDashboard(walletAddress: string | null | undefined) 
   });
 
   const refresh = useCallback(
-    async (wallet?: string | null) => {
-      const target = (wallet ?? walletAddress)?.trim().toLowerCase();
-      if (!target) return;
-      await queryClient.invalidateQueries({ queryKey: queryKeys.affiliates.me(target) });
+    async () => {
+      if (!address) return;
+      await query.refetch({ cancelRefetch: true });
     },
-    [queryClient, walletAddress],
+    [address, query.refetch],
   );
 
   const setStats = useCallback(
@@ -91,6 +90,7 @@ export function useAffiliateDashboard(walletAddress: string | null | undefined) 
   return {
     stats: address ? (query.data ?? null) : null,
     isLoading: Boolean(address) && (query.isLoading || (query.isFetching && !query.data)),
+    isRefreshing: Boolean(address) && query.isFetching,
     error: query.error ? toErrorMessage(query.error, "Failed to load dashboard") : null,
     refresh,
     setStats,

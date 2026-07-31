@@ -36,7 +36,7 @@ export function AffiliatePage(): ReactElement {
   const wallet = useWallet();
   const address = wallet.isConnected && wallet.address ? wallet.address : null;
 
-  const { stats, isLoading, error: dashError, refresh, setStats } =
+  const { stats, isLoading, isRefreshing, error: dashError, refresh, setStats } =
     useAffiliateDashboard(address);
   const { messages, send, isSending, error: chatError, resetChat } =
     useAffiliateAgent(address, stats?.availableUsdc ?? 0);
@@ -140,10 +140,14 @@ export function AffiliatePage(): ReactElement {
             <button
               type="button"
               onClick={() => void refresh()}
-              disabled={isLoading}
-              className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+              disabled={isRefreshing}
+              aria-label={isRefreshing ? "Refreshing affiliate dashboard" : "Refresh affiliate dashboard"}
+              data-testid="affiliate-refresh"
+              className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-wait disabled:opacity-60 transition-colors"
             >
-              Refresh
+              <ButtonSpinner loading={isRefreshing}>
+                {isRefreshing ? "Refreshing…" : "Refresh"}
+              </ButtonSpinner>
             </button>
           </div>
 
