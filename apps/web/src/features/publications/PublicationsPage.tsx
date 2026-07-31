@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { type ReactElement, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
 import {
@@ -131,6 +131,11 @@ export function PublicationsPage(): ReactElement {
     refetch: refetchPremium,
   } = usePremiumTeasers(undefined, 10);
 
+  const visibleAlerts = useMemo(
+    () => alerts.filter((alert) => alert.deliveryStatus !== "draft"),
+    [alerts],
+  );
+
   const totalCount =
     alertsPagination.total + digestsPagination.total + premiumPagination.total;
   const isLoading = alertsLoading || digestsLoading || premiumLoading;
@@ -156,7 +161,7 @@ export function PublicationsPage(): ReactElement {
         }
       />
 
-      {hasError && alerts.length === 0 && digests.length === 0 && premiumItems.length === 0 ? (
+      {hasError && visibleAlerts.length === 0 && digests.length === 0 && premiumItems.length === 0 ? (
         <RetryState
           title="Failed to load publications"
           message={alertsError ?? digestsError ?? premiumError ?? "Unknown error"}
@@ -168,15 +173,15 @@ export function PublicationsPage(): ReactElement {
             title="Public alerts"
             description="Real-time capital-flow and stress publications."
           >
-            {alertsLoading && alerts.length === 0 ? (
+            {alertsLoading && visibleAlerts.length === 0 ? (
               <LoadingState message="Loading alerts..." variant="cards" count={3} />
-            ) : alertsError && alerts.length === 0 ? (
+            ) : alertsError && visibleAlerts.length === 0 ? (
               <RetryState
                 title="Failed to load alerts"
                 message={alertsError}
                 onRetry={refetchAlerts}
               />
-            ) : alerts.length === 0 ? (
+            ) : visibleAlerts.length === 0 ? (
               <EmptyState
                 title="No alerts yet"
                 description="Public alerts will appear here once ChronicleAI publishes them."
@@ -184,7 +189,7 @@ export function PublicationsPage(): ReactElement {
             ) : (
               <>
                 <div className="flex flex-col gap-4">
-                  {alerts.map((alert) => (
+                  {visibleAlerts.map((alert) => (
                     <PublicationCard
                       key={`alert-${alert.id}`}
                       type="alert"
