@@ -42,10 +42,8 @@ export function createSmtpEmailService(config: {
   fromAddress: string | undefined;
   /** Resolves active subscriber emails from the database (or test double). */
   resolveRecipients: ResolveSmtpRecipients;
-  /** Public API origin used for List-Unsubscribe links when available. */
-  publicApiOrigin?: string | undefined;
 }): SmtpEmailService {
-  const { host, port, user, pass, fromAddress, resolveRecipients, publicApiOrigin } = config;
+  const { host, port, user, pass, fromAddress, resolveRecipients } = config;
 
   function isSmtpConfigured(): boolean {
     return Boolean(host && user && pass && fromAddress);
@@ -107,16 +105,6 @@ export function createSmtpEmailService(config: {
     `;
   }
 
-  function buildListUnsubscribeHeaders(): Record<string, string> | undefined {
-    if (!publicApiOrigin) return undefined;
-    const origin = publicApiOrigin.replace(/\/+$/, "");
-    // One-click requires a per-user token URL; generic endpoint documents the API.
-    return {
-      "List-Unsubscribe": `<${origin}/subscribers/unsubscribe>`,
-      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-    };
-  }
-
   async function sendToSubscribers(params: {
     channel: SmtpRecipientChannel;
     subject: string;
@@ -162,8 +150,6 @@ export function createSmtpEmailService(config: {
         auth: { user, pass },
       });
 
-      const headers = buildListUnsubscribeHeaders();
-
       // Use BCC so subscriber emails are not exposed to each other.
       const info = await transporter.sendMail({
         from: fromAddress,
@@ -171,7 +157,6 @@ export function createSmtpEmailService(config: {
         bcc: uniqueRecipients,
         subject: params.subject,
         html: params.html,
-        ...(headers ? { headers } : {}),
       });
 
       const recipientsReached = Array.isArray(info.accepted)

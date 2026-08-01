@@ -301,52 +301,6 @@ export class NewsletterSubscriptionService {
   }
 
   /**
-   * Issue a renewal challenge for an existing subscription whose period is ending or past due.
-   */
-  async startRenewal(params: {
-    email?: string | undefined;
-    payerWallet?: string | undefined;
-  }): Promise<NewsletterChallengeResult> {
-    const subscription = await this.resolveSubscription(params);
-    if (!subscription) {
-      throw badRequest("Newsletter subscription not found");
-    }
-
-    if (subscription.status === "cancelled" && !isNewsletterEntitled(subscription)) {
-      throw badRequest("Subscription is cancelled. Start a new subscribe challenge instead.");
-    }
-    if (subscription.status === "expired") {
-      throw badRequest("Subscription expired. Start a new subscribe challenge instead.");
-    }
-
-    const now = Date.now();
-    const periodEndMs = subscription.current_period_end
-      ? Date.parse(subscription.current_period_end)
-      : 0;
-    const renewWindowStart = periodEndMs - 7 * MS_PER_DAY;
-
-    // Allow renewals in the final 7 days of the period, or anytime past due.
-    if (
-      subscription.status === "active" &&
-      periodEndMs > 0 &&
-      now < renewWindowStart
-    ) {
-      throw badRequest(
-        "Renewal is available in the last 7 days of the current billing period.",
-      );
-    }
-
-    const product = await this.ensureNewsletterProduct();
-    return this.issueChallenge({
-      subscription,
-      product,
-      periodKind: "renewal",
-      payerReference: subscription.payer_wallet ?? undefined,
-      referralAddress: subscription.referral_address,
-    });
-  }
-
-  /**
    * Settle an x402 newsletter challenge and advance the billing period.
    */
   async settle(params: {
@@ -480,56 +434,6 @@ export class NewsletterSubscriptionService {
     };
   }
 
-  async getStatus(params: {
-    email?: string | undefined;
-    payerWallet?: string | undefined;
-  }): Promise<NewsletterSubscriptionRow | null> {
-    return this.resolveSubscription(params);
-  }
-
-  async cancel(params: {
-    email?: string | undefined;
-    payerWallet?: string | undefined;
-    atPeriodEnd?: boolean | undefined;
-  }): Promise<NewsletterSubscriptionRow> {
-    const subscription = await this.resolveSubscription(params);
-    if (!subscription) {
-      throw badRequest("Newsletter subscription not found");
-    }
-
-    const atPeriodEnd = params.atPeriodEnd !== false;
-    const now = new Date().toISOString();
-
-    if (atPeriodEnd && isNewsletterEntitled(subscription)) {
-      const updated = await this.newsletterRepo.update(subscription.id, {
-        cancel_at_period_end: true,
-        cancelled_at: now,
-      });
-      if (!updated.ok) {
-        throw badRequest(updated.error.message);
-      }
-      return updated.value;
-    }
-
-    // Immediate cancel
-    const updated = await this.newsletterRepo.update(subscription.id, {
-      status: "cancelled",
-      cancel_at_period_end: false,
-      cancelled_at: now,
-      next_renewal_at: null,
-      pending_challenge_reference: null,
-      pending_payment_record_id: null,
-    });
-    if (!updated.ok) {
-      throw badRequest(updated.error.message);
-    }
-
-    // Stop digest delivery for this address when fully cancelled
-    await this.subscriberRepo.unsubscribeByEmail(subscription.email);
-
-    return updated.value;
-  }
-
   /**
    * Transition active → past_due → expired when billing periods elapse without renewal.
    */
@@ -632,39 +536,6 @@ export class NewsletterSubscriptionService {
   }
 
   // ── Internals ─────────────────────────────────────────
-
-  private async resolveSubscription(params: {
-    email?: string | undefined;
-    payerWallet?: string | undefined;
-  }): Promise<NewsletterSubscriptionRow | null> {
-    const email = params.email?.trim();
-    const wallet = params.payerWallet?.trim();
-
-    if (!email && !wallet) {
-      throw badRequest("email or payerWallet is required");
-    }
-
-    if (email) {
-      if (!isValidSubscriberEmail(email)) {
-        throw badRequest("Invalid email address");
-      }
-      const result = await this.newsletterRepo.findByEmail(email);
-      if (!result.ok) {
-        throw badRequest(result.error.message);
-      }
-      return result.value;
-    }
-
-    const normalized = normalizeWalletAddress(wallet);
-    if (!normalized) {
-      throw badRequest("Invalid payer wallet address");
-    }
-    const result = await this.newsletterRepo.findByPayerWallet(normalized);
-    if (!result.ok) {
-      throw badRequest(result.error.message);
-    }
-    return result.value;
-  }
 
   private async issueChallenge(params: {
     subscription: NewsletterSubscriptionRow;

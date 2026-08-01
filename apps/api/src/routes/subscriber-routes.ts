@@ -4,8 +4,8 @@ import type { EmailSubscriberRepository } from "@chronicleai/db";
 import type { EmailSubscriberSource } from "@chronicleai/schemas";
 import { Router, type Router as RouterType } from "express";
 import {
-  toNewsletterSubscriptionResponse,
   type NewsletterSubscriptionService,
+  toNewsletterSubscriptionResponse,
 } from "../services/newsletter-subscription-service.ts";
 
 const ALLOWED_SOURCES = new Set<EmailSubscriberSource>(["web", "api", "premium", "import"]);
@@ -89,84 +89,6 @@ export function createSubscriberRoutes(
     }
   });
 
-  /**
-   * POST /subscribers/unsubscribe
-   * Body: { email? } or { token? } — at least one required
-   */
-  router.post("/subscribers/unsubscribe", async (req, res, next) => {
-    try {
-      const body = (req.body ?? {}) as Record<string, unknown>;
-      const email = typeof body.email === "string" ? body.email.trim() : "";
-      const token = typeof body.token === "string" ? body.token.trim() : "";
-
-      if (!email && !token) {
-        res.status(400).json({ error: "email or token is required" });
-        return;
-      }
-
-      const result = token
-        ? await subscriberRepo.unsubscribeByToken(token)
-        : await subscriberRepo.unsubscribeByEmail(email);
-
-      if (!result.ok) {
-        const status = result.error.statusCode || 500;
-        res.status(status).json({ error: result.error.message, code: result.error.code });
-        return;
-      }
-
-      if (!result.value) {
-        res.status(404).json({ error: "Subscriber not found" });
-        return;
-      }
-
-      res.json({
-        email: result.value.email,
-        status: result.value.status,
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  /**
-   * GET /subscribers/unsubscribe?token=...
-   * One-click / email-link unsubscribe (browser-friendly).
-   */
-  router.get("/subscribers/unsubscribe", async (req, res, next) => {
-    try {
-      const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
-      const email = typeof req.query.email === "string" ? req.query.email.trim() : "";
-
-      if (!token && !email) {
-        res.status(400).json({ error: "token or email query parameter is required" });
-        return;
-      }
-
-      const result = token
-        ? await subscriberRepo.unsubscribeByToken(token)
-        : await subscriberRepo.unsubscribeByEmail(email);
-
-      if (!result.ok) {
-        const status = result.error.statusCode || 500;
-        res.status(status).json({ error: result.error.message, code: result.error.code });
-        return;
-      }
-
-      if (!result.value) {
-        res.status(404).json({ error: "Subscriber not found" });
-        return;
-      }
-
-      res.json({
-        email: result.value.email,
-        status: result.value.status,
-        message: "You have been unsubscribed from ChronicleAI email updates.",
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
   // ── Recurring x402 monthly newsletter ─────────────────
 
   /**
@@ -190,48 +112,9 @@ export function createSubscriberRoutes(
 
       const result = await newsletterService.startSubscribe({
         email,
-        payerReference:
-          typeof body.payerReference === "string" ? body.payerReference : undefined,
+        payerReference: typeof body.payerReference === "string" ? body.payerReference : undefined,
         referralAddress:
           typeof body.referralAddress === "string" ? body.referralAddress : undefined,
-      });
-
-      res.status(201).json({
-        subscriptionId: result.subscription.id,
-        email: result.subscription.email,
-        status: result.subscription.status,
-        challengeReference: result.challenge.challengeReference,
-        paymentRoute: "x402" as const,
-        amountRequested: result.challenge.amountRequested,
-        currency: result.challenge.currency,
-        expiresAt: result.challenge.expiresAt,
-        challengeData: result.challenge.challengeData,
-        paymentRecordId: result.paymentRecordId,
-        billingPeriodDays: result.subscription.billing_period_days,
-        agreementType: "recurring_newsletter" as const,
-        periodKind: result.periodKind,
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  /**
-   * POST /subscribers/newsletter/renew
-   * Issue a renewal challenge for the next billing period.
-   * Body: { email? } or { payerWallet? }
-   */
-  router.post("/subscribers/newsletter/renew", async (req, res, next) => {
-    try {
-      if (!newsletterService) {
-        res.status(503).json({ error: "Newsletter subscription service is not configured" });
-        return;
-      }
-
-      const body = (req.body ?? {}) as Record<string, unknown>;
-      const result = await newsletterService.startRenewal({
-        email: typeof body.email === "string" ? body.email : undefined,
-        payerWallet: typeof body.payerWallet === "string" ? body.payerWallet : undefined,
       });
 
       res.status(201).json({
@@ -314,56 +197,6 @@ export function createSubscriberRoutes(
             : {}),
         },
       });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  /**
-   * GET /subscribers/newsletter/status?email=... | ?payerWallet=...
-   */
-  router.get("/subscribers/newsletter/status", async (req, res, next) => {
-    try {
-      if (!newsletterService) {
-        res.status(503).json({ error: "Newsletter subscription service is not configured" });
-        return;
-      }
-
-      const email = typeof req.query.email === "string" ? req.query.email : undefined;
-      const payerWallet =
-        typeof req.query.payerWallet === "string" ? req.query.payerWallet : undefined;
-
-      const subscription = await newsletterService.getStatus({ email, payerWallet });
-      if (!subscription) {
-        res.status(404).json({ error: "Newsletter subscription not found" });
-        return;
-      }
-
-      res.json(toNewsletterSubscriptionResponse(subscription));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  /**
-   * POST /subscribers/newsletter/cancel
-   * Body: { email? | payerWallet?, atPeriodEnd? }
-   */
-  router.post("/subscribers/newsletter/cancel", async (req, res, next) => {
-    try {
-      if (!newsletterService) {
-        res.status(503).json({ error: "Newsletter subscription service is not configured" });
-        return;
-      }
-
-      const body = (req.body ?? {}) as Record<string, unknown>;
-      const subscription = await newsletterService.cancel({
-        email: typeof body.email === "string" ? body.email : undefined,
-        payerWallet: typeof body.payerWallet === "string" ? body.payerWallet : undefined,
-        atPeriodEnd: body.atPeriodEnd === undefined ? true : Boolean(body.atPeriodEnd),
-      });
-
-      res.json(toNewsletterSubscriptionResponse(subscription));
     } catch (error) {
       next(error);
     }

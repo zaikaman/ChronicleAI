@@ -918,7 +918,7 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
   // Latest digest (no auth required)
   apiRouter.use(createDigestRoutes(deps.digestRepo));
 
-  // Free email opt-in + recurring x402 newsletter subscribe / renew / settle
+  // Free email opt-in + recurring x402 newsletter subscribe / settle
   apiRouter.use(createSubscriberRoutes(deps.subscriberRepo, newsletterService));
 
   // Billing cycle: active → past_due → expired without renewal
