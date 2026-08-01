@@ -21,7 +21,7 @@ export function createKeeperhubEventRoutes(
    *   - Classified payloads: eventType + magnitude (existing contract)
    *   - Raw Event Tracker payloads: eventName + address + args (normalized server-side)
    *
-   * The request must include a valid X-ChronicleAI-Signature header.
+ * The request must include valid X-ChronicleAI timestamp, nonce, and signature headers.
    *
    * Responses:
    *   202 - Event accepted for processing

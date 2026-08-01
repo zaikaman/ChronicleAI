@@ -7,6 +7,7 @@ import {
   createInvalidWindowPayload,
   createValidDigestRunPayload,
 } from "../../apps/api/src/test/fixtures/digests.ts";
+import { keeperhubSignatureHeaders } from "./keeperhub-signature-headers.ts";
 
 const ENV = {
   SUPABASE_URL: "http://localhost:54321",
@@ -51,14 +52,20 @@ describe("POST /keeperhub/digests/run", () => {
 
   it("returns 400 for invalid payload (missing periodEnd)", async () => {
     const invalid = createInvalidWindowPayload();
+    const body = JSON.stringify(invalid);
 
     const response = await fetch(`${server.url}/keeperhub/digests/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ChronicleAI-Signature": process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/digests/run",
+          method: "POST",
+          body,
+        }),
       },
-      body: JSON.stringify(invalid),
+      body,
     });
 
     expect(response.status).toBe(400);
@@ -66,17 +73,23 @@ describe("POST /keeperhub/digests/run", () => {
 
   it("returns 400 for reversed window (start after end)", async () => {
     const now = Date.now();
+    const body = JSON.stringify({
+      periodStart: new Date(now).toISOString(),
+      periodEnd: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+    });
 
     const response = await fetch(`${server.url}/keeperhub/digests/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ChronicleAI-Signature": process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/digests/run",
+          method: "POST",
+          body,
+        }),
       },
-      body: JSON.stringify({
-        periodStart: new Date(now).toISOString(),
-        periodEnd: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
-      }),
+      body,
     });
 
     expect(response.status).toBe(400);

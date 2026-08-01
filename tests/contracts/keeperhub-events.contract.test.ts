@@ -8,6 +8,7 @@ import {
   createQualifyingEvent,
   createRawUniswapSwapEvent,
 } from "../../apps/api/src/test/fixtures/keeperhub-events.ts";
+import { keeperhubSignatureHeaders } from "./keeperhub-signature-headers.ts";
 
 // Set env vars before importing app (dynamic import in beforeAll)
 const ENV = {
@@ -52,14 +53,20 @@ describe("POST /keeperhub/events", () => {
 
   it("returns 400 for malformed payload", async () => {
     const malformed = createMalformedEvent();
+    const body = JSON.stringify(malformed);
 
     const response = await fetch(`${server.url}/keeperhub/events`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ChronicleAI-Signature": process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/events",
+          method: "POST",
+          body,
+        }),
       },
-      body: JSON.stringify(malformed),
+      body,
     });
 
     expect(response.status).toBe(400);
@@ -69,15 +76,20 @@ describe("POST /keeperhub/events", () => {
     "returns 202 for valid qualifying event when signature is correct",
     async () => {
       const event = createQualifyingEvent();
+      const body = JSON.stringify(event);
 
       const response = await fetch(`${server.url}/keeperhub/events`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-ChronicleAI-Signature":
-            process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          ...keeperhubSignatureHeaders({
+            secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+            path: "/keeperhub/events",
+            method: "POST",
+            body,
+          }),
         },
-        body: JSON.stringify(event),
+        body,
       });
 
       // LLM generation may take a few seconds when providers are configured
@@ -88,14 +100,20 @@ describe("POST /keeperhub/events", () => {
 
   it("returns 202 for raw Uniswap Swap payload (server-side normalization)", async () => {
     const event = createRawUniswapSwapEvent();
+    const body = JSON.stringify(event);
 
     const response = await fetch(`${server.url}/keeperhub/events`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ChronicleAI-Signature": process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/events",
+          method: "POST",
+          body,
+        }),
       },
-      body: JSON.stringify(event),
+      body,
     });
 
     // 202 when DB is available; 500-class possible if routes partially configured

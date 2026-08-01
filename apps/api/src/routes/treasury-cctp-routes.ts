@@ -3,7 +3,7 @@
 // POST /treasury/cctp/rebalance  (force; optional amountUsdc)
 // POST /treasury/cctp/resume
 //
-// Mount behind keeperhubSignatureMiddleware (X-ChronicleAI-Signature) or equivalent.
+// Mount behind keeperhubSignatureMiddleware (the X-ChronicleAI-* HMAC headers) or equivalent.
 
 import { Router, type Router as RouterType } from "express";
 import type { CctpRebalanceTransferRow } from "@chronicleai/db";

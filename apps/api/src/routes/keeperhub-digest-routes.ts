@@ -15,7 +15,7 @@ export function createKeeperhubDigestRoutes(handler: DigestRunHandler): RouterTy
    * POST /keeperhub/digests/run
    *
    * Trigger a daily digest generation for a reporting window.
-   * The request must include a valid X-ChronicleAI-Signature header.
+ * The request must include valid X-ChronicleAI timestamp, nonce, and signature headers.
    * Idempotent: if a digest already exists for the window, returns 202 (duplicate).
    *
    * Request body (either form):

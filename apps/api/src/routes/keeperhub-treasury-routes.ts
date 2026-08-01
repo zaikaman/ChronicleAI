@@ -13,7 +13,7 @@ export function createKeeperhubTreasuryRoutes(handler: TreasuryCheckHandler): Ro
    *
    * Trigger a treasury health check. Records a treasury snapshot and
    * emits low-balance warnings if the available balance is below the safety buffer.
-   * The request must include a valid X-ChronicleAI-Signature header.
+ * The request must include valid X-ChronicleAI timestamp, nonce, and signature headers.
    *
    * Request body:
    *   capturedAt: ISO string - When the balance was measured

@@ -16,7 +16,7 @@ export function createKeeperhubSponsoredWatchRoutes(
    * POST /keeperhub/sponsored-watches/run
    *
    * Run one sponsored-watch campaign cycle (activate / monitor / complete).
-   * Requires valid X-ChronicleAI-Signature (KeeperHub webhook secret).
+ * Requires valid X-ChronicleAI timestamp, nonce, and signature headers (KeeperHub webhook secret).
    *
    * Optional body:
    *   now?: ISO timestamp override (for deterministic tests / backfill)

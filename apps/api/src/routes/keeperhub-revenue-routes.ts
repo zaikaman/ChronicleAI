@@ -19,7 +19,7 @@ export function createKeeperhubRevenueRoutes(handler: RevenueRoutingHandler): Ro
    * Trigger autonomous revenue routing. Calculates distributable revenue,
    * creates payout records, executes batched transfers, and calls recordPayout
    * on the Chronicle Registry.
-   * The request must include a valid X-ChronicleAI-Signature header.
+ * The request must include valid X-ChronicleAI timestamp, nonce, and signature headers.
    *
    * Request body:
    *   periodHash: string - Unique identifier for this routing period

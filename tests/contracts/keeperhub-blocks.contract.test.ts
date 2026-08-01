@@ -3,6 +3,7 @@
 import { createTestServer } from "@chronicleai/testing";
 import type { TestServer } from "@chronicleai/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { keeperhubSignatureHeaders } from "./keeperhub-signature-headers.ts";
 
 const ENV = {
   SUPABASE_URL: "http://localhost:54321",
@@ -44,14 +45,19 @@ describe("POST /keeperhub/blocks", () => {
   });
 
   it("returns 400 for missing chainId/blockNumber", async () => {
+    const body = JSON.stringify({});
     const response = await fetch(`${server.url}/keeperhub/blocks`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ChronicleAI-Signature":
-          process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/blocks",
+          method: "POST",
+          body,
+        }),
       },
-      body: JSON.stringify({}),
+      body,
     });
     expect(response.status).toBe(400);
   });
@@ -60,14 +66,19 @@ describe("POST /keeperhub/blocks", () => {
     // Block analysis requires RPC; this suite deletes RPC_URL in beforeAll.
     // If a real RPC_URL is present in the process (e.g. root .env loaded later),
     // accept either 502 (no RPC) or 202 (RPC available and block analyzed).
+    const body = JSON.stringify({ chainId: 1, blockNumber: 20_000_000 });
     const response = await fetch(`${server.url}/keeperhub/blocks`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ChronicleAI-Signature":
-          process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/blocks",
+          method: "POST",
+          body,
+        }),
       },
-      body: JSON.stringify({ chainId: 1, blockNumber: 20_000_000 }),
+      body,
     });
 
     if (!process.env.RPC_URL) {

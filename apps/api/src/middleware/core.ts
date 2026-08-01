@@ -25,7 +25,7 @@ export function corsMiddleware(allowedOrigin: string) {
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature, X-Premium-Access-Receipt, X-Payer-Reference",
+      "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature, X-ChronicleAI-Timestamp, X-ChronicleAI-Nonce, X-Premium-Access-Receipt, X-Payer-Reference",
     );
     res.setHeader(
       "Access-Control-Expose-Headers",

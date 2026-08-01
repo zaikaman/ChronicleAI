@@ -1,4 +1,4 @@
-// KeeperHub desk routes (signed with X-ChronicleAI-Signature):
+// KeeperHub desk routes (signed with the X-ChronicleAI-* HMAC headers):
 // POST /keeperhub/desk/signals
 // POST /keeperhub/desk/capital
 // POST /keeperhub/desk/tick

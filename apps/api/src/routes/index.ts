@@ -641,7 +641,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   );
   apiRouter.use(keeperhubRouter);
 
-  // Admin/demo CCTP treasury routes (auth: X-ChronicleAI-Signature).
+  // Admin/demo CCTP treasury routes (auth: X-ChronicleAI-* HMAC headers).
   // Middleware is path-scoped so public routes (/alerts, /desk, …) stay open.
   const treasuryCctpRouter = Router();
   treasuryCctpRouter.use(

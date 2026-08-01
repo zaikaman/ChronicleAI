@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import express from "express";
+import express, { type Request } from "express";
 import type { AddressInfo } from "node:net";
 import { createTreasuryCctpRoutes } from "../routes/treasury-cctp-routes.ts";
-import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
+import {
+  computeKeeperhubSignature,
+  keeperhubSignatureMiddleware,
+} from "../middleware/keeperhub-signature.ts";
 import { errorHandler } from "../middleware/core.ts";
 import type { CctpRebalanceService } from "../cctp/rebalance-service.ts";
 import type { CctpRebalanceTransferRow } from "@chronicleai/db";
+import { randomBytes } from "node:crypto";
 
 const SECRET = "test-keeperhub-webhook-secret-32chars!";
 
@@ -120,7 +124,13 @@ async function withServer(
   fn: (baseUrl: string) => Promise<void>,
 ): Promise<void> {
   const app = express();
-  app.use(express.json());
+  app.use(
+    express.json({
+      verify: (req, _res, body) => {
+        (req as Request).rawBody = Buffer.from(body);
+      },
+    }),
+  );
   mount(app);
   app.use(errorHandler);
   const server = await new Promise<import("node:http").Server>((resolve) => {
@@ -136,9 +146,25 @@ async function withServer(
   }
 }
 
-function signedHeaders(extra: Record<string, string> = {}): Record<string, string> {
+function signedHeaders(
+  path: string,
+  method = "GET",
+  body = "",
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const nonce = randomBytes(16).toString("hex");
   return {
-    "X-ChronicleAI-Signature": SECRET,
+    "X-ChronicleAI-Timestamp": String(timestamp),
+    "X-ChronicleAI-Nonce": nonce,
+    "X-ChronicleAI-Signature": computeKeeperhubSignature({
+      secret: SECRET,
+      method,
+      path,
+      body,
+      timestamp,
+      nonce,
+    }),
     ...extra,
   };
 }
@@ -172,7 +198,7 @@ describe("treasury CCTP routes", () => {
       },
       async (base) => {
         const res = await fetch(`${base}/treasury/cctp/status`, {
-          headers: signedHeaders(),
+          headers: signedHeaders("/treasury/cctp/status"),
         });
         expect(res.status).toBe(200);
         const body = (await res.json()) as {
@@ -210,13 +236,14 @@ describe("treasury CCTP routes", () => {
         mountCctp(app, mockService({ forceRebalance }));
       },
       async (base) => {
+        const payload = JSON.stringify({ amountUsdc: 1 });
         const res = await fetch(`${base}/treasury/cctp/rebalance`, {
           method: "POST",
           headers: {
-            ...signedHeaders(),
+            ...signedHeaders("/treasury/cctp/rebalance", "POST", payload),
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ amountUsdc: 1 }),
+          body: payload,
         });
         expect(res.status).toBe(200);
         const body = (await res.json()) as {
@@ -243,13 +270,14 @@ describe("treasury CCTP routes", () => {
         mountCctp(app, mockService());
       },
       async (base) => {
+        const payload = JSON.stringify({ amountUsdc: -1 });
         const res = await fetch(`${base}/treasury/cctp/rebalance`, {
           method: "POST",
           headers: {
-            ...signedHeaders(),
+            ...signedHeaders("/treasury/cctp/rebalance", "POST", payload),
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ amountUsdc: -1 }),
+          body: payload,
         });
         expect(res.status).toBe(400);
       },
@@ -275,7 +303,7 @@ describe("treasury CCTP routes", () => {
       async (base) => {
         const res = await fetch(`${base}/treasury/cctp/resume`, {
           method: "POST",
-          headers: signedHeaders(),
+          headers: signedHeaders("/treasury/cctp/resume", "POST"),
         });
         expect(res.status).toBe(200);
         const body = (await res.json()) as {
@@ -298,7 +326,7 @@ describe("treasury CCTP routes", () => {
       },
       async (base) => {
         const res = await fetch(`${base}/treasury/cctp/status`, {
-          headers: signedHeaders(),
+          headers: signedHeaders("/treasury/cctp/status"),
         });
         expect(res.status).toBe(503);
         const body = (await res.json()) as { error: string };

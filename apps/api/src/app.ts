@@ -25,7 +25,7 @@ import { createAffiliateFundingService } from "./services/affiliate-funding-serv
 import { createParaTreasuryClientFromEnv } from "./services/para-treasury-client.ts";
 import { createPremiumProductizerService } from "./services/premium-productizer-service.ts";
 import { createProviderConfigs } from "./services/llm-provider-client.ts";
-import express, { type Express } from "express";
+import express, { type Express, type Request } from "express";
 import compression from "compression";
 import {
   corsMiddleware,
@@ -53,7 +53,13 @@ app.set("trust proxy", 1);
 
 // Middleware — compression first so JSON/API bodies are gzip/br encoded (P1-7)
 app.use(compression({ threshold: 1024 }));
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, body) => {
+      (req as Request).rawBody = Buffer.from(body);
+    },
+  }),
+);
 app.use(requestIdMiddleware);
 app.use(timingMiddleware);
 
