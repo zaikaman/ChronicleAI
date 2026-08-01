@@ -91,7 +91,7 @@ export function createPayoutRecordRepository(supabase: SupabaseClient): PayoutRe
       });
 
       const { data, error, count } = await table()
-        .select("*", { count: "exact" })
+        .select("*", { count: params?.countMode ?? "exact" })
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
 

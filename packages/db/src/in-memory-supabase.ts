@@ -28,7 +28,7 @@ interface QueryState {
   payload?: Row | Row[];
   single?: boolean;
   head?: boolean;
-  countExact?: boolean;
+  countRequested?: boolean;
 }
 
 function newId(): string {
@@ -158,7 +158,10 @@ class InMemoryQueryBuilder implements PromiseLike<{
     return new InMemoryQueryBuilder(this.store, { ...this.state, ...patch });
   }
 
-  select(columns = "*", options?: { count?: "exact"; head?: boolean }): InMemoryQueryBuilder {
+  select(
+    columns = "*",
+    options?: { count?: "exact" | "planned" | "estimated"; head?: boolean },
+  ): InMemoryQueryBuilder {
     // insert/update/delete pipelines call .select() after mutation; keep action.
     const headPatch =
       options?.head === undefined ? {} : ({ head: options.head } as const);
@@ -166,14 +169,14 @@ class InMemoryQueryBuilder implements PromiseLike<{
       return this.clone({
         selectColumns: columns,
         ...headPatch,
-        countExact: options?.count === "exact",
+        countRequested: options?.count !== undefined,
       });
     }
     return this.clone({
       action: "select",
       selectColumns: columns,
       ...headPatch,
-      countExact: options?.count === "exact",
+      countRequested: options?.count !== undefined,
     });
   }
 
@@ -517,7 +520,7 @@ class InMemoryQueryBuilder implements PromiseLike<{
       return {
         data: null,
         error: null,
-        count: this.state.countExact ? total : null,
+        count: this.state.countRequested ? total : null,
       };
     }
 
@@ -537,7 +540,7 @@ class InMemoryQueryBuilder implements PromiseLike<{
     return {
       data: projected,
       error: null,
-      count: this.state.countExact ? total : null,
+      count: this.state.countRequested ? total : null,
     };
   }
 }

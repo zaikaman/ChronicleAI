@@ -15,6 +15,12 @@ import {
 export interface PaginationParams {
   page?: number;
   limit?: number;
+  /**
+   * Controls the database work used to populate pagination totals.
+   * Exact remains the default for existing callers; public Activity uses
+   * planned counts because it only needs a navigation hint.
+   */
+  countMode?: "exact" | "planned" | "estimated";
 }
 
 /** Canonical page-based list envelope used by repositories and API responses. */

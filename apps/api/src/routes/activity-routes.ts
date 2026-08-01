@@ -153,6 +153,7 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
       const result = await execLogRepo.listPage({
         page: parsed.page,
         limit: parsed.limit,
+        countMode: "planned",
         ...(entityId ? { entityId } : {}),
         ...(entityType ? { entityType } : {}),
       });
@@ -185,33 +186,41 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
       const result = await paymentRecordRepo.listPage({
         page: parsed.page,
         limit: parsed.limit,
+        countMode: "planned",
       });
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });
         return;
       }
 
-      const paymentsWithReasons = await Promise.all(
-        result.value.items.map(async (p) => {
-          if (p.status === "underpaid" || p.status === "expired") {
-            return { payment: p, failureReason: paymentFailureReason(p) };
+      const failedPaymentIds = result.value.items
+        .filter((p) => p.status === "failed")
+        .map((p) => p.id);
+      const diagnosticsByPaymentId = new Map<
+        string,
+        { details?: unknown; message?: string | null }
+      >();
+
+      if (failedPaymentIds.length > 0 && execLogRepo.listFailedByEntityIds) {
+        const diagnostics = await execLogRepo
+          .listFailedByEntityIds("payment_record", failedPaymentIds, 10)
+          .catch(() => null);
+        if (diagnostics?.ok) {
+          for (const diagnostic of diagnostics.value) {
+            if (diagnostic.entity_id && !diagnosticsByPaymentId.has(diagnostic.entity_id)) {
+              diagnosticsByPaymentId.set(diagnostic.entity_id, diagnostic);
+            }
           }
+        }
+      }
 
-          if (p.status !== "failed") {
-            return { payment: p, failureReason: undefined };
-          }
-
-          const logs = await execLogRepo.listByEntity("payment_record", p.id, 10).catch(() => null);
-          const failedLog = logs?.ok
-            ? logs.value.find((log) => log.status === "failed")
-            : undefined;
-
-          return {
-            payment: p,
-            failureReason: paymentFailureReason(p, failedLog),
-          };
-        }),
-      );
+      const paymentsWithReasons = result.value.items.map((payment) => ({
+        payment,
+        failureReason: paymentFailureReason(
+          payment,
+          diagnosticsByPaymentId.get(payment.id),
+        ),
+      }));
 
       res.json(
         fromDbPage(
@@ -269,6 +278,7 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
       const result = await payoutRepo.listPage({
         page: parsed.page,
         limit: parsed.limit,
+        countMode: "planned",
       });
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });
@@ -354,6 +364,7 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
       const result = await cctpRebalanceRepo.listPage({
         page: parsed.page,
         limit: parsed.limit,
+        countMode: "planned",
       });
       if (!result.ok) {
         res.status(500).json({ error: result.error.message });

@@ -266,7 +266,7 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       });
 
       const { data, error, count } = await table()
-        .select("*", { count: "exact" })
+        .select("*", { count: params?.countMode ?? "exact" })
         .order("requested_at", { ascending: false })
         .range(offset, offset + limit - 1);
 

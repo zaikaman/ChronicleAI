@@ -20,6 +20,12 @@ export interface ExecutionLogListPageParams extends PaginationParams {
   entityType?: string;
 }
 
+/** The fields needed to render a public payment failure reason. */
+export type ExecutionLogFailureDiagnostic = Pick<
+  ExecutionLogRow,
+  "entity_id" | "status" | "message" | "details"
+>;
+
 export interface ExecutionLogRepository {
   append(data: ExecutionLogInsert): Promise<Result<ExecutionLogRow>>;
   listByEntity(
@@ -28,6 +34,12 @@ export interface ExecutionLogRepository {
     limitParam?: number,
   ): Promise<Result<ExecutionLogRow[]>>;
   listRecent(limitParam?: number): Promise<Result<ExecutionLogRow[]>>;
+  /** Fetch failed diagnostics for many entities with one database query. */
+  listFailedByEntityIds?(
+    entityType: string,
+    entityIds: readonly string[],
+    limitPerEntity?: number,
+  ): Promise<Result<ExecutionLogFailureDiagnostic[]>>;
   listPage(
     params?: ExecutionLogListPageParams,
   ): Promise<Result<PaginatedResult<ExecutionLogRow>>>;
@@ -120,6 +132,34 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
       return success(rows as unknown as ExecutionLogRow[]);
     },
 
+    async listFailedByEntityIds(entityType, entityIds, limitPerEntity = 10) {
+      const ids = [
+        ...new Set(
+          entityIds.filter((id) =>
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+              id.trim(),
+            ),
+          ),
+        ),
+      ];
+      if (ids.length === 0) return success([]);
+
+      const safeLimitPerEntity = Math.min(100, Math.max(1, Math.floor(limitPerEntity)));
+      const { data: rows, error } = await table()
+        .select("entity_id, status, message, details")
+        .eq("entity_type", entityType)
+        .eq("status", "failed")
+        .in("entity_id", ids)
+        .order("created_at", { ascending: false })
+        // The caller only needs the same bounded diagnostic window as
+        // listByEntity, while the query itself remains batched.
+        .limit(Math.min(1000, ids.length * safeLimitPerEntity));
+
+      if (error) return failure(mapPostgrestError(error));
+
+      return success((rows ?? []) as unknown as ExecutionLogFailureDiagnostic[]);
+    },
+
     async listPage(params) {
       const { page, limit, offset } = normalizePagination(params, {
         defaultLimit: 25,
@@ -139,7 +179,7 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
           : null;
 
       let query = table()
-        .select("*", { count: "exact" })
+        .select("*", { count: params?.countMode ?? "exact" })
         .order("created_at", { ascending: false });
 
       if (entityId) {
