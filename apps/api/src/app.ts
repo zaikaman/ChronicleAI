@@ -48,7 +48,9 @@ const isProduction = (process.env["NODE_ENV"] ?? "development") === "production"
 const isTestRuntime =
   process.env["NODE_ENV"] === "test" || process.env["VITEST"] === "true";
 
-// Trust reverse-proxy (Heroku) so req.ip / rate-limit keys use X-Forwarded-For.
+// Trust the single reverse-proxy hop (Heroku). Express resolves req.ip using
+// this setting; rate limiting must use that resolved value instead of parsing
+// the client-controlled X-Forwarded-For header itself.
 app.set("trust proxy", 1);
 
 // Middleware — compression first so JSON/API bodies are gzip/br encoded (P1-7)

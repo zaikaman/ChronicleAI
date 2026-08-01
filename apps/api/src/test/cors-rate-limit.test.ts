@@ -17,12 +17,18 @@ type MockResponse = {
   end(): MockResponse;
 };
 
-function createRequest(method: string, path: string): Request {
+function createRequest(
+  method: string,
+  path: string,
+  options: { ip?: string; forwardedFor?: string } = {},
+): Request {
   return {
     method,
     path,
-    headers: {},
-    ip: "127.0.0.1",
+    headers: options.forwardedFor
+      ? { "x-forwarded-for": options.forwardedFor }
+      : {},
+    ip: options.ip ?? "127.0.0.1",
     socket: { remoteAddress: "127.0.0.1" },
   } as unknown as Request;
 }
@@ -120,6 +126,36 @@ describe("CORS and rate-limit middleware", () => {
     const nextCalled = runMiddleware(
       limiter,
       createRequest("GET", "/affiliates/agent/chat/jobs/job_test"),
+      response,
+    );
+
+    expect(nextCalled).toBe(false);
+    expect(response.statusCode).toBe(429);
+  });
+
+  it("does not let spoofed forwarded IPs bypass the resolved-IP limit", () => {
+    const limiter = publicAndLlmRateLimitMiddleware();
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = createResponse();
+      const nextCalled = runMiddleware(
+        limiter,
+        createRequest("GET", "/affiliates/agent/chat/jobs/job_test", {
+          forwardedFor: `198.51.100.${attempt + 1}`,
+        }),
+        response,
+      );
+
+      expect(nextCalled).toBe(true);
+      expect(response.statusCode).toBe(200);
+    }
+
+    const response = createResponse();
+    const nextCalled = runMiddleware(
+      limiter,
+      createRequest("GET", "/affiliates/agent/chat/jobs/job_test", {
+        forwardedFor: "203.0.113.99",
+      }),
       response,
     );
 

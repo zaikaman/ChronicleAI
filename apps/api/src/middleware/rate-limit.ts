@@ -1,6 +1,8 @@
 /**
  * P2-3: In-process sliding-window rate limits for public + LLM-adjacent routes.
- * Per-IP (or X-Forwarded-For first hop). Suitable for single-dyno; multi-dyno
+ * Per-IP. Express resolves the IP according to the app's trusted-proxy
+ * configuration; do not parse forwarded headers here because clients can send
+ * arbitrary X-Forwarded-For values. Suitable for single-dyno; multi-dyno
  * needs Redis/shared store later.
  */
 
@@ -26,13 +28,6 @@ type Bucket = {
 const stores = new Map<string, Map<string, Bucket>>();
 
 function clientKey(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    return forwarded.split(",")[0]?.trim() || "unknown";
-  }
-  if (Array.isArray(forwarded) && forwarded[0]) {
-    return forwarded[0].split(",")[0]?.trim() || "unknown";
-  }
   return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
