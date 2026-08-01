@@ -53,11 +53,12 @@ export interface ParaTreasuryClient {
   getUsdcBalance(): Promise<number>;
   /**
    * Broadcast a USDC ERC-20 transfer from the Para MPC wallet.
-   * @param amountUsdc Human USDC units (e.g. 12.5), not base units.
+   * @param amountUsdc Human USDC units as a decimal string (e.g. "12.5"), not base units.
+   * Decimal strings are required so conversion to token units is exact.
    */
   sendTransfer(
     to: string,
-    amountUsdc: number,
+    amountUsdc: string,
     idempotencyKey?: string,
   ): Promise<OnChainWriteReceipt>;
   /** Chain ID used for Para EVM operations. */
@@ -152,6 +153,49 @@ function publicClientFor(rpcUrl: string, chainId: number) {
     chain: chainFromId(chainId),
     transport: http(rpcUrl.trim()),
   });
+}
+
+const DECIMAL_AMOUNT_RE = /^\d+(?:\.\d+)?$/;
+
+/**
+ * Convert a human USDC amount to atomic units without passing through a JS
+ * floating-point number. Excess precision is rejected instead of rounded.
+ */
+export function parseUsdcAmountToAtomic(amountUsdc: string, decimals: number): bigint {
+  if (typeof amountUsdc !== "string") {
+    throw new Error(`Invalid USDC transfer amount: ${String(amountUsdc)}`);
+  }
+
+  const normalized = amountUsdc.trim();
+  if (!DECIMAL_AMOUNT_RE.test(normalized)) {
+    throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
+  }
+
+  const [wholePart, fraction = ""] = normalized.split(".");
+  const whole = wholePart ?? "";
+  const significantFraction = fraction.replace(/0+$/, "");
+  if (significantFraction.length > decimals) {
+    throw new Error(
+      `Invalid USDC transfer amount: ${amountUsdc} (more than ${decimals} decimal places)`,
+    );
+  }
+  const canonical = significantFraction
+    ? `${whole}.${significantFraction}`
+    : whole;
+
+  let amountRaw: bigint;
+  try {
+    amountRaw = parseUnits(canonical, decimals);
+  } catch {
+    throw new Error(
+      `Invalid USDC transfer amount: ${amountUsdc} (more than ${decimals} decimal places)`,
+    );
+  }
+
+  if (amountRaw <= 0n) {
+    throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
+  }
+  return amountRaw;
 }
 
 export function createParaTreasuryClient(config: ParaTreasuryClientConfig): ParaTreasuryClient {
@@ -347,13 +391,13 @@ export function createParaTreasuryClient(config: ParaTreasuryClientConfig): Para
       return Number(formatUnits(amount, decimals));
     },
 
-    async sendTransfer(to: string, amountUsdc: number, idempotencyKey?: string) {
+    async sendTransfer(to: string, amountUsdc: string, idempotencyKey?: string) {
       if (!ADDRESS_RE.test(to)) {
         throw new Error(`Invalid transfer recipient address: ${to}`);
       }
-      if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) {
-        throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
-      }
+
+      const decimals = config.usdcDecimals ?? 6;
+      const amountRaw = parseUsdcAmountToAtomic(amountUsdc, decimals);
 
       const usdcAddress = config.usdcAddress?.trim();
       if (!usdcAddress || !ADDRESS_RE.test(usdcAddress)) {
@@ -365,8 +409,6 @@ export function createParaTreasuryClient(config: ParaTreasuryClientConfig): Para
       const wallet = await this.ensureWallet();
       const checksumTo = getAddress(to);
       const checksumUsdc = getAddress(usdcAddress);
-      const decimals = config.usdcDecimals ?? 6;
-      const amountRaw = parseUnits(String(amountUsdc), decimals);
       const data = encodeFunctionData({
         abi: ERC20_TRANSFER_ABI,
         functionName: "transfer",

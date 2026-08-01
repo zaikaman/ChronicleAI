@@ -468,7 +468,11 @@ describe("RevenueRoutingService", () => {
     expect(result.creatorRecoveryAmount).toBe(15200);
     expect(repos.payoutRepo.create).toHaveBeenCalledTimes(1);
     expect(repos.web3Client.sendTransfer).toHaveBeenCalledTimes(1);
-    expect(repos.web3Client.sendTransfer).toHaveBeenCalledWith(CREATOR_WALLET, 15200);
+    expect(repos.web3Client.sendTransfer).toHaveBeenCalledWith(
+      CREATOR_WALLET,
+      15200,
+      "payout-payout-mock-1",
+    );
   });
 
   it("sends USDC amounts 1:1 without ETH FX conversion", async () => {
@@ -492,7 +496,11 @@ describe("RevenueRoutingService", () => {
     const result = await service.routeRevenue(`test-period-usdc-${Date.now()}`);
     expect(result.routed).toBe(true);
     // costs 6000 → net 19000 → creator 80% = 15200 USDC (no FX)
-    expect(repos.web3Client.sendTransfer).toHaveBeenCalledWith(CREATOR_WALLET, 15200);
+    expect(repos.web3Client.sendTransfer).toHaveBeenCalledWith(
+      CREATOR_WALLET,
+      15200,
+      "payout-payout-mock-1",
+    );
   });
 
   it("should respect routingIntervalMs since last_routed_at", async () => {

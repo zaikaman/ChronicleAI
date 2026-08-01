@@ -618,11 +618,11 @@ function createParaWeb3Client(
     },
 
     sendTransfer: (to, amountUsdc, idempotencyKey) =>
-      paraClient.sendTransfer(to, amountUsdc, idempotencyKey),
+      paraClient.sendTransfer(to, amountUsdc.toString(), idempotencyKey),
     ...(affiliateParaClient
       ? {
           sendAffiliateTransfer: (to: string, amountUsdc: number, idempotencyKey?: string) =>
-            affiliateParaClient.sendTransfer(to, amountUsdc, idempotencyKey),
+            affiliateParaClient.sendTransfer(to, amountUsdc.toString(), idempotencyKey),
         }
       : {}),
   };

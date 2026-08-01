@@ -886,7 +886,7 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
         keeperHubRunId = receipt.keeperHubRunId;
       } else if (paraTreasury) {
         transferPath = "para";
-        const receipt = await paraTreasury.sendTransfer(desk, amountUsdc);
+        const receipt = await paraTreasury.sendTransfer(desk, amountUsdc.toString());
         txHash = receipt.txHash;
         explorerUrl = receipt.explorerUrl;
         keeperHubRunId = receipt.keeperHubRunId;

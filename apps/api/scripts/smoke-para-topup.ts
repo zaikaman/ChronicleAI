@@ -31,7 +31,7 @@ if (!deskRaw || !/^0x[a-fA-F0-9]{40}$/.test(deskRaw)) {
 }
 const desk: Address = deskRaw as Address;
 
-const amount = Number(process.env.SMOKE_TOPUP_USDC ?? "1");
+const amount = process.env.SMOKE_TOPUP_USDC ?? "1";
 const usdcAddress = (
   process.env.X402_USDC_ADDRESS ?? "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
 ) as Address;

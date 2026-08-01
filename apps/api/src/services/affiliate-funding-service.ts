@@ -103,7 +103,7 @@ export function createAffiliateFundingService(deps: {
     try {
       const receipt = await deps.treasuryClient!.sendTransfer(
         claimed.value.destination_wallet,
-        claimed.value.amount,
+        claimed.value.amount.toString(),
         `affiliate-funding-${claimed.value.affiliate_earning_id}`,
       );
       const completed = await deps.repository.markCompleted(claimed.value.id, {

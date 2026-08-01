@@ -14,7 +14,7 @@ const TOKEN = "0x036cbd53842c5426634e7929541ec2318f3dcf7e";
 
 function createHarness(options?: { failFirst?: boolean }) {
   const rows = new Map<string, AffiliateFundingTransferRow>();
-  const calls: Array<{ to: string; amount: number; idempotencyKey?: string }> = [];
+  const calls: Array<{ to: string; amount: string; idempotencyKey?: string }> = [];
   let sequence = 0;
   let failedOnce = false;
 
@@ -84,7 +84,7 @@ function createHarness(options?: { failFirst?: boolean }) {
   };
 
   const treasuryClient = {
-    async sendTransfer(to: string, amount: number, idempotencyKey?: string): Promise<OnChainWriteReceipt> {
+    async sendTransfer(to: string, amount: string, idempotencyKey?: string): Promise<OnChainWriteReceipt> {
       calls.push({ to, amount, idempotencyKey });
       if (options?.failFirst && !failedOnce) {
         failedOnce = true;
@@ -132,7 +132,7 @@ describe("affiliate funding service", () => {
     expect(harness.calls).toHaveLength(1);
     expect(harness.calls[0]).toMatchObject({
       to: DESTINATION,
-      amount: 1,
+      amount: "1",
       idempotencyKey: `affiliate-funding-${EARNING_ID}`,
     });
   });

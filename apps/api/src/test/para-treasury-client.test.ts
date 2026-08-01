@@ -3,7 +3,25 @@ import {
   createParaTreasuryClient,
   isParaTreasuryConfigured,
   mapNetworkToChainId,
+  parseUsdcAmountToAtomic,
 } from "../services/para-treasury-client.ts";
+
+describe("parseUsdcAmountToAtomic", () => {
+  it("converts decimal strings to exact token units", () => {
+    expect(parseUsdcAmountToAtomic("12.5", 6)).toBe(12_500_000n);
+    expect(parseUsdcAmountToAtomic("0.000001", 6)).toBe(1n);
+    expect(parseUsdcAmountToAtomic("1.0000000", 6)).toBe(1_000_000n);
+  });
+
+  it("rejects values that cannot be represented exactly", () => {
+    expect(() => parseUsdcAmountToAtomic("0.0000009", 6)).toThrow(
+      /more than 6 decimal places/,
+    );
+    expect(() => parseUsdcAmountToAtomic("0.30000000000000004", 6)).toThrow(
+      /more than 6 decimal places/,
+    );
+  });
+});
 
 describe("isParaTreasuryConfigured", () => {
   it("is true when PARA_API_KEY is non-empty", () => {
@@ -140,7 +158,7 @@ describe("createParaTreasuryClient", () => {
     });
 
     await expect(
-      clientNoRpc.sendTransfer("0x70997970C51812dc3A010C7d01b50e0d17dc79C8", 12.5),
+      clientNoRpc.sendTransfer("0x70997970C51812dc3A010C7d01b50e0d17dc79C8", "12.5"),
     ).rejects.toThrow(/RPC_URL/);
     expect(restClient.signTransaction).not.toHaveBeenCalled();
   });
@@ -181,7 +199,7 @@ describe("createParaTreasuryClient", () => {
     });
 
     await expect(
-      client.sendTransfer("0x70997970C51812dc3A010C7d01b50e0d17dc79C8", 0),
+      client.sendTransfer("0x70997970C51812dc3A010C7d01b50e0d17dc79C8", "0"),
     ).rejects.toThrow(/Invalid USDC transfer amount/);
     expect(restClient.signTransaction).not.toHaveBeenCalled();
   });
