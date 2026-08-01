@@ -89,6 +89,8 @@ export function createSponsoredWatchService(params: {
     frontendOrigin,
   } = params;
   const reportService = params.reportService ?? createSponsoredWatchReportService();
+  /** Coalesces timer/webhook callers so the full campaign scan stays single-flight. */
+  let campaignCycleInFlight: Promise<CampaignCycleResult> | null = null;
 
   function requireWeb3(): Web3Client {
     if (!web3Client) {
@@ -924,117 +926,133 @@ export function createSponsoredWatchService(params: {
     },
 
     async processCampaignCycle(now = new Date()) {
-      const nowIso = now.toISOString();
-      const cycle: CampaignCycleResult = {
-        activated: 0,
-        monitored: 0,
-        completed: 0,
-        repaired: 0,
-        failed: 0,
-        errors: [],
-      };
-
-      // 1. Activate accepted campaigns whose window has started
-      const dueActivation = await watchRepo.listDueForActivation(nowIso);
-      if (!dueActivation.ok) {
-        cycle.errors.push(`listDueForActivation: ${dueActivation.error.message}`);
-      } else {
-        for (const watch of dueActivation.value) {
-          try {
-            await activateWatch(watch);
-            cycle.activated += 1;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            cycle.errors.push(`activate ${watch.id}: ${message}`);
-            cycle.failed += 1;
-          }
-        }
+      if (campaignCycleInFlight) {
+        return campaignCycleInFlight;
       }
 
-      // 2. Monitor in-window campaigns (Event Tracker correlation)
-      const inWindow = await watchRepo.listInMonitoringWindow(nowIso);
-      if (!inWindow.ok) {
-        cycle.errors.push(`listInMonitoringWindow: ${inWindow.error.message}`);
-      } else {
-        for (const watch of inWindow.value) {
-          try {
-            await refreshMonitoring(watch);
-            cycle.monitored += 1;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            cycle.errors.push(`monitor ${watch.id}: ${message}`);
-            cycle.failed += 1;
-          }
+      const cyclePromise = runCampaignCycle(now);
+      campaignCycleInFlight = cyclePromise;
+      try {
+        return await cyclePromise;
+      } finally {
+        if (campaignCycleInFlight === cyclePromise) {
+          campaignCycleInFlight = null;
         }
       }
-
-      // 3. Complete ended campaigns: generate report + publishSponsoredReport
-      const dueComplete = await watchRepo.listDueForCompletion(nowIso);
-      if (!dueComplete.ok) {
-        cycle.errors.push(`listDueForCompletion: ${dueComplete.error.message}`);
-      } else {
-        for (const watch of dueComplete.value) {
-          if (completionInFlight.has(watch.id)) continue;
-          try {
-            await completeEndedWatch(watch);
-            cycle.completed += 1;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            cycle.errors.push(`complete ${watch.id}: ${message}`);
-            cycle.failed += 1;
-            // Do not mark failed permanently on transient registry/LLM errors —
-            // next cycle retries. Permanent product failures use failWatch explicitly.
-            await execLogRepo.append({
-              action_type: "sponsored_watch",
-              entity_type: "sponsored_watch",
-              entity_id: watch.id,
-              status: "failed",
-              message: `End-of-campaign completion attempt failed (will retry): ${message}`,
-              details: {
-                method: "publishSponsoredReport",
-                reason: "completion_retryable",
-                createTxHash: watch.create_tx_hash,
-                onChainWatchId: watch.on_chain_watch_id,
-                endsAt: watch.ends_at,
-                error_message: message,
-              },
-              started_at: nowIso,
-              completed_at: new Date().toISOString(),
-            });
-          }
-        }
-      }
-
-      // 4. Repair completed campaigns stuck with empty / "..." narrative
-      //    (e.g. Groq 8k overflow accepted as placeholder before quality gates).
-      const maybeRepair = await watchRepo.listCompletedNeedingReportRepair(25);
-      if (!maybeRepair.ok) {
-        cycle.errors.push(`listCompletedNeedingReportRepair: ${maybeRepair.error.message}`);
-      } else {
-        for (const watch of maybeRepair.value) {
-          if (
-            !isPlaceholderSponsoredReport({
-              reportTitle: watch.report_title,
-              reportSummary: watch.report_summary,
-              reportAnalysis: watch.report_analysis,
-              reportHighlights: watch.report_highlights,
-            })
-          ) {
-            continue;
-          }
-          if (completionInFlight.has(watch.id)) continue;
-          try {
-            await repairPlaceholderReport(watch);
-            cycle.repaired += 1;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            cycle.errors.push(`repair ${watch.id}: ${message}`);
-            cycle.failed += 1;
-          }
-        }
-      }
-
-      return cycle;
     },
   };
+
+  async function runCampaignCycle(now: Date): Promise<CampaignCycleResult> {
+    const nowIso = now.toISOString();
+    const cycle: CampaignCycleResult = {
+      activated: 0,
+      monitored: 0,
+      completed: 0,
+      repaired: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    // 1. Activate accepted campaigns whose window has started
+    const dueActivation = await watchRepo.listDueForActivation(nowIso);
+    if (!dueActivation.ok) {
+      cycle.errors.push(`listDueForActivation: ${dueActivation.error.message}`);
+    } else {
+      for (const watch of dueActivation.value) {
+        try {
+          await activateWatch(watch);
+          cycle.activated += 1;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          cycle.errors.push(`activate ${watch.id}: ${message}`);
+          cycle.failed += 1;
+        }
+      }
+    }
+
+    // 2. Monitor in-window campaigns (Event Tracker correlation)
+    const inWindow = await watchRepo.listInMonitoringWindow(nowIso);
+    if (!inWindow.ok) {
+      cycle.errors.push(`listInMonitoringWindow: ${inWindow.error.message}`);
+    } else {
+      for (const watch of inWindow.value) {
+        try {
+          await refreshMonitoring(watch);
+          cycle.monitored += 1;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          cycle.errors.push(`monitor ${watch.id}: ${message}`);
+          cycle.failed += 1;
+        }
+      }
+    }
+
+    // 3. Complete ended campaigns: generate report + publishSponsoredReport
+    const dueComplete = await watchRepo.listDueForCompletion(nowIso);
+    if (!dueComplete.ok) {
+      cycle.errors.push(`listDueForCompletion: ${dueComplete.error.message}`);
+    } else {
+      for (const watch of dueComplete.value) {
+        if (completionInFlight.has(watch.id)) continue;
+        try {
+          await completeEndedWatch(watch);
+          cycle.completed += 1;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          cycle.errors.push(`complete ${watch.id}: ${message}`);
+          cycle.failed += 1;
+          // Do not mark failed permanently on transient registry/LLM errors —
+          // next cycle retries. Permanent product failures use failWatch explicitly.
+          await execLogRepo.append({
+            action_type: "sponsored_watch",
+            entity_type: "sponsored_watch",
+            entity_id: watch.id,
+            status: "failed",
+            message: `End-of-campaign completion attempt failed (will retry): ${message}`,
+            details: {
+              method: "publishSponsoredReport",
+              reason: "completion_retryable",
+              createTxHash: watch.create_tx_hash,
+              onChainWatchId: watch.on_chain_watch_id,
+              endsAt: watch.ends_at,
+              error_message: message,
+            },
+            started_at: nowIso,
+            completed_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    // 4. Repair completed campaigns stuck with empty / "..." narrative
+    //    (e.g. Groq 8k overflow accepted as placeholder before quality gates).
+    const maybeRepair = await watchRepo.listCompletedNeedingReportRepair(25);
+    if (!maybeRepair.ok) {
+      cycle.errors.push(`listCompletedNeedingReportRepair: ${maybeRepair.error.message}`);
+    } else {
+      for (const watch of maybeRepair.value) {
+        if (
+          !isPlaceholderSponsoredReport({
+            reportTitle: watch.report_title,
+            reportSummary: watch.report_summary,
+            reportAnalysis: watch.report_analysis,
+            reportHighlights: watch.report_highlights,
+          })
+        ) {
+          continue;
+        }
+        if (completionInFlight.has(watch.id)) continue;
+        try {
+          await repairPlaceholderReport(watch);
+          cycle.repaired += 1;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          cycle.errors.push(`repair ${watch.id}: ${message}`);
+          cycle.failed += 1;
+        }
+      }
+    }
+
+    return cycle;
+  }
 }

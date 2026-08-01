@@ -363,6 +363,34 @@ describe("SponsoredWatchService", () => {
   });
 
   describe("processCampaignCycle", () => {
+    it("does not overlap a slow cycle with the next invocation", async () => {
+      let releaseFirstList: (() => void) | undefined;
+      const firstList = new Promise<void>((resolve) => {
+        releaseFirstList = resolve;
+      });
+
+      mockWatchRepo.listDueForActivation
+        .mockImplementationOnce(async () => {
+          await firstList;
+          return { ok: true, value: [] };
+        })
+        .mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+
+      const firstCycle = service.processCampaignCycle(new Date("2026-07-28T12:00:00.000Z"));
+      await Promise.resolve();
+
+      const secondCycle = service.processCampaignCycle(new Date("2026-07-28T12:01:00.000Z"));
+      expect(mockWatchRepo.listDueForActivation).toHaveBeenCalledTimes(1);
+
+      releaseFirstList?.();
+      await Promise.all([firstCycle, secondCycle]);
+
+      await service.processCampaignCycle(new Date("2026-07-28T12:02:00.000Z"));
+      expect(mockWatchRepo.listDueForActivation).toHaveBeenCalledTimes(2);
+    });
+
     it("should activate, monitor, and complete ended campaigns", async () => {
       const monitoringWatch = {
         ...mockWatchRow,
