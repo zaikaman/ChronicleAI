@@ -45,17 +45,6 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 | Live activity and execution proof | [chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity) |
 | Live desk and audit timeline | [chronicle-ai-web.vercel.app/desk](https://chronicle-ai-web.vercel.app/desk) |
 | Registry contract | [`0xD8Deb4475a7E23E194Bc93f8739858Fb20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) |
-| Demo video | **Add the recorded demo URL here before submission.** |
-
-The shortest useful demo is:
-
-1. Open a Chronicle alert or desk signal.
-2. Show the agent’s proposal and hard policy decision.
-3. Show KeeperHub MCP/workflow discovery, execution, and polling.
-4. Open the resulting explorer transaction.
-5. Return to the Activity page and show the audit spine: preflight → KeeperHub run → receipt.
-
-The video should use a registry publication or desk trade whose write path is unambiguously KeeperHub-backed. CCTP is a supporting treasury feature and is documented separately below.
 
 ## What is actually running
 
@@ -85,15 +74,6 @@ The repository includes 33 KeeperHub workflow definitions: 28 core workflows and
 | Sponsored Watch | `createSponsoredWatch` | [0xcc5eb3b6…85b2](https://sepolia.etherscan.io/tx/0xcc5eb3b64e1ceb743e99a98525707b3594c36dfec91f1bbb497b2a4e64d785b2) |
 | Sponsored Report | `publishSponsoredReport` | [0x92d63e8b…bdf7](https://sepolia.etherscan.io/tx/0x92d63e8b3912e6fc57b19637cbbb158d20fce8e801997bce6a0489c68846bdf7) |
 | Affiliate Payout | `recordAffiliatePayout` | [0xd4739e92…d7fc](https://sepolia.etherscan.io/tx/0xd4739e92b6ae88f61d06c63cd10e22794da86f058356484f7decced41af2d7fc) |
-
-### Supporting CCTP proof
-
-ChronicleAI also has a Circle CCTP liquidity-starvation worker. Its current implementation uses a Para MPC or legacy operator executor in [`apps/api/src/cctp/`](apps/api/src/cctp/), not the KeeperHub workflow bridge. These transactions are real supporting treasury proofs, but they are deliberately **not counted** in the KeeperHub-backed table above.
-
-- [CCTP burn: Base Sepolia](https://sepolia.basescan.org/tx/0xb30984def5e87dbcf3968e30972229f1e9109afbe39338e375f8c4de7c67cec4)
-- [CCTP mint: Ethereum Sepolia](https://sepolia.etherscan.io/tx/0xfeb8f1e45c61abc4bd5c0d94b9073b1447687b15469ad1171833dc0855c4497c)
-
-This separation keeps the hackathon claim precise: the demonstrated desk and registry execution path goes through KeeperHub; CCTP is an adjacent treasury backend.
 
 ## KeeperHub integration
 
@@ -128,21 +108,6 @@ Private routing and gas sponsorship are mutually exclusive on the same transacti
 - **No invented fills:** a run without a real transaction hash remains pending, unknown, failed, or timed out.
 - **Kill switch:** missed heartbeats and failed safety conditions pause the desk and route residual defense through the dedicated kill-switch workflow.
 
-## Demo script
-
-The best 90-second cut is a single intelligence-to-action loop:
-
-| Time | Show | Message |
-| --- | --- | --- |
-| 0:00–0:10 | Chronicle alert or digest with source and registry proof | “ChronicleAI publishes what it sees.” |
-| 0:10–0:25 | Desk ticket with signal, proposal, position limits, and policy result | “The model proposes; policy decides.” |
-| 0:25–0:45 | KeeperHub MCP/workflow discovery and `execute_workflow` call | “The agent does not broadcast directly.” |
-| 0:45–1:05 | KeeperHub execution ID, preflight result, route badge, and polling | “KeeperHub handles the last mile.” |
-| 1:05–1:20 | Explorer transaction and Activity page | “The action actually landed onchain.” |
-| 1:20–1:30 | Audit timeline: policy → submit → outcome | “Every step is inspectable afterward.” |
-
-Premium payments, sponsored watches, affiliate payouts, and CCTP are supporting proof points. They should reinforce the same story, not compete with the primary desk flow.
-
 ## Architecture
 
 ```mermaid
@@ -172,16 +137,6 @@ sequenceDiagram
         Chronicle->>Audit: Record policy / preflight reason and alert operator
     end
 ```
-
-## Honest execution boundaries
-
-The hackathon demo and the primary desk/registry product path use KeeperHub workflows. The repository also contains compatibility paths that should not be confused with that claim:
-
-- The CCTP rebalance worker signs through Para MPC or a legacy operator executor.
-- Some treasury code contains Para-backed compatibility behavior when a specific KeeperHub transfer workflow is unavailable.
-- Direct EOA writes are gated for local/test compatibility and are disabled in production.
-
-The production web3 factory requires KeeperHub for registry configuration, and the desk execution bridge explicitly rejects missing workflow IDs. The demo should use the KeeperHub-backed desk or registry routes and label adjacent treasury infrastructure accurately.
 
 ## Repository map
 
