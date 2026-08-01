@@ -10,6 +10,7 @@ import {
   createChatModelsInOrder,
   invokeToolAgent,
 } from "../agents/langchain/index.ts";
+import { randomUUID } from "node:crypto";
 import type { AffiliateAgentJobRepository } from "@chronicleai/db";
 import type { LLMProviderMap } from "./llm-provider-client.ts";
 import type {
@@ -77,7 +78,7 @@ export interface AffiliateAgentService {
     history?: AffiliateAgentMessage[];
   }): AffiliateAgentJob;
 
-  getChatJob(jobId: string): Promise<AffiliateAgentJob | null>;
+  getChatJob(jobId: string, affiliateWallet: string): Promise<AffiliateAgentJob | null>;
 }
 
 
@@ -815,11 +816,12 @@ export function createAffiliateAgentService(deps: {
 
     startChatJob(params) {
       cleanupOldJobs();
-      const id = `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const affiliateWallet = params.affiliateWallet.trim().toLowerCase();
+      const id = `job_${affiliateWallet}_${randomUUID()}`;
       const now = new Date().toISOString();
       const job: AffiliateAgentJob = {
         id,
-        affiliateWallet: params.affiliateWallet,
+        affiliateWallet,
         status: "pending",
         request: {
           message: params.message,
@@ -837,7 +839,7 @@ export function createAffiliateAgentService(deps: {
       if (deps.jobRepo) {
         void deps.jobRepo.create({
           id,
-          affiliate_wallet: params.affiliateWallet,
+          affiliate_wallet: affiliateWallet,
           status: "pending",
           request: job.request as unknown as Record<string, unknown>,
           created_at: now,
@@ -855,7 +857,7 @@ export function createAffiliateAgentService(deps: {
           void deps.jobRepo.update(id, { status: "processing" }).catch(() => {});
         }
         try {
-          const res = await service.chat(params);
+          const res = await service.chat({ ...params, affiliateWallet });
           job.status = "completed";
           job.result = res;
           job.updatedAt = new Date().toISOString();
@@ -882,11 +884,14 @@ export function createAffiliateAgentService(deps: {
       return job;
     },
 
-    async getChatJob(jobId) {
+    async getChatJob(jobId, affiliateWallet) {
+      const ownerWallet = affiliateWallet.trim().toLowerCase();
       const memoryHit = jobs.get(jobId);
-      if (memoryHit) return memoryHit;
+      if (memoryHit) {
+        return memoryHit.affiliateWallet.toLowerCase() === ownerWallet ? memoryHit : null;
+      }
       if (!deps.jobRepo) return null;
-      const dbResult = await deps.jobRepo.getById(jobId);
+      const dbResult = await deps.jobRepo.getById(jobId, ownerWallet);
       if (!dbResult.ok || !dbResult.value) return null;
       const row = dbResult.value;
       return {

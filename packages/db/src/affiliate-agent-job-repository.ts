@@ -10,7 +10,7 @@ import type {
 } from "./types.ts";
 
 export interface AffiliateAgentJobRepository {
-  getById(id: string): Promise<Result<AffiliateAgentJobRow | null>>;
+  getById(id: string, affiliateWallet: string): Promise<Result<AffiliateAgentJobRow | null>>;
   create(job: AffiliateAgentJobInsert): Promise<Result<AffiliateAgentJobRow>>;
   update(id: string, patch: AffiliateAgentJobUpdate): Promise<Result<AffiliateAgentJobRow>>;
 }
@@ -21,10 +21,11 @@ export function createAffiliateAgentJobRepository(
   const table = () => supabase.from("affiliate_agent_jobs");
 
   return {
-    async getById(id: string) {
+    async getById(id: string, affiliateWallet: string) {
       const { data, error } = await table()
         .select("*")
         .eq("id", id)
+        .eq("affiliate_wallet", affiliateWallet)
         .limit(1);
 
       if (error) return failure(mapPostgrestError(error));

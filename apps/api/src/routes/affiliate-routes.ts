@@ -534,18 +534,15 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
         return;
       }
 
-      const job = await agentService.getChatJob(jobId);
-      if (!job) {
-        res.status(404).json({ error: "Job not found" });
+      const proof = await requireWalletProof(req.query as Record<string, unknown>);
+      if (!proof.ok) {
+        res.status(proof.status).json({ error: proof.error });
         return;
       }
 
-      const proof = await requireWalletProof(
-        req.query as Record<string, unknown>,
-        job.affiliateWallet,
-      );
-      if (!proof.ok) {
-        res.status(proof.status).json({ error: proof.error });
+      const job = await agentService.getChatJob(jobId, proof.wallet);
+      if (!job) {
+        res.status(404).json({ error: "Job not found" });
         return;
       }
 

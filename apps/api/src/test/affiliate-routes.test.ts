@@ -108,6 +108,83 @@ async function request(
 describe("affiliate wallet ownership routes", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it("requires wallet proof before looking up an agent job", async () => {
+    const getChatJob = vi.fn();
+    const deps = makeDeps({
+      agentService: { getChatJob } as unknown as AffiliateRouteDeps["agentService"],
+    });
+    const response = await request(
+      "GET",
+      "/affiliates/agent/chat/jobs/job_unknown",
+      undefined,
+      deps,
+    );
+
+    expect(response.status).toBe(401);
+    expect(getChatJob).not.toHaveBeenCalled();
+  });
+
+  it("passes the signed wallet into agent job lookup", async () => {
+    const job = {
+      id: "job_0x1111111111111111111111111111111111111111_5a1f8a19-5f9f-4f18-89f2-6cb7f7d22b0c",
+      affiliateWallet: affiliateWallet.address.toLowerCase(),
+      status: "processing" as const,
+      request: { message: "show my stats" },
+      result: null,
+      error: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const getChatJob = vi.fn(async (jobId: string, wallet: string) =>
+      wallet === affiliateWallet.address.toLowerCase() ? { ...job, id: jobId } : null,
+    );
+    const deps = makeDeps({
+      agentService: { getChatJob } as unknown as AffiliateRouteDeps["agentService"],
+    });
+    const auth = await authFor(affiliateWallet);
+    const query = new URLSearchParams({
+      walletAddress: affiliateWallet.address,
+      issuedAt: auth.issuedAt,
+      signature: auth.signature,
+    });
+
+    const response = await request(
+      "GET",
+      `/affiliates/agent/chat/jobs/${encodeURIComponent(job.id)}?${query}`,
+      undefined,
+      deps,
+    );
+
+    expect(response.status).toBe(200);
+    expect(getChatJob).toHaveBeenCalledWith(job.id, affiliateWallet.address.toLowerCase());
+  });
+
+  it("does not return a job to a different signed wallet", async () => {
+    const getChatJob = vi.fn(async () => null);
+    const deps = makeDeps({
+      agentService: { getChatJob } as unknown as AffiliateRouteDeps["agentService"],
+    });
+    const auth = await authFor(referredWallet);
+    const query = new URLSearchParams({
+      walletAddress: referredWallet.address,
+      issuedAt: auth.issuedAt,
+      signature: auth.signature,
+    });
+
+    const response = await request(
+      "GET",
+      `/affiliates/agent/chat/jobs/job_owned_by_someone_else?${query}`,
+      undefined,
+      deps,
+    );
+
+    expect(response.status).toBe(404);
+    expect(getChatJob).toHaveBeenCalledWith(
+      "job_owned_by_someone_else",
+      referredWallet.address.toLowerCase(),
+    );
+  });
+
   it("rejects an unsigned dashboard request", async () => {
     const deps = makeDeps();
     const response = await request(

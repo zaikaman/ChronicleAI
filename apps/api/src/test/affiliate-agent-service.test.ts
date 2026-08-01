@@ -7,6 +7,7 @@ import {
 import type { AffiliateDashboardStats } from "../services/affiliate-dashboard-service.ts";
 
 const WALLET = "0x1111111111111111111111111111111111111111";
+const OTHER_WALLET = "0x2222222222222222222222222222222222222222";
 
 function baseStats(overrides?: Partial<AffiliateDashboardStats>): AffiliateDashboardStats {
   return {
@@ -303,9 +304,28 @@ describe("createAffiliateAgentService", () => {
       // Wait briefly for background execution to complete
       await new Promise((r) => setTimeout(r, 50));
 
-      const updated = await agent.getChatJob(job.id);
+      const updated = await agent.getChatJob(job.id, WALLET);
       expect(updated?.status).toBe("completed");
       expect(updated?.result?.reply).toContain("People referred");
+      expect(await agent.getChatJob(job.id, OTHER_WALLET)).toBeNull();
+    });
+
+    it("creates wallet-bound, non-predictable job ids", () => {
+      const agent = createAffiliateAgentService({
+        dashboardService: {
+          getStats: vi.fn(),
+          getAvailableBalanceUsdc: vi.fn(),
+        },
+        withdrawalService: { withdraw: vi.fn() },
+        llm: null,
+      });
+
+      const first = agent.startChatJob({ affiliateWallet: WALLET, message: "help" });
+      const second = agent.startChatJob({ affiliateWallet: WALLET, message: "help" });
+
+      expect(first.id).toMatch(new RegExp(`^job_${WALLET}_[0-9a-f-]{36}$`));
+      expect(second.id).toMatch(new RegExp(`^job_${WALLET}_[0-9a-f-]{36}$`));
+      expect(first.id).not.toBe(second.id);
     });
   });
 });
