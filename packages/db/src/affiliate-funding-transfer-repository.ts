@@ -12,16 +12,6 @@ import type {
 } from "./types.ts";
 
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
-const PROCESSING_LEASE_MS = 5 * 60 * 1000;
-
-function isStaleProcessing(row: AffiliateFundingTransferRow): boolean {
-  if (row.status !== "processing") return false;
-  const updatedAt = Date.parse(row.updated_at);
-  return (
-    !Number.isFinite(updatedAt) ||
-    Date.now() - updatedAt >= PROCESSING_LEASE_MS
-  );
-}
 
 export interface AffiliateFundingTransferRepository {
   createForEarning(
@@ -31,7 +21,7 @@ export interface AffiliateFundingTransferRepository {
     earningId: string,
   ): Promise<Result<AffiliateFundingTransferRow | null>>;
   listRetryable(limit?: number): Promise<Result<AffiliateFundingTransferRow[]>>;
-  /** Claim a pending/failed row, or reclaim a stale processing lease. */
+  /** Claim a pending/failed row. Processing rows require reconciliation. */
   claim(id: string): Promise<Result<AffiliateFundingTransferRow | null>>;
   markCompleted(
     id: string,
@@ -102,13 +92,14 @@ export function createAffiliateFundingTransferRepository(
       const safeLimit = Math.min(Math.max(limit, 1), 500);
       const { data, error } = await table()
         .select("*")
-        .in("status", ["pending", "failed", "processing"])
+        // A processing row may already have broadcast its transfer. It must
+        // never be reclaimed automatically because doing so can pay twice.
+        .in("status", ["pending", "failed"])
         .order("updated_at", { ascending: true })
         .limit(500);
       if (error) return failure(mapPostgrestError(error));
       return success(
         ((data ?? []) as AffiliateFundingTransferRow[])
-          .filter((row) => row.status !== "processing" || isStaleProcessing(row))
           .slice(0, safeLimit),
       );
     },
@@ -119,9 +110,7 @@ export function createAffiliateFundingTransferRepository(
       const row = maybeRow(current.data ?? []) as AffiliateFundingTransferRow | null;
       if (
         !row ||
-        (row.status !== "pending" &&
-          row.status !== "failed" &&
-          !isStaleProcessing(row))
+        (row.status !== "pending" && row.status !== "failed")
       ) {
         return success(null);
       }

@@ -1,18 +1,22 @@
-import { describe, expect, it } from "vitest";
 import type {
   AffiliateFundingTransferInsert,
   AffiliateFundingTransferRepository,
   AffiliateFundingTransferRow,
 } from "@chronicleai/db";
+import { RepositoryError } from "@chronicleai/db";
+import { describe, expect, it } from "vitest";
+import { createAffiliateFundingService } from "../services/affiliate-funding-service.ts";
 import type { OnChainWriteReceipt } from "../services/on-chain-write-receipt.ts";
 import type { ParaTreasuryClient } from "../services/para-treasury-client.ts";
-import { createAffiliateFundingService } from "../services/affiliate-funding-service.ts";
 
 const EARNING_ID = "earning-001";
 const DESTINATION = "0x677b30e08ef0ef2667b04220b27112a20cadba77";
 const TOKEN = "0x036cbd53842c5426634e7929541ec2318f3dcf7e";
 
-function createHarness(options?: { failFirst?: boolean }) {
+function createHarness(options?: {
+  failFirst?: boolean;
+  failCompletion?: boolean;
+}) {
   const rows = new Map<string, AffiliateFundingTransferRow>();
   const calls: Array<{ to: string; amount: string; idempotencyKey?: string }> = [];
   let sequence = 0;
@@ -69,6 +73,15 @@ function createHarness(options?: { failFirst?: boolean }) {
     },
     async markCompleted(id, meta) {
       const row = rows.get(id)!;
+      if (options?.failCompletion) {
+        return {
+          ok: false,
+          error: new RepositoryError(
+            "PERSISTENCE",
+            "temporary database acknowledgement failure",
+          ),
+        };
+      }
       row.status = "completed";
       row.tx_hash = meta.txHash;
       row.explorer_url = meta.explorerUrl ?? null;
@@ -152,6 +165,29 @@ describe("affiliate funding service", () => {
     expect(harness.rows.size).toBe(1);
     expect(harness.calls).toHaveLength(2);
     expect(harness.calls[0]?.idempotencyKey).toBe(harness.calls[1]?.idempotencyKey);
+  });
+
+  it("does not reclaim a processing row after the transfer acknowledgement fails", async () => {
+    const harness = createHarness({ failCompletion: true });
+
+    const first = await harness.service.fundEarning({
+      earningId: EARNING_ID,
+      amount: 1,
+      currency: "USDC",
+    });
+    const retry = await harness.service.retryPending();
+
+    expect(first).toMatchObject({
+      status: "failed",
+      txHash: `0x${"a".repeat(64)}`,
+      errorMessage: expect.stringContaining("DB update failed"),
+    });
+    expect(harness.rows.get("funding-1")).toMatchObject({
+      status: "processing",
+      tx_hash: null,
+    });
+    expect(retry).toEqual({ attempted: 0, completed: 0, failed: 0 });
+    expect(harness.calls).toHaveLength(1);
   });
 
   it("skips safely when the treasury funding rail is not configured", async () => {

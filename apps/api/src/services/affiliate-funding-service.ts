@@ -84,6 +84,11 @@ export function createAffiliateFundingService(deps: {
   async function processRow(
     row: AffiliateFundingTransferRow,
   ): Promise<AffiliateFundingResult> {
+    // A transfer may have succeeded before the process received the database
+    // acknowledgement. Never reclaim a processing row automatically: there
+    // is no safe way to distinguish that case from a crash before send.
+    if (row.status === "processing") return resultForRow(row);
+
     const claimed = await deps.repository.claim(row.id);
     if (!claimed.ok) {
       return {
@@ -111,9 +116,8 @@ export function createAffiliateFundingService(deps: {
         explorerUrl: receipt.explorerUrl,
       });
       if (!completed.ok) {
-        // The Para idempotency key is stable for this earning. A retry will
-        // recover the same transaction rather than intentionally creating a
-        // second funding transfer.
+        // Leave the row processing. It may already have paid on-chain, and a
+        // retry must wait for reconciliation instead of sending a second time.
         return {
           status: "failed",
           amount: claimed.value.amount,
@@ -192,14 +196,20 @@ export function createAffiliateFundingService(deps: {
         return { attempted: 0, completed: 0, failed: 1 };
       }
 
+      // Keep this guard at the service boundary as well as in the repository;
+      // a stale processing row must never become a second on-chain transfer.
+      const retryableRows = rows.value.filter(
+        (row) => row.status === "pending" || row.status === "failed",
+      );
+
       let completed = 0;
       let failed = 0;
-      for (const row of rows.value) {
+      for (const row of retryableRows) {
         const result = await processRow(row);
         if (result.status === "completed") completed += 1;
         if (result.status === "failed") failed += 1;
       }
-      return { attempted: rows.value.length, completed, failed };
+      return { attempted: retryableRows.length, completed, failed };
     },
   };
 }
