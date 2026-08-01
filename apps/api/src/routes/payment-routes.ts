@@ -67,7 +67,7 @@ export function createPaymentRoutes(params: {
   earningsService?: AffiliateEarningsService | null;
   /** Funds the KeeperHub affiliate execution wallet from the x402 treasury. */
   fundingService?: AffiliateFundingService | null;
-  /** When true, Set-Cookie includes Secure (production / HTTPS). */
+  /** When true, issue the Secure receipt cookie (production / HTTPS). */
   secureCookies?: boolean;
   /** Public SPA origin for HTTPS sponsored-report / premium-receipt content URIs. */
   frontendOrigin?: string;
@@ -157,6 +157,13 @@ export function createPaymentRoutes(params: {
     accessReceipt: string,
     expiresAt: string,
   ): void {
+    // A receipt is a bearer credential. Never issue a cookie that can travel
+    // over plaintext HTTP; callers in development can use the response token
+    // through Authorization instead.
+    if (params.secureCookies !== true) {
+      return;
+    }
+
     const maxAgeSeconds = Math.max(
       0,
       Math.floor((Date.parse(expiresAt) - Date.now()) / 1000) ||
@@ -168,7 +175,6 @@ export function createPaymentRoutes(params: {
         token: accessReceipt,
         premiumItemId,
         maxAgeSeconds,
-        secure: params.secureCookies === true,
       }),
     );
   }

@@ -32,7 +32,6 @@ export interface DeskFeedAccessGate {
   verifyAccess(params: {
     authorizationHeader?: string | undefined;
     receiptHeader?: string | string[] | undefined;
-    receiptQuery?: string | string[] | undefined;
     cookieHeader?: string | undefined;
   }): Promise<
     | { allowed: true; product: PremiumIntelligenceItemRow; paymentRecordId: string }
@@ -119,7 +118,6 @@ export function createDeskFeedAccessGate(deps: {
       const receiptToken = extractAccessReceiptFromRequest({
         authorizationHeader: params.authorizationHeader,
         receiptHeader: params.receiptHeader,
-        receiptQuery: params.receiptQuery,
         cookieHeader: params.cookieHeader,
         premiumItemId: product.id,
       });

@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PremiumAccessReceiptService,
+  buildPremiumAccessReceiptCookie,
   extractAccessReceiptFromRequest,
   resolvePremiumAccessSecret,
 } from "../services/premium-access-receipt-service.ts";
@@ -90,7 +91,6 @@ describe("extractAccessReceiptFromRequest", () => {
     const token = extractAccessReceiptFromRequest({
       authorizationHeader: "Bearer abc.def",
       receiptHeader: "header-token",
-      receiptQuery: "query-token",
     });
     expect(token).toBe("abc.def");
   });
@@ -98,16 +98,16 @@ describe("extractAccessReceiptFromRequest", () => {
   it("falls back to X-Premium-Access-Receipt header", () => {
     const token = extractAccessReceiptFromRequest({
       receiptHeader: "header-token",
-      receiptQuery: "query-token",
     });
     expect(token).toBe("header-token");
   });
 
-  it("falls back to ?receipt= query", () => {
+  it("ignores receipts supplied through query parameters", () => {
     const token = extractAccessReceiptFromRequest({
-      receiptQuery: "query-token",
+      cookieHeader: "chronicle_premium_receipt_item-1=query-token",
+      premiumItemId: "item-2",
     });
-    expect(token).toBe("query-token");
+    expect(token).toBeUndefined();
   });
 
   it("reads item-scoped cookie", () => {
@@ -116,6 +116,19 @@ describe("extractAccessReceiptFromRequest", () => {
       premiumItemId: "item-1",
     });
     expect(token).toBe("cookie-token");
+  });
+});
+
+describe("buildPremiumAccessReceiptCookie", () => {
+  it("always marks receipt cookies Secure and HttpOnly", () => {
+    const cookie = buildPremiumAccessReceiptCookie({
+      token: "payload.signature",
+      premiumItemId: "item-1",
+      maxAgeSeconds: 3600,
+    });
+
+    expect(cookie).toContain("Secure");
+    expect(cookie).toContain("HttpOnly");
   });
 });
 

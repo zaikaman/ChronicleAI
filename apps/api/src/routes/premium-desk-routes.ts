@@ -46,7 +46,6 @@ export function createPremiumDeskRoutes(deps: {
           ? req.headers.authorization
           : undefined,
       receiptHeader: req.headers["x-premium-access-receipt"],
-      receiptQuery: req.query.receipt as string | string[] | undefined,
       cookieHeader:
         typeof req.headers.cookie === "string" ? req.headers.cookie : undefined,
     });

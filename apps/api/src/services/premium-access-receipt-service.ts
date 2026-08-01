@@ -167,12 +167,15 @@ export function resolvePremiumAccessSecret(env: {
 
 /**
  * Extract an access receipt from request sources (Authorization Bearer,
- * X-Premium-Access-Receipt header, or ?receipt= query).
+ * X-Premium-Access-Receipt header, or a premium receipt cookie).
+ *
+ * Receipts are deliberately not accepted from query parameters. URLs are
+ * routinely copied into browser history, proxy logs, analytics, and referrer
+ * headers, so putting a bearer credential in a query string would leak it.
  */
 export function extractAccessReceiptFromRequest(params: {
   authorizationHeader?: string | undefined;
   receiptHeader?: string | string[] | undefined;
-  receiptQuery?: string | string[] | undefined;
   cookieHeader?: string | undefined;
   premiumItemId?: string | undefined;
 }): string | undefined {
@@ -188,14 +191,6 @@ export function extractAccessReceiptFromRequest(params: {
   }
   if (Array.isArray(header) && typeof header[0] === "string" && header[0].trim()) {
     return header[0].trim();
-  }
-
-  const query = params.receiptQuery;
-  if (typeof query === "string" && query.trim()) {
-    return query.trim();
-  }
-  if (Array.isArray(query) && typeof query[0] === "string" && query[0].trim()) {
-    return query[0].trim();
   }
 
   // Optional HttpOnly cookie: chronicle_premium_receipt=<token>
@@ -228,14 +223,13 @@ function parseCookieHeader(header: string): Record<string, string> {
 }
 
 /**
- * Build Set-Cookie value for a premium access receipt (HttpOnly).
+ * Build a Secure, HttpOnly Set-Cookie value for a premium access receipt.
  * Cross-origin SPAs still need Authorization Bearer; cookies help same-site callers.
  */
 export function buildPremiumAccessReceiptCookie(params: {
   token: string;
   premiumItemId: string;
   maxAgeSeconds: number;
-  secure: boolean;
 }): string {
   const name = `chronicle_premium_receipt_${params.premiumItemId}`;
   const parts = [
@@ -243,7 +237,7 @@ export function buildPremiumAccessReceiptCookie(params: {
     "Path=/",
     "HttpOnly",
     `Max-Age=${Math.max(0, Math.floor(params.maxAgeSeconds))}`,
-    params.secure ? "Secure" : "",
+    "Secure",
     // Lax works for same-site; cross-origin APIs should prefer Authorization.
     "SameSite=Lax",
   ].filter(Boolean);
