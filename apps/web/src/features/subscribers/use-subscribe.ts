@@ -118,7 +118,7 @@ export function useSubscribe(): UseSubscribeResult {
           payer = connected;
         }
 
-        void attributeReferralOnConnect(payer);
+        void attributeReferralOnConnect(payer, wallet.signMessage);
 
         try {
           await wallet.ensureChain();

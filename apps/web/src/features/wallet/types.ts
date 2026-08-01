@@ -61,5 +61,7 @@ export interface WalletContextValue {
     primaryType: string;
     message: Record<string, unknown>;
   }) => Promise<string>;
+  /** Sign a human-readable ownership/session message with the connected account. */
+  signMessage: (message: string) => Promise<string>;
   clearError: () => void;
 }

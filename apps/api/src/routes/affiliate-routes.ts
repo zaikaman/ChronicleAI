@@ -1,5 +1,5 @@
-// Public affiliate registration + referral tracking + dashboard + payout agent
-// Identity = connected wallet address (no separate sign-in / registration gate).
+// Public affiliate registration + referral tracking + dashboard + payout agent.
+// Private wallet identity is established with a server-verified personal_sign.
 
 import type {
   AffiliateRepository,
@@ -9,6 +9,7 @@ import { normalizeAffiliateWallet } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 import type { AffiliateAgentService } from "../services/affiliate-agent-service.ts";
+import { type AffiliateAuthPayload, verifyAffiliateAuth } from "../services/affiliate-auth.ts";
 import type { AffiliateDashboardService } from "../services/affiliate-dashboard-service.ts";
 import type { AffiliateWithdrawalAuthorization } from "../services/affiliate-withdrawal-auth.ts";
 
@@ -35,6 +36,60 @@ function toAffiliateResponse(row: {
 function readWallet(input: unknown): string | null {
   if (typeof input !== "string") return null;
   return normalizeAffiliateWallet(input);
+}
+
+function readAuthPayload(input: Record<string, unknown>): AffiliateAuthPayload | null {
+  const nested = input.auth && typeof input.auth === "object" ? (input.auth as Record<string, unknown>) : input;
+  const walletAddress =
+    typeof nested.walletAddress === "string"
+      ? nested.walletAddress
+      : typeof nested.wallet_address === "string"
+        ? nested.wallet_address
+        : typeof nested.wallet === "string"
+          ? nested.wallet
+        : "";
+  const issuedAt =
+    typeof nested.issuedAt === "string"
+      ? nested.issuedAt
+      : typeof nested.issued_at === "string"
+        ? nested.issued_at
+        : "";
+  const signature = typeof nested.signature === "string" ? nested.signature : "";
+
+  if (!walletAddress || !issuedAt || !signature) return null;
+  return { walletAddress, issuedAt, signature };
+}
+
+async function requireWalletProof(
+  input: Record<string, unknown>,
+  expectedWallet?: string | null,
+): Promise<
+  | { ok: true; wallet: string }
+  | { ok: false; status: 401 | 403; error: string }
+> {
+  const payload = readAuthPayload(input);
+  if (!payload) {
+    return {
+      ok: false,
+      status: 401,
+      error: "Signed wallet ownership proof is required",
+    };
+  }
+
+  const verified = await verifyAffiliateAuth(payload);
+  if (!verified.ok) {
+    return { ok: false, status: 401, error: verified.error };
+  }
+
+  if (expectedWallet && verified.walletAddress !== expectedWallet) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Signed wallet does not match the requested wallet",
+    };
+  }
+
+  return { ok: true, wallet: verified.walletAddress };
 }
 
 /**
@@ -83,12 +138,20 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
   router.post("/affiliates", async (req, res, next) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const walletAddress =
+      const requestedWallet =
         typeof body.walletAddress === "string"
           ? body.walletAddress
           : typeof body.wallet_address === "string"
             ? body.wallet_address
             : "";
+      const wallet = readWallet(requestedWallet);
+      const proof = await requireWalletProof(body, wallet);
+      if (!proof.ok) {
+        res.status(proof.status).json({ error: proof.error });
+        return;
+      }
+
+      const walletAddress = proof.wallet;
 
       if (!walletAddress.trim()) {
         res.status(400).json({ error: "walletAddress is required" });
@@ -213,7 +276,7 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
   router.post("/affiliates/attribute", async (req, res, next) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const referredWallet =
+      const requestedReferredWallet =
         typeof body.referredWallet === "string"
           ? body.referredWallet
           : typeof body.referred_wallet === "string"
@@ -221,6 +284,11 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
             : typeof body.walletAddress === "string"
               ? body.walletAddress
               : "";
+
+      if (requestedReferredWallet && !readWallet(requestedReferredWallet)) {
+        res.status(400).json({ error: "referredWallet must be a valid 0x address" });
+        return;
+      }
 
       const refRaw =
         typeof body.ref === "string"
@@ -235,10 +303,6 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
                   ? body.affiliate_wallet
                   : "";
 
-      if (!referredWallet.trim()) {
-        res.status(400).json({ error: "referredWallet is required" });
-        return;
-      }
       if (!refRaw.trim()) {
         res.status(400).json({ error: "ref (referral code or affiliate wallet) is required" });
         return;
@@ -253,6 +317,14 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
         res.status(404).json({ error: "No approved affiliate for that referral" });
         return;
       }
+
+      const proof = await requireWalletProof(body, readWallet(requestedReferredWallet));
+      if (!proof.ok) {
+        res.status(proof.status).json({ error: proof.error });
+        return;
+      }
+
+      const referredWallet = proof.wallet;
 
       const result = await attributionRepo.attributeFirstTouch({
         referred_wallet: referredWallet,
@@ -291,17 +363,27 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
    */
   router.get("/affiliates/me", async (req, res, next) => {
     try {
-      const wallet = readWallet(
+      const requestedWallet = readWallet(
         typeof req.query.wallet === "string"
           ? req.query.wallet
           : typeof req.query.walletAddress === "string"
             ? req.query.walletAddress
             : "",
       );
-      if (!wallet) {
+      if (!requestedWallet) {
         res.status(400).json({ error: "wallet query param is required (0x address)" });
         return;
       }
+
+      const proof = await requireWalletProof(
+        req.query as Record<string, unknown>,
+        requestedWallet,
+      );
+      if (!proof.ok) {
+        res.status(proof.status).json({ error: proof.error });
+        return;
+      }
+      const wallet = proof.wallet;
 
       const ensured = await ensureAffiliate(affiliateRepo, wallet);
       if (!ensured.ok) {
@@ -328,7 +410,7 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
   router.post("/affiliates/me", async (req, res, next) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const wallet = readWallet(
+      const requestedWallet = readWallet(
         typeof body.walletAddress === "string"
           ? body.walletAddress
           : typeof body.wallet_address === "string"
@@ -337,10 +419,17 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
               ? body.wallet
               : "",
       );
-      if (!wallet) {
+      if (!requestedWallet) {
         res.status(400).json({ error: "walletAddress is required" });
         return;
       }
+
+      const proof = await requireWalletProof(body, requestedWallet);
+      if (!proof.ok) {
+        res.status(proof.status).json({ error: proof.error });
+        return;
+      }
+      const wallet = proof.wallet;
 
       const ensured = await ensureAffiliate(affiliateRepo, wallet);
       if (!ensured.ok) {
@@ -369,17 +458,24 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
   router.post("/affiliates/agent/chat", async (req, res, next) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const wallet = readWallet(
+      const requestedWallet = readWallet(
         typeof body.walletAddress === "string"
           ? body.walletAddress
           : typeof body.wallet_address === "string"
             ? body.wallet_address
             : "",
       );
-      if (!wallet) {
+      if (!requestedWallet) {
         res.status(400).json({ error: "walletAddress is required" });
         return;
       }
+
+      const proof = await requireWalletProof(body, requestedWallet);
+      if (!proof.ok) {
+        res.status(proof.status).json({ error: proof.error });
+        return;
+      }
+      const wallet = proof.wallet;
 
       const message = typeof body.message === "string" ? body.message.trim() : "";
       if (!message) {
@@ -441,6 +537,15 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
       const job = await agentService.getChatJob(jobId);
       if (!job) {
         res.status(404).json({ error: "Job not found" });
+        return;
+      }
+
+      const proof = await requireWalletProof(
+        req.query as Record<string, unknown>,
+        job.affiliateWallet,
+      );
+      if (!proof.ok) {
+        res.status(proof.status).json({ error: proof.error });
         return;
       }
 

@@ -3,12 +3,7 @@
 
 import { useAccountModal, useConnectModal } from "@rainbow-me/rainbowkit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  useAccount,
-  useDisconnect,
-  useSignTypedData,
-  useSwitchChain,
-} from "wagmi";
+import { useAccount, useDisconnect, useSignMessage, useSignTypedData, useSwitchChain } from "wagmi";
 import { isEvmAddress, resolveTargetChain } from "./chains.ts";
 import { notifyWalletConnected } from "./connect-bridge.ts";
 import type { WalletChainConfig, WalletContextValue, WalletStatus } from "./types.ts";
@@ -130,6 +125,7 @@ export function useWalletLive(): WalletContextValue {
   const { disconnect: wagmiDisconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
   const { signTypedDataAsync } = useSignTypedData();
+  const { signMessageAsync } = useSignMessage();
 
   const [error, setError] = useState<string | null>(null);
   const pendingConnectRef = useRef<{
@@ -306,6 +302,26 @@ export function useWalletLive(): WalletContextValue {
     [address, signTypedDataAsync, clearError],
   );
 
+  const signMessage = useCallback(
+    async (message: string): Promise<string> => {
+      clearError();
+      if (!address) {
+        const msg = "Connect a wallet before signing.";
+        setError(msg);
+        throw new Error(msg);
+      }
+
+      try {
+        return await signMessageAsync({ message });
+      } catch (err) {
+        const msg = mapWalletError(err, "Failed to sign wallet ownership proof.");
+        setError(msg);
+        throw new Error(msg);
+      }
+    },
+    [address, clearError, signMessageAsync],
+  );
+
   return {
     status: mapAccountStatus(accountStatus, !!address),
     address: address ?? null,
@@ -321,6 +337,7 @@ export function useWalletLive(): WalletContextValue {
     disconnect,
     ensureChain,
     signTypedData,
+    signMessage,
     clearError,
   };
 }

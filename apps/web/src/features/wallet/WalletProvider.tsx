@@ -110,6 +110,9 @@ function createStubWallet(ensureWalletStack: () => Promise<void>): WalletContext
     signTypedData: async () => {
       throw new Error("Connect a wallet before signing.");
     },
+    signMessage: async () => {
+      throw new Error("Connect a wallet before signing.");
+    },
     clearError: () => {
       // no-op
     },

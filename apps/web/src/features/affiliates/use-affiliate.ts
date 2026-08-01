@@ -2,9 +2,10 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { apiGetJson, apiPostJson, toErrorMessage } from "../../lib/api.ts";
-import { queryKeys } from "../../lib/query-keys.ts";
 import { keccak256, stringToBytes } from "viem";
+import { apiGetJson, apiPostJson, toErrorMessage } from "../../lib/api.ts";
+import { signAffiliateAuth } from "../../lib/affiliate-auth.ts";
+import { queryKeys } from "../../lib/query-keys.ts";
 import { useWallet } from "../wallet";
 
 export interface AffiliateStats {
@@ -57,17 +58,22 @@ const WELCOME =
   "Hi — I'm the ChronicleAI affiliate payout agent (LLM + tools). I can reason about your request, call tools for live balances, and execute USDC withdrawals on-chain through KeeperHub. Ask naturally — e.g. \"how am I doing?\" or \"cash out everything\".";
 
 export function useAffiliateDashboard(walletAddress: string | null | undefined) {
+  const wallet = useWallet();
   const queryClient = useQueryClient();
   const address = walletAddress?.trim().toLowerCase() || null;
 
   const query = useQuery({
     queryKey: queryKeys.affiliates.me(address ?? ""),
     enabled: Boolean(address),
-    queryFn: ({ signal }) =>
-      apiGetJson<AffiliateStats>("/affiliates/me", {
+    queryFn: async ({ signal }) => {
+      const queryAddress = address;
+      if (!queryAddress) throw new Error("Wallet address is required");
+      const auth = await signAffiliateAuth(queryAddress, wallet.signMessage);
+      return apiGetJson<AffiliateStats>("/affiliates/me", {
         signal,
-        params: { wallet: address! },
-      }),
+        params: { wallet: queryAddress, issuedAt: auth.issuedAt, signature: auth.signature },
+      });
+    },
     staleTime: 15_000,
   });
 
@@ -124,14 +130,22 @@ export function useAffiliateAgent(walletAddress: string | null | undefined, avai
         const isWithdrawal = /\b(withdraw|claim|cash\s*out|pay\s*me|send\s+(me\s+)?(my\s+)?(money|usdc|funds|rewards?))\b/.test(lower);
         const amountMatch = lower.match(/(?:withdraw|claim|send|transfer|cash\s*out)\s*(?:me\s+)?(?:about\s+)?(\d+(?:\.\d+)?)\s*(?:usdc|usd)?/);
         const freshStats = isWithdrawal
-          ? await apiGetJson<AffiliateStats>("/affiliates/me", {
-              params: { wallet: address },
-            })
+          ? await (async () => {
+              const auth = await signAffiliateAuth(address, wallet.signMessage);
+              return apiGetJson<AffiliateStats>("/affiliates/me", {
+                params: {
+                  wallet: address,
+                  issuedAt: auth.issuedAt,
+                  signature: auth.signature,
+                },
+              });
+            })()
           : null;
         const authorizationBalance = freshStats?.availableUsdc ?? availableUsdc;
         const requestedAmount = amountMatch ? Number(amountMatch[1]) : authorizationBalance;
         const nonce = keccak256(stringToBytes(`${address}:${Date.now()}:${Math.random()}`));
         const expiry = Math.floor(Date.now() / 1000) + 600;
+        const auth = await signAffiliateAuth(address, wallet.signMessage);
         const withdrawalAuthorization = {
           wallet: address,
           amount: String(Math.round(requestedAmount * 1_000_000)),
@@ -164,6 +178,7 @@ export function useAffiliateAgent(walletAddress: string | null | undefined, avai
           provider?: string | null;
         }>("/affiliates/agent/chat", {
           walletAddress: address,
+          auth,
           message: trimmed,
           withdrawalAuthorization,
         });
@@ -187,7 +202,13 @@ export function useAffiliateAgent(walletAddress: string | null | undefined, avai
               toolCalls?: Array<{ name: string }>;
               mode?: "llm" | "fallback";
               provider?: string | null;
-            }>(`/affiliates/agent/chat/jobs/${encodeURIComponent(jobId)}`);
+            }>(`/affiliates/agent/chat/jobs/${encodeURIComponent(jobId)}`, {
+              params: {
+                wallet: auth.walletAddress,
+                issuedAt: auth.issuedAt,
+                signature: auth.signature,
+              },
+            });
 
             if (pollRes.status === "completed") {
               finalResult = pollRes;
@@ -219,7 +240,7 @@ export function useAffiliateAgent(walletAddress: string | null | undefined, avai
         setIsSending(false);
       }
     },
-    [availableUsdc, wallet.chainId, wallet.signTypedData, walletAddress],
+    [availableUsdc, wallet.chainId, wallet.signMessage, wallet.signTypedData, walletAddress],
   );
 
   const resetChat = useCallback(() => {
