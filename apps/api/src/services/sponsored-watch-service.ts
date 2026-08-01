@@ -136,7 +136,7 @@ export function createSponsoredWatchService(params: {
     }
 
     const nowIso = new Date().toISOString();
-    const apiKey = process.env.ETHERSCAN_API_KEY || "3DVMDIVA82VM8Y9M3GVKFI8G9481CNG6SE";
+    const apiKey = process.env.ETHERSCAN_API_KEY?.trim();
 
     // 1. Try Etherscan V2 API first (Sepolia chainId 11155111) for fast & complete log retrieval
     if (apiKey) {

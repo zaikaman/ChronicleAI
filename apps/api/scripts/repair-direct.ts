@@ -46,7 +46,8 @@ async function runDirectRepair() {
   console.log("Watch target:", watch.target_contract);
 
   // Fetch logs from Etherscan V2
-  const apiKey = process.env.ETHERSCAN_API_KEY || "3DVMDIVA82VM8Y9M3GVKFI8G9481CNG6SE";
+  const apiKey = process.env.ETHERSCAN_API_KEY?.trim();
+  if (!apiKey) throw new Error("ETHERSCAN_API_KEY is required to query Etherscan");
   const urlV2 = `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&address=${watch.target_contract}&page=1&offset=500&sort=desc&apikey=${apiKey}`;
 
   console.log("Fetching Etherscan V2 logs...");
