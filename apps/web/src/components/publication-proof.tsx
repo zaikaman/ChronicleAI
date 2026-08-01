@@ -1,5 +1,6 @@
 /** IDEA proof-of-publication panel: registry tx, content hash, source hash, gas, KeeperHub status. */
 
+import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config/chains";
 import type { ReactElement, ReactNode } from "react";
 import { formatGasUsed, sepoliaTxUrl, truncateHash, txExplorerUrl } from "../lib/explorer.ts";
 
@@ -95,14 +96,12 @@ export function PublicationProof({
   if (!hasAny) return null;
 
   // Registry proofs land on Ethereum Sepolia (ops rail), not Base payment rail.
-  const txHref =
-    explorerUrl ?? (registryTxHash ? sepoliaTxUrl(registryTxHash) : undefined);
+  const txHref = explorerUrl ?? (registryTxHash ? sepoliaTxUrl(registryTxHash) : undefined);
 
   // Source event (monitored protocol transaction, e.g. Ethereum Mainnet / Sepolia / Base)
-  const rawSourceTx =
-    sourceHash && /^0x[0-9a-fA-F]{64}$/.test(sourceHash) ? sourceHash : null;
+  const rawSourceTx = sourceHash && /^0x[0-9a-fA-F]{64}$/.test(sourceHash) ? sourceHash : null;
   const sourceTxHref = rawSourceTx
-    ? (txExplorerUrl(chainId ?? 1, rawSourceTx) ?? `https://etherscan.io/tx/${rawSourceTx}`)
+    ? txExplorerUrl(chainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID, rawSourceTx)
     : undefined;
 
   if (compact) {

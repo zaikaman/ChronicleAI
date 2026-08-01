@@ -1,9 +1,10 @@
 {
   "version": 1,
+  "enabled": false,
   "exportedAt": "2026-07-11T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI CoW Protocol Large Trade Monitor (Telegram bridge)",
-    "description": "NEWSPAPER ONLY (not a desk execution input). FREE TIER: Schedule hourly (~720 schedule fires/mo; For Each can add more) → Query Trade events → size filter → Telegram CHRONICLE_INGEST. Prefer a separate vanity account or leave disabled. CoW is not a v1 Sepolia desk venue."
+  "description": "ARCHIVED/DISABLED: CoW has no verified active Ethereum Sepolia source in Chronicle v1. Preserve Mainnet history only; it is excluded from active intelligence and desk inputs."
   },
   "nodes": [
     {

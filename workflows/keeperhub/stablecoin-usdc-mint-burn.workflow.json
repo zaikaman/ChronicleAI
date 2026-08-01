@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI USDC Mint/Burn Monitor (Telegram bridge)",
-    "description": "NEWSPAPER ONLY. FREE TIER: Schedule hourly → Query Circle USDC Mint and Burn on mainnet → size filter (~$1M+) → Telegram CHRONICLE_INGEST. Chronicle classifies as stablecoin_mint / stablecoin_burn. Prefer vanity account."
+  "description": "NEWSPAPER ONLY. FREE TIER: Schedule hourly → Query verified Circle USDC Mint and Burn on Ethereum Sepolia → size filter (~$1M+) → Telegram CHRONICLE_INGEST. Chronicle classifies as stablecoin_mint / stablecoin_burn."
   },
   "nodes": [
     {
@@ -29,8 +29,8 @@
         "label": "Query USDC Mints",
         "config": {
           "actionType": "web3/query-events",
-          "network": "1",
-          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "network": "11155111",
+          "contractAddress": "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
           "eventName": "Mint",
           "blockCount": "320",
           "abi": "[{\"type\":\"event\",\"name\":\"Mint\",\"inputs\":[{\"indexed\":true,\"name\":\"minter\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount\",\"type\":\"uint256\"}]}]"
@@ -74,7 +74,94 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "-1004373075093",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Mint\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-mint:For Each Mint.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-mint:For Each Mint.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-mint:For Each Mint.currentItem.logIndex}}\",\"args\":{\"minter\":\"{{@for-each-mint:For Each Mint.currentItem.args.minter}}\",\"to\":\"{{@for-each-mint:For Each Mint.currentItem.args.to}}\",\"amount\":\"{{@for-each-mint:For Each Mint.currentItem.args.amount}}\"},\"protocol\":\"Circle\"}}",
+        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Mint\",\"address\":\"0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238\",\"transactionHash\":\"{{@for-each-mint:For Each Mint.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-mint:For Each Mint.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-mint:For Each Mint.currentItem.logIndex}}\",\"args\":{\"minter\":\"{{@for-each-mint:For Each Mint.currentItem.args.minter}}\",\"to\":\"{{@for-each-mint:For Each Mint.currentItem.args.to}}\",\"amount\":\"{{@for-each-mint:For Each Mint.currentItem.args.amount}}\"},\"protocol\":\"Circle Sepolia USDC\"}}",
+          "parseMode": "none"
+        }
+      }
+    },
+    {
+      "id": "query-transfers",
+      "type": "action",
+      "position": { "x": 320, "y": 600 },
+      "data": {
+        "type": "action",
+        "label": "Query USDC Transfer Fallback",
+        "config": {
+          "actionType": "web3/query-events",
+          "network": "11155111",
+          "contractAddress": "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
+          "eventName": "Transfer",
+          "blockCount": "320",
+          "abi": "[{\"type\":\"event\",\"name\":\"Transfer\",\"inputs\":[{\"indexed\":true,\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"value\",\"type\":\"uint256\"}]}]"
+        }
+      }
+    },
+    {
+      "id": "for-each-transfer",
+      "type": "action",
+      "position": { "x": 560, "y": 600 },
+      "data": {
+        "type": "action",
+        "label": "For Each Transfer Fallback",
+        "config": {
+          "actionType": "For Each",
+          "arraySource": "{{@query-transfers:Query USDC Transfer Fallback.events}}",
+          "maxIterations": "50"
+        }
+      }
+    },
+    {
+      "id": "condition-transfer-mint",
+      "type": "action",
+      "position": { "x": 800, "y": 520 },
+      "data": {
+        "type": "action",
+        "label": "Transfer from zero → Mint",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}} == \"0x0000000000000000000000000000000000000000\" && {{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}} >= 1000000000000"
+        }
+      }
+    },
+    {
+      "id": "post-transfer-mint-telegram",
+      "type": "action",
+      "position": { "x": 1040, "y": 480 },
+      "data": {
+        "type": "action",
+        "label": "Telegram zero-address mint → Chronicle",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "-1004373075093",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Transfer\",\"address\":\"0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.logIndex}}\",\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}}\"},\"protocol\":\"Circle Sepolia USDC\",\"fallback\":\"zero_address\"}}",
+          "parseMode": "none"
+        }
+      }
+    },
+    {
+      "id": "condition-transfer-burn",
+      "type": "action",
+      "position": { "x": 800, "y": 760 },
+      "data": {
+        "type": "action",
+        "label": "Transfer to zero → Burn",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}} == \"0x0000000000000000000000000000000000000000\" && {{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}} >= 1000000000000"
+        }
+      }
+    },
+    {
+      "id": "post-transfer-burn-telegram",
+      "type": "action",
+      "position": { "x": 1040, "y": 720 },
+      "data": {
+        "type": "action",
+        "label": "Telegram zero-address burn → Chronicle",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "-1004373075093",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Transfer\",\"address\":\"0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.logIndex}}\",\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}}\"},\"protocol\":\"Circle Sepolia USDC\",\"fallback\":\"zero_address\"}}",
           "parseMode": "none"
         }
       }
@@ -88,8 +175,8 @@
         "label": "Query USDC Burns",
         "config": {
           "actionType": "web3/query-events",
-          "network": "1",
-          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "network": "11155111",
+          "contractAddress": "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
           "eventName": "Burn",
           "blockCount": "320",
           "abi": "[{\"type\":\"event\",\"name\":\"Burn\",\"inputs\":[{\"indexed\":true,\"name\":\"burner\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount\",\"type\":\"uint256\"}]}]"
@@ -133,7 +220,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "-1004373075093",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Burn\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-burn:For Each Burn.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-burn:For Each Burn.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-burn:For Each Burn.currentItem.logIndex}}\",\"args\":{\"burner\":\"{{@for-each-burn:For Each Burn.currentItem.args.burner}}\",\"amount\":\"{{@for-each-burn:For Each Burn.currentItem.args.amount}}\"},\"protocol\":\"Circle\"}}",
+        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Burn\",\"address\":\"0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238\",\"transactionHash\":\"{{@for-each-burn:For Each Burn.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-burn:For Each Burn.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-burn:For Each Burn.currentItem.logIndex}}\",\"args\":{\"burner\":\"{{@for-each-burn:For Each Burn.currentItem.args.burner}}\",\"amount\":\"{{@for-each-burn:For Each Burn.currentItem.args.amount}}\"},\"protocol\":\"Circle Sepolia USDC\"}}",
           "parseMode": "none"
         }
       }
@@ -169,6 +256,36 @@
       "id": "e8",
       "source": "condition-burn-large",
       "target": "post-burn-telegram",
+      "sourceHandle": "true",
+      "type": "animated"
+    },
+    { "id": "e9", "source": "trigger-schedule", "target": "query-transfers" },
+    { "id": "e10", "source": "query-transfers", "target": "for-each-transfer" },
+    {
+      "id": "e11",
+      "source": "for-each-transfer",
+      "target": "condition-transfer-mint",
+      "sourceHandle": "loop",
+      "type": "animated"
+    },
+    {
+      "id": "e12",
+      "source": "condition-transfer-mint",
+      "target": "post-transfer-mint-telegram",
+      "sourceHandle": "true",
+      "type": "animated"
+    },
+    {
+      "id": "e13",
+      "source": "for-each-transfer",
+      "target": "condition-transfer-burn",
+      "sourceHandle": "loop",
+      "type": "animated"
+    },
+    {
+      "id": "e14",
+      "source": "condition-transfer-burn",
+      "target": "post-transfer-burn-telegram",
       "sourceHandle": "true",
       "type": "animated"
     }

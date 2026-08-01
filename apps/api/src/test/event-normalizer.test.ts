@@ -276,6 +276,52 @@ describe("event-normalizer", () => {
     expect(result.payload.flowContext?.direction).toBe("supply_contract");
   });
 
+  it("normalizes Circle Sepolia zero-address Transfer mint fallback", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const result = await normalizer.normalize({
+      chainId: 11_155_111,
+      eventName: "Transfer",
+      address: "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
+      transactionHash: "0xtransfer-mint",
+      logIndex: 3,
+      args: {
+        from: "0x0000000000000000000000000000000000000000",
+        to: "0x2222222222222222222222222222222222222222",
+        value: String(2_000_000n * 1_000_000n),
+      },
+      protocol: "Circle Sepolia USDC",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.eventType).toBe("stablecoin_mint");
+    expect(result.payload.assetSymbols).toEqual(["USDC"]);
+    expect(result.payload.magnitude?.value).toBeCloseTo(2_000_000, 0);
+  });
+
+  it("normalizes Circle Sepolia zero-address Transfer burn fallback", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const result = await normalizer.normalize({
+      chainId: 11_155_111,
+      eventName: "Transfer",
+      address: "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
+      transactionHash: "0xtransfer-burn",
+      logIndex: 4,
+      args: {
+        from: "0x2222222222222222222222222222222222222222",
+        to: "0x0000000000000000000000000000000000000000",
+        value: String(2_000_000n * 1_000_000n),
+      },
+      protocol: "Circle Sepolia USDC",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.eventType).toBe("stablecoin_burn");
+    expect(result.payload.assetSymbols).toEqual(["USDC"]);
+    expect(result.payload.magnitude?.value).toBeCloseTo(2_000_000, 0);
+  });
+
   it("normalizes Aave Supply as protocol_deposit", async () => {
     const normalizer = createEventNormalizer(stubOracle());
     const amount = String(750_000n * 1_000_000n);

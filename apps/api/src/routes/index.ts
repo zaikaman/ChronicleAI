@@ -17,6 +17,7 @@ export { apiRouter };
 
 // Lazy setup function to avoid circular dependencies
 import type { ServerEnv } from "@chronicleai/config";
+import { registerGroqKeyIndexPersister, setGroqKeyIndex } from "@chronicleai/config";
 import type {
   AffiliateRepository,
   DailyDigestRepository,
@@ -30,62 +31,24 @@ import type {
   PublicAlertRepository,
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
-import { BlockIngestionHandler } from "../keeperhub/block-ingestion-handler.ts";
-import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
-import { createEventNormalizer } from "../monitoring/event-normalizer.ts";
 import {
-  blockRpcUrlsFromEnv,
-  createOnChainBlockService,
-} from "../monitoring/on-chain-block-service.ts";
-import { createPriceOracle } from "../monitoring/price-oracle-service.ts";
-import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
-import { createNewsletterSubscriptionService } from "../services/newsletter-subscription-service.ts";
-import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
-import { createTreasuryRegistryGate } from "../services/treasury-registry-gate.ts";
-import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
-import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
-import {
-  createPolicyEngine,
-  createSignalEngine,
-  createDeskSignalIngestService,
-  deskPolicyConfigFromEnv,
-  createHeartbeatService,
-  createPositionService,
-  createIntentService,
-  createTicketService,
-  createCapitalManager,
-  createKillSwitchService,
-  createStrategyRunner,
-  createExecutionBridgeFromEnv,
-  createKhSimulatePreflightFromEnv,
-  createDeskControlPlane,
-  createDeskScheduler,
-  registerDeskControlPlane,
-  getDeskControlPlane,
-  createDeskTradingAgent,
-  createFailureClassifier,
-  createNarrativeService,
-  createSignalFusionJudge,
-} from "../desk/index.ts";
-import type { LLMProvider } from "@chronicleai/schemas";
-import { createProviderConfigs, type LLMProviderMap } from "../services/llm-provider-client.ts";
-import { setGroqKeyIndex, registerGroqKeyIndexPersister } from "@chronicleai/config";
-import {
-  createDeskSignalRepository,
+  createAffiliateAgentJobRepository,
+  createDeskAgentRunRepository,
+  createDeskCapitalMoveRepository,
+  createDeskControlStateRepository,
+  createDeskHeartbeatRepository,
   createDeskIntentRepository,
   createDeskPositionRepository,
-  createDeskCapitalMoveRepository,
+  createDeskSignalRepository,
   createDeskTicketRepository,
-  createDeskHeartbeatRepository,
-  createDeskAgentRunRepository,
-  createDeskControlStateRepository,
-  createSystemControlStateRepository,
-  createAffiliateAgentJobRepository,
   createServerSupabaseClient,
+  createSystemControlStateRepository,
 } from "@chronicleai/db";
+import type { LLMProvider } from "@chronicleai/schemas";
 import {
-  createCctpRebalanceWorker,
+  type CctpRebalanceService,
   cctpExplorerUrls,
+  createCctpRebalanceWorker,
   deployableToDeskUsdc,
   evaluateDeskCctpStarvation,
   getCctpRebalanceRepo,
@@ -93,20 +56,58 @@ import {
   registerCctpRebalanceRepo,
   registerCctpService,
   tryCreateCctpRebalanceStackFromEnv,
-  type CctpRebalanceService,
 } from "../cctp/index.ts";
+import {
+  createCapitalManager,
+  createDeskControlPlane,
+  createDeskScheduler,
+  createDeskSignalIngestService,
+  createDeskTradingAgent,
+  createExecutionBridgeFromEnv,
+  createFailureClassifier,
+  createHeartbeatService,
+  createIntentService,
+  createKhSimulatePreflightFromEnv,
+  createKillSwitchService,
+  createNarrativeService,
+  createPolicyEngine,
+  createPositionService,
+  createSignalEngine,
+  createSignalFusionJudge,
+  createStrategyRunner,
+  createTicketService,
+  deskPolicyConfigFromEnv,
+  getDeskControlPlane,
+  registerDeskControlPlane,
+} from "../desk/index.ts";
+import { BlockIngestionHandler } from "../keeperhub/block-ingestion-handler.ts";
+import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
+import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
+import { createEventNormalizer } from "../monitoring/event-normalizer.ts";
+import {
+  blockRpcUrlsFromEnv,
+  createOnChainBlockService,
+} from "../monitoring/on-chain-block-service.ts";
+import { createPriceOracle } from "../monitoring/price-oracle-service.ts";
+import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
+import { createAlertToSignalService } from "../services/alert-to-signal-service.ts";
+import { warnIfPrivateRoutingMisconfigured } from "../services/keeperhub-private-capability.ts";
+import { type LLMProviderMap, createProviderConfigs } from "../services/llm-provider-client.ts";
+import { createNewsletterSubscriptionService } from "../services/newsletter-subscription-service.ts";
+import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
+import {
+  ensureTelegramWebhook,
+  resolvePublicApiBaseUrl,
+} from "../services/telegram-webhook-registration.ts";
+import { createTreasuryRegistryGate } from "../services/treasury-registry-gate.ts";
+import { createTreasuryStatusService } from "../services/treasury-status-service.ts";
 import { createAlertRoutes } from "./alert-routes.ts";
 import { createDeskRoutes } from "./desk-routes.ts";
 import { createKeeperhubBlockRoutes } from "./keeperhub-block-routes.ts";
 import { createKeeperhubDeskRoutes } from "./keeperhub-desk-routes.ts";
 import { createKeeperhubEventRoutes } from "./keeperhub-event-routes.ts";
-import { createTreasuryCctpRoutes } from "./treasury-cctp-routes.ts";
-import {
-  ensureTelegramWebhook,
-  resolvePublicApiBaseUrl,
-} from "../services/telegram-webhook-registration.ts";
 import { createTelegramWebhookRoutes } from "./telegram-webhook-routes.ts";
-import { warnIfPrivateRoutingMisconfigured } from "../services/keeperhub-private-capability.ts";
+import { createTreasuryCctpRoutes } from "./treasury-cctp-routes.ts";
 
 export interface US1Dependencies {
   eventRepo: MonitoredEventRepository;
@@ -116,7 +117,9 @@ export interface US1Dependencies {
   /** Latest treasury snapshots for FR-026 treasury-gated registry writes. */
   treasuryRepo: TreasurySnapshotRepository;
   /** Optional: mints paid deep dives when alert clusters form. */
-  premiumProductizer?: import("../services/premium-productizer-service.ts").PremiumProductizerService | null;
+  premiumProductizer?:
+    | import("../services/premium-productizer-service.ts").PremiumProductizerService
+    | null;
 }
 
 export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependencies): void {
@@ -220,7 +223,9 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   void systemControlStateRepo.get().then((res) => {
     if (res.ok) {
       setGroqKeyIndex(res.value.groq_key_index);
-      console.info(`[system] Groq key rotation index restored from database: ${res.value.groq_key_index}`);
+      console.info(
+        `[system] Groq key rotation index restored from database: ${res.value.groq_key_index}`,
+      );
     }
   });
 
@@ -228,7 +233,6 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   registerGroqKeyIndexPersister((nextIndex) => {
     void systemControlStateRepo.upsert({ groq_key_index: nextIndex }).catch(() => {});
   });
-
 
   // LLM providers for desk agent (Gemini → Groq → OpenAI)
   const deskLlmProviders: LLMProviderMap = createProviderConfigs(env);
@@ -246,6 +250,12 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     signals: deskSignalRepo,
     fusionJudge: deskFusionJudge,
   });
+  handler.setAlertToSignalService(
+    createAlertToSignalService({
+      alertRepo: deps.alertRepo,
+      signalEngine: deskSignalEngine,
+    }),
+  );
   const deskSignalIngest = createDeskSignalIngestService({
     signalEngine: deskSignalEngine,
     signals: deskSignalRepo,
@@ -254,9 +264,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   });
 
   const deskLlmConfigured = Boolean(
-    env.geminiApiKey?.trim() ||
-      env.openaiApiKey?.trim() ||
-      env.groqApiKey?.trim(),
+    env.geminiApiKey?.trim() || env.openaiApiKey?.trim() || env.groqApiKey?.trim(),
   );
 
   // LLM agent is hardwired (no DESK_AGENT_ENABLED). Without an API key the
@@ -333,8 +341,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
           registry: registryService,
           execLogRepo: deps.execLogRepo,
           isKillSwitchArmed: () => deskKillSwitchRef?.isArmed() ?? false,
-          treasuryPrivateTransferThresholdUsdc:
-            env.treasuryPrivateTransferThresholdUsdc,
+          treasuryPrivateTransferThresholdUsdc: env.treasuryPrivateTransferThresholdUsdc,
         })
       : null;
 
@@ -354,9 +361,9 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   void deskKillSwitch.hydrate().then((state) => {
     if (state.armed || deskPausedRuntime) {
       console.info(
-        `[desk] control state restored: armed=${String(state.armed)}` +
-          (state.armedReason ? ` reason=${state.armedReason}` : "") +
-          ` paused=${String(deskPausedRuntime)}`,
+        `[desk] control state restored: armed=${String(state.armed)}${
+          state.armedReason ? ` reason=${state.armedReason}` : ""
+        } paused=${String(deskPausedRuntime)}`,
       );
     }
   });
@@ -365,9 +372,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   // workflows — fail them so single-flight does not block forever.
   void deskIntentRepo.listByStatus("executing", 100).then(async (result) => {
     if (!result.ok) {
-      console.warn(
-        `[desk] failed to list executing intents on boot: ${result.error.message}`,
-      );
+      console.warn(`[desk] failed to list executing intents on boot: ${result.error.message}`);
       return;
     }
     let reaped = 0;
@@ -379,9 +384,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
       if (updated.ok) reaped += 1;
     }
     if (reaped > 0) {
-      console.info(
-        `[desk] reaped ${reaped} executing intent(s) abandoned on process restart`,
-      );
+      console.info(`[desk] reaped ${reaped} executing intent(s) abandoned on process restart`);
     }
   });
 
@@ -422,6 +425,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     killSwitch: deskKillSwitch,
     strategyRunner: deskStrategyRunner,
     signals: deskSignalRepo,
+    alertRepo: deps.alertRepo,
     executionBridge: deskExecutionBridge,
     controlState: deskControlStateRepo,
     agent: deskTradingAgent,
@@ -448,9 +452,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
         ...(env.rpcUrl !== undefined ? { rpcUrl: env.rpcUrl } : {}),
         usdcAddress: env.deskUsdcAddress,
         usdcDecimals: 6,
-        ...(deskTreasury.address !== undefined
-          ? { treasuryAddress: deskTreasury.address }
-          : {}),
+        ...(deskTreasury.address !== undefined ? { treasuryAddress: deskTreasury.address } : {}),
         ...(deskParaTreasury != null ? { paraTreasury: deskParaTreasury } : {}),
       });
       if (!balances) return null;
@@ -493,11 +495,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     );
   } else {
     console.info(
-      "[desk-agent] mandatory LLM path live (provider preference=" +
-        (env.deskAgentLlmProvider ?? "auto") +
-        ", minConfidence=" +
-        env.deskAgentMinConfidence +
-        ")",
+      `[desk-agent] mandatory LLM path live (provider preference=${env.deskAgentLlmProvider ?? "auto"}, minConfidence=${env.deskAgentMinConfidence})`,
     );
   }
 
@@ -505,8 +503,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   void warnIfPrivateRoutingMisconfigured({
     apiBaseUrl: env.keeperhubApiBaseUrl,
     apiKey: env.keeperhubApiKey,
-    privatePolicyEnabled:
-      env.deskUsePrivateMempool || env.registryUsePrivateMempool,
+    privatePolicyEnabled: env.deskUsePrivateMempool || env.registryUsePrivateMempool,
     chainId: mapNetworkToChainId(env.keeperhubNetwork, 11_155_111),
   });
 
@@ -528,15 +525,10 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
           details: params?.details ?? {},
           started_at: new Date().toISOString(),
           completed_at:
-            status === "succeeded" || status === "failed"
-              ? new Date().toISOString()
-              : null,
+            status === "succeeded" || status === "failed" ? new Date().toISOString() : null,
         });
         if (!result.ok) {
-          console.warn(
-            "[cctp] activity log append failed:",
-            result.error.message,
-          );
+          console.warn("[cctp] activity log append failed:", result.error.message);
         }
       },
     },
@@ -564,9 +556,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
           rebalanceThresholdUsdc: env.cctpRebalanceThresholdUsdc,
         });
         if (result.starved) {
-          console.info(
-            `[cctp] desk starvation detected — may skip cooldown: ${result.detail}`,
-          );
+          console.info(`[cctp] desk starvation detected — may skip cooldown: ${result.detail}`);
         }
         return result.starved;
       } catch (error) {
@@ -581,9 +571,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   const cctpService = cctpStack.service;
   cctpServiceRef = cctpService;
   registerCctpService(cctpService);
-  registerCctpRebalanceRepo(
-    cctpService && "repo" in cctpStack ? cctpStack.repo : null,
-  );
+  registerCctpRebalanceRepo(cctpService && "repo" in cctpStack ? cctpStack.repo : null);
   let cctpWorker: ReturnType<typeof createCctpRebalanceWorker> | null = null;
 
   if (cctpService) {
@@ -595,8 +583,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
       enabled: true,
     });
     cctpWorker.start();
-    const backend =
-      "executorBackend" in cctpStack ? cctpStack.executorBackend : "unknown";
+    const backend = "executorBackend" in cctpStack ? cctpStack.executorBackend : "unknown";
     console.info(
       `[cctp] rebalance service ready (backend=${backend}, enabled=${String(env.cctpRebalanceEnabled)}, ` +
         `forceOnDeskStarvation=${String(env.cctpForceOnDeskStarvation)}, ` +
@@ -677,9 +664,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
         "TELEGRAM_WEBHOOK_SECRET set but TELEGRAM_INGEST_CHAT_ID / TELEGRAM_CHAT_ID missing — accepting ingest from any chat (set a group id in production)",
       );
     } else {
-      console.info(
-        `Telegram ingest bridge enabled (POST /telegram/webhook, chat ${ingestChatId})`,
-      );
+      console.info(`Telegram ingest bridge enabled (POST /telegram/webhook, chat ${ingestChatId})`);
     }
 
     // Idempotent setWebhook on every boot — Telegram keeps the URL across deploys;
@@ -719,36 +704,36 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   }
 
   // Public alerts (no auth required)
-  apiRouter.use(createAlertRoutes(deps.alertRepo));
+  apiRouter.use(createAlertRoutes(deps.alertRepo, deskSignalRepo));
 }
 
 // ── US2: Daily Digest Routes ───────────────────────────
 
+import { ACTIVE_INTELLIGENCE_CHAIN_ID, DIGEST_SCHEDULE_GRACE_MINUTES } from "@chronicleai/config";
 import { DigestRunHandler } from "../keeperhub/digest-run-handler.ts";
 import { createChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import { createDigestEventSelectionService } from "../services/digest-event-selection-service.ts";
 import { createDigestGenerationService } from "../services/digest-generation-service.ts";
 import { createDigestPublicationService } from "../services/digest-publication-service.ts";
+import { registerDigestRunHandler } from "../services/digest-run-bridge.ts";
+import { createDigestScheduler } from "../services/digest-scheduler.ts";
 import { createDigestWindowService } from "../services/digest-window-service.ts";
-import {
-  createNotificationService,
-} from "../services/notification-service.ts";
-import { createSmtpEmailService } from "../services/smtp-email-service.ts";
+import { createNotificationService } from "../services/notification-service.ts";
 import {
   createParaTreasuryClientFromEnv,
   mapNetworkToChainId,
 } from "../services/para-treasury-client.ts";
+import { createSmtpEmailService } from "../services/smtp-email-service.ts";
 import { resolveTreasuryWallet } from "../services/treasury-wallet.ts";
 import { createWeb3Client } from "../services/web3-client-service.ts";
-import { DIGEST_SCHEDULE_GRACE_MINUTES } from "@chronicleai/config";
-import { registerDigestRunHandler } from "../services/digest-run-bridge.ts";
-import { createDigestScheduler } from "../services/digest-scheduler.ts";
 import { createDigestRoutes } from "./digest-routes.ts";
 import { createKeeperhubDigestRoutes } from "./keeperhub-digest-routes.ts";
 import { createSubscriberRoutes } from "./subscriber-routes.ts";
 
 export interface US2Dependencies {
   eventRepo: MonitoredEventRepository;
+  /** Public Alerts are the durable root for digest causal source links. */
+  alertRepo: PublicAlertRepository;
   digestRepo: DailyDigestRepository;
   execLogRepo: ExecutionLogRepository;
   /** Multi-provider LLM attempt logging for digest generation (Gemini → Groq → OpenAI). */
@@ -765,9 +750,13 @@ export interface US2Dependencies {
   /** Credits affiliate USDC ledger when newsletter x402 settlements succeed. */
   earningsService: import("../services/affiliate-earnings-service.ts").AffiliateEarningsService;
   /** Funds credited affiliate rewards into the KeeperHub execution wallet. */
-  fundingService?: import("../services/affiliate-funding-service.ts").AffiliateFundingService | null;
+  fundingService?:
+    | import("../services/affiliate-funding-service.ts").AffiliateFundingService
+    | null;
   /** Optional: mints period deep dives + structured feeds after digest runs. */
-  premiumProductizer?: import("../services/premium-productizer-service.ts").PremiumProductizerService | null;
+  premiumProductizer?:
+    | import("../services/premium-productizer-service.ts").PremiumProductizerService
+    | null;
 }
 
 export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependencies): void {
@@ -873,7 +862,9 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
   });
 
   const windowService = createDigestWindowService(deps.digestRepo);
-  const eventSelectionService = createDigestEventSelectionService(deps.eventRepo);
+  const eventSelectionService = createDigestEventSelectionService(deps.eventRepo, {
+    chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+  });
   const digestProviderConfigs = createProviderConfigs(env);
   digestProviderConfigs.groq = {
     ...digestProviderConfigs.groq,
@@ -897,6 +888,7 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
   const handler = new DigestRunHandler({
     digestRepo: deps.digestRepo,
     eventRepo: deps.eventRepo,
+    alertRepo: deps.alertRepo,
     execLogRepo: deps.execLogRepo,
     windowService,
     eventSelectionService,
@@ -958,6 +950,7 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
 
 import type { SponsoredWatchRepository } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
+import { createDeskFeedAccessGate } from "../desk/index.ts";
 import { MppPaymentAdapter } from "../payments/mpp-payment-adapter.ts";
 import type { PaymentAdapter } from "../payments/payment-adapter.ts";
 import {
@@ -966,7 +959,6 @@ import {
 } from "../services/premium-access-receipt-service.ts";
 import { createSponsoredWatchReportService } from "../services/sponsored-watch-report-service.ts";
 import { createSponsoredWatchService } from "../services/sponsored-watch-service.ts";
-import { createDeskFeedAccessGate } from "../desk/index.ts";
 import { createKeeperhubSponsoredWatchRoutes } from "./keeperhub-sponsored-watch-routes.ts";
 import { createPaymentRoutes } from "./payment-routes.ts";
 import { createPremiumDeskRoutes } from "./premium-desk-routes.ts";
@@ -986,7 +978,9 @@ export interface US3Dependencies {
   /** Credits affiliate USDC ledger on settlement. */
   earningsService: import("../services/affiliate-earnings-service.ts").AffiliateEarningsService;
   /** Funds credited affiliate rewards into the KeeperHub execution wallet. */
-  fundingService?: import("../services/affiliate-funding-service.ts").AffiliateFundingService | null;
+  fundingService?:
+    | import("../services/affiliate-funding-service.ts").AffiliateFundingService
+    | null;
 }
 
 /** Interval for automated sponsored-watch activate / monitor / complete (Loop 4). */
@@ -1092,9 +1086,7 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
       }),
     );
   } else {
-    console.warn(
-      "Desk control plane not registered — /premium/desk/* routes disabled",
-    );
+    console.warn("Desk control plane not registered — /premium/desk/* routes disabled");
   }
 
   // Payment routes (includes soft-fail publishPremiumReceipt on settle)
@@ -1156,10 +1148,7 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
 
 // ── US4: Public Agent Activity, Treasury & Revenue Payouts ─
 
-import type {
-  AgentActivityRepository,
-  PayoutRecordRepository,
-} from "@chronicleai/db";
+import type { AgentActivityRepository, PayoutRecordRepository } from "@chronicleai/db";
 import { RevenueRoutingHandler } from "../keeperhub/revenue-routing-handler.ts";
 import { TreasuryCheckHandler } from "../keeperhub/treasury-check-handler.ts";
 import { createAffiliateAgentService } from "../services/affiliate-agent-service.ts";
@@ -1284,8 +1273,7 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
             referralRewardsAmount: 0,
             payoutPeriodHash: periodHash ?? `period_${Date.now()}`,
             payoutIds: [] as string[],
-            errorMessage:
-              "CREATOR_RECOVERY_WALLET is not configured — cannot route revenue",
+            errorMessage: "CREATOR_RECOVERY_WALLET is not configured — cannot route revenue",
           };
         },
       };
@@ -1352,9 +1340,7 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
     });
     revenueScheduler.start();
   } else if (!env.creatorRecoveryWallet) {
-    console.info(
-      "[revenue-scheduler] disabled — CREATOR_RECOVERY_WALLET not set",
-    );
+    console.info("[revenue-scheduler] disabled — CREATOR_RECOVERY_WALLET not set");
   } else {
     console.info(
       "[revenue-scheduler] disabled (REVENUE_ROUTING_SCHEDULE_ENABLED=false) — use POST /keeperhub/revenue/route",
@@ -1377,10 +1363,7 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
       const svc = getCctpService();
       if (!svc) return null;
       try {
-        const [balances, status] = await Promise.all([
-          svc.readBalances(),
-          svc.getStatus(),
-        ]);
+        const [balances, status] = await Promise.all([svc.readBalances(), svc.getStatus()]);
         const deployable = deployableToDeskUsdc(
           balances.treasurySepoliaUsdc,
           env.treasuryUsdcOperatingReserve,
@@ -1390,14 +1373,10 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
           "Earn on Base Sepolia (x402); deploy on Ethereum Sepolia via Circle CCTP.",
         ];
         if (balances.inFlightUsdc > 0) {
-          noteParts.push(
-            `${balances.inFlightUsdc} USDC in-flight on CCTP (not yet deployable).`,
-          );
+          noteParts.push(`${balances.inFlightUsdc} USDC in-flight on CCTP (not yet deployable).`);
         } else if (
-          balances.treasurySepoliaUsdc <
-            env.treasuryUsdcOperatingReserve + topupChunk &&
-          balances.treasuryBaseUsdc - env.cctpBaseSafetyBufferUsdc >=
-            env.cctpRebalanceThresholdUsdc
+          balances.treasurySepoliaUsdc < env.treasuryUsdcOperatingReserve + topupChunk &&
+          balances.treasuryBaseUsdc - env.cctpBaseSafetyBufferUsdc >= env.cctpRebalanceThresholdUsdc
         ) {
           noteParts.push(
             "Sepolia float is low while Base is flush — awaiting CCTP rebalance before desk top-up.",

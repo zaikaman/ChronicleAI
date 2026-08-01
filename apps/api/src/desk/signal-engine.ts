@@ -3,20 +3,24 @@
  * build windowed dedupe keys, and persist via desk_signals repository.
  */
 
+import type { DeskSignalRepository, DeskSignalRow } from "@chronicleai/db";
 import {
   DESK_CHAIN_ID,
   DESK_SIGNAL_TYPES,
   type DeskPolicyVerdict,
   type DeskSignalType,
 } from "@chronicleai/schemas";
-import type { DeskSignalRepository, DeskSignalRow } from "@chronicleai/db";
-import type { DeskPolicyConfig, DeskSignalFeatures, DeskSignalInput, DeskSignalRecord, DeskSignalSources, GasRegime } from "./types.ts";
-import type { PolicyEngine } from "./policy-engine.ts";
 import type { SignalFusionJudge } from "./agent/signal-fusion.ts";
-import {
-  DESK_BASIS_ABSURD_BPS,
-  isPlausibleEthUsdPrice,
-} from "./oracle-amm-pricing.ts";
+import { DESK_BASIS_ABSURD_BPS, isPlausibleEthUsdPrice } from "./oracle-amm-pricing.ts";
+import type { PolicyEngine } from "./policy-engine.ts";
+import type {
+  DeskPolicyConfig,
+  DeskSignalFeatures,
+  DeskSignalInput,
+  DeskSignalRecord,
+  DeskSignalSources,
+  GasRegime,
+} from "./types.ts";
 
 const SIGNAL_TYPE_SET = new Set<string>(DESK_SIGNAL_TYPES);
 
@@ -125,11 +129,7 @@ export function createSignalEngine(deps: {
           return {
             severity: clampSeverity(35),
             policyVerdict: "trade",
-            reasonCodes: [
-              "apy_data_quality",
-              "maintenance_eligible",
-              `apy_absurd_bps=${delta}`,
-            ],
+            reasonCodes: ["apy_data_quality", "maintenance_eligible", `apy_absurd_bps=${delta}`],
           };
         }
         if (delta < config.apyDeltaBps) {
@@ -158,30 +158,18 @@ export function createSignalEngine(deps: {
         const oracle = features.oraclePrice;
         const amm = features.ammPrice;
         // Absolute ETH/USD band: refuse trade when either mid is nonsense.
-        if (
-          oracle != null &&
-          Number.isFinite(oracle) &&
-          !isPlausibleEthUsdPrice(oracle)
-        ) {
+        if (oracle != null && Number.isFinite(oracle) && !isPlausibleEthUsdPrice(oracle)) {
           return {
             severity: 15,
             policyVerdict: "ignore",
-            reasonCodes: [
-              "basis_data_quality",
-              "oracle_price_out_of_band",
-              `oracle=${oracle}`,
-            ],
+            reasonCodes: ["basis_data_quality", "oracle_price_out_of_band", `oracle=${oracle}`],
           };
         }
         if (amm != null && Number.isFinite(amm) && !isPlausibleEthUsdPrice(amm)) {
           return {
             severity: 15,
             policyVerdict: "ignore",
-            reasonCodes: [
-              "basis_data_quality",
-              "amm_price_out_of_band",
-              `amm=${amm}`,
-            ],
+            reasonCodes: ["basis_data_quality", "amm_price_out_of_band", `amm=${amm}`],
           };
         }
         // Guard mis-scaled oracle/AMM units (e.g. answer / 1e8 twice).
@@ -251,6 +239,30 @@ export function createSignalEngine(deps: {
         };
       }
 
+      case "event_flow": {
+        return {
+          severity: clampSeverity(Number(features.severity) || 25),
+          policyVerdict: "defer",
+          reasonCodes: ["event_flow_observation", "no_direct_trade"],
+        };
+      }
+
+      case "event_supply": {
+        return {
+          severity: clampSeverity(Number(features.severity) || 15),
+          policyVerdict: "ignore",
+          reasonCodes: ["event_supply_observation", "no_direct_trade"],
+        };
+      }
+
+      case "event_protocol_flow": {
+        return {
+          severity: clampSeverity(Number(features.severity) || 20),
+          policyVerdict: "ignore",
+          reasonCodes: ["event_protocol_flow_observation", "desk_context_required"],
+        };
+      }
+
       case "capital_tick": {
         return { severity: 5, policyVerdict: "ignore", reasonCodes: ["capital_tick"] };
       }
@@ -288,12 +300,7 @@ export function createSignalEngine(deps: {
     }
 
     const f = input.features;
-    const parts: string[] = [
-      "desk",
-      String(chainId),
-      input.signalType,
-      `w${windowBucket}`,
-    ];
+    const parts: string[] = ["desk", String(chainId), input.signalType, `w${windowBucket}`];
 
     if (f.hf != null) parts.push(`hf${bucket(f.hf, 0.05).toFixed(2)}`);
     if (f.basisBps != null) parts.push(`b${bucket(f.basisBps, 10)}`);
@@ -425,6 +432,11 @@ export function createSignalEngine(deps: {
       policy_verdict: signal.policyVerdict,
       dedupe_key: signal.dedupeKey,
       created_at: signal.createdAt,
+      source_alert_id: input.sourceAlertId ?? null,
+      source_event_id: input.sourceEventId ?? null,
+      signal_origin: input.signalOrigin ?? "manual",
+      source_dedupe_key: input.sourceDedupeKey ?? null,
+      source_evidence: input.sourceEvidence ?? {},
     });
     if (!created.ok) {
       // Race: unique dedupe_key — re-read

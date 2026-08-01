@@ -3,21 +3,31 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
 import {
+  type PaginatedResult,
+  type PaginationParams,
   buildInsertPayload,
   buildPaginatedResult,
   buildUpdatePayload,
   mapPostgrestError,
   normalizePagination,
-  type PaginatedResult,
-  type PaginationParams,
 } from "./repository-utils.ts";
 import type { DailyDigestInsert, DailyDigestRow, DailyDigestUpdate } from "./types.ts";
+
+export interface DailyDigestListFilters {
+  chainId?: number;
+  digestKind?: "market" | "desk";
+  publicationChainId?: number;
+}
 
 export interface DailyDigestRepository {
   create(data: DailyDigestInsert): Promise<Result<DailyDigestRow>>;
   findById(id: string): Promise<Result<DailyDigestRow>>;
-  findByWindow(periodStart: string, periodEnd: string): Promise<DailyDigestRow | null>;
-  findLatestPublic(): Promise<Result<DailyDigestRow | null>>;
+  findByWindow(
+    periodStart: string,
+    periodEnd: string,
+    digestKind?: "market" | "desk",
+  ): Promise<DailyDigestRow | null>;
+  findLatestPublic(filters?: DailyDigestListFilters): Promise<Result<DailyDigestRow | null>>;
   updatePublicationStatus(
     id: string,
     status: string,
@@ -36,9 +46,11 @@ export interface DailyDigestRepository {
       explorerUrl?: string;
     },
   ): Promise<Result<DailyDigestRow>>;
-  list(limitParam?: number): Promise<Result<DailyDigestRow[]>>;
+  list(limitParam?: number, filters?: DailyDigestListFilters): Promise<Result<DailyDigestRow[]>>;
   /** Page-based public published digests (newest first). */
-  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<DailyDigestRow>>>;
+  listPage(
+    params?: PaginationParams & DailyDigestListFilters,
+  ): Promise<Result<PaginatedResult<DailyDigestRow>>>;
 }
 
 export function createDailyDigestRepository(supabase: SupabaseClient): DailyDigestRepository {
@@ -70,11 +82,10 @@ export function createDailyDigestRepository(supabase: SupabaseClient): DailyDige
       return success(row);
     },
 
-    async findByWindow(periodStart, periodEnd) {
-      const { data: rows, error } = await table()
-        .select("*")
-        .eq("period_start", periodStart)
-        .eq("period_end", periodEnd);
+    async findByWindow(periodStart, periodEnd, digestKind) {
+      let query = table().select("*").eq("period_start", periodStart).eq("period_end", periodEnd);
+      if (digestKind) query = query.eq("digest_kind", digestKind);
+      const { data: rows, error } = await query;
 
       if (error) {
         return null;
@@ -83,10 +94,14 @@ export function createDailyDigestRepository(supabase: SupabaseClient): DailyDige
       return (rows?.[0] as DailyDigestRow | undefined) ?? null;
     },
 
-    async findLatestPublic() {
-      const { data: rows, error } = await table()
-        .select("*")
-        .eq("audience", "public")
+    async findLatestPublic(filters) {
+      let query = table().select("*").eq("audience", "public");
+      if (filters?.chainId !== undefined) query = query.eq("chain_id", filters.chainId);
+      if (filters?.digestKind) query = query.eq("digest_kind", filters.digestKind);
+      if (filters?.publicationChainId !== undefined) {
+        query = query.eq("publication_chain_id", filters.publicationChainId);
+      }
+      const { data: rows, error } = await query
         .order("published_at", { ascending: false })
         .limit(1);
 
@@ -156,11 +171,16 @@ export function createDailyDigestRepository(supabase: SupabaseClient): DailyDige
       return success(rows as unknown as DailyDigestRow);
     },
 
-    async list(limitParam = 10) {
+    async list(limitParam = 10, filters = {}) {
       const limit = Math.min(50, Math.max(1, limitParam));
 
-      const { data: rows, error } = await table()
-        .select("*")
+      let query = table().select("*");
+      if (filters?.chainId !== undefined) query = query.eq("chain_id", filters.chainId);
+      if (filters?.digestKind) query = query.eq("digest_kind", filters.digestKind);
+      if (filters?.publicationChainId !== undefined) {
+        query = query.eq("publication_chain_id", filters.publicationChainId);
+      }
+      const { data: rows, error } = await query
         .order("published_at", { ascending: false })
         .limit(limit);
 
@@ -177,12 +197,20 @@ export function createDailyDigestRepository(supabase: SupabaseClient): DailyDige
         maxLimit: 100,
       });
 
-      const { data: rows, error, count } = await table()
+      let query = table()
         .select("*", { count: "exact" })
         .eq("audience", "public")
-        .not("published_at", "is", null)
-        .order("published_at", { ascending: false })
-        .range(offset, offset + limit - 1);
+        .not("published_at", "is", null);
+      if (params?.chainId !== undefined) query = query.eq("chain_id", params.chainId);
+      if (params?.digestKind) query = query.eq("digest_kind", params.digestKind);
+      if (params?.publicationChainId !== undefined) {
+        query = query.eq("publication_chain_id", params.publicationChainId);
+      }
+      const {
+        data: rows,
+        error,
+        count,
+      } = await query.order("published_at", { ascending: false }).range(offset, offset + limit - 1);
 
       if (error) {
         return failure(mapPostgrestError(error));

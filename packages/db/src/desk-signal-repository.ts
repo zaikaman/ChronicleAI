@@ -10,16 +10,12 @@ export interface DeskSignalRepository {
   create(data: DeskSignalInsert): Promise<Result<DeskSignalRow>>;
   findById(id: string): Promise<Result<DeskSignalRow | null>>;
   findByDedupeKey(dedupeKey: string): Promise<Result<DeskSignalRow | null>>;
+  findBySourceAlertId?(alertId: string): Promise<Result<DeskSignalRow | null>>;
   listRecent(limitParam?: number): Promise<Result<DeskSignalRow[]>>;
-  listByType(
-    signalType: DeskSignalType,
-    limitParam?: number,
-  ): Promise<Result<DeskSignalRow[]>>;
+  listByType(signalType: DeskSignalType, limitParam?: number): Promise<Result<DeskSignalRow[]>>;
 }
 
-export function createDeskSignalRepository(
-  supabase: SupabaseClient,
-): DeskSignalRepository {
+export function createDeskSignalRepository(supabase: SupabaseClient): DeskSignalRepository {
   const table = () => supabase.from("desk_signals");
 
   return {
@@ -33,6 +29,11 @@ export function createDeskSignalRepository(
         policy_verdict: data.policy_verdict ?? "ignore",
         dedupe_key: data.dedupe_key,
         created_at: data.created_at ?? new Date().toISOString(),
+        source_alert_id: data.source_alert_id ?? null,
+        source_event_id: data.source_event_id ?? null,
+        signal_origin: data.signal_origin ?? "manual",
+        source_dedupe_key: data.source_dedupe_key ?? null,
+        source_evidence: data.source_evidence ?? {},
       };
 
       const { data: row, error } = await table().insert(payload).select().single();
@@ -49,10 +50,14 @@ export function createDeskSignalRepository(
     },
 
     async findByDedupeKey(dedupeKey) {
-      const { data, error } = await table()
-        .select("*")
-        .eq("dedupe_key", dedupeKey)
-        .limit(1);
+      const { data, error } = await table().select("*").eq("dedupe_key", dedupeKey).limit(1);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(maybeRow((data ?? []) as DeskSignalRow[]));
+    },
+
+    async findBySourceAlertId(alertId) {
+      const { data, error } = await table().select("*").eq("source_alert_id", alertId).limit(1);
 
       if (error) return failure(mapPostgrestError(error));
       return success(maybeRow((data ?? []) as DeskSignalRow[]));

@@ -2,6 +2,7 @@
 // GET /premium/items - List available premium item teasers
 // GET /premium/items/:id - Access a premium item (returns 402 if not paid)
 
+import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
 import type {
   ExecutionLogRepository,
   PaymentRecordRepository,
@@ -11,8 +12,8 @@ import type {
 import { Router, type Router as RouterType } from "express";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 import {
-  extractAccessReceiptFromRequest,
   type PremiumAccessReceiptService,
+  extractAccessReceiptFromRequest,
 } from "../services/premium-access-receipt-service.ts";
 import { PaymentRequiredError, PremiumAccessService } from "../services/premium-access-service.ts";
 import { PremiumContentVisibilityService } from "../services/premium-content-visibility-service.ts";
@@ -212,6 +213,7 @@ export function createPremiumRoutes(params: {
       const result = await params.premiumRepo.listTeasersPage({
         page: parsed.page,
         limit: parsed.limit,
+        chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
       });
 
       if (!result.ok) {

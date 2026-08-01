@@ -1,6 +1,6 @@
 import { type ReactElement, useMemo, useState } from "react";
-import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { Page, PageHeader } from "../../components/page-chrome.tsx";
+import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { chainLabel } from "../../lib/explorer.ts";
 import { AlertCard } from "./AlertCard.tsx";
@@ -19,6 +19,8 @@ export function AlertsPage(): ReactElement {
   const [filters, setFilters] = useState<AlertFiltersState>({
     eventType: "",
     chainId: "",
+    alertKind: "",
+    signalStatus: "",
   });
 
   const visibleAlerts = useMemo(() => {
@@ -30,9 +32,7 @@ export function AlertsPage(): ReactElement {
     for (const alert of visibleAlerts) {
       if (alert.eventType) types.add(alert.eventType);
     }
-    return [...types]
-      .sort()
-      .map((value) => ({ value, label: formatEventTypeLabel(value) }));
+    return [...types].sort().map((value) => ({ value, label: formatEventTypeLabel(value) }));
   }, [visibleAlerts]);
 
   const chainOptions = useMemo(() => {
@@ -48,6 +48,22 @@ export function AlertsPage(): ReactElement {
       }));
   }, [visibleAlerts]);
 
+  const alertKindOptions = useMemo(() => {
+    const kinds = new Set<string>();
+    for (const alert of visibleAlerts) {
+      if (alert.alertKind) kinds.add(alert.alertKind);
+    }
+    return [...kinds].sort().map((value) => ({ value, label: formatEventTypeLabel(value) }));
+  }, [visibleAlerts]);
+
+  const signalStatusOptions = useMemo(() => {
+    const statuses = new Set<string>();
+    for (const alert of visibleAlerts) {
+      if (alert.signalStatus) statuses.add(alert.signalStatus);
+    }
+    return [...statuses].sort().map((value) => ({ value, label: formatEventTypeLabel(value) }));
+  }, [visibleAlerts]);
+
   const filteredAlerts = useMemo(() => {
     return visibleAlerts.filter((alert) => {
       if (filters.eventType && alert.eventType !== filters.eventType) {
@@ -56,11 +72,19 @@ export function AlertsPage(): ReactElement {
       if (filters.chainId && String(alert.chainId ?? "") !== filters.chainId) {
         return false;
       }
+      if (filters.alertKind && alert.alertKind !== filters.alertKind) {
+        return false;
+      }
+      if (filters.signalStatus && alert.signalStatus !== filters.signalStatus) {
+        return false;
+      }
       return true;
     });
-  }, [visibleAlerts, filters.eventType, filters.chainId]);
+  }, [visibleAlerts, filters.eventType, filters.chainId, filters.alertKind, filters.signalStatus]);
 
-  const hasActiveFilters = Boolean(filters.eventType || filters.chainId);
+  const hasActiveFilters = Boolean(
+    filters.eventType || filters.chainId || filters.alertKind || filters.signalStatus,
+  );
 
   return (
     <Page data-testid="alerts-list">
@@ -101,12 +125,17 @@ export function AlertsPage(): ReactElement {
         />
       ) : (
         <>
-          {(eventTypeOptions.length > 0 || chainOptions.length > 0) && (
+          {(eventTypeOptions.length > 0 ||
+            chainOptions.length > 0 ||
+            alertKindOptions.length > 0 ||
+            signalStatusOptions.length > 0) && (
             <AlertFilters
               filters={filters}
               onChange={setFilters}
               eventTypeOptions={eventTypeOptions}
               chainOptions={chainOptions}
+              alertKindOptions={alertKindOptions}
+              signalStatusOptions={signalStatusOptions}
             />
           )}
 

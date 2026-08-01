@@ -1,11 +1,11 @@
 // Normalize KeeperHub Event Tracker payloads into Chronicle EventIngestionPayload
 
 import {
+  type ProtocolContract,
+  type TokenMeta,
   isExchangeAddress,
   lookupEntity,
   lookupProtocolContract,
-  type ProtocolContract,
-  type TokenMeta,
 } from "@chronicleai/config";
 import type {
   EventIngestionPayload,
@@ -15,10 +15,7 @@ import type {
 } from "@chronicleai/schemas";
 import { EVENT_TYPES } from "@chronicleai/schemas";
 import { absBigInt, argAsBigInt, argAsString, scaleTokenAmount } from "./arg-utils.ts";
-import {
-  attachFlowContextToRawPayload,
-  enrichFlowContext,
-} from "./flow-enrichment.ts";
+import { attachFlowContextToRawPayload, enrichFlowContext } from "./flow-enrichment.ts";
 import type { PriceOracle } from "./price-oracle-service.ts";
 
 export interface EventNormalizer {
@@ -81,10 +78,43 @@ function buildSourceEventId(raw: RawOnChainEventPayload): string {
   return `${raw.chainId}-${tx}-${log}-${name}`;
 }
 
-function withFlow(
+function numberField(value: number | string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function attachCanonicalEvidence(
   payload: EventIngestionPayload,
-  flowContext: FlowContext,
+  raw: RawOnChainEventPayload,
 ): EventIngestionPayload {
+  const sourceEventId = payload.sourceEventId;
+  const sourceDedupeKey = `${payload.chainId}:${payload.eventType}:${sourceEventId}`;
+  return {
+    ...payload,
+    ...(numberField(raw.blockNumber) !== undefined
+      ? { blockNumber: numberField(raw.blockNumber) }
+      : {}),
+    ...(raw.blockHash ? { blockHash: raw.blockHash } : {}),
+    ...(numberField(raw.logIndex) !== undefined ? { logIndex: numberField(raw.logIndex) } : {}),
+    ...(raw.address ? { sourceContract: raw.address } : {}),
+    sourceDedupeKey,
+    normalizedFeatures: {
+      ...(payload.normalizedFeatures ?? {}),
+      sourceEventId,
+      eventType: payload.eventType,
+      chainId: payload.chainId,
+      protocol: payload.protocol ?? null,
+      transactionHash: payload.transactionHash ?? null,
+      blockNumber: numberField(raw.blockNumber) ?? null,
+      blockHash: raw.blockHash ?? null,
+      logIndex: numberField(raw.logIndex) ?? null,
+      sourceContract: raw.address ?? null,
+    },
+  };
+}
+
+function withFlow(payload: EventIngestionPayload, flowContext: FlowContext): EventIngestionPayload {
   return {
     ...payload,
     flowContext,
@@ -462,8 +492,9 @@ async function normalizeStablecoinSupply(
   // USDC is 1:1 USD with 6 decimals even without oracle
   let usd = priced?.usd ?? 0;
   const symbols = priced?.symbols ?? ["USDC"];
-  if (!priced && tokenAddress && STABLE_DECIMALS[tokenAddress]) {
-    const meta = STABLE_DECIMALS[tokenAddress]!;
+  const stableMeta = tokenAddress ? STABLE_DECIMALS[tokenAddress] : undefined;
+  if (!priced && stableMeta) {
+    const meta = stableMeta;
     usd = scaleTokenAmount(amount, meta.decimals);
     symbols[0] = meta.symbol;
   }
@@ -509,16 +540,14 @@ async function normalizeProtocolFlow(
   const args = raw.args ?? {};
   const reserve = argAsString(args.reserve) ?? argAsString(args.asset);
   const amount = argAsBigInt(args.amount);
-  const user =
-    argAsString(args.user) ?? argAsString(args.onBehalfOf) ?? argAsString(args.to);
+  const user = argAsString(args.user) ?? argAsString(args.onBehalfOf) ?? argAsString(args.to);
 
   if (amount === undefined) return null;
 
   const priced = await usdFromTokenAmount(amount, undefined, reserve, ethUsd);
   if (!priced) return null;
 
-  const eventType: EventType =
-    eventName === "Withdraw" ? "protocol_withdraw" : "protocol_deposit";
+  const eventType: EventType = eventName === "Withdraw" ? "protocol_withdraw" : "protocol_deposit";
 
   const protocol = contract?.protocol ?? raw.protocol ?? "Aave V3";
   const poolAddress = raw.address;
@@ -564,6 +593,25 @@ function toClassifiedPayload(body: Record<string, unknown>): EventIngestionPaylo
     ...(body.transactionHash ? { transactionHash: String(body.transactionHash) } : {}),
     ...(body.assetSymbols ? { assetSymbols: body.assetSymbols as string[] } : {}),
     ...(body.magnitude ? { magnitude: body.magnitude as { value: number; unit: string } } : {}),
+    ...(numberField(body.blockNumber as number | string | undefined) !== undefined
+      ? { blockNumber: numberField(body.blockNumber as number | string | undefined) }
+      : {}),
+    ...(typeof body.blockHash === "string" ? { blockHash: body.blockHash } : {}),
+    ...(numberField(body.logIndex as number | string | undefined) !== undefined
+      ? { logIndex: numberField(body.logIndex as number | string | undefined) }
+      : {}),
+    ...(typeof body.sourceContract === "string"
+      ? { sourceContract: body.sourceContract }
+      : typeof body.address === "string"
+        ? { sourceContract: body.address }
+        : {}),
+    ...(body.normalizedFeatures && typeof body.normalizedFeatures === "object"
+      ? { normalizedFeatures: body.normalizedFeatures as Record<string, unknown> }
+      : {}),
+    sourceDedupeKey:
+      typeof body.sourceDedupeKey === "string"
+        ? body.sourceDedupeKey
+        : `${Number(body.chainId)}:${String(body.eventType)}:${String(body.sourceEventId)}`,
   };
 
   // Honour pre-attached flowContext on classified path; else enrich lightly.
@@ -727,6 +775,8 @@ export function createEventNormalizer(priceOracle: PriceOracle): EventNormalizer
       if (raw.magnitude) {
         payload = { ...payload, magnitude: raw.magnitude };
       }
+
+      payload = attachCanonicalEvidence(payload, raw);
 
       return { ok: true, payload };
     },

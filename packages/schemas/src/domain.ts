@@ -31,12 +31,7 @@ export const EVENT_TYPES: readonly EventType[] = [
 ] as const;
 
 // ── Flow enrichment (capital-direction context) ─────────
-export type EntityRole =
-  | "exchange"
-  | "protocol"
-  | "treasury"
-  | "router"
-  | "unknown";
+export type EntityRole = "exchange" | "protocol" | "treasury" | "router" | "unknown";
 
 export const ENTITY_ROLES: readonly EntityRole[] = [
   "exchange",
@@ -98,6 +93,45 @@ export const ALERT_DELIVERY_STATUSES: readonly AlertDeliveryStatus[] = [
   "partial_failure",
   "failed",
 ] as const;
+
+/** Public alert classification used to separate newsroom events from desk triggers. */
+export type AlertKind = "market_event" | "desk_trigger";
+
+export const ALERT_KINDS: readonly AlertKind[] = ["market_event", "desk_trigger"] as const;
+
+/** State of the deterministic Alert -> Desk Signal projection. */
+export type AlertSignalStatus = "not_eligible" | "pending" | "created" | "failed";
+
+export const ALERT_SIGNAL_STATUSES: readonly AlertSignalStatus[] = [
+  "not_eligible",
+  "pending",
+  "created",
+  "failed",
+] as const;
+
+/** State of the causal desk action linked to an Alert. */
+export type AlertActionStatus =
+  | "not_created"
+  | "pending"
+  | "submitted"
+  | "filled"
+  | "failed"
+  | "deferred"
+  | "ignored";
+
+export const ALERT_ACTION_STATUSES: readonly AlertActionStatus[] = [
+  "not_created",
+  "pending",
+  "submitted",
+  "filled",
+  "failed",
+  "deferred",
+  "ignored",
+] as const;
+
+export type DigestKind = "market" | "desk";
+
+export const DIGEST_KINDS: readonly DigestKind[] = ["market", "desk"] as const;
 
 // ── Digest Publication States ───────────────────────────
 export type DigestPublicationStatus =
@@ -250,11 +284,7 @@ export const AUDIENCES: readonly Audience[] = ["public", "premium"] as const;
 // ── LLM Providers ───────────────────────────────────────
 export type LLMProvider = "gemini" | "openai" | "groq";
 
-export const LLM_PROVIDERS: readonly LLMProvider[] = [
-  "gemini",
-  "groq",
-  "openai",
-] as const;
+export const LLM_PROVIDERS: readonly LLMProvider[] = ["gemini", "groq", "openai"] as const;
 
 export type LLMGenerationAttemptStatus = "succeeded" | "failed" | "invalid_response";
 
@@ -332,6 +362,9 @@ export type DeskSignalType =
   | "oracle_basis"
   | "gas_regime"
   | "liquidation_cluster"
+  | "event_flow"
+  | "event_supply"
+  | "event_protocol_flow"
   | "capital_tick"
   | "manual";
 
@@ -341,6 +374,9 @@ export const DESK_SIGNAL_TYPES: readonly DeskSignalType[] = [
   "oracle_basis",
   "gas_regime",
   "liquidation_cluster",
+  "event_flow",
+  "event_supply",
+  "event_protocol_flow",
   "capital_tick",
   "manual",
 ] as const;
@@ -448,10 +484,7 @@ export const CCTP_RESUMABLE_STATUSES: readonly CctpRebalanceStatus[] = [
 
 export type CctpRebalanceMode = "direct" | "forwarding";
 
-export const CCTP_REBALANCE_MODES: readonly CctpRebalanceMode[] = [
-  "direct",
-  "forwarding",
-] as const;
+export const CCTP_REBALANCE_MODES: readonly CctpRebalanceMode[] = ["direct", "forwarding"] as const;
 
 /** v1 direction only: revenue rail → desk rail. */
 export type CctpRebalanceDirection = "base_to_sepolia";
@@ -522,11 +555,7 @@ export const DESK_AGENT_LEGS_HINTS: readonly DeskAgentLegsHint[] = [
 ] as const;
 
 /** Soft fusion labels for borderline signals (Role D). */
-export type DeskSignalFusionLabel =
-  | "actionable"
-  | "data_quality"
-  | "noise"
-  | "wait_for_confirm";
+export type DeskSignalFusionLabel = "actionable" | "data_quality" | "noise" | "wait_for_confirm";
 
 export const DESK_SIGNAL_FUSION_LABELS: readonly DeskSignalFusionLabel[] = [
   "actionable",

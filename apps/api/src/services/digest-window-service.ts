@@ -4,11 +4,7 @@ import { DIGEST_REPORTING_WINDOW_HOURS } from "@chronicleai/config";
 import type { DailyDigestRepository, DailyDigestRow } from "@chronicleai/db";
 
 /** Digests still awaiting a successful publish pass — safe to resume. */
-export const RESUMABLE_DIGEST_STATUSES = new Set([
-  "draft",
-  "queued",
-  "failed",
-]);
+export const RESUMABLE_DIGEST_STATUSES = new Set(["draft", "queued", "failed"]);
 
 export interface ExistingDigestSummary {
   id: string;
@@ -44,6 +40,7 @@ export interface DigestWindowService {
   checkDuplicate(params: {
     periodStart: string;
     periodEnd: string;
+    digestKind?: "market" | "desk";
   }): Promise<WindowValidationResult>;
 }
 
@@ -98,8 +95,8 @@ export function createDigestWindowService(digestRepo: DailyDigestRepository): Di
       return { valid: true };
     },
 
-    async checkDuplicate({ periodStart, periodEnd }) {
-      const existing = await digestRepo.findByWindow(periodStart, periodEnd);
+    async checkDuplicate({ periodStart, periodEnd, digestKind }) {
+      const existing = await digestRepo.findByWindow(periodStart, periodEnd, digestKind);
 
       if (existing) {
         const summary = toExistingDigestSummary(existing);

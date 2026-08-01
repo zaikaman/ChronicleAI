@@ -21,6 +21,7 @@ export interface MonitoredEventRepository {
     params?: PaginationParams & {
       status?: string;
       eventType?: string;
+      chainId?: number;
     },
   ): Promise<Result<MonitoredEventRow[]>>;
   /**
@@ -31,6 +32,7 @@ export interface MonitoredEventRepository {
     periodStart: string;
     periodEnd: string;
     status?: string;
+    chainId?: number;
     limit?: number;
   }): Promise<Result<MonitoredEventRow[]>>;
 }
@@ -102,6 +104,9 @@ export function createMonitoredEventRepository(supabase: SupabaseClient): Monito
       if (params?.eventType) {
         query = query.eq("event_type", params.eventType);
       }
+      if (params?.chainId !== undefined) {
+        query = query.eq("chain_id", params.chainId);
+      }
 
       const { data: rows, error } = await query
         .order("created_at", { ascending: false })
@@ -114,7 +119,7 @@ export function createMonitoredEventRepository(supabase: SupabaseClient): Monito
       return success(rows as unknown as MonitoredEventRow[]);
     },
 
-    async listInWindow({ periodStart, periodEnd, status, limit = 500 }) {
+    async listInWindow({ periodStart, periodEnd, status, chainId, limit = 500 }) {
       let query = table()
         .select("*")
         .gte("captured_at", periodStart)
@@ -124,6 +129,9 @@ export function createMonitoredEventRepository(supabase: SupabaseClient): Monito
 
       if (status) {
         query = query.eq("status", status);
+      }
+      if (chainId !== undefined) {
+        query = query.eq("chain_id", chainId);
       }
 
       const { data: rows, error } = await query;

@@ -1,7 +1,13 @@
 // API contract schemas matching the OpenAPI specification
 import type {
+  AlertActionStatus,
   AlertDeliveryStatus,
+  AlertKind,
+  AlertSignalStatus,
   Confidence,
+  DeskPolicyVerdict,
+  DeskSignalType,
+  DigestKind,
   DigestPublicationStatus,
   DigestSections,
   EmailSubscriberSource,
@@ -57,6 +63,70 @@ export interface PublicAlertResponse {
   protocol?: string;
   /** Deterministic capital-flow roles/direction when enrichment resolved. */
   flowContext?: FlowContext;
+  alertKind?: AlertKind;
+  publicationChainId?: number;
+  sourceDedupeKey?: string;
+  signalType?: DeskSignalType;
+  signalStatus?: AlertSignalStatus;
+  policyVerdict?: DeskPolicyVerdict;
+  actionStatus?: AlertActionStatus;
+  intentId?: string;
+  ticketId?: string;
+  transactionHash?: string;
+  actionTransactionHash?: string;
+  actionKeeperHubRunId?: string;
+  actionExplorerUrl?: string;
+  deterministicEvidence?: Record<string, unknown>;
+  causalChain?: AlertCausalChain;
+}
+
+export interface AlertCausalSignal {
+  id: string;
+  signalType: DeskSignalType;
+  origin: "alert" | "desk_read" | "manual";
+  sourceAlertId?: string;
+  sourceEventId?: string;
+  chainId: number;
+  policyVerdict: DeskPolicyVerdict;
+  severity: number;
+  features: Record<string, unknown>;
+  sources: Record<string, unknown>;
+  dedupeKey: string;
+  createdAt: string;
+}
+
+export interface AlertCausalDecision {
+  verdict: DeskPolicyVerdict;
+  intentId?: string;
+  reasonCodes: string[];
+  actionStatus: AlertActionStatus;
+}
+
+export interface AlertCausalAction {
+  intentId?: string;
+  ticketId?: string;
+  status: AlertActionStatus;
+  transactionHash?: string;
+  keeperHubRunId?: string;
+  explorerUrl?: string;
+}
+
+export interface AlertCausalProof {
+  sourceTransactionHash?: string;
+  registryTransactionHash?: string;
+  transactionHash?: string;
+  contentHash?: string;
+  contentUri?: string;
+  explorerUrl?: string;
+}
+
+export interface AlertCausalChain {
+  alertId: string;
+  sourceEventId?: string;
+  signal?: AlertCausalSignal;
+  decision?: AlertCausalDecision;
+  action?: AlertCausalAction;
+  proof?: AlertCausalProof;
 }
 
 // ── LLM Generation Attempt (response) ───────────────────
@@ -91,6 +161,13 @@ export interface DailyDigestResponse {
   gasUsedWei?: string;
   keeperHubRunId?: string;
   explorerUrl?: string;
+  digestKind?: DigestKind;
+  chainId?: number;
+  publicationChainId?: number;
+  sourceAlertIds?: string[];
+  sourceSignalIds?: string[];
+  sourceIntentIds?: string[];
+  sourceTicketIds?: string[];
 }
 
 // ── Digest Run Response (from KeeperHub trigger) ───────
@@ -298,12 +375,19 @@ export interface KeeperHubEventPayload {
   };
   capturedAt: string;
   rawPayload: Record<string, unknown>;
+  blockNumber?: number;
+  blockHash?: string;
+  logIndex?: number;
+  sourceContract?: string;
+  normalizedFeatures?: Record<string, unknown>;
+  sourceDedupeKey?: string;
 }
 
 // ── KeeperHub Digest Trigger ────────────────────────────
 export interface KeeperHubDigestTriggerPayload {
   periodStart: string;
   periodEnd: string;
+  digestKind?: DigestKind;
 }
 
 // ── KeeperHub Treasury Check ────────────────────────────

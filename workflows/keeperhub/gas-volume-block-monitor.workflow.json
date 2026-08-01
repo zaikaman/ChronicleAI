@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Gas & Volume Block Monitor (Telegram bridge)",
-    "description": "NEWSPAPER context (mainnet gas/volume). FREE TIER: Block Dispatcher every 300th mainnet block ≈ ~60 min (~720 runs/mo) → Telegram → Chronicle block ingest. Desk gas regime uses desk-gas-poll on Sepolia instead. Prefer vanity monitor account. Do NOT set blockInterval to 1."
+  "description": "NEWSPAPER context (Ethereum Sepolia gas/volume). FREE TIER: Block Dispatcher every 300th Sepolia block ≈ ~60 min (~720 runs/mo) → Telegram → Chronicle block ingest. Desk gas regime uses desk-gas-poll on Sepolia. Do NOT set blockInterval to 1."
   },
   "nodes": [
     {
@@ -18,7 +18,7 @@
         "label": "Every 300th Block (~60 min, free tier)",
         "config": {
           "triggerType": "Block",
-          "network": "1",
+          "network": "11155111",
           "blockInterval": 300
         }
       }
@@ -36,7 +36,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"block\",\"payload\":{\"chainId\":1,\"blockNumber\":\"{{@trigger-block:Trigger.blockNumber}}\",\"blockHash\":\"{{@trigger-block:Trigger.blockHash}}\",\"timestamp\":\"{{@trigger-block:Trigger.timestamp}}\",\"sourceEventId\":\"kh-block-{{@trigger-block:Trigger.blockNumber}}\"}}",
+        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"block\",\"payload\":{\"chainId\":11155111,\"blockNumber\":\"{{@trigger-block:Trigger.blockNumber}}\",\"blockHash\":\"{{@trigger-block:Trigger.blockHash}}\",\"timestamp\":\"{{@trigger-block:Trigger.timestamp}}\",\"sourceEventId\":\"kh-block-{{@trigger-block:Trigger.blockNumber}}\"}}",
           "parseMode": "none"
         }
       }

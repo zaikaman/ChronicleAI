@@ -2,7 +2,10 @@
 
 import type {
   AffiliateStatus,
+  AlertActionStatus,
   AlertDeliveryStatus,
+  AlertKind,
+  AlertSignalStatus,
   CctpRebalanceDirection,
   CctpRebalanceMode,
   CctpRebalanceStatus,
@@ -13,6 +16,7 @@ import type {
   DeskPolicyVerdict,
   DeskSignalType,
   DeskStrategy,
+  DigestKind,
   DigestPublicationStatus,
   EmailSubscriberSource,
   EmailSubscriberStatus,
@@ -43,6 +47,12 @@ export interface MonitoredEventRow {
   captured_at: string;
   significance_score: number | null;
   raw_payload: unknown;
+  block_number?: number | null;
+  block_hash?: string | null;
+  log_index?: number | null;
+  source_contract?: string | null;
+  normalized_evidence?: Record<string, unknown>;
+  source_dedupe_key?: string | null;
   status: MonitoredEventStatus;
   created_at: string;
   updated_at: string;
@@ -61,6 +71,12 @@ export interface MonitoredEventInsert {
   captured_at: string;
   significance_score?: number | null;
   raw_payload: unknown;
+  block_number?: number | null;
+  block_hash?: string | null;
+  log_index?: number | null;
+  source_contract?: string | null;
+  normalized_evidence?: Record<string, unknown>;
+  source_dedupe_key?: string | null;
   status?: MonitoredEventStatus;
 }
 
@@ -91,12 +107,27 @@ export interface PublicAlertRow {
   explorer_url: string | null;
   created_at: string;
   updated_at: string;
-  /** Populated when list/find joins monitored_events */
-  event_type?: EventType | null;
+  alert_kind?: AlertKind;
+  /** Denormalized source chain used for active/legacy API scopes. */
   chain_id?: number | null;
-  protocol?: string | null;
-  /** Source on-chain transaction hash from the monitored event (not registry proof). */
+  publication_chain_id?: number;
+  source_dedupe_key?: string | null;
+  desk_signal_id?: string | null;
+  signal_type?: DeskSignalType | null;
+  signal_status?: AlertSignalStatus;
+  policy_verdict?: DeskPolicyVerdict | null;
+  action_status?: AlertActionStatus;
+  intent_id?: string | null;
+  ticket_id?: string | null;
   transaction_hash?: string | null;
+  action_transaction_hash?: string | null;
+  action_keeper_hub_run_id?: string | null;
+  action_explorer_url?: string | null;
+  deterministic_evidence?: Record<string, unknown>;
+  /** Populated when list/find joins monitored_events */
+  source_event_id?: string | null;
+  event_type?: EventType | null;
+  protocol?: string | null;
   /** Flow enrichment from monitored_events.raw_payload.flowContext when joined. */
   flow_context?: Record<string, unknown> | null;
 }
@@ -122,6 +153,23 @@ export interface PublicAlertInsert {
   gas_used_wei?: string | null;
   keeper_hub_run_id?: string | null;
   explorer_url?: string | null;
+  alert_kind?: AlertKind;
+  event_type?: EventType | null;
+  chain_id?: number | null;
+  publication_chain_id?: number;
+  source_dedupe_key?: string | null;
+  desk_signal_id?: string | null;
+  signal_type?: DeskSignalType | null;
+  signal_status?: AlertSignalStatus;
+  policy_verdict?: DeskPolicyVerdict | null;
+  action_status?: AlertActionStatus;
+  intent_id?: string | null;
+  ticket_id?: string | null;
+  transaction_hash?: string | null;
+  action_transaction_hash?: string | null;
+  action_keeper_hub_run_id?: string | null;
+  action_explorer_url?: string | null;
+  deterministic_evidence?: Record<string, unknown>;
 }
 
 export type PublicAlertUpdate = Partial<PublicAlertInsert>;
@@ -154,6 +202,13 @@ export interface DailyDigestRow {
   market_narrative_status?: "succeeded" | "failed" | null;
   created_at: string;
   updated_at: string;
+  digest_kind?: DigestKind;
+  chain_id?: number;
+  publication_chain_id?: number;
+  source_alert_ids?: string[];
+  source_signal_ids?: string[];
+  source_intent_ids?: string[];
+  source_ticket_ids?: string[];
 }
 
 export interface DailyDigestInsert {
@@ -181,6 +236,13 @@ export interface DailyDigestInsert {
   market_narrative_provider?: string | null;
   /** DB CHECK: null | 'succeeded' | 'failed' (not 'ready'). */
   market_narrative_status?: "succeeded" | "failed" | null;
+  digest_kind?: DigestKind;
+  chain_id?: number;
+  publication_chain_id?: number;
+  source_alert_ids?: string[];
+  source_signal_ids?: string[];
+  source_intent_ids?: string[];
+  source_ticket_ids?: string[];
 }
 
 export type DailyDigestUpdate = Partial<DailyDigestInsert>;
@@ -292,6 +354,7 @@ export interface PremiumIntelligenceItemRow {
   status: PremiumItemStatus;
   created_at: string;
   updated_at: string;
+  source_chain_id?: number;
 }
 
 export interface PremiumIntelligenceItemInsert {
@@ -305,6 +368,7 @@ export interface PremiumIntelligenceItemInsert {
   price_currency: string;
   payment_routes: string[];
   status?: PremiumItemStatus;
+  source_chain_id?: number;
 }
 
 export type PremiumIntelligenceItemUpdate = Partial<PremiumIntelligenceItemInsert>;
@@ -564,9 +628,7 @@ export interface AffiliateInsert {
   approved_at?: string | null;
 }
 
-export type AffiliateUpdate = Partial<
-  Omit<AffiliateInsert, "wallet_address">
-> & {
+export type AffiliateUpdate = Partial<Omit<AffiliateInsert, "wallet_address">> & {
   wallet_address?: string;
 };
 
@@ -616,11 +678,7 @@ export interface AffiliateEarningInsert {
 }
 
 // ── Affiliate Funding Transfers (treasury → KeeperHub float) ───────────────
-export type AffiliateFundingTransferStatus =
-  | "pending"
-  | "processing"
-  | "completed"
-  | "failed";
+export type AffiliateFundingTransferStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface AffiliateFundingTransferRow {
   id: string;
@@ -704,6 +762,11 @@ export interface DeskSignalRow {
   policy_verdict: DeskPolicyVerdict;
   dedupe_key: string;
   created_at: string;
+  source_alert_id?: string | null;
+  source_event_id?: string | null;
+  signal_origin?: "alert" | "desk_read" | "manual";
+  source_dedupe_key?: string | null;
+  source_evidence?: Record<string, unknown>;
 }
 
 export interface DeskSignalInsert {
@@ -715,6 +778,11 @@ export interface DeskSignalInsert {
   policy_verdict?: DeskPolicyVerdict;
   dedupe_key: string;
   created_at?: string;
+  source_alert_id?: string | null;
+  source_event_id?: string | null;
+  signal_origin?: "alert" | "desk_read" | "manual";
+  source_dedupe_key?: string | null;
+  source_evidence?: Record<string, unknown>;
 }
 
 // ── Desk Intents ────────────────────────────────────────
@@ -853,9 +921,7 @@ export interface DeskTicketInsert {
   payload?: Record<string, unknown>;
 }
 
-export type DeskTicketUpdate = Partial<
-  Omit<DeskTicketInsert, "intent_id" | "ticket_hash">
-> & {
+export type DeskTicketUpdate = Partial<Omit<DeskTicketInsert, "intent_id" | "ticket_hash">> & {
   ticket_hash?: string;
 };
 
@@ -936,7 +1002,7 @@ export interface CctpRebalanceTransferRow {
   direction: CctpRebalanceDirection;
   source_domain: number;
   destination_domain: number;
-  source_chain_id: number;
+  source_chain_id?: number;
   destination_chain_id: number;
   amount_usdc: number;
   amount_atomic: string;
@@ -993,7 +1059,16 @@ export interface CctpRebalanceTransferInsert {
 
 /** Patch fields allowed on status transitions (not status itself). */
 export type CctpRebalanceTransferPatch = Partial<
-  Omit<CctpRebalanceTransferInsert, "status" | "direction" | "amount_usdc" | "amount_atomic" | "mode" | "treasury_address" | "mint_recipient">
+  Omit<
+    CctpRebalanceTransferInsert,
+    | "status"
+    | "direction"
+    | "amount_usdc"
+    | "amount_atomic"
+    | "mode"
+    | "treasury_address"
+    | "mint_recipient"
+  >
 > & {
   status?: never;
 };

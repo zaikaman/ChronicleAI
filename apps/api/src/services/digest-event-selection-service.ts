@@ -134,6 +134,7 @@ export function selectDiverseEvents(
 
 export function createDigestEventSelectionService(
   eventRepo: MonitoredEventRepository,
+  options: { chainId?: number } = {},
 ): DigestEventSelectionService {
   return {
     async selectEvents({ periodStart, periodEnd, maxEvents = 10 }) {
@@ -142,6 +143,7 @@ export function createDigestEventSelectionService(
         periodStart,
         periodEnd,
         status: "qualified",
+        ...(options.chainId !== undefined ? { chainId: options.chainId } : {}),
         limit: 500,
       });
 
@@ -152,6 +154,7 @@ export function createDigestEventSelectionService(
       } else {
         const result = await eventRepo.list({
           status: "qualified",
+          ...(options.chainId !== undefined ? { chainId: options.chainId } : {}),
           limit: 100,
         });
         if (!result.ok) {
@@ -169,14 +172,26 @@ export function createDigestEventSelectionService(
       const allInWindow = await eventRepo.listInWindow({
         periodStart,
         periodEnd,
+        ...(options.chainId !== undefined ? { chainId: options.chainId } : {}),
         limit: 500,
       });
       const totalEvents = allInWindow.ok ? allInWindow.value.length : windowEvents.length;
-      const qualifiedEvents = windowEvents.length;
+      const scopedEvents =
+        options.chainId === undefined
+          ? windowEvents
+          : windowEvents.filter((event) => event.chain_id === options.chainId);
+      const selected = selectDiverseEvents(scopedEvents, maxEvents).map(mapEvent);
 
-      const selected = selectDiverseEvents(windowEvents, maxEvents).map(mapEvent);
-
-      return { events: selected, totalEvents, qualifiedEvents };
+      return {
+        events: selected,
+        totalEvents:
+          options.chainId === undefined
+            ? totalEvents
+            : allInWindow.ok
+              ? allInWindow.value.filter((event) => event.chain_id === options.chainId).length
+              : scopedEvents.length,
+        qualifiedEvents: scopedEvents.length,
+      };
     },
   };
 }

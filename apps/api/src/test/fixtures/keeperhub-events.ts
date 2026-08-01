@@ -8,7 +8,7 @@ export function createQualifyingEvent(
   return {
     sourceEventId: `test-qualifying-${Date.now()}`,
     eventType: "large_swap",
-    chainId: 1,
+    chainId: 11155111,
     protocol: "Uniswap",
     assetSymbols: ["ETH", "USDC"],
     magnitude: { value: 2_500_000, unit: "USD" },
@@ -25,7 +25,7 @@ export function createIgnoredEvent(
   return {
     sourceEventId: `test-ignored-${Date.now()}`,
     eventType: "large_swap",
-    chainId: 1,
+    chainId: 11155111,
     protocol: "Uniswap",
     assetSymbols: ["ETH", "USDC"],
     magnitude: { value: 100, unit: "USD" }, // Below threshold
@@ -105,9 +105,9 @@ export function createRawUniswapSwapEvent(
   overrides?: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
-    chainId: 1,
+    chainId: 11155111,
     eventName: "Swap",
-    address: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+    address: "0x3289680dd4d6c10bb19b899729cda5eef58aeff1",
     transactionHash: `0xrawswap${Date.now().toString(16)}`,
     logIndex: 0,
     args: {

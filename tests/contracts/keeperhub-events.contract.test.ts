@@ -72,31 +72,27 @@ describe("POST /keeperhub/events", () => {
     expect(response.status).toBe(400);
   });
 
-  it(
-    "returns 202 for valid qualifying event when signature is correct",
-    async () => {
-      const event = createQualifyingEvent();
-      const body = JSON.stringify(event);
+  it("returns 202 for valid qualifying event when signature is correct", async () => {
+    const event = createQualifyingEvent();
+    const body = JSON.stringify(event);
 
-      const response = await fetch(`${server.url}/keeperhub/events`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...keeperhubSignatureHeaders({
-            secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
-            path: "/keeperhub/events",
-            method: "POST",
-            body,
-          }),
-        },
-        body,
-      });
+    const response = await fetch(`${server.url}/keeperhub/events`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/events",
+          method: "POST",
+          body,
+        }),
+      },
+      body,
+    });
 
-      // LLM generation may take a few seconds when providers are configured
-      expect([202, 500]).toContain(response.status);
-    },
-    30_000,
-  );
+    // LLM generation may take a few seconds when providers are configured
+    expect([202, 500]).toContain(response.status);
+  }, 30_000);
 
   it("returns 202 for raw Uniswap Swap payload (server-side normalization)", async () => {
     const event = createRawUniswapSwapEvent();
@@ -123,4 +119,25 @@ describe("POST /keeperhub/events", () => {
       expect(body.eventType).toBe("large_swap");
     }
   }, 30000);
+
+  it("rejects Mainnet events from the active ingestion path", async () => {
+    const event = createQualifyingEvent({ chainId: 1 });
+    const body = JSON.stringify(event);
+
+    const response = await fetch(`${server.url}/keeperhub/events`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/events",
+          method: "POST",
+          body,
+        }),
+      },
+      body,
+    });
+
+    expect(response.status).toBe(400);
+  });
 });

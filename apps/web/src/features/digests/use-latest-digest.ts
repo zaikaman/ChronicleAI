@@ -23,15 +23,19 @@ export interface LatestDigestData {
   keeperHubRunId?: string | undefined;
   explorerUrl?: string | undefined;
   sourceEventRoot?: string | undefined;
+  digestKind?: "market" | "desk" | undefined;
+  chainId?: number | undefined;
+  publicationChainId?: number | undefined;
+  sourceAlertIds: string[];
+  sourceSignalIds: string[];
+  sourceIntentIds: string[];
+  sourceTicketIds: string[];
 }
 
 function parseSections(raw: unknown): DigestSections | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const s = raw as Record<string, unknown>;
-  if (
-    typeof s.capitalDirection !== "string" &&
-    typeof s.exchangeAndProtocolFlows !== "string"
-  ) {
+  if (typeof s.capitalDirection !== "string" && typeof s.exchangeAndProtocolFlows !== "string") {
     return undefined;
   }
   return {
@@ -44,9 +48,7 @@ function parseSections(raw: unknown): DigestSections | undefined {
         ? s.exchangeAndProtocolFlows
         : "No qualifying CEX or protocol flow today.",
     stressBoard:
-      typeof s.stressBoard === "string"
-        ? s.stressBoard
-        : "No material stress signals today.",
+      typeof s.stressBoard === "string" ? s.stressBoard : "No material stress signals today.",
     storyOfTheDay:
       typeof s.storyOfTheDay === "string"
         ? s.storyOfTheDay
@@ -75,6 +77,23 @@ export function mapDigestResponse(raw: Record<string, unknown>): LatestDigestDat
     keeperHubRunId: raw.keeperHubRunId ? String(raw.keeperHubRunId) : undefined,
     explorerUrl: raw.explorerUrl ? String(raw.explorerUrl) : undefined,
     sourceEventRoot: raw.sourceEventRoot ? String(raw.sourceEventRoot) : undefined,
+    digestKind:
+      raw.digestKind === "market" || raw.digestKind === "desk" ? raw.digestKind : undefined,
+    chainId: typeof raw.chainId === "number" ? raw.chainId : undefined,
+    publicationChainId:
+      typeof raw.publicationChainId === "number" ? raw.publicationChainId : undefined,
+    sourceAlertIds: Array.isArray(raw.sourceAlertIds)
+      ? raw.sourceAlertIds.filter((id): id is string => typeof id === "string")
+      : [],
+    sourceSignalIds: Array.isArray(raw.sourceSignalIds)
+      ? raw.sourceSignalIds.filter((id): id is string => typeof id === "string")
+      : [],
+    sourceIntentIds: Array.isArray(raw.sourceIntentIds)
+      ? raw.sourceIntentIds.filter((id): id is string => typeof id === "string")
+      : [],
+    sourceTicketIds: Array.isArray(raw.sourceTicketIds)
+      ? raw.sourceTicketIds.filter((id): id is string => typeof id === "string")
+      : [],
   };
 }
 

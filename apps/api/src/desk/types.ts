@@ -106,6 +106,11 @@ export interface DeskSignalInput {
   sources?: DeskSignalSources | undefined;
   dedupeKey: string;
   createdAt?: string | undefined;
+  sourceAlertId?: string | null | undefined;
+  sourceEventId?: string | null | undefined;
+  signalOrigin?: "alert" | "desk_read" | "manual" | undefined;
+  sourceDedupeKey?: string | null | undefined;
+  sourceEvidence?: Record<string, unknown> | undefined;
 }
 
 export interface DeskSignalRecord {

@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { chainLabel } from "../../lib/explorer.ts";
 import { DigestAnalysisSections } from "./DigestAnalysisSections.tsx";
 import { DigestHighlights } from "./DigestHighlights.tsx";
 import { useLatestDigest } from "./use-latest-digest.ts";
@@ -48,7 +49,10 @@ export function LatestDigestPage(): ReactElement {
     <div data-testid="digest-latest" className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-3" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+        <h1
+          className="text-3xl font-bold tracking-tight text-foreground mb-3"
+          style={{ fontFamily: "var(--font-space-grotesk)" }}
+        >
           {digest.title}
         </h1>
         <div className="flex gap-4 items-center flex-wrap">
@@ -75,6 +79,10 @@ export function LatestDigestPage(): ReactElement {
           >
             {digest.publicationStatus.replace(/_/g, " ")}
           </span>
+          <span className="text-xs text-muted-foreground">
+            {digest.digestKind ?? "desk"} · {chainLabel(digest.chainId ?? 11155111)} ·{" "}
+            {digest.sourceAlertIds.length} alerts / {digest.sourceSignalIds.length} signals
+          </span>
         </div>
       </div>
 
@@ -96,6 +104,11 @@ export function LatestDigestPage(): ReactElement {
         analysis={digest.analysis}
         reportDate={digest.reportDate}
       />
+
+      <div className="mt-4 text-xs text-muted-foreground" data-testid="digest-causal-sources">
+        Evidence graph: {digest.sourceIntentIds.length} intents / {digest.sourceTicketIds.length}{" "}
+        tickets.
+      </div>
 
       {/* Self-hosted content permalink */}
       {digest.contentUri && (

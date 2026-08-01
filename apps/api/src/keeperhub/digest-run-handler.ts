@@ -1,10 +1,15 @@
 // KeeperHub digest run handler: processes scheduled digest generation triggers
 
 import type {
+  DeskIntentRepository,
+  DeskSignalRepository,
+  DeskTicketRepository,
   DailyDigestRepository,
   ExecutionLogRepository,
   MonitoredEventRepository,
+  PublicAlertRepository,
 } from "@chronicleai/db";
+import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
 import type { DigestRunPayload } from "@chronicleai/schemas";
 import type {
   DigestEventSelectionService,
@@ -40,6 +45,10 @@ export class DigestRunHandler {
   private readonly generationService: DigestGenerationService;
   private readonly publicationService: DigestPublicationService;
   private readonly premiumProductizer: PremiumProductizerService | null;
+  private readonly alertRepo: PublicAlertRepository | null;
+  private readonly signalRepo: DeskSignalRepository | null;
+  private readonly intentRepo: DeskIntentRepository | null;
+  private readonly ticketRepo: DeskTicketRepository | null;
   private readonly executionRouting: "private_mempool" | "public" | undefined;
 
   constructor(deps: {
@@ -52,6 +61,11 @@ export class DigestRunHandler {
     publicationService: DigestPublicationService;
     /** Mints period deep dives + structured feeds from real digest events. */
     premiumProductizer?: PremiumProductizerService | null;
+    /** Optional causal graph repositories used to stamp digest source links. */
+    alertRepo?: PublicAlertRepository | null;
+    signalRepo?: DeskSignalRepository | null;
+    intentRepo?: DeskIntentRepository | null;
+    ticketRepo?: DeskTicketRepository | null;
     /**
      * Optional desk execution routing for LLM context (Phase 2).
      * When desk prefers private mempool, pass `private_mempool`.
@@ -66,10 +80,15 @@ export class DigestRunHandler {
     this.generationService = deps.generationService;
     this.publicationService = deps.publicationService;
     this.premiumProductizer = deps.premiumProductizer ?? null;
+    this.alertRepo = deps.alertRepo ?? null;
+    this.signalRepo = deps.signalRepo ?? null;
+    this.intentRepo = deps.intentRepo ?? null;
+    this.ticketRepo = deps.ticketRepo ?? null;
     this.executionRouting = deps.executionRouting ?? undefined;
   }
 
   async runDigest(payload: DigestRunPayload, _source = "keeperhub"): Promise<DigestRunResult> {
+    const digestKind = payload.digestKind ?? "desk";
     // 1. Validate the reporting window
     const windowValidation = this.windowService.validateWindow({
       periodStart: payload.periodStart,
@@ -91,6 +110,7 @@ export class DigestRunHandler {
     const duplicateCheck = await this.windowService.checkDuplicate({
       periodStart: payload.periodStart,
       periodEnd: payload.periodEnd,
+      digestKind,
     });
 
     if (!duplicateCheck.valid && duplicateCheck.existingDigest) {
@@ -148,6 +168,9 @@ export class DigestRunHandler {
 
     // 4. Generate digest content (LLM only — no template fallback)
     const reportDate = (new Date(payload.periodEnd).toISOString().split("T")[0]) ?? "unknown-date";
+    const causalSources = await this.resolveCausalSources(
+      eventSelection.events.map((event) => event.id),
+    );
 
     await this.execLogRepo.append({
       action_type: "generate_digest",
@@ -222,6 +245,13 @@ export class DigestRunHandler {
       highlights: digestContent.highlights,
       analysis: digestContent.analysis ?? null,
       source_event_ids: digestContent.sourceEventIds,
+      digest_kind: digestKind,
+      chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      publication_chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      source_alert_ids: causalSources.alertIds,
+      source_signal_ids: causalSources.signalIds,
+      source_intent_ids: causalSources.intentIds,
+      source_ticket_ids: causalSources.ticketIds,
       audience: "public",
       publication_status: "draft",
       ...(digestContent.sections
@@ -262,6 +292,7 @@ export class DigestRunHandler {
       const raced = await this.windowService.checkDuplicate({
         periodStart: payload.periodStart,
         periodEnd: payload.periodEnd,
+        digestKind,
       });
       if (raced.existingDigest) {
         if (RESUMABLE_DIGEST_STATUSES.has(raced.existingDigest.publicationStatus)) {
@@ -347,6 +378,73 @@ export class DigestRunHandler {
         ? "Digest generated and published"
         : "Digest generated but publication had issues",
     };
+  }
+
+  private async resolveCausalSources(eventIds: string[]): Promise<{
+    alertIds: string[];
+    signalIds: string[];
+    intentIds: string[];
+    ticketIds: string[];
+  }> {
+    const empty = { alertIds: [], signalIds: [], intentIds: [], ticketIds: [] };
+    if (eventIds.length === 0 || !this.alertRepo?.listByEventIds) return empty;
+
+    try {
+      const alertResult = await this.alertRepo.listByEventIds(eventIds);
+      if (!alertResult.ok) return empty;
+
+      const alerts = alertResult.value.filter(
+        (alert) => alert.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID,
+      );
+      const alertIds = alerts.map((alert) => alert.id);
+      if (alertIds.length === 0) return empty;
+
+      const unique = (values: Array<string | null | undefined>): string[] =>
+        [...new Set(values.filter((value): value is string => Boolean(value)))];
+      const linkedSignalIds = unique(alerts.map((alert) => alert.desk_signal_id));
+      const linkedIntentIds = unique(alerts.map((alert) => alert.intent_id));
+      const linkedTicketIds = unique(alerts.map((alert) => alert.ticket_id));
+
+      const signals = this.signalRepo ? await this.signalRepo.listRecent(2000) : null;
+      const signalRows = signals?.ok
+        ? signals.value.filter(
+            (signal) =>
+              signal.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID &&
+              ((signal.source_alert_id && alertIds.includes(signal.source_alert_id)) ||
+                (signal.source_event_id && eventIds.includes(signal.source_event_id))),
+          )
+        : [];
+      const signalIds = unique([
+        ...linkedSignalIds,
+        ...signalRows.map((signal) => signal.id),
+      ]);
+
+      const intents = this.intentRepo ? await this.intentRepo.listRecent(2000) : null;
+      const intentRows = intents?.ok
+        ? intents.value.filter(
+            (intent) => intent.signal_id && signalIds.includes(intent.signal_id),
+          )
+        : [];
+      const intentIds = unique([
+        ...linkedIntentIds,
+        ...intentRows.map((intent) => intent.id),
+      ]);
+
+      const tickets = this.ticketRepo ? await this.ticketRepo.listRecent(2000) : null;
+      const ticketIds = unique([
+        ...linkedTicketIds,
+        ...(tickets?.ok
+          ? tickets.value
+              .filter((ticket) => intentIds.includes(ticket.intent_id))
+              .map((ticket) => ticket.id)
+          : []),
+      ]);
+
+      return { alertIds, signalIds, intentIds, ticketIds };
+    } catch {
+      // Optional causal lookups must not make digest generation unavailable.
+      return empty;
+    }
   }
 
   /**
@@ -470,6 +568,7 @@ export class DigestRunHandler {
         periodStart: params.periodStart,
         periodEnd: params.periodEnd,
         status: "qualified",
+        chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
         limit: 2000,
       });
       const eventsForPremium = fullEvents.ok
@@ -479,7 +578,10 @@ export class DigestRunHandler {
               const found = await this.eventRepo.findById(id);
               return found.ok ? found.value : null;
             }),
-          )).filter((e): e is NonNullable<typeof e> => e != null);
+          )).filter(
+            (e): e is NonNullable<typeof e> =>
+              e != null && e.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID,
+          );
 
       if (eventsForPremium.length === 0) {
         return;

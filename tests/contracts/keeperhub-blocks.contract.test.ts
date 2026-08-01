@@ -25,7 +25,7 @@ describe("POST /keeperhub/blocks", () => {
       process.env[key] = value;
     }
     // Ensure RPC is unset for this suite
-    delete process.env.RPC_URL;
+    process.env.RPC_URL = undefined;
 
     const { app } = await import("../../apps/api/src/app.ts");
     server = await createTestServer(app);
@@ -39,7 +39,7 @@ describe("POST /keeperhub/blocks", () => {
     const response = await fetch(`${server.url}/keeperhub/blocks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chainId: 1, blockNumber: 1 }),
+      body: JSON.stringify({ chainId: 11155111, blockNumber: 1 }),
     });
     expect(response.status).toBe(401);
   });
@@ -66,7 +66,7 @@ describe("POST /keeperhub/blocks", () => {
     // Block analysis requires RPC; this suite deletes RPC_URL in beforeAll.
     // If a real RPC_URL is present in the process (e.g. root .env loaded later),
     // accept either 502 (no RPC) or 202 (RPC available and block analyzed).
-    const body = JSON.stringify({ chainId: 1, blockNumber: 20_000_000 });
+    const body = JSON.stringify({ chainId: 11155111, blockNumber: 20_000_000 });
     const response = await fetch(`${server.url}/keeperhub/blocks`, {
       method: "POST",
       headers: {
@@ -90,4 +90,23 @@ describe("POST /keeperhub/blocks", () => {
       expect([202, 502]).toContain(response.status);
     }
   }, 30_000);
+
+  it("rejects Mainnet blocks from the active ingestion path", async () => {
+    const body = JSON.stringify({ chainId: 1, blockNumber: 20_000_000 });
+    const response = await fetch(`${server.url}/keeperhub/blocks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...keeperhubSignatureHeaders({
+          secret: process.env.KEEPERHUB_WEBHOOK_SECRET || "test-webhook-secret",
+          path: "/keeperhub/blocks",
+          method: "POST",
+          body,
+        }),
+      },
+      body,
+    });
+
+    expect(response.status).toBe(400);
+  });
 });

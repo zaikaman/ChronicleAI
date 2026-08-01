@@ -381,9 +381,11 @@ export type Database = {
         Row: {
           analysis: string | null
           audience: string
+          chain_id: number
           content_hash: string | null
           content_uri: string | null
           created_at: string
+          digest_kind: string
           explorer_url: string | null
           gas_used: string | null
           gas_used_wei: string | null
@@ -399,12 +401,17 @@ export type Database = {
           market_narrative_status: string | null
           period_end: string
           period_start: string
+          publication_chain_id: number
           publication_status: string
           published_at: string | null
           registry_tx_hash: string | null
           report_date: string
+          source_alert_ids: string[]
           source_event_ids: string[]
           source_event_root: string | null
+          source_intent_ids: string[]
+          source_signal_ids: string[]
+          source_ticket_ids: string[]
           summary: string
           title: string
           updated_at: string
@@ -412,9 +419,11 @@ export type Database = {
         Insert: {
           analysis?: string | null
           audience?: string
+          chain_id?: number
           content_hash?: string | null
           content_uri?: string | null
           created_at?: string
+          digest_kind?: string
           explorer_url?: string | null
           gas_used?: string | null
           gas_used_wei?: string | null
@@ -430,12 +439,17 @@ export type Database = {
           market_narrative_status?: string | null
           period_end: string
           period_start: string
+          publication_chain_id?: number
           publication_status?: string
           published_at?: string | null
           registry_tx_hash?: string | null
           report_date: string
+          source_alert_ids?: string[]
           source_event_ids?: string[]
           source_event_root?: string | null
+          source_intent_ids?: string[]
+          source_signal_ids?: string[]
+          source_ticket_ids?: string[]
           summary: string
           title: string
           updated_at?: string
@@ -443,9 +457,11 @@ export type Database = {
         Update: {
           analysis?: string | null
           audience?: string
+          chain_id?: number
           content_hash?: string | null
           content_uri?: string | null
           created_at?: string
+          digest_kind?: string
           explorer_url?: string | null
           gas_used?: string | null
           gas_used_wei?: string | null
@@ -461,12 +477,17 @@ export type Database = {
           market_narrative_status?: string | null
           period_end?: string
           period_start?: string
+          publication_chain_id?: number
           publication_status?: string
           published_at?: string | null
           registry_tx_hash?: string | null
           report_date?: string
+          source_alert_ids?: string[]
           source_event_ids?: string[]
           source_event_root?: string | null
+          source_intent_ids?: string[]
+          source_signal_ids?: string[]
+          source_ticket_ids?: string[]
           summary?: string
           title?: string
           updated_at?: string
@@ -735,7 +756,12 @@ export type Database = {
           id: string
           policy_verdict: string
           severity: number
+          signal_origin: string
           signal_type: string
+          source_alert_id: string | null
+          source_dedupe_key: string | null
+          source_event_id: string | null
+          source_evidence: Json
           sources: Json
         }
         Insert: {
@@ -746,7 +772,12 @@ export type Database = {
           id?: string
           policy_verdict?: string
           severity?: number
+          signal_origin?: string
           signal_type: string
+          source_alert_id?: string | null
+          source_dedupe_key?: string | null
+          source_event_id?: string | null
+          source_evidence?: Json
           sources?: Json
         }
         Update: {
@@ -757,7 +788,12 @@ export type Database = {
           id?: string
           policy_verdict?: string
           severity?: number
+          signal_origin?: string
           signal_type?: string
+          source_alert_id?: string | null
+          source_dedupe_key?: string | null
+          source_event_id?: string | null
+          source_evidence?: Json
           sources?: Json
         }
         Relationships: []
@@ -955,17 +991,23 @@ export type Database = {
       monitored_events: {
         Row: {
           asset_symbols: string[] | null
+          block_hash: string | null
+          block_number: number | null
           captured_at: string
           chain_id: number
           created_at: string
           event_type: string
           id: string
+          log_index: number | null
           magnitude: Json | null
+          normalized_evidence: Json
           observed_at: string | null
           protocol: string | null
           raw_payload: Json
           significance_score: number | null
           source: string
+          source_contract: string | null
+          source_dedupe_key: string | null
           source_event_id: string | null
           status: string
           transaction_hash: string | null
@@ -973,17 +1015,23 @@ export type Database = {
         }
         Insert: {
           asset_symbols?: string[] | null
+          block_hash?: string | null
+          block_number?: number | null
           captured_at: string
           chain_id: number
           created_at?: string
           event_type: string
           id?: string
+          log_index?: number | null
           magnitude?: Json | null
+          normalized_evidence?: Json
           observed_at?: string | null
           protocol?: string | null
           raw_payload: Json
           significance_score?: number | null
           source: string
+          source_contract?: string | null
+          source_dedupe_key?: string | null
           source_event_id?: string | null
           status?: string
           transaction_hash?: string | null
@@ -991,17 +1039,23 @@ export type Database = {
         }
         Update: {
           asset_symbols?: string[] | null
+          block_hash?: string | null
+          block_number?: number | null
           captured_at?: string
           chain_id?: number
           created_at?: string
           event_type?: string
           id?: string
+          log_index?: number | null
           magnitude?: Json | null
+          normalized_evidence?: Json
           observed_at?: string | null
           protocol?: string | null
           raw_payload?: Json
           significance_score?: number | null
           source?: string
+          source_contract?: string | null
+          source_dedupe_key?: string | null
           source_event_id?: string | null
           status?: string
           transaction_hash?: string | null
@@ -1147,6 +1201,7 @@ export type Database = {
           price_amount: number
           price_currency: string
           slug: string
+          source_chain_id: number
           source_event_ids: string[]
           status: string
           summary_public: string
@@ -1162,6 +1217,7 @@ export type Database = {
           price_amount: number
           price_currency?: string
           slug: string
+          source_chain_id?: number
           source_event_ids?: string[]
           status?: string
           summary_public: string
@@ -1177,6 +1233,7 @@ export type Database = {
           price_amount?: number
           price_currency?: string
           slug?: string
+          source_chain_id?: number
           source_event_ids?: string[]
           status?: string
           summary_public?: string
@@ -1187,87 +1244,138 @@ export type Database = {
       }
       public_alerts: {
         Row: {
+          action_explorer_url: string | null
+          action_keeper_hub_run_id: string | null
+          action_status: string
+          action_transaction_hash: string | null
+          alert_kind: string
           audience: string
+          chain_id: number | null
           confidence: string | null
           content_hash: string | null
           content_uri: string | null
           created_at: string
           dedupe_key: string | null
           delivery_status: string
+          desk_signal_id: string | null
           destinations: Json | null
+          deterministic_evidence: Json
+          event_type: string | null
           explorer_url: string | null
           gas_used: string | null
           gas_used_wei: string | null
           generation_attempt_ids: string[]
           generation_provider: string | null
           id: string
+          intent_id: string | null
           keeper_hub_run_id: string | null
           market_chatter: Json | null
           market_chatter_provider: string | null
           market_chatter_status: string | null
           monitored_event_id: string | null
+          policy_verdict: string | null
+          publication_chain_id: number
           published_at: string | null
           registry_tx_hash: string | null
+          signal_status: string
+          signal_type: string | null
+          source_dedupe_key: string | null
           source_event_hash: string | null
           source_references: Json
           summary: string
+          ticket_id: string | null
           title: string
+          transaction_hash: string | null
           updated_at: string
         }
         Insert: {
+          action_explorer_url?: string | null
+          action_keeper_hub_run_id?: string | null
+          action_status?: string
+          action_transaction_hash?: string | null
+          alert_kind?: string
           audience?: string
+          chain_id?: number | null
           confidence?: string | null
           content_hash?: string | null
           content_uri?: string | null
           created_at?: string
           dedupe_key?: string | null
           delivery_status?: string
+          desk_signal_id?: string | null
           destinations?: Json | null
+          deterministic_evidence?: Json
+          event_type?: string | null
           explorer_url?: string | null
           gas_used?: string | null
           gas_used_wei?: string | null
           generation_attempt_ids?: string[]
           generation_provider?: string | null
           id?: string
+          intent_id?: string | null
           keeper_hub_run_id?: string | null
           market_chatter?: Json | null
           market_chatter_provider?: string | null
           market_chatter_status?: string | null
           monitored_event_id?: string | null
+          policy_verdict?: string | null
+          publication_chain_id?: number
           published_at?: string | null
           registry_tx_hash?: string | null
+          signal_status?: string
+          signal_type?: string | null
+          source_dedupe_key?: string | null
           source_event_hash?: string | null
           source_references?: Json
           summary: string
+          ticket_id?: string | null
           title: string
+          transaction_hash?: string | null
           updated_at?: string
         }
         Update: {
+          action_explorer_url?: string | null
+          action_keeper_hub_run_id?: string | null
+          action_status?: string
+          action_transaction_hash?: string | null
+          alert_kind?: string
           audience?: string
+          chain_id?: number | null
           confidence?: string | null
           content_hash?: string | null
           content_uri?: string | null
           created_at?: string
           dedupe_key?: string | null
           delivery_status?: string
+          desk_signal_id?: string | null
           destinations?: Json | null
+          deterministic_evidence?: Json
+          event_type?: string | null
           explorer_url?: string | null
           gas_used?: string | null
           gas_used_wei?: string | null
           generation_attempt_ids?: string[]
           generation_provider?: string | null
           id?: string
+          intent_id?: string | null
           keeper_hub_run_id?: string | null
           market_chatter?: Json | null
           market_chatter_provider?: string | null
           market_chatter_status?: string | null
           monitored_event_id?: string | null
+          policy_verdict?: string | null
+          publication_chain_id?: number
           published_at?: string | null
           registry_tx_hash?: string | null
+          signal_status?: string
+          signal_type?: string | null
+          source_dedupe_key?: string | null
           source_event_hash?: string | null
           source_references?: Json
           summary?: string
+          ticket_id?: string | null
           title?: string
+          transaction_hash?: string | null
           updated_at?: string
         }
         Relationships: [

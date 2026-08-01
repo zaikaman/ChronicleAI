@@ -1,24 +1,32 @@
 // Public alert repository: create, find by dedupe key, list newest-first, update delivery status
 
+import type {
+  AlertActionStatus,
+  AlertKind,
+  AlertSignalStatus,
+  DeskPolicyVerdict,
+  DeskSignalType,
+  EventType,
+} from "@chronicleai/schemas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
 import {
+  type PaginatedResult,
+  type PaginationParams,
   buildInsertPayload,
   buildPaginatedResult,
   buildUpdatePayload,
   expectRow,
   mapPostgrestError,
   normalizePagination,
-  type PaginatedResult,
-  type PaginationParams,
 } from "./repository-utils.ts";
-import type { EventType } from "@chronicleai/schemas";
 import type { PublicAlertInsert, PublicAlertRow, PublicAlertUpdate } from "./types.ts";
 
 /** Select alert columns plus joined monitored event metadata for public feeds. */
 const ALERT_WITH_EVENT_SELECT = `
   *,
   monitored_events (
+    source_event_id,
     event_type,
     chain_id,
     protocol,
@@ -28,6 +36,7 @@ const ALERT_WITH_EVENT_SELECT = `
 `;
 
 interface MonitoredEventJoin {
+  source_event_id?: string | null;
   event_type?: string | null;
   chain_id?: number | null;
   protocol?: string | null;
@@ -45,20 +54,37 @@ function extractFlowContext(
 }
 
 function mapAlertWithEvent(row: Record<string, unknown>): PublicAlertRow {
-  const joined = row.monitored_events as MonitoredEventJoin | MonitoredEventJoin[] | null | undefined;
+  const joined = row.monitored_events as
+    | MonitoredEventJoin
+    | MonitoredEventJoin[]
+    | null
+    | undefined;
   const event = Array.isArray(joined) ? joined[0] : joined;
 
   const { monitored_events: _ignored, ...rest } = row;
+  const rowChainId = typeof row.chain_id === "number" ? row.chain_id : null;
+  const rowTransactionHash = typeof row.transaction_hash === "string" ? row.transaction_hash : null;
 
   return {
     ...(rest as unknown as PublicAlertRow),
+    source_event_id: event?.source_event_id ?? null,
     event_type: (event?.event_type as EventType | null | undefined) ?? null,
-    chain_id: typeof event?.chain_id === "number" ? event.chain_id : null,
+    chain_id: rowChainId ?? (typeof event?.chain_id === "number" ? event.chain_id : null),
     protocol: event?.protocol ?? null,
     transaction_hash:
-      typeof event?.transaction_hash === "string" ? event.transaction_hash : null,
+      rowTransactionHash ??
+      (typeof event?.transaction_hash === "string" ? event.transaction_hash : null),
     flow_context: extractFlowContext(event?.raw_payload ?? null),
   };
+}
+
+export interface PublicAlertListFilters {
+  chainId?: number;
+  alertKind?: AlertKind;
+  signalStatus?: AlertSignalStatus;
+  eventType?: EventType;
+  policyVerdict?: DeskPolicyVerdict;
+  actionStatus?: AlertActionStatus;
 }
 
 export interface PublicAlertRepository {
@@ -66,9 +92,12 @@ export interface PublicAlertRepository {
   findById(id: string): Promise<Result<PublicAlertRow>>;
   findByDedupeKey(dedupeKey: string): Promise<PublicAlertRow | null>;
   /** Newest-first; limit-only convenience for internal consumers. */
-  list(limitParam?: number): Promise<Result<PublicAlertRow[]>>;
+  list(limitParam?: number, filters?: PublicAlertListFilters): Promise<Result<PublicAlertRow[]>>;
   /** Page-based list with exact total for public feeds. */
-  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<PublicAlertRow>>>;
+  listPage(
+    params?: PaginationParams & PublicAlertListFilters,
+  ): Promise<Result<PaginatedResult<PublicAlertRow>>>;
+  listByEventIds?(eventIds: string[]): Promise<Result<PublicAlertRow[]>>;
   updateDeliveryStatus(
     id: string,
     status: string,
@@ -94,6 +123,30 @@ export interface PublicAlertRepository {
       explorerUrl?: string;
     },
   ): Promise<Result<PublicAlertRow>>;
+  updateContent?(
+    id: string,
+    content: {
+      title?: string;
+      summary?: string;
+      sourceReferences?: string[];
+      confidence?: string | null;
+    },
+  ): Promise<Result<PublicAlertRow>>;
+  updateCausalMetadata?(
+    id: string,
+    metadata: {
+      deskSignalId?: string | null;
+      signalType?: DeskSignalType | null;
+      signalStatus?: AlertSignalStatus;
+      policyVerdict?: DeskPolicyVerdict | null;
+      actionStatus?: AlertActionStatus;
+      intentId?: string | null;
+      ticketId?: string | null;
+      actionTransactionHash?: string | null;
+      actionKeeperHubRunId?: string | null;
+      actionExplorerUrl?: string | null;
+    },
+  ): Promise<Result<PublicAlertRow>>;
 }
 
 export function createPublicAlertRepository(supabase: SupabaseClient): PublicAlertRepository {
@@ -112,9 +165,7 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
     },
 
     async findById(id) {
-      const { data: rows, error } = await table()
-        .select(ALERT_WITH_EVENT_SELECT)
-        .eq("id", id);
+      const { data: rows, error } = await table().select(ALERT_WITH_EVENT_SELECT).eq("id", id);
 
       if (error) {
         return failure(mapPostgrestError(error));
@@ -134,11 +185,18 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       return (rows?.[0] as unknown as PublicAlertRow) ?? null;
     },
 
-    async list(limitParam = 50) {
+    async list(limitParam = 50, filters = {}) {
       const limit = Math.min(100, Math.max(1, limitParam));
 
-      const { data: rows, error } = await table()
-        .select(ALERT_WITH_EVENT_SELECT)
+      let query = table().select(ALERT_WITH_EVENT_SELECT);
+      if (filters?.chainId !== undefined) query = query.eq("chain_id", filters.chainId);
+      if (filters?.alertKind) query = query.eq("alert_kind", filters.alertKind);
+      if (filters?.signalStatus) query = query.eq("signal_status", filters.signalStatus);
+      if (filters?.eventType) query = query.eq("event_type", filters.eventType);
+      if (filters?.policyVerdict) query = query.eq("policy_verdict", filters.policyVerdict);
+      if (filters?.actionStatus) query = query.eq("action_status", filters.actionStatus);
+
+      const { data: rows, error } = await query
         .order("published_at", { ascending: false })
         .limit(limit);
 
@@ -146,9 +204,7 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
         return failure(mapPostgrestError(error));
       }
 
-      return success(
-        (rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>)),
-      );
+      return success((rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>)));
     },
 
     async listPage(params) {
@@ -157,19 +213,35 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
         maxLimit: 100,
       });
 
-      const { data: rows, error, count } = await table()
-        .select(ALERT_WITH_EVENT_SELECT, { count: "exact" })
-        .order("published_at", { ascending: false })
-        .range(offset, offset + limit - 1);
+      let query = table().select(ALERT_WITH_EVENT_SELECT, { count: "exact" });
+      if (params?.chainId !== undefined) query = query.eq("chain_id", params.chainId);
+      if (params?.alertKind) query = query.eq("alert_kind", params.alertKind);
+      if (params?.signalStatus) query = query.eq("signal_status", params.signalStatus);
+      if (params?.eventType) query = query.eq("event_type", params.eventType);
+      if (params?.policyVerdict) query = query.eq("policy_verdict", params.policyVerdict);
+      if (params?.actionStatus) query = query.eq("action_status", params.actionStatus);
+
+      const {
+        data: rows,
+        error,
+        count,
+      } = await query.order("published_at", { ascending: false }).range(offset, offset + limit - 1);
 
       if (error) {
         return failure(mapPostgrestError(error));
       }
 
-      const items = (rows ?? []).map((r) =>
-        mapAlertWithEvent(r as Record<string, unknown>),
-      );
+      const items = (rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>));
       return success(buildPaginatedResult(items, page, limit, count ?? items.length));
+    },
+
+    async listByEventIds(eventIds) {
+      if (eventIds.length === 0) return success([]);
+      const { data: rows, error } = await table()
+        .select(ALERT_WITH_EVENT_SELECT)
+        .in("monitored_event_id", eventIds);
+      if (error) return failure(mapPostgrestError(error));
+      return success((rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>)));
     },
 
     async updateDeliveryStatus(id, status, publishedAt?) {
@@ -246,6 +318,46 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
         return failure(mapPostgrestError(error));
       }
 
+      return success(rows as unknown as PublicAlertRow);
+    },
+
+    async updateContent(id, content) {
+      const update: PublicAlertUpdate = {};
+      if (content.title !== undefined) update.title = content.title;
+      if (content.summary !== undefined) update.summary = content.summary;
+      if (content.sourceReferences !== undefined) {
+        update.source_references = content.sourceReferences;
+      }
+      if (content.confidence !== undefined) {
+        update.confidence = content.confidence as PublicAlertRow["confidence"];
+      }
+      const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
+      const { data: rows, error } = await table().update(payload).eq("id", id).select().single();
+      if (error) return failure(mapPostgrestError(error));
+      return success(rows as unknown as PublicAlertRow);
+    },
+
+    async updateCausalMetadata(id, metadata) {
+      const update: PublicAlertUpdate = {};
+      if (metadata.deskSignalId !== undefined) update.desk_signal_id = metadata.deskSignalId;
+      if (metadata.signalType !== undefined) update.signal_type = metadata.signalType;
+      if (metadata.signalStatus !== undefined) update.signal_status = metadata.signalStatus;
+      if (metadata.policyVerdict !== undefined) update.policy_verdict = metadata.policyVerdict;
+      if (metadata.actionStatus !== undefined) update.action_status = metadata.actionStatus;
+      if (metadata.intentId !== undefined) update.intent_id = metadata.intentId;
+      if (metadata.ticketId !== undefined) update.ticket_id = metadata.ticketId;
+      if (metadata.actionTransactionHash !== undefined) {
+        update.action_transaction_hash = metadata.actionTransactionHash;
+      }
+      if (metadata.actionKeeperHubRunId !== undefined) {
+        update.action_keeper_hub_run_id = metadata.actionKeeperHubRunId;
+      }
+      if (metadata.actionExplorerUrl !== undefined) {
+        update.action_explorer_url = metadata.actionExplorerUrl;
+      }
+      const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
+      const { data: rows, error } = await table().update(payload).eq("id", id).select().single();
+      if (error) return failure(mapPostgrestError(error));
       return success(rows as unknown as PublicAlertRow);
     },
   };

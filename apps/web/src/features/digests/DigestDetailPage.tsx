@@ -1,12 +1,9 @@
 import type { ReactElement } from "react";
 import { Link, useParams } from "react-router-dom";
 import { StatusBadge } from "../../components/data-primitives.tsx";
-import {
-  ContentUriFooter,
-  Page,
-  PageHeader,
-} from "../../components/page-chrome.tsx";
+import { ContentUriFooter, Page, PageHeader } from "../../components/page-chrome.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { chainLabel } from "../../lib/explorer.ts";
 import { DigestAnalysisSections } from "./DigestAnalysisSections.tsx";
 import { DigestHighlights } from "./DigestHighlights.tsx";
 import { useDigest } from "./use-digest.ts";
@@ -23,11 +20,7 @@ export function DigestDetailPage(): ReactElement {
   if (state.status === "loading") {
     return (
       <Page data-testid="digest-detail">
-        <LoadingState
-          message="Loading digest..."
-          variant="digest"
-          data-testid="digest-loading"
-        />
+        <LoadingState message="Loading digest..." variant="digest" data-testid="digest-loading" />
       </Page>
     );
   }
@@ -99,10 +92,16 @@ export function DigestDetailPage(): ReactElement {
         title={digest.title}
         description={publishedLabel}
         below={
-          <StatusBadge
-            label={digest.publicationStatus.replace(/_/g, " ")}
-            variant={statusVariant}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge
+              label={digest.publicationStatus.replace(/_/g, " ")}
+              variant={statusVariant}
+            />
+            <StatusBadge
+              label={`${digest.digestKind ?? "desk"} · ${chainLabel(digest.chainId ?? 11155111)}`}
+              variant="info"
+            />
+          </div>
         }
       />
 
@@ -123,6 +122,17 @@ export function DigestDetailPage(): ReactElement {
         sections={digest.sections}
         reportDate={digest.reportDate}
       />
+
+      <div
+        className="mt-4 rounded-xl border border-border/60 bg-muted/15 p-4 text-xs text-muted-foreground"
+        data-testid="digest-causal-sources"
+      >
+        Evidence graph: {digest.sourceAlertIds.length} alert
+        {digest.sourceAlertIds.length === 1 ? "" : "s"}, {digest.sourceSignalIds.length} signal
+        {digest.sourceSignalIds.length === 1 ? "" : "s"}, {digest.sourceIntentIds.length} intent
+        {digest.sourceIntentIds.length === 1 ? "" : "s"}, {digest.sourceTicketIds.length} ticket
+        {digest.sourceTicketIds.length === 1 ? "" : "s"}.
+      </div>
 
       {digest.contentUri ? <ContentUriFooter uri={digest.contentUri} /> : null}
     </Page>

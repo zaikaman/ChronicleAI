@@ -22,6 +22,13 @@ export interface EventIngestionPayload {
   };
   capturedAt: string;
   rawPayload: Record<string, unknown>;
+  /** Canonical deterministic evidence extracted from the source observation. */
+  blockNumber?: number;
+  blockHash?: string;
+  logIndex?: number;
+  sourceContract?: string;
+  normalizedFeatures?: Record<string, unknown>;
+  sourceDedupeKey?: string;
   /** Deterministic flow enrichment; also mirrored into rawPayload.flowContext. */
   flowContext?: FlowContext;
 }
@@ -67,6 +74,8 @@ export interface BlockIngestionPayload {
 export interface DigestRunPayload {
   periodStart: string;
   periodEnd: string;
+  /** Desk digests are the default product surface; market is explicit. */
+  digestKind?: "market" | "desk";
 }
 
 // ── Treasury Check Payload ──────────────────────────────

@@ -9,11 +9,27 @@ export { CHAIN_ID_BASE_SEPOLIA, CHAIN_ID_SEPOLIA };
 export const CHAIN_ID_ETHEREUM = 1;
 export const CHAIN_ID_BASE = 8_453;
 
+/**
+ * Active Chronicle intelligence/publication chain. Mainnet remains available
+ * to historical readers only; new monitoring, alerts, digests, premium items,
+ * and desk decisions must be explicitly Sepolia-scoped.
+ */
+export const ACTIVE_INTELLIGENCE_CHAIN_ID = CHAIN_ID_SEPOLIA;
+export const LEGACY_INTELLIGENCE_CHAIN_ID = CHAIN_ID_ETHEREUM;
+
 /** Product primary ops testnet — registry proofs, desk execution, capital plane. */
 export const PRIMARY_TESTNET_CHAIN_ID = CHAIN_ID_SEPOLIA;
 
 /** Human payment testnet — x402 + CDP facilitator (Base Sepolia). */
 export const PAYMENT_TESTNET_CHAIN_ID = CHAIN_ID_BASE_SEPOLIA;
+
+export function isActiveIntelligenceChain(chainId: number): boolean {
+  return chainId === ACTIVE_INTELLIGENCE_CHAIN_ID;
+}
+
+export function isLegacyIntelligenceChain(chainId: number): boolean {
+  return chainId === LEGACY_INTELLIGENCE_CHAIN_ID;
+}
 
 const CHAIN_LABELS: Readonly<Record<number, string>> = {
   [CHAIN_ID_ETHEREUM]: "Ethereum Mainnet",

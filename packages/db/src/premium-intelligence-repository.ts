@@ -4,12 +4,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, failure, success } from "./errors.ts";
 import {
+  type PaginatedResult,
+  type PaginationParams,
   buildPaginatedResult,
   mapPostgrestError,
   maybeRow,
   normalizePagination,
-  type PaginatedResult,
-  type PaginationParams,
 } from "./repository-utils.ts";
 import type {
   PremiumIntelligenceItemInsert,
@@ -19,7 +19,7 @@ import type {
 
 /** Public teaser columns only — never includes content_private (P2-1). */
 export const PREMIUM_TEASER_COLUMNS =
-  "id, slug, title, content_type, summary_public, source_event_ids, price_amount, price_currency, payment_routes, status, created_at, updated_at" as const;
+  "id, slug, title, content_type, summary_public, source_event_ids, source_chain_id, price_amount, price_currency, payment_routes, status, created_at, updated_at" as const;
 
 /** Cap for public teaser lists (legacy non-page callers). */
 export const PREMIUM_TEASER_LIST_LIMIT = 50;
@@ -28,17 +28,17 @@ export const PREMIUM_TEASER_LIST_LIMIT = 50;
  * Row shape returned by listTeasers — public columns only.
  * content_private is intentionally omitted at the DB projection layer.
  */
-export type PremiumIntelligenceTeaserRow = Omit<
-  PremiumIntelligenceItemRow,
-  "content_private"
->;
+export type PremiumIntelligenceTeaserRow = Omit<PremiumIntelligenceItemRow, "content_private">;
 
 export interface PremiumIntelligenceRepository {
   /** Public catalog teasers (bounded, no content_private). */
-  listTeasers(limitParam?: number): Promise<Result<PremiumIntelligenceTeaserRow[]>>;
+  listTeasers(
+    limitParam?: number,
+    filters?: { chainId?: number },
+  ): Promise<Result<PremiumIntelligenceTeaserRow[]>>;
   /** Page-based public catalog teasers (no content_private). */
   listTeasersPage(
-    params?: PaginationParams,
+    params?: PaginationParams & { chainId?: number },
   ): Promise<Result<PaginatedResult<PremiumIntelligenceTeaserRow>>>;
   findBySlug(slug: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
   findById(id: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
@@ -61,18 +61,18 @@ export function createPremiumIntelligenceRepository(
   const table = () => supabase.from("premium_intelligence_items");
 
   return {
-    async listTeasers(limitParam = PREMIUM_TEASER_LIST_LIMIT) {
+    async listTeasers(limitParam = PREMIUM_TEASER_LIST_LIMIT, filters = {}) {
       // Exclude catalog-only products (newsletter + desk feed payment FKs).
       // Still findable via findById/findBySlug for settlements and access gates.
       // P2-1: project public columns only — never select content_private for teasers.
       const limit = Math.min(PREMIUM_TEASER_LIST_LIMIT, Math.max(1, limitParam));
-      const { data, error } = await table()
+      let query = table()
         .select(PREMIUM_TEASER_COLUMNS)
         .eq("status", "available")
         .neq("content_type", "monthly_newsletter")
-        .neq("slug", "chronicle-desk-feed")
-        .order("created_at", { ascending: false })
-        .limit(limit);
+        .neq("slug", "chronicle-desk-feed");
+      if (filters?.chainId !== undefined) query = query.eq("source_chain_id", filters.chainId);
+      const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
 
       if (error) return failure(mapPostgrestError(error));
       return success((data ?? []) as unknown as PremiumIntelligenceTeaserRow[]);
@@ -83,11 +83,13 @@ export function createPremiumIntelligenceRepository(
         defaultLimit: 20,
         maxLimit: 100,
       });
-      const { data, error, count } = await table()
+      let query = table()
         .select(PREMIUM_TEASER_COLUMNS, { count: "exact" })
         .eq("status", "available")
         .neq("content_type", "monthly_newsletter")
-        .neq("slug", "chronicle-desk-feed")
+        .neq("slug", "chronicle-desk-feed");
+      if (params?.chainId !== undefined) query = query.eq("source_chain_id", params.chainId);
+      const { data, error, count } = await query
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -170,9 +172,7 @@ export function createPremiumIntelligenceRepository(
       if (toArchive.length === 0) return success(0);
 
       const ids = toArchive.map((r) => r.id as string);
-      const { error: updateError } = await table()
-        .update({ status: "archived" })
-        .in("id", ids);
+      const { error: updateError } = await table().update({ status: "archived" }).in("id", ids);
 
       if (updateError) return failure(mapPostgrestError(updateError));
       return success(ids.length);

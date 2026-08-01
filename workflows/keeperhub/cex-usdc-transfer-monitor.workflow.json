@@ -1,9 +1,10 @@
 {
   "version": 1,
+  "enabled": false,
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI CEX USDC Transfer Monitor (Telegram bridge)",
-    "description": "NEWSPAPER ONLY. FREE TIER: Schedule hourly → Query USDC Transfer events on mainnet → size filter (~$500k+) → Telegram CHRONICLE_INGEST. Chronicle normalizer classifies CEX-labeled from/to as cex_inflow / cex_outflow using the entity label book. Prefer vanity account or leave disabled."
+  "description": "ARCHIVED/DISABLED: no verified Ethereum Sepolia CEX source exists. Preserve the Mainnet workflow for explicit historical replay only; Chronicle never synthesizes CEX labels on Sepolia."
   },
   "nodes": [
     {

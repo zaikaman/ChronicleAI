@@ -45,8 +45,8 @@ import { createParaTreasuryClientFromEnv } from "./services/para-treasury-client
 import { createPremiumProductizerService } from "./services/premium-productizer-service.ts";
 
 const app: Express = express();
-const isProduction = (process.env["NODE_ENV"] ?? "development") === "production";
-const isTestRuntime = process.env["NODE_ENV"] === "test" || process.env["VITEST"] === "true";
+const isProduction = (process.env.NODE_ENV ?? "development") === "production";
+const isTestRuntime = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
 
 // Trust the single reverse-proxy hop (Heroku). Express resolves req.ip using
 // this setting; rate limiting must use that resolved value instead of parsing
@@ -69,7 +69,7 @@ app.use(timingMiddleware);
 // CORS must run before any middleware that can terminate a request (including
 // rate limiting), otherwise browser clients cannot read error responses.
 // CORS — production must set FRONTEND_ORIGIN (no silent localhost fallback).
-const frontendOrigin = process.env["FRONTEND_ORIGIN"];
+const frontendOrigin = process.env.FRONTEND_ORIGIN;
 if (!frontendOrigin) {
   if (isProduction) {
     throw new Error(
@@ -192,6 +192,7 @@ try {
   // US2: Daily Digests + free email + recurring x402 newsletter (treasury-gated registry writes)
   setupUS2Routes(app, env, {
     eventRepo,
+    alertRepo,
     digestRepo,
     execLogRepo,
     llmAttemptRepo,

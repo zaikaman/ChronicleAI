@@ -3,6 +3,7 @@
 // Free alerts stay free — this only mints separate paid SKUs with private analysis.
 
 import {
+  ACTIVE_INTELLIGENCE_CHAIN_ID,
   PREMIUM_CASCADE_MIN_LIQUIDATIONS,
   PREMIUM_CASCADE_MIN_TOTAL_USD,
   PREMIUM_CLUSTER_WINDOW_HOURS,
@@ -27,10 +28,10 @@ import type {
 import type { PaymentRoute } from "@chronicleai/schemas";
 import type { LLMProviderMap } from "./llm-provider-client.ts";
 import {
-  createPremiumDeepDiveGenerationService,
   type PremiumDeepDiveGenerationService,
   type PremiumDeepDiveKind,
   type PremiumLlmSection,
+  createPremiumDeepDiveGenerationService,
 } from "./premium-deep-dive-generation-service.ts";
 
 export interface PremiumProductizerConfig {
@@ -60,7 +61,14 @@ export interface PremiumProductizerService {
   productizeDigest(params: {
     digest: Pick<
       DailyDigestRow,
-      "id" | "report_date" | "period_start" | "period_end" | "title" | "summary" | "highlights" | "analysis"
+      | "id"
+      | "report_date"
+      | "period_start"
+      | "period_end"
+      | "title"
+      | "summary"
+      | "highlights"
+      | "analysis"
     >;
     events: MonitoredEventRow[];
   }): Promise<ProductizerResult>;
@@ -154,7 +162,7 @@ function formatEventLine(event: MonitoredEventRow): string {
   const magText = mag != null && unit ? `${mag} ${unit}` : "n/a";
   const protocol = event.protocol ?? "unknown";
   const assets = event.asset_symbols?.length ? event.asset_symbols.join("/") : "—";
-  const tx = event.transaction_hash ? event.transaction_hash.slice(0, 12) + "…" : "no-tx";
+  const tx = event.transaction_hash ? `${event.transaction_hash.slice(0, 12)}…` : "no-tx";
   return `${event.event_type} | ${protocol} | ${assets} | ${magText} | ${chainLabel(event.chain_id)} | ${tx} | ${event.captured_at}`;
 }
 
@@ -218,13 +226,20 @@ function buildDeterministicFallback(params: {
   digestSummary?: string | null;
   digestHighlights?: string[];
   digestAnalysis?: string | null;
-}): { sections: PremiumLlmSection[]; analysis: string; stats: ReturnType<typeof computeEventStats> } {
+}): {
+  sections: PremiumLlmSection[];
+  analysis: string;
+  stats: ReturnType<typeof computeEventStats>;
+} {
   const stats = computeEventStats(params.events);
 
   const executive =
     params.kind === "cascade"
-      ? `Cascade analysis for ${params.label}: ${stats.ranked.length} related liquidation/risk events` +
-        (stats.totalUsd > 0 ? ` totaling ~$${stats.totalUsd.toLocaleString("en-US")} notional.` : ".")
+      ? `Cascade analysis for ${params.label}: ${stats.ranked.length} related liquidation/risk events${
+          stats.totalUsd > 0
+            ? ` totaling ~$${stats.totalUsd.toLocaleString("en-US")} notional.`
+            : "."
+        }`
       : params.kind === "digest"
         ? `Period deep dive for ${params.label}: ${stats.ranked.length} qualified on-chain events beyond the public digest summary.`
         : params.kind === "historical"
@@ -416,6 +431,7 @@ export function createPremiumProductizerService(deps: {
       price_currency: "USDC",
       payment_routes: config.paymentRoutes,
       status: "available",
+      source_chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
     });
 
     if (!created.ok) {
@@ -586,11 +602,11 @@ export function createPremiumProductizerService(deps: {
         : `Deep Dive: ${params.label} Event Cluster (${params.day})`;
     const defaultSummaryPublic =
       params.kind === "cascade"
-        ? `Paid cascade report for ${params.label}: ${params.liquidationCount ?? 0} liquidations` +
-          (params.liquidationUsd && params.liquidationUsd > 0
-            ? ` (~$${Math.round(params.liquidationUsd).toLocaleString("en-US")} notional)`
-            : "") +
-          `. Public alerts cover individual events; this SKU joins them.`
+        ? `Paid cascade report for ${params.label}: ${params.liquidationCount ?? 0} liquidations${
+            params.liquidationUsd && params.liquidationUsd > 0
+              ? ` (~$${Math.round(params.liquidationUsd).toLocaleString("en-US")} notional)`
+              : ""
+          }. Public alerts cover individual events; this SKU joins them.`
         : `Paid multi-event analysis for ${params.label}: ${params.events.length} related on-chain events in a short window. Public alerts stay free; this report ranks and correlates them.`;
 
     const composed = await composeDeepDivePrivate({
@@ -660,11 +676,16 @@ export function createPremiumProductizerService(deps: {
       );
       return result;
     }
-    const day = dayKey(liquidations[0]?.captured_at ?? new Date().toISOString());
+    const firstLiquidation = liquidations[0];
+    if (!firstLiquidation) {
+      result.skipped.push("window-cascade-missing-liquidation");
+      return result;
+    }
+    const day = dayKey(firstLiquidation.captured_at);
     const label =
-      protocols.size >= 2 ? `multi-protocol (${[...protocols].slice(0, 4).join("/")})` : clusterLabel(
-        clusterKeyForEvent(liquidations[0]!),
-      );
+      protocols.size >= 2
+        ? `multi-protocol (${[...protocols].slice(0, 4).join("/")})`
+        : clusterLabel(clusterKeyForEvent(firstLiquidation));
     return mintDeepDive({
       kind: "cascade",
       label,
@@ -683,12 +704,13 @@ export function createPremiumProductizerService(deps: {
       periodStart,
       periodEnd,
       status: "qualified",
+      chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
       limit: 2000,
     });
     if (!listed.ok) {
       throw new Error(listed.error.message);
     }
-    return listed.value;
+    return listed.value.filter((event) => event.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID);
   }
 
   /** LLM historical feeds for protocols that have enough lookback activity. */
@@ -698,9 +720,7 @@ export function createPremiumProductizerService(deps: {
   ): Promise<ProductizerResult> {
     const result = emptyResult();
     const protocols = new Set(
-      triggerEvents
-        .map((e) => e.protocol?.trim())
-        .filter((p): p is string => Boolean(p)),
+      triggerEvents.map((e) => e.protocol?.trim()).filter((p): p is string => Boolean(p)),
     );
     if (protocols.size === 0) {
       result.skipped.push("historical-no-protocols");
@@ -773,6 +793,10 @@ export function createPremiumProductizerService(deps: {
     async productizeAfterQualifiedEvent(event) {
       const result = emptyResult();
       try {
+        if (event.chain_id !== ACTIVE_INTELLIGENCE_CHAIN_ID) {
+          result.skipped.push(`legacy-chain-excluded:${event.chain_id}`);
+          return result;
+        }
         const end = new Date(event.captured_at);
         if (Number.isNaN(end.getTime())) {
           result.errors.push("invalid-captured_at");
@@ -802,6 +826,7 @@ export function createPremiumProductizerService(deps: {
     async productizeDigest({ digest, events }) {
       const result = emptyResult();
       try {
+        events = events.filter((event) => event.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID);
         if (events.length === 0) {
           result.skipped.push("digest-no-events");
           return result;

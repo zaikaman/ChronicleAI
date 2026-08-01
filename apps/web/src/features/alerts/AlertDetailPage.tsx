@@ -1,10 +1,7 @@
+import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config/chains";
 import type { ReactElement } from "react";
 import { Link, useParams } from "react-router-dom";
-import {
-  ContentUriFooter,
-  Page,
-  PageBackLink,
-} from "../../components/page-chrome.tsx";
+import { ContentUriFooter, Page, PageBackLink } from "../../components/page-chrome.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { txExplorerUrl } from "../../lib/explorer.ts";
 import { DeskActedBanner } from "../desk/DeskActedBanner.tsx";
@@ -16,10 +13,8 @@ export function AlertDetailPage(): ReactElement {
   const { alertId } = useParams<{ alertId: string }>();
   const { state, refetch } = useAlert(alertId);
   const relatedTicket = useRelatedDeskTicket({
-    sourceEventHash:
-      state.status === "success" ? state.data.sourceEventHash : undefined,
-    sourceReferences:
-      state.status === "success" ? state.data.sourceReferences : undefined,
+    sourceEventHash: state.status === "success" ? state.data.sourceEventHash : undefined,
+    sourceReferences: state.status === "success" ? state.data.sourceReferences : undefined,
   });
 
   if (state.status === "loading") {
@@ -74,7 +69,7 @@ export function AlertDetailPage(): ReactElement {
       ? state.data.sourceEventHash
       : null;
   const sourceExplorerUrl = sourceTx
-    ? (txExplorerUrl(state.data.chainId ?? 1, sourceTx) ?? `https://etherscan.io/tx/${sourceTx}`)
+    ? txExplorerUrl(state.data.chainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID, sourceTx)
     : undefined;
 
   return (
@@ -83,7 +78,7 @@ export function AlertDetailPage(): ReactElement {
       {relatedTicket.ticket ? <DeskActedBanner ticket={relatedTicket.ticket} /> : null}
       <AlertCard alert={state.data} linkable={false} data-testid="alert-detail-card" />
       {state.data.contentUri ? <ContentUriFooter uri={state.data.contentUri} /> : null}
-      {(state.data.explorerUrl || sourceExplorerUrl) ? (
+      {state.data.explorerUrl || sourceExplorerUrl ? (
         <div className="mt-3 text-center flex items-center justify-center gap-6 flex-wrap text-sm font-medium text-muted-foreground">
           {sourceExplorerUrl ? (
             <a

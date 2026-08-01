@@ -6,6 +6,7 @@ import type {
   ExecutionLogRepository,
 } from "@chronicleai/db";
 import { ConflictError } from "@chronicleai/db";
+import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
 import type { EventIngestionPayload, FlowContext } from "@chronicleai/schemas";
 import { extractFlowContext } from "../monitoring/flow-enrichment.ts";
 import {
@@ -34,14 +35,69 @@ import type { NotificationService } from "../services/notification-service.ts";
 import type { PremiumProductizerService } from "../services/premium-productizer-service.ts";
 import type { TreasuryRegistryGate } from "../services/treasury-registry-gate.ts";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
+import {
+  alertSignalProjectionForEvent,
+  type AlertToSignalService,
+} from "../services/alert-to-signal-service.ts";
 
 export interface IngestionResult {
   accepted: boolean;
   statusCode: number;
   alertId?: string;
+  signalId?: string;
+  signalStatus?: "not_eligible" | "created" | "failed";
+  actionStatus?: "not_created" | "pending" | "deferred" | "ignored" | "failed";
   message: string;
   /** Set when a liquidation cluster was also synthesized from this ingest. */
   clusterAlertId?: string;
+}
+
+function sourceReferencesForPayload(payload: EventIngestionPayload): string[] {
+  return [
+    payload.sourceEventId,
+    payload.transactionHash,
+    payload.blockHash,
+    payload.blockNumber !== undefined ? `block:${payload.blockNumber}` : undefined,
+    payload.logIndex !== undefined ? `log:${payload.logIndex}` : undefined,
+    payload.sourceContract,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+function deterministicEvidenceForPayload(
+  payload: EventIngestionPayload,
+  sourceDedupeKey: string,
+): Record<string, unknown> {
+  return {
+    sourceEventId: payload.sourceEventId,
+    eventType: payload.eventType,
+    chainId: payload.chainId,
+    protocol: payload.protocol ?? null,
+    transactionHash: payload.transactionHash ?? null,
+    blockNumber: payload.blockNumber ?? null,
+    blockHash: payload.blockHash ?? null,
+    logIndex: payload.logIndex ?? null,
+    sourceContract: payload.sourceContract ?? null,
+    assetSymbols: payload.assetSymbols ?? null,
+    magnitude: payload.magnitude ?? null,
+    normalizedFeatures: payload.normalizedFeatures ?? {},
+    sourceDedupeKey,
+  };
+}
+
+function deterministicAlertTitle(payload: EventIngestionPayload): string {
+  const subject = payload.protocol ? `${payload.protocol} ${payload.eventType}` : payload.eventType;
+  return `${subject} observed on Ethereum Sepolia`;
+}
+
+function deterministicAlertSummary(
+  payload: EventIngestionPayload,
+  score: number,
+): string {
+  const magnitude = payload.magnitude
+    ? ` Magnitude: ${payload.magnitude.value} ${payload.magnitude.unit}.`
+    : "";
+  const tx = payload.transactionHash ? ` Source transaction: ${payload.transactionHash}.` : "";
+  return `Structured ${payload.eventType} evidence was observed on Ethereum Sepolia with qualification score ${score.toFixed(2)}.${magnitude}${tx} Interpretation is being enriched asynchronously.`;
 }
 
 export class EventIngestionHandler {
@@ -55,6 +111,7 @@ export class EventIngestionHandler {
   private readonly publicationService: AlertPublicationService;
   private readonly clusterService: LiquidationClusterService;
   private readonly premiumProductizer: PremiumProductizerService | null;
+  private alertToSignalService: AlertToSignalService | null;
   /** Guard against recursive cluster re-entry. */
   private synthesizingCluster = false;
 
@@ -73,12 +130,15 @@ export class EventIngestionHandler {
     treasuryGate?: TreasuryRegistryGate | null;
     /** Mints paid deep dives when event clusters / cascades form. */
     premiumProductizer?: PremiumProductizerService | null;
+    /** Projects the deterministic Alert into at most one desk signal. */
+    alertToSignalService?: AlertToSignalService | null;
   }) {
     this.eventRepo = deps.eventRepo;
     this.alertRepo = deps.alertRepo;
     this.execLogRepo = deps.execLogRepo;
     this.llmAttemptRepo = deps.llmAttemptRepo;
     this.premiumProductizer = deps.premiumProductizer ?? null;
+    this.alertToSignalService = deps.alertToSignalService ?? null;
     this.qualificationService = createEventQualificationService();
     this.dedupeService = createAlertDedupeService();
     this.contentService = createPublicAlertContentService(
@@ -96,14 +156,34 @@ export class EventIngestionHandler {
     this.clusterService = createLiquidationClusterService(deps.eventRepo);
   }
 
+  setAlertToSignalService(service: AlertToSignalService | null): void {
+    this.alertToSignalService = service;
+  }
+
   async ingest(payload: EventIngestionPayload, source = "keeperhub"): Promise<IngestionResult> {
+    if (payload.chainId !== ACTIVE_INTELLIGENCE_CHAIN_ID) {
+      return {
+        accepted: false,
+        statusCode: 400,
+        message: `Active intelligence ingestion is Sepolia-only; received chain ${payload.chainId}`,
+      };
+    }
+
     const flowContext: FlowContext | null =
       payload.flowContext ?? extractFlowContext(payload.rawPayload);
 
+    const sourceDedupeKey =
+      payload.sourceDedupeKey ??
+      `${source}:${payload.eventType}:${payload.sourceEventId}`;
+    const deterministicEvidence = deterministicEvidenceForPayload(
+      payload,
+      sourceDedupeKey,
+    );
+
     // Ensure flowContext is mirrored into raw_payload for persistence / digests
     const rawPayload = flowContext
-      ? { ...payload.rawPayload, flowContext }
-      : payload.rawPayload;
+      ? { ...payload.rawPayload, flowContext, deterministicEvidence }
+      : { ...payload.rawPayload, deterministicEvidence };
 
     // 1. Persist the raw event first
     const eventResult = await this.eventRepo.create({
@@ -117,6 +197,12 @@ export class EventIngestionHandler {
       transaction_hash: payload.transactionHash ?? null,
       captured_at: payload.capturedAt,
       raw_payload: rawPayload,
+      block_number: payload.blockNumber ?? null,
+      block_hash: payload.blockHash ?? null,
+      log_index: payload.logIndex ?? null,
+      source_contract: payload.sourceContract ?? null,
+      normalized_evidence: payload.normalizedFeatures ?? {},
+      source_dedupe_key: sourceDedupeKey,
       status: "received",
     });
 
@@ -157,10 +243,11 @@ export class EventIngestionHandler {
     });
 
     // 3. Qualify the event
+    const rawRecord = rawPayload as Record<string, unknown>;
     const clusterCount =
       payload.eventType === "liquidation_cluster" &&
-      typeof rawPayload.count === "number"
-        ? rawPayload.count
+      typeof rawRecord.count === "number"
+        ? rawRecord.count
         : undefined;
 
     const qualification = this.qualificationService.qualify({
@@ -235,69 +322,36 @@ export class EventIngestionHandler {
       };
     }
 
-    // 6. Generate LLM alert content
-    await this.execLogRepo.append({
-      action_type: "generate_alert",
-      entity_type: "monitored_event",
-      entity_id: event.id,
-      status: "started",
-      message: "Starting LLM alert generation",
-    });
-
-    const generationResult = await this.contentService.generateAlert({
-      monitoredEventId: event.id,
-      eventType: payload.eventType,
-      chainId: payload.chainId,
-      protocol: payload.protocol ?? null,
-      assetSymbols: payload.assetSymbols ?? null,
-      magnitude: payload.magnitude ?? null,
-      transactionHash: payload.transactionHash ?? null,
-      significanceScore: qualification.score,
-      source,
-      sourceEventId: payload.sourceEventId,
-      capturedAt: payload.capturedAt,
-      flowContext,
-      clusterCount: clusterCount ?? null,
-    });
-
-    if (!generationResult.success || !generationResult.content) {
-      // All providers failed
-      await this.eventRepo.updateStatus(event.id, "failed");
-      await this.execLogRepo.append({
-        action_type: "generate_alert",
-        entity_type: "monitored_event",
-        entity_id: event.id,
-        status: "failed",
-        message: "Alert generation failed: all LLM providers failed",
-        details: {
-          attempts: generationResult.attempts.map((a) => ({
-            provider: a.provider,
-            failure_reason: a.failureReason,
-            latency_ms: a.latencyMs,
-          })),
-        },
-      });
-
-      const clusterAlertId = await this.maybeEmitLiquidationCluster(payload, source);
-
-      return {
-        accepted: true,
-        statusCode: 202,
-        message: "Event accepted but alert generation failed (all providers failed)",
-        ...(clusterAlertId ? { clusterAlertId } : {}),
-      };
-    }
-
-    // 7. Create the public alert record
+    // 6. Create the deterministic public Alert shell before any LLM call.
+    // This makes the public observation and its causal evidence durable even
+    // when enrichment, publication, or registry anchoring is unavailable.
+    const signalProjection = this.alertToSignalService
+      ? alertSignalProjectionForEvent(payload.eventType)
+      : null;
     const alertResult = await this.alertRepo.create({
       monitored_event_id: event.id,
-      title: generationResult.content.title,
-      summary: generationResult.content.summary,
-      source_references: generationResult.content.sourceReferences,
+      title: deterministicAlertTitle(payload),
+      summary: deterministicAlertSummary(payload, qualification.score),
+      source_references: sourceReferencesForPayload(payload),
       audience: "public",
       dedupe_key: dedupeKey,
-      confidence: generationResult.content.confidence,
-      delivery_status: "draft",
+      delivery_status: "queued",
+      alert_kind:
+        payload.eventType === "liquidation" ||
+        payload.eventType === "liquidation_cluster" ||
+        payload.eventType === "gas_spike"
+          ? "desk_trigger"
+          : "market_event",
+      event_type: payload.eventType,
+      chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      publication_chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      source_dedupe_key: sourceDedupeKey,
+      signal_type: signalProjection?.signalType ?? null,
+      signal_status: signalProjection ? "pending" : "not_eligible",
+      action_status: signalProjection ? signalProjection.defaultActionStatus : "ignored",
+      transaction_hash: payload.transactionHash ?? null,
+      deterministic_evidence: deterministicEvidence,
+      confidence: qualification.score >= 0.8 ? "high" : qualification.score >= 0.55 ? "medium" : "low",
     });
 
     if (!alertResult.ok) {
@@ -310,86 +364,31 @@ export class EventIngestionHandler {
 
     const alert = alertResult.value;
 
-    // Record generation succeeded log
-    await this.execLogRepo.append({
-      action_type: "generate_alert",
-      entity_type: "public_alert",
-      entity_id: alert.id,
-      status: "succeeded",
-      message: `Alert generated using ${generationResult.providerUsed}`,
-      details: {
-        provider: generationResult.providerUsed,
-        title: generationResult.content.title,
-        attempts: generationResult.attempts.length,
-        ...(flowContext
-          ? { direction: flowContext.direction, venue: flowContext.venue ?? null }
-          : {}),
-      },
-    });
+    // 7. Project structured evidence into at most one Desk Signal. Signal
+    // failure changes only the causal status; it never removes the Alert or
+    // changes the event back to failed.
+    let signalResult: Awaited<ReturnType<AlertToSignalService["project"]>> | null = null;
+    if (this.alertToSignalService) {
+      signalResult = await this.alertToSignalService.project({
+        alert,
+        event,
+      });
+    }
 
-    // 8. Publish the alert (local feed + KeeperHub registry write)
-    const publicationResult = await this.publicationService.publishAlert(
-      alert.id,
-      payload.transactionHash ?? payload.sourceEventId,
-    );
-
-    await this.execLogRepo.append({
-      action_type: "publish_alert",
-      entity_type: "public_alert",
-      entity_id: alert.id,
-      status: publicationResult.success ? "succeeded" : "failed",
-      message: publicationResult.message,
-      details: {
-        registry_tx_hash: publicationResult.registryTxHash,
-        keeper_hub_run_id: publicationResult.keeperHubRunId,
-        explorer_url: publicationResult.explorerUrl,
-        content_hash: publicationResult.contentHash,
-        gas_used: publicationResult.gasUsed,
-        gas_used_wei: publicationResult.gasUsedWei,
-        executedViaKeeperHub: Boolean(publicationResult.keeperHubRunId),
-        community_broadcast: publicationResult.communityBroadcast
-          ? {
-              destinations: publicationResult.communityBroadcast.destinations,
-              failures: publicationResult.communityBroadcast.failures,
-              delivered: publicationResult.communityBroadcast.delivered,
-            }
-          : null,
-      },
+    // 8. Enrichment, registry publication, and premium productization are
+    // asynchronous side effects. The deterministic Alert is already visible.
+    void this.enrichAndPublishAlert({
+      alertId: alert.id,
+      eventId: event.id,
+      payload,
+      source,
+      qualificationScore: qualification.score,
+      flowContext,
+      clusterCount: clusterCount ?? null,
     });
 
     // 9. Premium productizer — free alert stays free; mint paid SKUs only when
     // related events form a cluster/cascade (non-fatal on failure).
-    if (this.premiumProductizer) {
-      try {
-        const productized = await this.premiumProductizer.productizeAfterQualifiedEvent(event);
-        if (productized.created.length > 0 || productized.errors.length > 0) {
-          await this.execLogRepo.append({
-            action_type: "monitor",
-            entity_type: "monitored_event",
-            entity_id: event.id,
-            status: productized.errors.length > 0 ? "failed" : "succeeded",
-            message:
-              productized.created.length > 0
-                ? `Premium productizer minted ${productized.created.length} item(s)`
-                : `Premium productizer errors: ${productized.errors.join("; ")}`,
-            details: {
-              createdSlugs: productized.created.map((i) => i.slug),
-              skipped: productized.skipped,
-              errors: productized.errors,
-            },
-          });
-        }
-      } catch (error) {
-        await this.execLogRepo.append({
-          action_type: "monitor",
-          entity_type: "monitored_event",
-          entity_id: event.id,
-          status: "failed",
-          message: `Premium productizer failed: ${error instanceof Error ? error.message : String(error)}`,
-        });
-      }
-    }
-
     // 10. Liquidation cluster synthesizer (inline after liq ingest)
     const clusterAlertId = await this.maybeEmitLiquidationCluster(payload, source);
 
@@ -397,11 +396,176 @@ export class EventIngestionHandler {
       accepted: true,
       statusCode: 202,
       alertId: alert.id,
-      message: publicationResult.success
-        ? "Alert generated and published"
-        : `Alert generated but publication failed: ${publicationResult.message}`,
+      ...(signalResult?.signalId ? { signalId: signalResult.signalId } : {}),
+      ...(signalResult ? { signalStatus: signalResult.status, actionStatus: signalResult.actionStatus } : {}),
+      message: signalResult?.reason ?? "Deterministic Alert accepted; enrichment and publication queued",
       ...(clusterAlertId ? { clusterAlertId } : {}),
     };
+  }
+
+  private async enrichAndPublishAlert(params: {
+    alertId: string;
+    eventId: string;
+    payload: EventIngestionPayload;
+    source: string;
+    qualificationScore: number;
+    flowContext: FlowContext | null;
+    clusterCount: number | null;
+  }): Promise<void> {
+    const {
+      alertId,
+      eventId,
+      payload,
+      source,
+      qualificationScore,
+      flowContext,
+      clusterCount,
+    } = params;
+    let generationSucceeded = false;
+
+    try {
+      await this.execLogRepo.append({
+        action_type: "generate_alert",
+        entity_type: "monitored_event",
+        entity_id: eventId,
+        status: "started",
+        message: "Starting asynchronous LLM alert enrichment",
+      });
+
+      const generationResult = await this.contentService.generateAlert({
+        monitoredEventId: eventId,
+        eventType: payload.eventType,
+        chainId: payload.chainId,
+        protocol: payload.protocol ?? null,
+        assetSymbols: payload.assetSymbols ?? null,
+        magnitude: payload.magnitude ?? null,
+        transactionHash: payload.transactionHash ?? null,
+        significanceScore: qualificationScore,
+        source,
+        sourceEventId: payload.sourceEventId,
+        capturedAt: payload.capturedAt,
+        flowContext,
+        clusterCount,
+      });
+
+      if (generationResult.success && generationResult.content) {
+        generationSucceeded = true;
+        if (this.alertRepo.updateContent) {
+          await this.alertRepo.updateContent(alertId, {
+            title: generationResult.content.title,
+            summary: generationResult.content.summary,
+            sourceReferences: generationResult.content.sourceReferences,
+            confidence: generationResult.content.confidence,
+          });
+        }
+        if (generationResult.providerUsed) {
+          await this.alertRepo.updateGenerationMetadata(alertId, {
+            generationProvider: generationResult.providerUsed,
+          });
+        }
+        await this.execLogRepo.append({
+          action_type: "generate_alert",
+          entity_type: "public_alert",
+          entity_id: alertId,
+          status: "succeeded",
+          message: `Alert enriched using ${generationResult.providerUsed ?? "configured provider"}`,
+          details: {
+            provider: generationResult.providerUsed ?? null,
+            attempts: generationResult.attempts.length,
+          },
+        });
+      } else {
+        await this.execLogRepo.append({
+          action_type: "generate_alert",
+          entity_type: "public_alert",
+          entity_id: alertId,
+          status: "failed",
+          message: "Alert enrichment failed; deterministic Alert shell retained",
+          details: {
+            attempts: generationResult.attempts.map((attempt) => ({
+              provider: attempt.provider,
+              failure_reason: attempt.failureReason ?? null,
+              latency_ms: attempt.latencyMs,
+            })),
+          },
+        });
+      }
+    } catch (error) {
+      await this.execLogRepo.append({
+        action_type: "generate_alert",
+        entity_type: "public_alert",
+        entity_id: alertId,
+        status: "failed",
+        message: `Alert enrichment failed; deterministic shell retained: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+
+    try {
+      const publicationResult = await this.publicationService.publishAlert(
+        alertId,
+        payload.transactionHash ?? payload.sourceEventId,
+      );
+      await this.execLogRepo.append({
+        action_type: "publish_alert",
+        entity_type: "public_alert",
+        entity_id: alertId,
+        status: publicationResult.success ? "succeeded" : "failed",
+        message: publicationResult.message,
+        details: {
+          generationSucceeded,
+          registry_tx_hash: publicationResult.registryTxHash,
+          keeper_hub_run_id: publicationResult.keeperHubRunId,
+          explorer_url: publicationResult.explorerUrl,
+          content_hash: publicationResult.contentHash,
+          gas_used: publicationResult.gasUsed,
+          gas_used_wei: publicationResult.gasUsedWei,
+          executedViaKeeperHub: Boolean(publicationResult.keeperHubRunId),
+        },
+      });
+    } catch (error) {
+      await this.alertRepo.updateDeliveryStatus(alertId, "partial_failure");
+      await this.execLogRepo.append({
+        action_type: "publish_alert",
+        entity_type: "public_alert",
+        entity_id: alertId,
+        status: "failed",
+        message: `Alert publication failed; Alert remains available: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+
+    if (!this.premiumProductizer) return;
+    try {
+      const eventResult = await this.eventRepo.findById(eventId);
+      if (!eventResult.ok) throw eventResult.error;
+      const productized = await this.premiumProductizer.productizeAfterQualifiedEvent(
+        eventResult.value,
+      );
+      if (productized.created.length > 0 || productized.errors.length > 0) {
+        await this.execLogRepo.append({
+          action_type: "monitor",
+          entity_type: "monitored_event",
+          entity_id: eventId,
+          status: productized.errors.length > 0 ? "failed" : "succeeded",
+          message:
+            productized.created.length > 0
+              ? `Premium productizer minted ${productized.created.length} item(s)`
+              : `Premium productizer errors: ${productized.errors.join("; ")}`,
+          details: {
+            createdSlugs: productized.created.map((item) => item.slug),
+            skipped: productized.skipped,
+            errors: productized.errors,
+          },
+        });
+      }
+    } catch (error) {
+      await this.execLogRepo.append({
+        action_type: "monitor",
+        entity_type: "monitored_event",
+        entity_id: eventId,
+        status: "failed",
+        message: `Premium productizer failed: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
   }
 
   /**

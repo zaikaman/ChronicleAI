@@ -2,19 +2,50 @@
 // Returns newest-first public alerts with page-based pagination, plus by-id lookup
 // for HTTPS on-chain content URIs.
 
-import type { PublicAlertRepository, PublicAlertRow } from "@chronicleai/db";
+import { ACTIVE_INTELLIGENCE_CHAIN_ID, LEGACY_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
+import type {
+  DeskSignalRepository,
+  DeskSignalRow,
+  PublicAlertRepository,
+  PublicAlertRow,
+} from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import { notFound } from "../errors.ts";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 
-function formatAlertResponse(alert: PublicAlertRow): Record<string, unknown> {
+function formatSignalResponse(signal: DeskSignalRow): Record<string, unknown> {
+  return {
+    id: signal.id,
+    signalType: signal.signal_type,
+    origin: signal.signal_origin ?? "manual",
+    ...(signal.source_alert_id ? { sourceAlertId: signal.source_alert_id } : {}),
+    ...(signal.source_event_id ? { sourceEventId: signal.source_event_id } : {}),
+    chainId: signal.chain_id,
+    policyVerdict: signal.policy_verdict,
+    severity: signal.severity,
+    features: signal.features,
+    sources: signal.sources,
+    dedupeKey: signal.dedupe_key,
+    createdAt: signal.created_at,
+  };
+}
+
+function formatAlertResponse(
+  alert: PublicAlertRow,
+  signal?: DeskSignalRow | null,
+): Record<string, unknown> {
+  const actionStatus = alert.action_status ?? "not_created";
+  const signalStatus = alert.signal_status ?? "not_eligible";
+  const signalType = alert.signal_type ?? signal?.signal_type ?? undefined;
+  const policyVerdict = alert.policy_verdict ?? signal?.policy_verdict ?? undefined;
+  const chainId = alert.chain_id ?? undefined;
   return {
     id: alert.id,
     title: alert.title,
     summary: alert.summary,
     sourceReferences: alert.source_references,
     deliveryStatus: alert.delivery_status,
-    publishedAt: alert.published_at,
+    publishedAt: alert.published_at ?? "",
     confidence: alert.confidence,
     generationProvider: alert.generation_provider ?? undefined,
     registryTxHash: alert.registry_tx_hash ?? undefined,
@@ -26,13 +57,96 @@ function formatAlertResponse(alert: PublicAlertRow): Record<string, unknown> {
     explorerUrl: alert.explorer_url ?? undefined,
     keeperHubRunId: alert.keeper_hub_run_id ?? undefined,
     eventType: alert.event_type ?? undefined,
-    chainId: alert.chain_id ?? undefined,
+    chainId,
     protocol: alert.protocol ?? undefined,
     ...(alert.flow_context ? { flowContext: alert.flow_context } : {}),
+    alertKind: alert.alert_kind ?? "market_event",
+    publicationChainId: alert.publication_chain_id ?? ACTIVE_INTELLIGENCE_CHAIN_ID,
+    sourceDedupeKey: alert.source_dedupe_key ?? alert.dedupe_key ?? undefined,
+    signalType,
+    signalStatus,
+    policyVerdict,
+    actionStatus,
+    intentId: alert.intent_id ?? undefined,
+    ticketId: alert.ticket_id ?? undefined,
+    transactionHash: alert.transaction_hash ?? undefined,
+    actionTransactionHash: alert.action_transaction_hash ?? undefined,
+    actionKeeperHubRunId: alert.action_keeper_hub_run_id ?? undefined,
+    actionExplorerUrl: alert.action_explorer_url ?? undefined,
+    deterministicEvidence: alert.deterministic_evidence ?? undefined,
+    causalChain: {
+      alertId: alert.id,
+      sourceEventId:
+        alert.source_event_id ??
+        (typeof alert.deterministic_evidence?.sourceEventId === "string"
+          ? alert.deterministic_evidence.sourceEventId
+          : (alert.monitored_event_id ?? undefined)),
+      ...(signal ? { signal: formatSignalResponse(signal) } : {}),
+      ...(policyVerdict
+        ? {
+            decision: {
+              verdict: policyVerdict,
+              ...(alert.intent_id ? { intentId: alert.intent_id } : {}),
+              reasonCodes: [],
+              actionStatus,
+            },
+          }
+        : {}),
+      action: {
+        ...(alert.intent_id ? { intentId: alert.intent_id } : {}),
+        ...(alert.ticket_id ? { ticketId: alert.ticket_id } : {}),
+        status: actionStatus,
+        ...(alert.action_transaction_hash
+          ? { transactionHash: alert.action_transaction_hash }
+          : {}),
+        ...(alert.action_keeper_hub_run_id
+          ? { keeperHubRunId: alert.action_keeper_hub_run_id }
+          : {}),
+        ...(alert.action_explorer_url ? { explorerUrl: alert.action_explorer_url } : {}),
+      },
+      proof: {
+        ...(alert.transaction_hash ? { sourceTransactionHash: alert.transaction_hash } : {}),
+        ...(alert.action_transaction_hash
+          ? { transactionHash: alert.action_transaction_hash }
+          : {}),
+        ...(alert.registry_tx_hash ? { registryTransactionHash: alert.registry_tx_hash } : {}),
+        ...(alert.content_hash ? { contentHash: alert.content_hash } : {}),
+        ...(alert.content_uri ? { contentUri: alert.content_uri } : {}),
+        ...((alert.action_explorer_url ?? alert.explorer_url)
+          ? { explorerUrl: alert.action_explorer_url ?? alert.explorer_url }
+          : {}),
+      },
+    },
   };
 }
 
-export function createAlertRoutes(alertRepo: PublicAlertRepository): RouterType {
+function queryString(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
+}
+
+function chainScope(req: { query: Record<string, unknown> }):
+  | { chainId: number }
+  | { error: string } {
+  const scope = queryString(req.query.scope)?.toLowerCase();
+  const chainValue = queryString(req.query.chainId);
+  if (scope === "legacy" || scope === "mainnet" || chainValue === "1") {
+    return { chainId: LEGACY_INTELLIGENCE_CHAIN_ID };
+  }
+  if (scope === "all") {
+    return { error: "Use scope=legacy for archived Mainnet alerts or the default Sepolia scope" };
+  }
+  if (chainValue !== undefined && chainValue !== String(ACTIVE_INTELLIGENCE_CHAIN_ID)) {
+    return { error: `Unsupported active alert chain: ${chainValue}` };
+  }
+  return { chainId: ACTIVE_INTELLIGENCE_CHAIN_ID };
+}
+
+export function createAlertRoutes(
+  alertRepo: PublicAlertRepository,
+  signalRepo?: DeskSignalRepository,
+): RouterType {
   const router: RouterType = Router();
 
   /**
@@ -58,9 +172,52 @@ export function createAlertRoutes(alertRepo: PublicAlertRepository): RouterType 
         return;
       }
 
+      const scope = chainScope(req);
+      if ("error" in scope) {
+        res.status(400).json({ error: scope.error });
+        return;
+      }
+
       const result = await alertRepo.listPage({
         page: parsed.page,
         limit: parsed.limit,
+        chainId: scope.chainId,
+        ...(queryString(req.query.alertKind)
+          ? { alertKind: queryString(req.query.alertKind) as "market_event" | "desk_trigger" }
+          : {}),
+        ...(queryString(req.query.signalStatus)
+          ? {
+              signalStatus: queryString(req.query.signalStatus) as
+                | "not_eligible"
+                | "pending"
+                | "created"
+                | "failed",
+            }
+          : {}),
+        ...(queryString(req.query.eventType)
+          ? { eventType: queryString(req.query.eventType) as PublicAlertRow["event_type"] & string }
+          : {}),
+        ...(queryString(req.query.policyVerdict)
+          ? {
+              policyVerdict: queryString(req.query.policyVerdict) as
+                | "trade"
+                | "defend"
+                | "defer"
+                | "ignore",
+            }
+          : {}),
+        ...(queryString(req.query.actionStatus)
+          ? {
+              actionStatus: queryString(req.query.actionStatus) as
+                | "not_created"
+                | "pending"
+                | "submitted"
+                | "filled"
+                | "failed"
+                | "deferred"
+                | "ignored",
+            }
+          : {}),
       });
 
       if (!result.ok) {
@@ -99,12 +256,23 @@ export function createAlertRoutes(alertRepo: PublicAlertRepository): RouterType 
       }
 
       const alert = result.value;
-      if (alert.delivery_status !== "published") {
+      const scope = chainScope(req);
+      if ("error" in scope) {
+        res.status(400).json({ error: scope.error });
+        return;
+      }
+      if ((alert.chain_id ?? null) !== scope.chainId || alert.delivery_status === "draft") {
         next(notFound("Alert not found"));
         return;
       }
 
-      res.json(formatAlertResponse(alert));
+      let signal: DeskSignalRow | null = null;
+      if (signalRepo && alert.desk_signal_id) {
+        const signalResult = await signalRepo.findById(alert.desk_signal_id);
+        if (signalResult.ok) signal = signalResult.value;
+      }
+
+      res.json(formatAlertResponse(alert, signal));
     } catch (error) {
       next(error);
     }

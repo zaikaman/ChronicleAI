@@ -17,30 +17,57 @@ import type {
   ExecutionLogRepository,
   MonitoredEventRepository,
   MonitoredEventRow,
+  PublicAlertRepository,
 } from "@chronicleai/db";
 import type {
+  AlertActionStatus,
   DeskAgentProposal,
   DeskHeartbeatSource,
+  DeskPolicyVerdict,
   DeskSignalType,
   DeskStrategy,
   ExecutionLogStatus,
 } from "@chronicleai/schemas";
 import { DESK_STRATEGIES } from "@chronicleai/schemas";
-import type { CapitalManager, CapitalManagerTickResult } from "./capital-manager.ts";
-import type { ExecutionBridge } from "./execution-bridge.ts";
-import type { HeartbeatService } from "./heartbeat-service.ts";
-import type { IntentService } from "./intent-service.ts";
-import type { KillSwitchService, KillSwitchState, KillSwitchTripResult } from "./kill-switch-service.ts";
-import { detectPowderThrash } from "./policy-engine.ts";
-import type { PositionService } from "./position-service.ts";
+import { capitalLog, deskLog } from "../lib/logger.ts";
+import { softAppendExecutionLog } from "../services/keeperhub-execution-log.ts";
 import {
+  type RoutingPolicyEnv,
   extractRoutingFromDetails,
   flashbotsProtectStatusUrl,
   publicPrivateRoutingStatus,
   routingExecutionPathCopy,
   shouldLinkProtectStatus,
-  type RoutingPolicyEnv,
 } from "../services/routing-metadata.ts";
+import type { DeskTradingAgent } from "./agent/desk-trading-agent.ts";
+import type { FailureClassifier } from "./agent/failure-classifier.ts";
+import {
+  applyForceDefendOverride,
+  applyForceMaintenanceOverride,
+  applyMinConfidence,
+  mapProposalToDecision,
+} from "./agent/map-proposal.ts";
+import type { NarrativeService } from "./agent/narrative.ts";
+import { isDeskAgentProposal } from "./agent/proposal-schema.ts";
+import { contextDigest } from "./agent/tools.ts";
+import type { DeskAgentContext, PublicDeskAgentSummary } from "./agent/types.ts";
+import type { CapitalManager, CapitalManagerTickResult } from "./capital-manager.ts";
+import {
+  type EventMicrotradeTrigger,
+  evaluateAndPlanEventMicrotrade,
+  isEventMicrotradeTriggerType,
+} from "./event-microtrade-hook.ts";
+import { parseExecutionAuditFromPayload, publicExecutionAuditFields } from "./execution-audit.ts";
+import type { ExecutionBridge } from "./execution-bridge.ts";
+import type { HeartbeatService } from "./heartbeat-service.ts";
+import type { IntentService } from "./intent-service.ts";
+import type {
+  KillSwitchService,
+  KillSwitchState,
+  KillSwitchTripResult,
+} from "./kill-switch-service.ts";
+import { detectPowderThrash } from "./policy-engine.ts";
+import type { PositionService } from "./position-service.ts";
 import type {
   StrategyEvaluateResult,
   StrategyExecuteResult,
@@ -48,10 +75,6 @@ import type {
   StrategyRunner,
 } from "./strategy-runner.ts";
 import type { TicketPublishResult, TicketService } from "./ticket-service.ts";
-import {
-  parseExecutionAuditFromPayload,
-  publicExecutionAuditFields,
-} from "./execution-audit.ts";
 import type {
   DeskExecutionResultInput,
   DeskIntentFill,
@@ -61,28 +84,6 @@ import type {
   GasRegime,
   HeartbeatStatus,
 } from "./types.ts";
-import type { DeskTradingAgent } from "./agent/desk-trading-agent.ts";
-import type {
-  DeskAgentContext,
-  PublicDeskAgentSummary,
-} from "./agent/types.ts";
-import { isDeskAgentProposal } from "./agent/proposal-schema.ts";
-import {
-  applyForceDefendOverride,
-  applyForceMaintenanceOverride,
-  applyMinConfidence,
-  mapProposalToDecision,
-} from "./agent/map-proposal.ts";
-import { contextDigest } from "./agent/tools.ts";
-import type { FailureClassifier } from "./agent/failure-classifier.ts";
-import type { NarrativeService } from "./agent/narrative.ts";
-import {
-  evaluateAndPlanEventMicrotrade,
-  isEventMicrotradeTriggerType,
-  type EventMicrotradeTrigger,
-} from "./event-microtrade-hook.ts";
-import { softAppendExecutionLog } from "../services/keeperhub-execution-log.ts";
-import { capitalLog, deskLog } from "../lib/logger.ts";
 
 // ── Signal → strategy mapping ───────────────────────────
 
@@ -392,6 +393,8 @@ export interface DeskControlPlaneDeps {
   killSwitch: KillSwitchService;
   strategyRunner: StrategyRunner;
   signals: DeskSignalRepository;
+  /** Optional public Alert repository for live causal-chain updates. */
+  alertRepo?: PublicAlertRepository | null | undefined;
   executionBridge?: ExecutionBridge | null;
 
   /**
@@ -477,9 +480,11 @@ function asString(value: unknown): string | undefined {
   return undefined;
 }
 
-function agentFieldsFromSnapshot(
-  snapshot: unknown,
-): { thesis: string | null; confidence: number | null; action: string | null } {
+function agentFieldsFromSnapshot(snapshot: unknown): {
+  thesis: string | null;
+  confidence: number | null;
+  action: string | null;
+} {
   const rec =
     snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
       ? (snapshot as Record<string, unknown>)
@@ -617,16 +622,13 @@ export function toPublicTicketNarrative(row: DeskTicketRow): PublicDeskTicketNar
         .filter((x): x is { txHash: string; url: string } => x != null)
     : [];
 
-  const primaryProtectHash =
-    fillTxHashes[0] ?? asOptionalString(base.txHash) ?? null;
+  const primaryProtectHash = fillTxHashes[0] ?? asOptionalString(base.txHash) ?? null;
   const protectStatusUrl =
     linkProtect && primaryProtectHash
       ? flashbotsProtectStatusUrl(primaryProtectHash, chainId)
       : null;
 
-  const auditFields = publicExecutionAuditFields(
-    parseExecutionAuditFromPayload(payload),
-  );
+  const auditFields = publicExecutionAuditFields(parseExecutionAuditFromPayload(payload));
 
   return {
     ...base,
@@ -699,20 +701,11 @@ function inventoryFromMark(mark: DeskPositionMark): StrategyInventory {
   const aave = mark.aave;
   // Prefer exact aEthLINK balance; fall back to collateralUsd/price estimate.
   let aaveLinkSupplied: number | undefined;
-  if (
-    aave.aLinkSupplied != null &&
-    Number.isFinite(aave.aLinkSupplied) &&
-    aave.aLinkSupplied > 0
-  ) {
+  if (aave.aLinkSupplied != null && Number.isFinite(aave.aLinkSupplied) && aave.aLinkSupplied > 0) {
     aaveLinkSupplied = aave.aLinkSupplied;
   } else {
     const linkUsd = mark.linkUsd;
-    if (
-      linkUsd != null &&
-      linkUsd > 0 &&
-      aave.totalDebtUsd < 0.01 &&
-      aave.totalCollateralUsd > 0
-    ) {
+    if (linkUsd != null && linkUsd > 0 && aave.totalDebtUsd < 0.01 && aave.totalCollateralUsd > 0) {
       aaveLinkSupplied = aave.totalCollateralUsd / linkUsd;
     }
   }
@@ -830,6 +823,43 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
    */
   let lastAgentMemory: PublicDeskAgentSummary | null = null;
 
+  async function syncAlertCausalMetadata(
+    signal: DeskSignalRow | null | undefined,
+    metadata: {
+      policyVerdict?: DeskPolicyVerdict | null;
+      actionStatus?: AlertActionStatus;
+      intentId?: string | null;
+      ticketId?: string | null;
+      actionTransactionHash?: string | null;
+      actionKeeperHubRunId?: string | null;
+      actionExplorerUrl?: string | null;
+    },
+  ): Promise<void> {
+    const alertId = signal?.source_alert_id?.trim();
+    const alertRepo = deps.alertRepo;
+    const updateCausalMetadata = alertRepo?.updateCausalMetadata;
+    if (!alertId || !alertRepo || !updateCausalMetadata) return;
+
+    try {
+      const result = await updateCausalMetadata.call(alertRepo, alertId, metadata);
+      if (!result.ok) {
+        deskLog.warn("alert causal update rejected", {
+          alertId,
+          signalId: signal?.id ?? null,
+          error: result.error.message,
+        });
+      }
+    } catch (error) {
+      // Causal projection is observability. It must never authorize, cancel,
+      // or otherwise change the execution path of an already-evaluated intent.
+      deskLog.warn("alert causal update failed", {
+        alertId,
+        signalId: signal?.id ?? null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async function safeMark(persist: boolean): Promise<{
     mark: DeskPositionMark | null;
     markError?: string;
@@ -853,9 +883,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
     }
   }
 
-  async function lastMoveAt(
-    direction: "topup" | "sweep",
-  ): Promise<string | null> {
+  async function lastMoveAt(direction: "topup" | "sweep"): Promise<string | null> {
     const result = await deps.capitalMoves.findLatestByDirection(direction);
     if (!result.ok) throw result.error;
     return result.value?.created_at ?? null;
@@ -895,14 +923,13 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
    * P2-2: parallelize independent reads for agent context snapshot.
    */
   async function buildAgentContext(signalLimit: number): Promise<DeskAgentContext> {
-    const [markBundle, signalsResult, intents, capitalResult, openByStrategy] =
-      await Promise.all([
-        safeMark(false),
-        deps.signals.listRecent(signalLimit),
-        deps.intents.listRecent(20),
-        deps.capitalMoves.listRecent(10),
-        buildOpenByStrategy(),
-      ]);
+    const [markBundle, signalsResult, intents, capitalResult, openByStrategy] = await Promise.all([
+      safeMark(false),
+      deps.signals.listRecent(signalLimit),
+      deps.intents.listRecent(20),
+      deps.capitalMoves.listRecent(10),
+      buildOpenByStrategy(),
+    ]);
 
     if (!signalsResult.ok) throw signalsResult.error;
     if (!capitalResult.ok) throw capitalResult.error;
@@ -925,7 +952,11 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
     let gasGwei: number | null = null;
     for (const s of signalsResult.value) {
       const features = featuresFromSignal(s);
-      if (features.gasRegime === "normal" || features.gasRegime === "elevated" || features.gasRegime === "critical") {
+      if (
+        features.gasRegime === "normal" ||
+        features.gasRegime === "elevated" ||
+        features.gasRegime === "critical"
+      ) {
         gasRegime = features.gasRegime;
       }
       const g = asNumber(features.gasGwei);
@@ -958,9 +989,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         totalDebtUsd: aave?.totalDebtUsd ?? null,
         ethUsd: mark?.ethUsd ?? null,
         linkUsd: mark?.linkUsd ?? null,
-        ...(inv?.aaveLinkSupplied != null
-          ? { aaveLinkSupplied: inv.aaveLinkSupplied }
-          : {}),
+        ...(inv?.aaveLinkSupplied != null ? { aaveLinkSupplied: inv.aaveLinkSupplied } : {}),
       },
       policy: {
         maxTradeUsdc: deps.config.maxTradeUsdc,
@@ -1008,8 +1037,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       lastFailedByStrategy,
       capitalMoves,
       lastCapitalSummary: lastMove
-        ? `${lastMove.direction} ${lastMove.amountUsdc} USDC` +
-          (lastMove.reason ? ` (${lastMove.reason})` : "")
+        ? `${lastMove.direction} ${lastMove.amountUsdc} USDC${lastMove.reason ? ` (${lastMove.reason})` : ""}`
         : null,
       gasRegime,
       gasGwei,
@@ -1167,12 +1195,10 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
     try {
       const result = await deps.agentRuns.linkIntent(agentRunId, intentId);
       if (!result.ok) {
-        console.error(
-          "[desk-agent] linkIntent failed:",
-          result.error.message,
-          result.error.code,
-          { agentRunId, intentId },
-        );
+        console.error("[desk-agent] linkIntent failed:", result.error.message, result.error.code, {
+          agentRunId,
+          intentId,
+        });
         return;
       }
       if (lastAgentMemory) {
@@ -1201,13 +1227,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       paused,
       forceDefendEnabled: agentConfig.forceDefendOnCriticalHf,
     });
-    proposal = applyMaintenanceOverrideFromMark(
-      proposal,
-      mark,
-      deps.config,
-      paused,
-      killArmed,
-    );
+    proposal = applyMaintenanceOverrideFromMark(proposal, mark, deps.config, paused, killArmed);
     return proposal;
   }
 
@@ -1290,9 +1310,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       });
       let rows: MonitoredEventRow[] = [];
       if (qualified.ok) {
-        rows = qualified.value.filter((r) =>
-          isEventMicrotradeTriggerType(r.event_type),
-        );
+        rows = qualified.value.filter((r) => isEventMicrotradeTriggerType(r.event_type));
       }
       if (rows.length === 0) {
         // listInWindow without status (e.g. status column filter unavailable)
@@ -1304,17 +1322,14 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         });
         if (anyStatus.ok) {
           rows = anyStatus.value.filter(
-            (r) =>
-              isEventMicrotradeTriggerType(r.event_type) &&
-              r.status === "qualified",
+            (r) => isEventMicrotradeTriggerType(r.event_type) && r.status === "qualified",
           );
         }
       }
       // Newest first
       rows = [...rows].sort(
         (a, b) =>
-          Date.parse(b.captured_at || b.created_at) -
-          Date.parse(a.captured_at || a.created_at),
+          Date.parse(b.captured_at || b.created_at) - Date.parse(a.captured_at || a.created_at),
       );
       return rows.map((r) => ({
         monitoredEventId: r.id,
@@ -1343,9 +1358,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
     async markLive(persist = false) {
       if (!deps.positions || !deskAddress) {
         throw new Error(
-          deskAddress
-            ? "Position service not configured"
-            : "DESK_WALLET_ADDRESS is not configured",
+          deskAddress ? "Position service not configured" : "DESK_WALLET_ADDRESS is not configured",
         );
       }
       return deps.positions.mark({ persist, deskAddress });
@@ -1530,7 +1543,10 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         };
       }
 
-      const result = await deps.agent!.run(context);
+      if (!deps.agent) {
+        throw new Error("Desk agent unavailable after mandatory-path preflight");
+      }
+      const result = await deps.agent.run(context);
       const agentRunId = await persistAgentRun({
         proposal: result.proposal,
         context,
@@ -1609,9 +1625,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
 
       const lastTopup = await deps.capitalMoves.findLatestByDirection("topup");
       if (!lastTopup.ok) throw lastTopup.error;
-      const lastTopupAtMs = lastTopup.value
-        ? new Date(lastTopup.value.created_at).getTime()
-        : null;
+      const lastTopupAtMs = lastTopup.value ? new Date(lastTopup.value.created_at).getTime() : null;
 
       if (!deps.capitalManager) {
         return {
@@ -1672,8 +1686,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         if (thrash && freeUsdcOnDesk + 1e-9 < deps.config.minFreeUsdc) {
           suppressMaxAumSweep = true;
           console.warn(
-            "[desk.capital] desk_powder_thrash_detected — suppressing max-AUM sweeps " +
-              `until free USDC ≥ minFree (${deps.config.minFreeUsdc})`,
+            `[desk.capital] desk_powder_thrash_detected — suppressing max-AUM sweeps until free USDC ≥ minFree (${deps.config.minFreeUsdc})`,
           );
           await softAppendExecLog({
             status: "succeeded",
@@ -1684,9 +1697,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
               freeUsdcOnDesk,
               minFreeUsdc: deps.config.minFreeUsdc,
               deskEquityUsdc,
-              recentSweepCount: moves
-                .slice(0, 3)
-                .filter((m) => m.direction === "sweep").length,
+              recentSweepCount: moves.slice(0, 3).filter((m) => m.direction === "sweep").length,
               recentShortfallFills: shortfallFills.slice(0, 3).map((i) => i.id),
             },
           });
@@ -1718,8 +1729,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         topupChunkUsdc: deps.config.topupChunkUsdc,
         freeLinkOnDesk: bodyFreeLink ?? mark?.link ?? 0,
         linkUsdPrice: bodyLinkUsd ?? mark?.linkUsd ?? null,
-        aaveTotalCollateralUsd:
-          bodyAaveCollateral ?? mark?.aave.totalCollateralUsd ?? 0,
+        aaveTotalCollateralUsd: bodyAaveCollateral ?? mark?.aave.totalCollateralUsd ?? 0,
         aaveTotalDebtUsd: bodyAaveDebt ?? mark?.aave.totalDebtUsd ?? 0,
         ...(bodyAaveLink != null
           ? { aaveLinkSupplied: bodyAaveLink }
@@ -1768,9 +1778,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       const tickStartedAt = new Date().toISOString();
       const source = (asString(body.source) as DeskHeartbeatSource | undefined) ?? "api";
       const allowedSources = new Set(["api", "scheduler", "workflow"]);
-      const heartbeatSource = allowedSources.has(source)
-        ? (source as DeskHeartbeatSource)
-        : "api";
+      const heartbeatSource = allowedSources.has(source) ? (source as DeskHeartbeatSource) : "api";
 
       const heartbeat = await deps.heartbeats.touch(heartbeatSource);
       const execute = asBoolean(body.execute, false);
@@ -1912,9 +1920,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
               signalId: match.signal?.id ?? null,
               signalType: match.signal?.signal_type ?? strategy,
               strategy,
-              planAction: mapped.skipRiskIncreasing
-                ? "agent_hold"
-                : "agent_not_authorized",
+              planAction: mapped.skipRiskIncreasing ? "agent_hold" : "agent_not_authorized",
               reasonCodes: mapped.skipRiskIncreasing
                 ? [
                     "agent_skip_all_strategies",
@@ -1928,6 +1934,12 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
                       : "agent_no_preferred_strategy",
                     "llm_path_mandatory",
                   ],
+            });
+            await syncAlertCausalMetadata(match.signal, {
+              ...(match.signal?.policy_verdict
+                ? { policyVerdict: match.signal.policy_verdict }
+                : {}),
+              actionStatus: mapped.skipRiskIncreasing ? "deferred" : "ignored",
             });
             continue;
           }
@@ -1964,8 +1976,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
               lastMaintenanceAtMs,
               signalId: match.signal?.id ?? null,
               agentProposal,
-              agentNotionalCapUsdc:
-                mapped.notionalCapUsdc > 0 ? mapped.notionalCapUsdc : undefined,
+              agentNotionalCapUsdc: mapped.notionalCapUsdc > 0 ? mapped.notionalCapUsdc : undefined,
             });
           } catch (error) {
             evaluations.push({
@@ -1973,17 +1984,32 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
               signalType: match.signal?.signal_type ?? strategy,
               strategy,
               planAction: "error",
-              reasonCodes: [
-                error instanceof Error ? error.message : "evaluate_failed",
-              ],
+              reasonCodes: [error instanceof Error ? error.message : "evaluate_failed"],
+            });
+            await syncAlertCausalMetadata(match.signal, {
+              ...(match.signal?.policy_verdict
+                ? { policyVerdict: match.signal.policy_verdict }
+                : {}),
+              actionStatus: "failed",
             });
             continue;
           }
 
+          const plannedActionStatus: AlertActionStatus = evalResult.intent
+            ? "pending"
+            : evalResult.plan.action === "ignore"
+              ? "ignored"
+              : "deferred";
+          await syncAlertCausalMetadata(match.signal, {
+            ...(match.signal?.policy_verdict ? { policyVerdict: match.signal.policy_verdict } : {}),
+            actionStatus: plannedActionStatus,
+            ...(evalResult.intent ? { intentId: evalResult.intent.id } : {}),
+          });
+
           evaluations.push({
             signalId: match.signal?.id ?? null,
-            signalType: match.signal?.signal_type ??
-              (match.synthetic ? "maintenance_inventory" : strategy),
+            signalType:
+              match.signal?.signal_type ?? (match.synthetic ? "maintenance_inventory" : strategy),
             strategy,
             planAction: evalResult.plan.action,
             policyAllow: evalResult.policy?.allow,
@@ -2006,22 +2032,46 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
                 deskAddress,
                 inventory,
                 publishTicket: true,
-                signalType:
-                  match.signal?.signal_type ?? "maintenance_inventory",
+                signalType: match.signal?.signal_type ?? "maintenance_inventory",
                 signalFeatures: features,
               });
               executions.push(execResult);
+              const executionActionStatus: AlertActionStatus =
+                execResult.intent.status === "filled"
+                  ? "filled"
+                  : execResult.intent.status === "failed"
+                    ? "failed"
+                    : "submitted";
+              await syncAlertCausalMetadata(match.signal, {
+                ...(match.signal?.policy_verdict
+                  ? { policyVerdict: match.signal.policy_verdict }
+                  : {}),
+                actionStatus: executionActionStatus,
+                intentId: evalResult.intent.id,
+                ...(execResult.ticket?.ticket.id ? { ticketId: execResult.ticket.ticket.id } : {}),
+                ...(execResult.receipt?.txHash
+                  ? { actionTransactionHash: execResult.receipt.txHash }
+                  : {}),
+                ...(execResult.receipt?.keeperHubRunId || execResult.ticket?.keeperHubRunId
+                  ? {
+                      actionKeeperHubRunId:
+                        execResult.receipt?.keeperHubRunId ?? execResult.ticket?.keeperHubRunId,
+                    }
+                  : {}),
+                ...(execResult.receipt?.explorerUrl || execResult.ticket?.explorerUrl
+                  ? {
+                      actionExplorerUrl:
+                        execResult.receipt?.explorerUrl ?? execResult.ticket?.explorerUrl,
+                    }
+                  : {}),
+              });
               if (execResult.intent.status === "filled") {
                 await touchLastMaintenanceAt(
-                  execResult.intent.reason_codes ??
-                    evalResult.plan.reasonCodes,
+                  execResult.intent.reason_codes ?? evalResult.plan.reasonCodes,
                 );
               }
 
-              if (
-                execResult.intent.status === "failed" &&
-                deps.failureClassifier
-              ) {
+              if (execResult.intent.status === "failed" && deps.failureClassifier) {
                 try {
                   const classification = await deps.failureClassifier.classify({
                     strategy,
@@ -2055,8 +2105,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       // Prefer tiny maintenance rebalance; oracle_amm only if basis valid.
       let eventMicrotrade: DeskTickResult["eventMicrotrade"];
       if (mark && !deps.getDeskPaused() && !deps.config.paused) {
-        const tickHasIntent = evaluations.some((e) => e.intentId) ||
-          executions.length > 0;
+        const tickHasIntent = evaluations.some((e) => e.intentId) || executions.length > 0;
         const nowMs = Date.now();
         const cfg = deps.config;
         const lookbackMs = cfg.eventMicrotradeLookbackMs;
@@ -2141,20 +2190,15 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
           planResult.strategy
         ) {
           const strategy = planResult.strategy;
-          const microFeatures: import("./types.ts").DeskSignalFeatures =
-            oracleFeatures ?? {
-              totalCollateralUsd: inventory.totalCollateralUsd,
-              totalDebtUsd: inventory.totalDebtUsd,
-            };
+          const microFeatures: import("./types.ts").DeskSignalFeatures = oracleFeatures ?? {
+            totalCollateralUsd: inventory.totalCollateralUsd,
+            totalDebtUsd: inventory.totalDebtUsd,
+          };
 
           await softAppendExecutionLog(deps.execLogRepo, {
             action_type: "desk_event_microtrade",
-            entity_type: eligibility.trigger?.monitoredEventId
-              ? "monitored_event"
-              : "desk",
-            entity_id:
-              eligibility.trigger?.monitoredEventId ??
-              heartbeat.id,
+            entity_type: eligibility.trigger?.monitoredEventId ? "monitored_event" : "desk",
+            entity_id: eligibility.trigger?.monitoredEventId ?? heartbeat.id,
             status: "started",
             message: `Event microtrade started (${planResult.mode}, trigger=${eligibility.trigger?.eventType ?? "unknown"})`,
             started_at: new Date().toISOString(),
@@ -2163,8 +2207,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
               mode: planResult.mode,
               strategy,
               trigger: eligibility.trigger?.eventType ?? null,
-              monitored_event_id:
-                eligibility.trigger?.monitoredEventId ?? null,
+              monitored_event_id: eligibility.trigger?.monitoredEventId ?? null,
               notional_usdc: planResult.plan.notionalUsdc,
               reason_codes: planResult.plan.reasonCodes,
             },
@@ -2187,8 +2230,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
               agentNotionalCapUsdc: planResult.plan.notionalUsdc,
             });
           } catch (error) {
-            const msg =
-              error instanceof Error ? error.message : "event_microtrade_eval_failed";
+            const msg = error instanceof Error ? error.message : "event_microtrade_eval_failed";
             evaluations.push({
               signalId: null,
               signalType: "event_linked_microtrade",
@@ -2234,10 +2276,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
               strategy,
               planAction: "policy_deny",
               policyAllow: false,
-              reasonCodes: [
-                ...evalResult.plan.reasonCodes,
-                ...evalResult.policy.reasonCodes,
-              ],
+              reasonCodes: [...evalResult.plan.reasonCodes, ...evalResult.policy.reasonCodes],
             });
             await softAppendExecutionLog(deps.execLogRepo, {
               action_type: "desk_event_microtrade",
@@ -2275,26 +2314,21 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
                 signalType: "event_linked_microtrade",
                 signalFeatures: {
                   ...microFeatures,
-                  monitoredEventId:
-                    eligibility.trigger?.monitoredEventId ?? null,
+                  monitoredEventId: eligibility.trigger?.monitoredEventId ?? null,
                   eventType: eligibility.trigger?.eventType ?? null,
                 },
               });
               executions.push(execResult);
               if (execResult.intent.status === "filled") {
                 await touchLastMaintenanceAt(
-                  execResult.intent.reason_codes ??
-                    planResult.plan.reasonCodes,
+                  execResult.intent.reason_codes ?? planResult.plan.reasonCodes,
                 );
               }
               await softAppendExecutionLog(deps.execLogRepo, {
                 action_type: "desk_event_microtrade",
                 entity_type: "desk_intent",
                 entity_id: evalResult.intent.id,
-                status:
-                  execResult.intent.status === "filled"
-                    ? "succeeded"
-                    : "failed",
+                status: execResult.intent.status === "filled" ? "succeeded" : "failed",
                 message:
                   execResult.intent.status === "filled"
                     ? `Event microtrade filled (${planResult.mode})`
@@ -2304,12 +2338,10 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
                   phase: "event_microtrade",
                   mode: planResult.mode,
                   strategy,
-                  monitored_event_id:
-                    eligibility.trigger?.monitoredEventId ?? null,
+                  monitored_event_id: eligibility.trigger?.monitoredEventId ?? null,
                   intent_id: evalResult.intent.id,
                   keeper_hub_run_id:
-                    execResult.receipt?.keeperHubRunId ??
-                    execResult.intent.keeper_hub_run_id,
+                    execResult.receipt?.keeperHubRunId ?? execResult.intent.keeper_hub_run_id,
                   tx_hash: execResult.receipt?.txHash ?? null,
                 },
               });
@@ -2325,8 +2357,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
                   phase: "event_microtrade",
                   mode: planResult.mode,
                   intent_id: evalResult.intent.id,
-                  monitored_event_id:
-                    eligibility.trigger?.monitoredEventId ?? null,
+                  monitored_event_id: eligibility.trigger?.monitoredEventId ?? null,
                 },
               });
             }
@@ -2391,13 +2422,9 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       const failedCount = executions.filter((e) => e.intent.status === "failed").length;
       await softAppendExecLog({
         status: "succeeded",
-        message:
-          `Desk tick complete: agent=${agentProposal?.action ?? "none"}` +
-          ` evals=${evaluations.length} execs=${executions.length}` +
-          (agentRunId ? ` agentRun=${agentRunId}` : "") +
-          (eventMicrotrade?.allowed
-            ? ` eventMicrotrade=${eventMicrotrade.mode ?? "yes"}`
-            : ""),
+        message: `Desk tick complete: agent=${agentProposal?.action ?? "none"} evals=${evaluations.length} execs=${executions.length}${
+          agentRunId ? ` agentRun=${agentRunId}` : ""
+        }${eventMicrotrade?.allowed ? ` eventMicrotrade=${eventMicrotrade.mode ?? "yes"}` : ""}`,
         entityType: "desk_tick",
         entityId: heartbeat.id,
         startedAt: tickStartedAt,
@@ -2543,8 +2570,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       }
 
       const { mark } = await safeMark(true);
-      const freeUsdc =
-        asNumber(body.freeUsdcOnDesk) ?? mark?.usdc ?? 0;
+      const freeUsdc = asNumber(body.freeUsdcOnDesk) ?? mark?.usdc ?? 0;
 
       const tripResult = await deps.killSwitch.trip({
         reason,
