@@ -91,6 +91,80 @@ describe("createPremiumDeepDiveGenerationService", () => {
     expect(langchainAgents.invokeStructuredAgent).toHaveBeenCalled();
   });
 
+  it("rejects placeholder content and falls through to OpenAI", async () => {
+    const placeholder = {
+      summaryPublic: "...",
+      sections: [
+        { title: "Executive Summary", body: "...", findings: ["...", "..."] },
+        { title: "Key Findings", body: "...", findings: ["..."] },
+        { title: "Risk Notes", body: "...", findings: ["..."] },
+      ],
+      analysis: "...",
+      confidence: "medium",
+    };
+    const openAiNarrative = {
+      summaryPublic: "Three CoW Protocol swaps formed a concentrated Ethereum flow cluster.",
+      sections: [
+        {
+          title: "Executive Summary",
+          body: "Three qualified swaps total roughly $3.1 million and concentrate activity in USDC and WETH.",
+          findings: ["The largest event represents the majority of observed notional."],
+        },
+        {
+          title: "Risk Notes",
+          body: "The events show concentration, but the supplied fields do not identify the counterparties or intent.",
+          findings: ["Treat the cluster as directional flow evidence rather than a confirmed trade thesis."],
+        },
+      ],
+      analysis:
+        "The cluster is notable for its notional concentration and short observation window. The available event fields support a flow-composition reading, but they do not establish whether the activity reflects rebalancing, execution routing, or a single coordinated actor.",
+      confidence: "medium",
+    };
+
+    vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
+    const invokeSpy = vi
+      .spyOn(langchainAgents, "invokeStructuredAgent")
+      .mockImplementation(async (params) => {
+        if (params.provider === "groq") {
+          return {
+            structured: placeholder,
+            rawText: JSON.stringify(placeholder),
+            toolCallCount: 0,
+          };
+        }
+        return {
+          structured: openAiNarrative,
+          rawText: JSON.stringify(openAiNarrative),
+          toolCallCount: 0,
+        };
+      });
+
+    const service = createPremiumDeepDiveGenerationService({
+      gemini: { apiKey: "", model: "gemini-test" },
+      openai: { apiKey: "openai-key", model: "gpt-test" },
+      groq: { apiKey: "groq-key", model: "groq-test" },
+    });
+
+    const result = await service.generateNarrative({
+      kind: "cluster",
+      label: "cow protocol",
+      events: [makeEvent("e1"), makeEvent("e2"), makeEvent("e3")],
+      defaultSummaryPublic: "Default teaser",
+      fallback: {
+        sections: [{ title: "Executive Summary", body: "Fallback" }],
+        analysis: "Fallback analysis",
+      },
+    });
+
+    expect(result.usedLlm).toBe(true);
+    expect(result.generationProvider).toBe("openai");
+    expect(result.analysis).toContain("notional concentration");
+    expect(invokeSpy.mock.calls.map(([params]) => params.provider)).toEqual([
+      "groq",
+      "openai",
+    ]);
+  });
+
   it("falls back when all providers return invalid JSON", async () => {
     vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);
     vi.spyOn(langchainAgents, "invokeStructuredAgent").mockResolvedValue({

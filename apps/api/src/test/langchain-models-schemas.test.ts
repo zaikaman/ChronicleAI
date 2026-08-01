@@ -15,6 +15,7 @@ import {
   failureClassificationSchema,
   fitPromptToTokenBudget,
   invokeStructuredAgent,
+  isAzureOpenAIEndpoint,
   normalizeGeminiBaseUrl,
   premiumNarrativeSchema,
   signalFusionSchema,
@@ -72,6 +73,19 @@ describe("normalizeGeminiBaseUrl", () => {
     expect(normalizeGeminiBaseUrl(undefined)).toBeUndefined();
     expect(normalizeGeminiBaseUrl("")).toBeUndefined();
     expect(normalizeGeminiBaseUrl("   ")).toBeUndefined();
+  });
+});
+
+describe("isAzureOpenAIEndpoint", () => {
+  it("recognizes Azure OpenAI v1 endpoints", () => {
+    expect(isAzureOpenAIEndpoint("https://example.services.ai.azure.com/openai/v1")).toBe(true);
+    expect(isAzureOpenAIEndpoint("https://example.openai.azure.com/openai/v1")).toBe(true);
+  });
+
+  it("does not classify standard OpenAI or unrelated proxy URLs as Azure", () => {
+    expect(isAzureOpenAIEndpoint("https://api.openai.com/v1")).toBe(false);
+    expect(isAzureOpenAIEndpoint("https://proxy.example.com/v1")).toBe(false);
+    expect(isAzureOpenAIEndpoint(undefined)).toBe(false);
   });
 });
 

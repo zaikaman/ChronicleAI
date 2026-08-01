@@ -1,5 +1,5 @@
 // LLM-backed premium deep-dive / historical narrative generation.
-// Same provider fallback as alerts/digests: Gemini → Groq → OpenAI.
+// Same provider fallback as alerts/digests: Groq → OpenAI.
 // Grounded only in provided monitored events — never invents txs/protocols.
 
 import {
@@ -60,7 +60,29 @@ export interface PremiumDeepDiveGenerationService {
 }
 
 const SYSTEM_INSTRUCTION =
-  "You are ChronicleAI's premium intelligence desk. Write paid-tier on-chain research that is clearly deeper than free public alerts. Be precise, sourced to the provided events, and useful to serious market readers and automated clients. Never invent transactions, protocols, or magnitudes not present in the data.";
+  "You are ChronicleAI's premium intelligence desk. Write paid-tier on-chain research that is clearly deeper than free public alerts. Be precise, sourced to the provided events, and useful to serious market readers and automated clients. Never invent transactions, protocols, or magnitudes not present in the data. Never return placeholders, ellipses, empty strings, or template text; every narrative field must contain concrete event-grounded content.";
+
+const PLACEHOLDER_ONLY_PATTERN = /^(?:\.{3,}|…+|tbd|todo|n\/?a|none|null|unknown|placeholder)$/iu;
+const PLACEHOLDER_TEMPLATE_PATTERN = /^(?:<[^>]+>|\[[^\]]+\])$/u;
+const MIN_SUMMARY_LENGTH = 12;
+const MIN_SECTION_CONTENT_LENGTH = 8;
+const MIN_ANALYSIS_LENGTH = 40;
+
+/**
+ * LLMs sometimes satisfy the JSON shape by copying the example placeholders.
+ * Treat those responses as failed generations so the next provider can run.
+ */
+function meaningfulText(value: unknown, minimumLength: number): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (text.length < minimumLength) return null;
+  if (PLACEHOLDER_ONLY_PATTERN.test(text) || PLACEHOLDER_TEMPLATE_PATTERN.test(text)) {
+    return null;
+  }
+  if (/\.{3,}|…/u.test(text)) return null;
+  if (!/[\p{L}\p{N}]/u.test(text)) return null;
+  return text;
+}
 
 function magnitudeLine(event: MonitoredEventRow): string {
   const mag = event.magnitude;
@@ -142,7 +164,8 @@ function buildPrompt(params: PremiumDeepDiveGenerationParams): string {
     "",
     "IMPORTANT RULES:",
     "- This content is PREMIUM (paid). Go deeper than public alerts: multi-event structure, composition, risk framing, ranked findings, scenario implications.",
-    "- Do NOT invent events, txs, protocols, or numbers. If data is thin, say so and lower confidence.",
+    "- Do NOT invent events, txs, protocols, or numbers. If data is thin, write a concrete limitation grounded in the listed events and lower confidence.",
+    "- Never return ellipses (... or …), bracketed placeholders, template instructions, or empty strings.",
     "- summaryPublic is a TEASER for the unpaid catalog card: hook the buyer without dumping the full private analysis.",
     "- sections: 3–6 sections with title + body and/or findings[]. Include an Executive Summary section.",
     "- analysis: longer interpretive essay (2–5 short paragraphs) clearly labeled as interpretation.",
@@ -151,15 +174,14 @@ function buildPrompt(params: PremiumDeepDiveGenerationParams): string {
     "",
     "Respond ONLY with JSON (no markdown fences) using this shape:",
     JSON.stringify({
-      summaryPublic: "Short public teaser (1–3 sentences)…",
+      summaryPublic: "",
       sections: [
-        { title: "Executive Summary", body: "…" },
-        { title: "Key Findings", findings: ["…", "…"] },
-        { title: "Risk / Structure Notes", body: "…" },
+        { title: "", body: "", findings: [] },
       ],
-      analysis: "Longer premium interpretation…",
-      confidence: "high|medium|low",
+      analysis: "",
+      confidence: "medium",
     }),
+    "The JSON above shows field types only. Replace every empty value with concrete content from SOURCE EVENTS before responding.",
   );
 
   return lines.join("\n");
@@ -173,7 +195,7 @@ function validateNarrative(
     const jsonStr = extractJsonObject(raw) ?? raw;
     const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
 
-    if (!Array.isArray(parsed.sections) || typeof parsed.analysis !== "string") {
+    if (!Array.isArray(parsed.sections)) {
       return null;
     }
 
@@ -187,15 +209,18 @@ function validateNarrative(
     for (const item of parsed.sections.slice(0, 8)) {
       if (!item || typeof item !== "object") continue;
       const section = item as Record<string, unknown>;
-      if (typeof section.title !== "string" || !section.title.trim()) continue;
-      const next: PremiumLlmSection = { title: section.title.trim().slice(0, 120) };
-      if (typeof section.body === "string" && section.body.trim()) {
-        next.body = section.body.trim().slice(0, 4000);
+      const title = meaningfulText(section.title, 2);
+      if (!title) continue;
+      const next: PremiumLlmSection = { title: title.slice(0, 120) };
+      const body = meaningfulText(section.body, MIN_SECTION_CONTENT_LENGTH);
+      if (body) {
+        next.body = body.slice(0, 4000);
       }
       if (Array.isArray(section.findings)) {
         const findings = section.findings
-          .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
-          .map((f) => f.trim().slice(0, 500))
+          .map((f) => meaningfulText(f, MIN_SECTION_CONTENT_LENGTH))
+          .filter((f): f is string => f !== null)
+          .map((f) => f.slice(0, 500))
           .slice(0, 12);
         if (findings.length > 0) next.findings = findings;
       }
@@ -206,13 +231,13 @@ function validateNarrative(
 
     if (sections.length === 0) return null;
 
-    const analysis = parsed.analysis.trim().slice(0, 8000);
+    const analysis = meaningfulText(parsed.analysis, MIN_ANALYSIS_LENGTH)?.slice(0, 8000);
     if (!analysis) return null;
 
     const summaryPublic =
-      typeof parsed.summaryPublic === "string" && parsed.summaryPublic.trim().length > 0
-        ? parsed.summaryPublic.trim().slice(0, 600)
-        : params.defaultSummaryPublic;
+      meaningfulText(parsed.summaryPublic, MIN_SUMMARY_LENGTH)?.slice(0, 600) ??
+      meaningfulText(params.defaultSummaryPublic, MIN_SUMMARY_LENGTH) ??
+      params.defaultSummaryPublic;
 
     return { summaryPublic, sections, analysis, confidence };
   } catch {

@@ -121,6 +121,27 @@ export function normalizeGeminiBaseUrl(
 }
 
 /**
+ * Azure OpenAI's OpenAI-compatible v1 endpoint authenticates with `api-key`.
+ * Keep this detection narrow so ordinary OpenAI-compatible proxies continue
+ * using the standard bearer-key behavior.
+ */
+export function isAzureOpenAIEndpoint(baseUrl: string | undefined): boolean {
+  const trimmed = baseUrl?.trim();
+  if (!trimmed) return false;
+
+  try {
+    const hostname = new URL(trimmed).hostname.toLowerCase();
+    return (
+      hostname.endsWith(".openai.azure.com") ||
+      hostname.endsWith(".services.ai.azure.com") ||
+      hostname.endsWith(".cognitiveservices.azure.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build a LangChain chat model for a single Chronicle provider config.
  * Returns null when the API key is missing/blank.
  */
@@ -158,7 +179,15 @@ export function createChatModel(
       timeout: 300000,
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(config.baseUrl
-        ? { configuration: { baseURL: config.baseUrl, timeout: 300000 } }
+        ? {
+            configuration: {
+              baseURL: config.baseUrl,
+              timeout: 300000,
+              ...(isAzureOpenAIEndpoint(config.baseUrl)
+                ? { defaultHeaders: { "api-key": config.apiKey } }
+                : {}),
+            },
+          }
         : {}),
     });
   }

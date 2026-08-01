@@ -8,6 +8,7 @@ export {
   createChatModelsInOrder,
   orderedProviders,
   messageContentToText,
+  isAzureOpenAIEndpoint,
   normalizeGeminiBaseUrl,
   type ChronicleChatModel,
   type CreateChatModelOptions,
