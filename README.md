@@ -1,15 +1,42 @@
 # ChronicleAI
 
-> **The proof-first autonomous crypto intelligence desk.**
+> **The proof-first autonomous onchain response desk.**
 >
-> ChronicleAI observes onchain markets, publishes verifiable intelligence, sells deeper analysis, and—when policy allows—acts on that intelligence through KeeperHub.
+> ChronicleAI turns a live market signal into a policy-approved KeeperHub transaction and publishes the proof.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
 [![Tests](https://img.shields.io/badge/Tests-1054%20passing-brightgreen?style=for-the-badge)](README.md#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
-## The product in one sentence
+## Demo first
+
+ChronicleAI turns a live onchain signal into a policy-approved KeeperHub transaction and publishes the proof.
+
+The core loop is deliberately small:
+
+```mermaid
+flowchart LR
+    S[Live onchain signal] --> E[Plain-language alert]
+    E --> D[Desk proposal]
+    D --> G[Policy and preflight]
+    G --> K[KeeperHub workflow]
+    K --> T[Onchain transaction]
+    T --> P[Registry receipt and audit trail]
+```
+
+The alert explains why the action was proposed, the desk shows why it was allowed, and the proof surfaces show that KeeperHub actually executed it. Premium feeds, sponsored watches, treasury routing, and affiliate payouts extend this loop but are not required to understand the core demo.
+
+### The core demo
+
+| Step | Surface | Judge should see |
+| --- | --- | --- |
+| 1 | [Live alerts](https://chronicle-ai-web.vercel.app/alerts) | A real onchain signal and a plain-language explanation. |
+| 2 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | The proposed action, policy decision, and preflight status. |
+| 3 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, outcome, routing, and audit context. |
+| 4 | [Example onchain proof](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | The transaction that anyone can verify independently. |
+
+## Full system overview
 
 ChronicleAI is an autonomous onchain market desk with a public memory: it turns market signals into sourced alerts and digests, offers premium machine-readable intelligence over x402/MPP, and can convert a policy-approved insight into an auditable KeeperHub execution.
 
@@ -20,7 +47,7 @@ This is the distinction from a generic trading bot:
 - It **acts only after policy and preflight checks** instead of letting an LLM broadcast arbitrary calldata.
 - It **proves what happened** with registry receipts, KeeperHub run IDs, transaction hashes, routing metadata, and an activity trail.
 
-## The Last Mile, end to end
+## Full system architecture: the last mile
 
 ```mermaid
 flowchart LR
@@ -37,7 +64,7 @@ flowchart LR
 
 The same intelligence can be read, paid for, acted on, and independently verified. KeeperHub owns the execution step; ChronicleAI owns the intelligence, policy, product experience, and proof layer around it.
 
-## Judge in 30 seconds
+## Judge links
 
 | Requirement | Link |
 | --- | --- |
@@ -46,7 +73,7 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 | Live desk and audit timeline | [chronicle-ai-web.vercel.app/desk](https://chronicle-ai-web.vercel.app/desk) |
 | Registry contract | [`0xD8Deb4475a7E23E194Bc93f8739858Fb20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) |
 
-## What is actually running
+## Supporting surfaces and capabilities
 
 - **Public intelligence:** alerts, daily digests, trade tickets, capital-move records, and proof-of-publication receipts.
 - **Premium intelligence:** HTTP 402 routing with x402/MPP adapters for machine-readable feeds and paid analysis.
@@ -55,9 +82,9 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 - **Reliability layer:** preflight simulation, idempotency keys, private routing for material desk actions, gas and routing metadata, kill-switch controls, and structured outcome handling.
 - **Operator UX:** public Activity, Alerts, Premium, and Desk views make the agent’s work inspectable instead of asking users to trust a black box.
 
-## Verified KeeperHub execution proof
+## Deep proof set
 
-The repository includes 33 KeeperHub workflow definitions: 28 core workflows and 5 optional mainnet monitoring workflows. The following are the clean KeeperHub-backed proof set currently linked from the project:
+The core demo uses one signal-to-transaction path. The repository includes 33 KeeperHub workflow definitions (28 core workflows and 5 optional mainnet monitoring workflows); the following proof set is available for deeper inspection:
 
 | Surface / workflow | Action | Transaction |
 | --- | --- | --- |

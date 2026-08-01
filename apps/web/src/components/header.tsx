@@ -1,17 +1,17 @@
-import { ArrowDownRight } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { Link, useLocation } from "react-router-dom";
-import { useState, type ReactNode } from "react";
 import { ConnectWalletButton } from "@/features/wallet";
 import { prefetchRoute } from "@/lib/route-prefetch.ts";
+import { ArrowDownRight } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { type ReactNode, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 
 const navLinks = [
-  { label: "Alerts", href: "/alerts", description: "Live public market bulletins" },
-  { label: "Digest", href: "/digests/latest", description: "Latest daily intelligence report" },
-  { label: "Archive", href: "/publications", description: "All publications in one feed" },
-  { label: "Desk", href: "/desk", description: "Capital book, intents & trade tickets" },
-  { label: "Premium", href: "/premium", description: "Paid deep analysis & sponsorships" },
-  { label: "Activity", href: "/activity", description: "Public on-chain agent trail" },
+  { label: "Alerts", href: "/alerts", description: "Live onchain signals" },
+  { label: "Desk", href: "/desk", description: "Policy-gated action review" },
+  { label: "Activity", href: "/activity", description: "Public execution and proof trail" },
+  { label: "Digest", href: "/digests/latest", description: "Latest intelligence brief" },
+  { label: "Archive", href: "/publications", description: "Past publications and proof records" },
+  { label: "Premium", href: "/premium", description: "Paid intelligence and sponsorships" },
 ];
 
 const ease = [0.23, 1, 0.32, 1] as const;
@@ -34,8 +34,18 @@ function HamburgerIcon({ isOpen }: { isOpen: boolean }): ReactNode {
 }
 
 const CornerSVG = ({ className }: { className: string }) => (
-  <svg className={className} width="50" height="50" viewBox="0 0 50 50" fill="none" aria-hidden="true">
-    <path d="M5.50871e-06 0C-0.00788227 37.3001 8.99616 50.0116 50 50H5.50871e-06V0Z" fill="currentColor" />
+  <svg
+    className={className}
+    width="50"
+    height="50"
+    viewBox="0 0 50 50"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M5.50871e-06 0C-0.00788227 37.3001 8.99616 50.0116 50 50H5.50871e-06V0Z"
+      fill="currentColor"
+    />
   </svg>
 );
 
@@ -65,7 +75,11 @@ export function Header(): ReactNode {
       className="fixed shadow-2xl/20 rounded-b-4xl top-2.5 left-1/2 -translate-x-1/2 w-full max-w-5xl max-[1200px]:max-w-2xl bg-frame z-[9990] max-[850px]:top-0 max-[850px]:left-0 max-[850px]:right-0 max-[850px]:translate-x-0 max-[850px]:w-full max-[850px]:max-w-none max-[850px]:rounded-none max-[850px]:rounded-b-4xl max-[850px]:overflow-hidden border-b border-border/10"
     >
       <div className="h-20 max-[850px]:h-18 flex items-center justify-between px-4 max-[850px]:px-6">
-        <Link to="/" className="flex items-center gap-2 ml-4 max-[850px]:ml-0" onClick={closeMobile}>
+        <Link
+          to="/"
+          className="flex items-center gap-2 ml-4 max-[850px]:ml-0"
+          onClick={closeMobile}
+        >
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
             CAI
           </div>
@@ -74,7 +88,10 @@ export function Header(): ReactNode {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-0.5 max-[1200px]:gap-0 max-[850px]:hidden" aria-label="Primary">
+        <nav
+          className="flex items-center gap-0.5 max-[1200px]:gap-0 max-[850px]:hidden"
+          aria-label="Primary"
+        >
           {navLinks.map((link) => {
             const active = isActivePath(pathname, link.href);
             return (
@@ -85,7 +102,9 @@ export function Header(): ReactNode {
                 onMouseEnter={() => prefetchRoute(link.href)}
                 onFocus={() => prefetchRoute(link.href)}
                 className={`px-3 py-2 max-[1200px]:px-2.5 text-sm font-medium transition-colors rounded-full hover:bg-foreground/5 ${
-                  active ? "text-foreground bg-foreground/5" : "text-foreground/80 hover:text-foreground"
+                  active
+                    ? "text-foreground bg-foreground/5"
+                    : "text-foreground/80 hover:text-foreground"
                 }`}
               >
                 {link.label}
@@ -96,10 +115,10 @@ export function Header(): ReactNode {
 
         <div className="flex items-center gap-3 max-[850px]:hidden">
           <ConnectWalletButton data-testid="header-connect-wallet" />
-          <Link to="/digests/latest" className="group relative inline-flex items-center">
+          <Link to="/alerts" className="group relative inline-flex items-center">
             <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-xl bg-accent" />
             <span className="relative z-10 px-5 py-2.5 rounded-xl bg-foreground text-background text-sm font-medium">
-              Read digest
+              View live signal
             </span>
             <span className="relative -left-px z-10 w-9 h-9 rounded-xl flex items-center justify-center text-black">
               <ArrowDownRight className="w-4 h-4 transition-transform duration-300 group-hover:-rotate-45" />
@@ -166,13 +185,13 @@ export function Header(): ReactNode {
                     Unlock premium
                   </Link>
                   <Link
-                    to="/digests/latest"
+                    to="/alerts"
                     className="group relative inline-flex items-center"
                     onClick={closeMobile}
                   >
                     <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-2xl bg-accent" />
                     <span className="relative z-10 px-5 py-3 rounded-2xl bg-foreground text-background text-sm font-medium">
-                      Read digest
+                      View live signal
                     </span>
                     <span className="relative -left-px z-10 w-10 h-10 rounded-2xl flex items-center justify-center text-foreground">
                       <ArrowDownRight className="w-4 h-4 transition-transform duration-300 group-hover:-rotate-45" />

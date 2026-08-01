@@ -1,33 +1,23 @@
-import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 
 const faqs = [
   {
     question: "What is ChronicleAI?",
     answer:
-      "ChronicleAI is an autonomous on-chain newspaper and policy-gated market desk. It monitors blockchain events via KeeperHub, publishes free alerts and digests with proof-of-publication, sells premium intelligence through x402 and MPP, and runs a closed-loop trading book on Ethereum Sepolia — where an LLM proposes, hard policy decides, and KeeperHub executes.",
+      "ChronicleAI is a proof-first onchain response desk. It detects meaningful market signals, explains what matters, applies hard policy, and sends only approved actions through KeeperHub. Alerts, registry receipts, and execution logs make the result independently verifiable.",
   },
   {
     question: "What is Chronicle Desk?",
     answer:
-      "The desk is ChronicleAI's capital book: USDC inventory managed against AUM floors and ceilings, with three strategies (risk defend on Aave health factor, yield rotation via Uniswap + Aave, and oracle–AMM basis trades). Every risk-increasing intent is validated by policy; only then does KeeperHub run strategy workflows and anchor a trade ticket on ChronicleRegistry.",
+      "Chronicle Desk is the review surface for proposed onchain responses. It shows the signal, structured proposal, policy checks, preflight result, and KeeperHub execution state before a transaction can be sent.",
   },
   {
     question: "How is content and trade activity verified?",
     answer:
-      "Major digests, alerts, sponsored reports, and trade tickets are written through KeeperHub to ChronicleRegistry on Ethereum Sepolia. Open any publication or desk ticket for a clickable proof transaction, or visit Agent Activity for the public execution trail, treasury health, payouts, and capital moves — no login required.",
-  },
-  {
-    question: "How does paid intelligence access work?",
-    answer:
-      "Deeper market intelligence, historical feeds, and structured desk data can be gated. Humans pay with x402 (EIP-712 USDC on Base Sepolia via CDP); automated clients settle via MPP. Desk execution and registry proofs stay on Ethereum Sepolia. Sponsored watches let protocols fund dedicated monitoring campaigns with on-chain create and report receipts.",
-  },
-  {
-    question: "How is ChronicleAI self-sustaining?",
-    answer:
-      "Subscription, sponsorship, and micropayment revenue lands in a Para MPC treasury. The agent retains a safety buffer for gas and operations, can top up the desk book, and routes surplus to creator and affiliate wallets via KeeperHub-executed transfers — with public payout receipts on Activity.",
+      "Approved desk actions run through KeeperHub and anchor a receipt on ChronicleRegistry. The alert, policy decision, transaction hash, and public execution trail stay linked, so anyone can inspect what happened without logging in.",
   },
   {
     question: "Can the LLM trade freely?",
@@ -50,13 +40,12 @@ function FAQItem({
   onToggle: () => void;
 }): ReactNode {
   return (
-    <motion.div
+    <motion.li
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{ duration: 0.5, ease, delay: index * 0.05 }}
       className="rounded-2xl bg-frame p-5 shadow-sm sm:p-6"
-      role="listitem"
     >
       <button
         type="button"
@@ -78,23 +67,22 @@ function FAQItem({
       </button>
       <AnimatePresence initial={false}>
         {isOpen && (
-          <motion.div
+          <motion.section
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.3, ease }}
             className="overflow-hidden"
             id={`faq-answer-${index}`}
-            role="region"
             aria-labelledby={`faq-question-${index}`}
           >
             <p className="pt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
               {faq.answer}
             </p>
-          </motion.div>
+          </motion.section>
         )}
       </AnimatePresence>
-    </motion.div>
+    </motion.li>
   );
 }
 
@@ -122,20 +110,28 @@ export function FAQ(): ReactNode {
             Common questions
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
-            Newspaper proofs, desk policy, payments, and how KeeperHub keeps every action
-            auditable.
+            Signals, policy checks, KeeperHub execution, and the registry proof behind every
+            approved action.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="inline-flex">
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="inline-flex"
+            >
               <Link
-                to="/publications"
+                to="/alerts"
                 className="inline-flex cursor-pointer items-center rounded-xl bg-foreground px-6 py-2.5 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
               >
-                Browse Newspaper
+                View live signal
               </Link>
             </motion.div>
-            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="inline-flex">
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="inline-flex"
+            >
               <Link
                 to="/desk"
                 className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-frame px-6 py-2.5 text-sm font-semibold text-foreground transition-colors"
@@ -156,7 +152,7 @@ export function FAQ(): ReactNode {
           </div>
         </motion.div>
 
-        <div className="flex flex-col gap-3" role="list">
+        <ul className="flex flex-col gap-3">
           {faqs.map((faq, index) => (
             <FAQItem
               key={faq.question}
@@ -166,7 +162,7 @@ export function FAQ(): ReactNode {
               onToggle={() => handleToggle(index)}
             />
           ))}
-        </div>
+        </ul>
       </div>
     </section>
   );

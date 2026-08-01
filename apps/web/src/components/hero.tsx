@@ -1,19 +1,13 @@
-import { LogoLoop, type LogoItem } from "./logo-loop";
-import {
-  ArrowDownRight,
-  Activity,
-  ShieldCheck,
-  Landmark,
-  Check,
-} from "lucide-react";
+import { Activity, ArrowDownRight, Check, Landmark, ShieldCheck } from "lucide-react";
 import { motion, useMotionValue, useSpring } from "motion/react";
-import { useMemo, useRef, type ReactNode, type MouseEvent } from "react";
+import { type MouseEvent, type ReactNode, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useAgentActivity } from "../features/activity/use-agent-activity.ts";
 import { useAlerts } from "../features/alerts/use-alerts.ts";
 import { formatHealthFactor, formatUsdc, strategyLabel } from "../features/desk/format.ts";
 import { useDeskStatus } from "../features/desk/use-desk.ts";
 import { chainLabel, truncateHash } from "../lib/explorer.ts";
+import { type LogoItem, LogoLoop } from "./logo-loop";
 
 const ease = [0.23, 1, 0.32, 1] as const;
 
@@ -28,17 +22,11 @@ const fadeInScale = {
 };
 
 const logos: LogoItem[] = [
-  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub Workflows</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Flashbots Protect RPC</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Circle CCTP V2</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub MCP Server</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Ethereum Sepolia</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Aave V3</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Uniswap V3</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">x402 Micropayments</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">MPP Tempo</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Groq Qwen 3.6-27b</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">OpenAI GPT-4o</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Onchain signal</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Plain-language alert</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Policy gate</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub execution</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Registry proof</span> },
 ];
 
 const PARALLAX_INTENSITY = 20;
@@ -61,8 +49,7 @@ function HeroDashboard(): ReactNode {
       return {
         id: alert.id,
         name: alert.title,
-        details:
-          alert.summary.length > 90 ? `${alert.summary.slice(0, 90)}…` : alert.summary,
+        details: alert.summary.length > 90 ? `${alert.summary.slice(0, 90)}…` : alert.summary,
         tag,
         href: `/alerts/${alert.id}`,
       };
@@ -71,9 +58,7 @@ function HeroDashboard(): ReactNode {
 
   const latestAnchoredDigest = useMemo(() => {
     if (!activity?.digests?.length) return null;
-    return (
-      activity.digests.find((d) => Boolean(d.registryTxHash)) ?? activity.digests[0] ?? null
-    );
+    return activity.digests.find((d) => Boolean(d.registryTxHash)) ?? activity.digests[0] ?? null;
   }, [activity]);
 
   const deskStatusLabel = useMemo(() => {
@@ -108,10 +93,10 @@ function HeroDashboard(): ReactNode {
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
-            ChronicleAI · Newspaper + Desk
+            ChronicleAI · Signal to proof
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-4xl">
-            Live agent console
+            One visible execution loop
           </h2>
         </div>
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-black">
@@ -123,17 +108,17 @@ function HeroDashboard(): ReactNode {
         <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="mb-4 flex items-center justify-between gap-2">
             <span className="text-sm text-white/60">
-              {isLoading ? "Loading signals…" : "Latest published alerts"}
+              {isLoading ? "Loading signals…" : "1 · Latest live signal"}
             </span>
             <span className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-black">
-              KeeperHub
+              Onchain feed
             </span>
           </div>
           <div className="space-y-3">
             {signals.length === 0 && !isLoading ? (
               <div className="rounded-xl bg-black/30 p-4 text-sm text-white/50">
-                No published alerts yet. Signals appear here when ChronicleAI detects significant
-                on-chain events.
+                No published alerts yet. Signals appear here when ChronicleAI detects a significant
+                onchain event.
               </div>
             ) : (
               signals.map((s) => (
@@ -162,10 +147,12 @@ function HeroDashboard(): ReactNode {
             data-testid="hero-desk-panel"
           >
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <Landmark className="h-4 w-4" />
-              Chronicle Desk
+              <Landmark className="h-4 w-4" />2 · Policy-gated desk
             </div>
-            <p className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="hero-desk-equity">
+            <p
+              className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
+              data-testid="hero-desk-equity"
+            >
               {isLoading ? "—" : formatUsdc(desk?.equityUsdc ?? null)}
             </p>
             <p className="mt-1 text-sm text-black/60">
@@ -176,15 +163,14 @@ function HeroDashboard(): ReactNode {
               <p className="mt-2 text-xs font-medium text-black/70">{lastAgentLine}</p>
             ) : (
               <p className="mt-2 text-xs text-black/55">
-                LLM proposes · policy disposes · KeeperHub executes
+                LLM proposes · policy decides · KeeperHub executes
               </p>
             )}
           </Link>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck className="h-4 w-4 text-accent" />
-              On-chain publication proof
+              <ShieldCheck className="h-4 w-4 text-accent" />3 · Registry proof
             </div>
             {latestAnchoredDigest ? (
               <Link
@@ -208,8 +194,8 @@ function HeroDashboard(): ReactNode {
             ) : (
               <p className="text-sm leading-relaxed text-white/50">
                 {isLoading
-                  ? "Loading digest anchors…"
-                  : "No digests anchored yet. Daily digests and trade tickets appear here after KeeperHub execution."}
+                  ? "Loading registry proofs…"
+                  : "No registry proof yet. Approved actions appear here after KeeperHub execution."}
               </p>
             )}
           </div>
@@ -281,12 +267,10 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            Autonomous newspaper
-            <span className="text-accent">+</span>
-            policy-gated desk
+            Policy-gated onchain response desk
           </motion.div>
 
-          <h1 className="mb-6 text-8xl font-medium leading-[1.1] tracking-tight text-black max-[850px]:text-5xl">
+          <h1 className="mb-6 text-7xl font-medium leading-[1.05] tracking-tight text-black max-[850px]:text-5xl">
             <motion.span
               className="block font-bold tracking-tighter"
               style={{ fontFamily: "var(--font-space-grotesk)" }}
@@ -296,7 +280,7 @@ export function Hero(): ReactNode {
               ChronicleAI
             </motion.span>
             <motion.span className="block" variants={fadeInUp} transition={{ duration: 0.8, ease }}>
-              Intelligence that <span className="font-serif italic text-accent">acts</span>
+              From signal to <span className="font-serif italic text-accent">verified action.</span>
             </motion.span>
           </h1>
 
@@ -305,9 +289,9 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            An autonomous onchain intelligence registry &amp; trading desk powered by KeeperHub's 6 execution surfaces: 
-            Workflows, MCP Server tools, x402/MPP dual-routing, smart gas preflight dry-runs, Flashbots private RPCs, 
-            and Circle CCTP cross-chain liquidity rebalancing.
+            ChronicleAI explains what is happening onchain, applies hard policy, and sends only
+            approved actions through KeeperHub. Every outcome includes a transaction and an
+            auditable proof.
           </motion.p>
 
           <motion.div
@@ -316,28 +300,22 @@ export function Hero(): ReactNode {
             className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center max-[850px]:w-full"
           >
             <Link
-              to="/publications"
+              to="/alerts"
               className="group relative inline-flex cursor-pointer items-center max-[850px]:w-full"
             >
               <span className="absolute inset-y-0 right-0 w-[calc(100%-2rem)] rounded-xl bg-accent max-[850px]:w-full" />
               <span className="relative z-10 rounded-xl bg-black px-6 py-3 font-medium text-white max-[850px]:flex-1">
-                Explore Newspaper
+                View live signal
               </span>
               <span className="relative z-10 -left-px flex h-11 w-11 items-center justify-center rounded-xl text-black">
                 <ArrowDownRight className="h-5 w-5 transition-transform duration-300 group-hover:-rotate-45" />
               </span>
             </Link>
             <Link
-              to="/desk"
+              to="/activity"
               className="inline-flex items-center justify-center rounded-xl border border-black/15 bg-white/80 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-white max-[850px]:w-full"
             >
-              Open Desk
-            </Link>
-            <Link
-              to="/activity"
-              className="inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-black/70 transition-colors hover:text-black max-[850px]:w-full"
-            >
-              Agent activity
+              View execution proof
             </Link>
           </motion.div>
         </motion.div>

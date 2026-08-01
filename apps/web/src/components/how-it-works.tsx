@@ -1,33 +1,33 @@
-import { useRef } from "react";
+import { Activity, BrainCircuit, Landmark, ShieldCheck } from "lucide-react";
 import { motion, useScroll, useTransform } from "motion/react";
-import { BrainCircuit, ShieldCheck, Activity, Landmark } from "lucide-react";
+import { useRef } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 const steps = [
   {
     icon: Activity,
-    title: "Monitor & Discover Tools via MCP",
+    title: "Detect the signal",
     description:
-      "KeeperHub Event Tracker, Block Dispatcher, and MCP Server discover dynamic onchain execution capabilities, feeding market events, APY shifts, and gas regimes into the agent pipeline.",
+      "ChronicleAI watches configured onchain events and turns meaningful activity into a sourced, plain-language alert.",
   },
   {
     icon: BrainCircuit,
-    title: "Reason & Preflight Dry-Run",
+    title: "Explain and propose",
     description:
-      "Dual-provider LLMs (Groq Qwen 3.6-27b primary, OpenAI GPT-4o fallback) formulate strategic proposals with automatic Groq key rotation. Before any live transaction, Layer A dry-run preflight (simulate: true) verifies execution logic and computes adaptive gas pricing.",
-  },
-  {
-    icon: Landmark,
-    title: "Execute Privately through KeeperHub",
-    description:
-      "Approved trades execute onchain via KeeperHub workflows using Flashbots Protect private mempools (Ethereum Sepolia) for private transaction submission.",
+      "The agent explains why the signal matters, then produces a structured proposal using only the actions ChronicleAI allows.",
   },
   {
     icon: ShieldCheck,
-    title: "Prove, Settle & Rebalance via CCTP",
+    title: "Apply policy and preflight",
     description:
-      "Onchain registry proofs anchor to ChronicleRegistry. Paid feeds settle via x402 / MPP dual-protocol challenge routing, while Circle CCTP worker automatically rebalances liquidity between Base and Sepolia.",
+      "Hard limits, health checks, pause state, routing, and preflight decide whether the action can proceed. If a check fails, the safe default is hold.",
+  },
+  {
+    icon: Landmark,
+    title: "Execute and prove",
+    description:
+      "Approved actions run through KeeperHub. The resulting transaction, registry receipt, and execution trail remain linked for independent verification.",
   },
 ];
 
@@ -77,16 +77,15 @@ export function HowItWorks(): ReactNode {
             How it works
           </h2>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-foreground/60">
-            From raw on-chain signal to verifiable publication — and, when policy allows, to a real
-            KeeperHub-executed trade ticket.
+            From a live onchain signal to a policy-approved KeeperHub transaction and public proof.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Link
-                to="/publications"
+                to="/alerts"
                 className="inline-flex cursor-pointer items-center rounded-xl bg-foreground px-6 py-3 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
               >
-                Explore Newspaper
+                View live signal
               </Link>
             </motion.div>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
