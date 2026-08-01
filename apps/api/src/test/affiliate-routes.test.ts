@@ -1,7 +1,11 @@
 import express from "express";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createAffiliateRoutes, type AffiliateRouteDeps } from "../routes/affiliate-routes.ts";
+import {
+  MAX_AFFILIATE_AGENT_HISTORY_MESSAGES,
+  MAX_AFFILIATE_AGENT_MESSAGE_CHARS,
+} from "../lib/request-limits.ts";
+import { type AffiliateRouteDeps, createAffiliateRoutes } from "../routes/affiliate-routes.ts";
 import { buildAffiliateAuthMessage } from "../services/affiliate-auth.ts";
 
 const affiliateWallet = privateKeyToAccount(generatePrivateKey());
@@ -244,5 +248,53 @@ describe("affiliate wallet ownership routes", () => {
     expect(deps.attributionRepo.attributeFirstTouch).toHaveBeenCalledWith(
       expect.objectContaining({ referred_wallet: referredWallet.address.toLowerCase() }),
     );
+  });
+
+  it("rejects an oversized affiliate-agent message before starting a job", async () => {
+    const startChatJob = vi.fn();
+    const deps = makeDeps({
+      agentService: { startChatJob } as unknown as AffiliateRouteDeps["agentService"],
+    });
+    const auth = await authFor(affiliateWallet);
+
+    const response = await request(
+      "POST",
+      "/affiliates/agent/chat",
+      {
+        ...auth,
+        message: "x".repeat(MAX_AFFILIATE_AGENT_MESSAGE_CHARS + 1),
+        withdrawalAuthorization: {},
+      },
+      deps,
+    );
+
+    expect(response.status).toBe(413);
+    expect(startChatJob).not.toHaveBeenCalled();
+  });
+
+  it("rejects an oversized affiliate-agent history before starting a job", async () => {
+    const startChatJob = vi.fn();
+    const deps = makeDeps({
+      agentService: { startChatJob } as unknown as AffiliateRouteDeps["agentService"],
+    });
+    const auth = await authFor(affiliateWallet);
+
+    const response = await request(
+      "POST",
+      "/affiliates/agent/chat",
+      {
+        ...auth,
+        message: "show my stats",
+        withdrawalAuthorization: {},
+        history: Array.from({ length: MAX_AFFILIATE_AGENT_HISTORY_MESSAGES + 1 }, () => ({
+          role: "user",
+          content: "previous turn",
+        })),
+      },
+      deps,
+    );
+
+    expect(response.status).toBe(413);
+    expect(startChatJob).not.toHaveBeenCalled();
   });
 });

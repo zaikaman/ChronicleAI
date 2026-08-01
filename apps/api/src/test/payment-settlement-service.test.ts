@@ -49,12 +49,16 @@ describe("PaymentSettlementService", () => {
       findByChallengeReference: vi.fn().mockResolvedValue({ ok: true as const, value: record }),
       markSettled: vi.fn().mockResolvedValue({ ok: true as const, value: settledRow }),
       markUnderpaid: vi.fn().mockResolvedValue({ ok: true as const, value: record }),
-      markExpired: vi.fn().mockResolvedValue({ ok: true as const, value: { ...record, status: "expired" as const } }),
+      markExpired: vi
+        .fn()
+        .mockResolvedValue({ ok: true as const, value: { ...record, status: "expired" as const } }),
       markFailed: vi.fn().mockResolvedValue({ ok: true as const, value: record }),
       markRegistryProof: vi.fn().mockResolvedValue({ ok: true as const, value: settledRow }),
       expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
+      deleteExpiredChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
       listByPremiumItem: vi.fn(),
-      list: vi.fn(), listPage: vi.fn(),
+      list: vi.fn(),
+      listPage: vi.fn(),
       listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
       findSettledByPayer: vi.fn(),
     };
@@ -62,7 +66,8 @@ describe("PaymentSettlementService", () => {
     const execLogRepo: ExecutionLogRepository = {
       append: vi.fn().mockResolvedValue({ ok: true as const, value: { id: "log-1" } }),
       listByEntity: vi.fn(),
-      listRecent: vi.fn(), listPage: vi.fn()
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
     };
 
     const adapter: PaymentAdapter = {
@@ -116,9 +121,7 @@ describe("PaymentSettlementService", () => {
       verification.currency,
       verification.payerReference!.toLowerCase(),
     );
-    expect(result.verification.payerReference).toBe(
-      verification.payerReference?.toLowerCase(),
-    );
+    expect(result.verification.payerReference).toBe(verification.payerReference?.toLowerCase());
   });
 
   it("falls back to challenge-time payer_reference when verification omits payer", async () => {
@@ -377,7 +380,12 @@ describe("PaymentSettlementService", () => {
       if (consumed) {
         return {
           ok: false as const,
-          error: { name: "ConflictError", code: "CONFLICT", message: "settlement already consumed", statusCode: 409 } as never,
+          error: {
+            name: "ConflictError",
+            code: "CONFLICT",
+            message: "settlement already consumed",
+            statusCode: 409,
+          } as never,
         };
       }
       consumed = true;
@@ -410,7 +418,12 @@ describe("PaymentSettlementService", () => {
       if (consumed) {
         return {
           ok: false as const,
-          error: { name: "ConflictError", code: "CONFLICT", message: "settlement already consumed", statusCode: 409 } as never,
+          error: {
+            name: "ConflictError",
+            code: "CONFLICT",
+            message: "settlement already consumed",
+            statusCode: 409,
+          } as never,
         };
       }
       consumed = true;

@@ -635,6 +635,21 @@ export function createInMemorySupabaseClient(): InMemorySupabaseClient {
           error: null,
         });
       }
+      if (fn === "treasury_payment_aggregates") {
+        const rows = store.get("payment_records") ?? [];
+        const settled = rows.filter((row) => row.status === "settled");
+        const totalRevenue = settled.reduce((sum, row) => {
+          const amount = Number(row.amount_settled ?? 0);
+          return sum + (Number.isFinite(amount) ? amount : 0);
+        }, 0);
+        return Promise.resolve({
+          data: {
+            totalRevenue,
+            totalPaidRequests: settled.length,
+          },
+          error: null,
+        });
+      }
       return Promise.resolve({
         data: null,
         error: { message: `RPC not available in in-memory test client: ${fn}` },

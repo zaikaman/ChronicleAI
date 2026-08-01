@@ -10,11 +10,11 @@ import type {
   TreasurySnapshotRepository,
 } from "@chronicleai/db";
 import { describe, expect, it, vi } from "vitest";
+import { createAgentActivityService } from "../services/agent-activity-service.ts";
 import type {
   ChronicleRegistryService,
   RegistryPublishResult,
 } from "../services/chronicle-registry-service.ts";
-import { createAgentActivityService } from "../services/agent-activity-service.ts";
 import { createNotificationService } from "../services/notification-service.ts";
 import { createStaticRevenueFxService } from "../services/revenue-fx-service.ts";
 import { createRevenueRoutingService } from "../services/revenue-routing-service.ts";
@@ -27,7 +27,8 @@ describe("Agent Activity Integration", () => {
     const execLogRepo: ExecutionLogRepository = {
       append: vi.fn().mockResolvedValue({ ok: true as const, value: {} }),
       listByEntity: vi.fn(),
-      listRecent: vi.fn(), listPage: vi.fn()
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
     };
 
     const evaluation = treasuryService.evaluate({
@@ -142,7 +143,8 @@ describe("Agent Activity Integration", () => {
       }),
       findById: vi.fn(),
       findByPeriod: vi.fn(),
-      list: vi.fn(), listPage: vi.fn(),
+      list: vi.fn(),
+      listPage: vi.fn(),
       update: vi.fn(),
       markTransferred: vi.fn().mockImplementation(async (id, payoutTxHash, registryTxHash) => ({
         ok: true as const,
@@ -167,8 +169,10 @@ describe("Agent Activity Integration", () => {
       markFailed: vi.fn(),
       markRegistryProof: vi.fn(),
       expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
+      deleteExpiredChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
       listByPremiumItem: vi.fn(),
-      list: vi.fn().mockResolvedValue({ ok: true as const, value: [] }), listPage: vi.fn(),
+      list: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
+      listPage: vi.fn(),
       listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
       findSettledByPayer: vi.fn(),
     };
@@ -225,7 +229,8 @@ describe("Agent Activity Integration", () => {
     const execLogRepo: ExecutionLogRepository = {
       append: vi.fn().mockResolvedValue({ ok: true as const, value: {} }),
       listByEntity: vi.fn(),
-      listRecent: vi.fn(), listPage: vi.fn()
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
     };
 
     const mockRegistryService: ChronicleRegistryService = {

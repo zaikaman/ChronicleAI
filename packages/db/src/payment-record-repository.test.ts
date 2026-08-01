@@ -73,3 +73,35 @@ describe("payment settlement consumption", () => {
     expect(results.find((result) => !result.ok)?.error.code).toBe("CONFLICT");
   });
 });
+
+describe("payment challenge cleanup", () => {
+  it("deletes expired challenges without touching settled payment history", async () => {
+    const client = createInMemorySupabaseClient();
+    await client.from("payment_records").insert([
+      {
+        id: "expired-open",
+        status: "challenge_issued",
+        expires_at: "2026-07-31T23:59:00.000Z",
+      },
+      {
+        id: "expired-status",
+        status: "expired",
+        expires_at: "2026-07-31T23:59:00.000Z",
+      },
+      {
+        id: "settled-history",
+        status: "settled",
+        expires_at: "2026-07-31T23:59:00.000Z",
+        amount_settled: 5,
+      },
+    ]);
+
+    const repository = createPaymentRecordRepository(client as never);
+    const result = await repository.deleteExpiredChallenges("2026-08-01T00:00:00.000Z");
+
+    expect(result).toEqual({ ok: true, value: 2 });
+    expect(client.__store.get("payment_records")).toEqual([
+      expect.objectContaining({ id: "settled-history", status: "settled" }),
+    ]);
+  });
+});

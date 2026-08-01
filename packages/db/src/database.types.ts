@@ -1596,6 +1596,7 @@ export type Database = {
         Args: { p_affiliate_wallet: string; p_statuses: string[] }
         Returns: number
       }
+      treasury_payment_aggregates: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never

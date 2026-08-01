@@ -27,10 +27,7 @@ export function corsMiddleware(allowedOrigin: string) {
       "Access-Control-Allow-Headers",
       "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature, X-ChronicleAI-Timestamp, X-ChronicleAI-Nonce, X-Premium-Access-Receipt, X-Payer-Reference",
     );
-    res.setHeader(
-      "Access-Control-Expose-Headers",
-      "X-Premium-Access-Receipt, X-Payer-Reference",
-    );
+    res.setHeader("Access-Control-Expose-Headers", "X-Premium-Access-Receipt, X-Payer-Reference");
     res.setHeader("Access-Control-Max-Age", "86400");
     res.setHeader("Vary", "Origin");
 
@@ -107,6 +104,17 @@ export function publicGetCacheMiddleware(req: Request, res: Response, next: Next
 
 // ── Final Error Handler ─────────────────────────────────
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
+  const parserError = err as Error & { status?: number; type?: string };
+  if (parserError.type === "entity.too.large" || parserError.status === 413) {
+    res.status(413).json({ error: "Request body too large" });
+    return;
+  }
+
+  if (parserError.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Invalid JSON request body" });
+    return;
+  }
+
   if (err instanceof ApiError) {
     res.status(err.statusCode).json({
       error: err.publicMessage,

@@ -5,12 +5,12 @@ import type { PaymentStatus } from "@chronicleai/schemas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ConflictError, type Result, failure, success } from "./errors.ts";
 import {
+  type PaginatedResult,
+  type PaginationParams,
   buildPaginatedResult,
   mapPostgrestError,
   maybeRow,
   normalizePagination,
-  type PaginatedResult,
-  type PaginationParams,
 } from "./repository-utils.ts";
 import type { PaymentRecordInsert, PaymentRecordRow, PaymentRecordUpdate } from "./types.ts";
 
@@ -23,9 +23,7 @@ const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
  * - Lowercases EVM addresses so checksum vs lowercase never miss matches
  * - Returns null for empty/missing values
  */
-export function normalizePayerReference(
-  payerReference: string | null | undefined,
-): string | null {
+export function normalizePayerReference(payerReference: string | null | undefined): string | null {
   if (payerReference == null) return null;
   const trimmed = payerReference.trim();
   if (!trimmed) return null;
@@ -80,6 +78,11 @@ export interface PaymentRecordRepository {
    * Returns the number of rows transitioned to `expired`.
    */
   expireOpenChallenges(asOf?: string): Promise<Result<number>>;
+  /**
+   * Delete expired payment challenges so terminal challenge rows do not grow
+   * without bound. Settled, underpaid, and failed payment history is retained.
+   */
+  deleteExpiredChallenges(asOf?: string): Promise<Result<number>>;
   listByPremiumItem(
     premiumItemId: string,
     limitParam?: number,
@@ -229,6 +232,34 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
 
       if (error) return failure(mapPostgrestError(error));
       return success((data ?? []).length);
+    },
+
+    async deleteExpiredChallenges(asOf?) {
+      const cutoff = asOf ?? new Date().toISOString();
+      let deletedCount = 0;
+
+      // A terminal expired status is authoritative, including legacy rows
+      // created before expires_at was added.
+      const { data: expiredData, error: expiredError } = await table()
+        .delete()
+        .eq("status", "expired")
+        .select("id");
+
+      if (expiredError) return failure(mapPostgrestError(expiredError));
+      deletedCount += (expiredData ?? []).length;
+
+      // Also remove open rows that were never marked expired before cleanup.
+      const { data, error } = await table()
+        .delete()
+        .in("status", ["challenge_issued", "pending"])
+        .not("expires_at", "is", null)
+        .lte("expires_at", cutoff)
+        .select("id");
+
+      if (error) return failure(mapPostgrestError(error));
+      deletedCount += (data ?? []).length;
+
+      return success(deletedCount);
     },
 
     async listByPremiumItem(premiumItemId, limitParam = 100) {

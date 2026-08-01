@@ -4,12 +4,12 @@ import {
   createAffiliateFundingTransferRepository,
   createAffiliateRepository,
   createAffiliateWithdrawalRepository,
+  createAgentActivityRepository,
   createDailyDigestRepository,
   createEmailSubscriberRepository,
   createExecutionLogRepository,
   createLLMGenerationAttemptRepository,
   createMonitoredEventRepository,
-  createAgentActivityRepository,
   createNewsletterSubscriptionRepository,
   createPaymentRecordRepository,
   createPayoutRecordRepository,
@@ -20,13 +20,9 @@ import {
   createSponsoredWatchRepository,
   createTreasurySnapshotRepository,
 } from "@chronicleai/db";
-import { createAffiliateEarningsService } from "./services/affiliate-earnings-service.ts";
-import { createAffiliateFundingService } from "./services/affiliate-funding-service.ts";
-import { createParaTreasuryClientFromEnv } from "./services/para-treasury-client.ts";
-import { createPremiumProductizerService } from "./services/premium-productizer-service.ts";
-import { createProviderConfigs } from "./services/llm-provider-client.ts";
-import express, { type Express, type Request } from "express";
 import compression from "compression";
+import express, { type Express, type Request } from "express";
+import { MAX_JSON_BODY_SIZE } from "./lib/request-limits.ts";
 import {
   corsMiddleware,
   errorHandler,
@@ -42,11 +38,15 @@ import {
   setupUS3Routes,
   setupUS4Routes,
 } from "./routes/index.ts";
+import { createAffiliateEarningsService } from "./services/affiliate-earnings-service.ts";
+import { createAffiliateFundingService } from "./services/affiliate-funding-service.ts";
+import { createProviderConfigs } from "./services/llm-provider-client.ts";
+import { createParaTreasuryClientFromEnv } from "./services/para-treasury-client.ts";
+import { createPremiumProductizerService } from "./services/premium-productizer-service.ts";
 
 const app: Express = express();
 const isProduction = (process.env["NODE_ENV"] ?? "development") === "production";
-const isTestRuntime =
-  process.env["NODE_ENV"] === "test" || process.env["VITEST"] === "true";
+const isTestRuntime = process.env["NODE_ENV"] === "test" || process.env["VITEST"] === "true";
 
 // Trust the single reverse-proxy hop (Heroku). Express resolves req.ip using
 // this setting; rate limiting must use that resolved value instead of parsing
@@ -57,6 +57,7 @@ app.set("trust proxy", 1);
 app.use(compression({ threshold: 1024 }));
 app.use(
   express.json({
+    limit: MAX_JSON_BODY_SIZE,
     verify: (req, _res, body) => {
       (req as Request).rawBody = Buffer.from(body);
     },
@@ -170,10 +171,7 @@ try {
   // One-shot cleanup: hide non-LLM auto productizer leftovers (old boot backfill).
   void premiumRepo.archiveNonLlmAutoProducts().then((result) => {
     if (!result.ok) {
-      console.warn(
-        "Failed to archive non-LLM auto premium items:",
-        result.error.message,
-      );
+      console.warn("Failed to archive non-LLM auto premium items:", result.error.message);
       return;
     }
     if (result.value > 0) {
@@ -234,19 +232,25 @@ try {
     withdrawalRepo,
   });
 
-  // Periodically reap open payment challenges past expires_at.
-  // Settlement also runs a best-effort reaper; this keeps status rows accurate without traffic.
+  // Periodically expire and delete payment challenges past expires_at.
+  // Settlement also runs a best-effort expiry pass; this keeps status rows accurate without traffic.
   const CHALLENGE_EXPIRY_SWEEP_MS = 60_000;
   const runChallengeExpirySweep = () => {
-    void paymentRecordRepo.expireOpenChallenges().then((result) => {
-      if (!result.ok) {
-        console.warn("Payment challenge expiry sweep failed:", result.error.message);
-        return;
+    void (async () => {
+      const expired = await paymentRecordRepo.expireOpenChallenges();
+      if (!expired.ok) {
+        console.warn("Payment challenge expiry sweep failed:", expired.error.message);
+      } else if (expired.value > 0) {
+        console.info(`Expired ${expired.value} open payment challenge(s)`);
       }
-      if (result.value > 0) {
-        console.info(`Expired ${result.value} open payment challenge(s)`);
+
+      const deleted = await paymentRecordRepo.deleteExpiredChallenges();
+      if (!deleted.ok) {
+        console.warn("Payment challenge cleanup failed:", deleted.error.message);
+      } else if (deleted.value > 0) {
+        console.info(`Removed ${deleted.value} expired payment challenge(s)`);
       }
-    });
+    })();
   };
   runChallengeExpirySweep();
   setInterval(runChallengeExpirySweep, CHALLENGE_EXPIRY_SWEEP_MS).unref?.();

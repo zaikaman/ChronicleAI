@@ -1,13 +1,16 @@
 // Public affiliate registration + referral tracking + dashboard + payout agent.
 // Private wallet identity is established with a server-verified personal_sign.
 
-import type {
-  AffiliateRepository,
-  ReferralAttributionRepository,
-} from "@chronicleai/db";
+import type { AffiliateRepository, ReferralAttributionRepository } from "@chronicleai/db";
 import { normalizeAffiliateWallet } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
+import {
+  MAX_AFFILIATE_AGENT_HISTORY_CHARS,
+  MAX_AFFILIATE_AGENT_HISTORY_MESSAGES,
+  MAX_AFFILIATE_AGENT_HISTORY_MESSAGE_CHARS,
+  MAX_AFFILIATE_AGENT_MESSAGE_CHARS,
+} from "../lib/request-limits.ts";
 import type { AffiliateAgentService } from "../services/affiliate-agent-service.ts";
 import { type AffiliateAuthPayload, verifyAffiliateAuth } from "../services/affiliate-auth.ts";
 import type { AffiliateDashboardService } from "../services/affiliate-dashboard-service.ts";
@@ -39,7 +42,8 @@ function readWallet(input: unknown): string | null {
 }
 
 function readAuthPayload(input: Record<string, unknown>): AffiliateAuthPayload | null {
-  const nested = input.auth && typeof input.auth === "object" ? (input.auth as Record<string, unknown>) : input;
+  const nested =
+    input.auth && typeof input.auth === "object" ? (input.auth as Record<string, unknown>) : input;
   const walletAddress =
     typeof nested.walletAddress === "string"
       ? nested.walletAddress
@@ -47,7 +51,7 @@ function readAuthPayload(input: Record<string, unknown>): AffiliateAuthPayload |
         ? nested.wallet_address
         : typeof nested.wallet === "string"
           ? nested.wallet
-        : "";
+          : "";
   const issuedAt =
     typeof nested.issuedAt === "string"
       ? nested.issuedAt
@@ -63,10 +67,7 @@ function readAuthPayload(input: Record<string, unknown>): AffiliateAuthPayload |
 async function requireWalletProof(
   input: Record<string, unknown>,
   expectedWallet?: string | null,
-): Promise<
-  | { ok: true; wallet: string }
-  | { ok: false; status: 401 | 403; error: string }
-> {
+): Promise<{ ok: true; wallet: string } | { ok: false; status: 401 | 403; error: string }> {
   const payload = readAuthPayload(input);
   if (!payload) {
     return {
@@ -375,10 +376,7 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
         return;
       }
 
-      const proof = await requireWalletProof(
-        req.query as Record<string, unknown>,
-        requestedWallet,
-      );
+      const proof = await requireWalletProof(req.query as Record<string, unknown>, requestedWallet);
       if (!proof.ok) {
         res.status(proof.status).json({ error: proof.error });
         return;
@@ -477,7 +475,15 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
       }
       const wallet = proof.wallet;
 
-      const message = typeof body.message === "string" ? body.message.trim() : "";
+      const rawMessage = typeof body.message === "string" ? body.message : "";
+      if (rawMessage.length > MAX_AFFILIATE_AGENT_MESSAGE_CHARS) {
+        res.status(413).json({
+          error: `message exceeds the ${MAX_AFFILIATE_AGENT_MESSAGE_CHARS}-character limit`,
+        });
+        return;
+      }
+
+      const message = rawMessage.trim();
       if (!message) {
         res.status(400).json({ error: "message is required" });
         return;
@@ -496,15 +502,51 @@ export function createAffiliateRoutes(deps: AffiliateRouteDeps): RouterType {
         return;
       }
 
-      const history = Array.isArray(body.history)
-        ? (body.history as Array<{ role?: string; content?: string }>)
-            .filter((m) => typeof m.content === "string" && typeof m.role === "string")
-            .slice(-12)
-            .map((m) => ({
-              role: m.role as "user" | "assistant" | "system" | "tool",
-              content: String(m.content),
-            }))
-        : [];
+      if (body.history !== undefined && !Array.isArray(body.history)) {
+        res.status(400).json({ error: "history must be an array when provided" });
+        return;
+      }
+
+      const rawHistory = Array.isArray(body.history) ? body.history : [];
+      if (rawHistory.length > MAX_AFFILIATE_AGENT_HISTORY_MESSAGES) {
+        res.status(413).json({
+          error: `history cannot contain more than ${MAX_AFFILIATE_AGENT_HISTORY_MESSAGES} messages`,
+        });
+        return;
+      }
+
+      let historyChars = 0;
+      for (const entry of rawHistory) {
+        if (!entry || typeof entry !== "object") continue;
+        const content = (entry as { content?: unknown }).content;
+        if (typeof content !== "string") continue;
+        if (content.length > MAX_AFFILIATE_AGENT_HISTORY_MESSAGE_CHARS) {
+          res.status(413).json({
+            error: `history messages cannot exceed ${MAX_AFFILIATE_AGENT_HISTORY_MESSAGE_CHARS} characters`,
+          });
+          return;
+        }
+        historyChars += content.length;
+        if (historyChars > MAX_AFFILIATE_AGENT_HISTORY_CHARS) {
+          res.status(413).json({
+            error: `history exceeds the ${MAX_AFFILIATE_AGENT_HISTORY_CHARS}-character limit`,
+          });
+          return;
+        }
+      }
+
+      const history = rawHistory
+        .filter(
+          (entry): entry is { role: string; content: string } =>
+            Boolean(entry) &&
+            typeof entry === "object" &&
+            typeof (entry as { role?: unknown }).role === "string" &&
+            typeof (entry as { content?: unknown }).content === "string",
+        )
+        .map((entry) => ({
+          role: entry.role as "user" | "assistant" | "system" | "tool",
+          content: entry.content,
+        }));
 
       const job = agentService.startChatJob({
         affiliateWallet: wallet,

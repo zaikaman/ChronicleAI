@@ -102,7 +102,10 @@ export function createTreasurySnapshotRepository(
     },
 
     async getAggregates() {
-      const latestResult = await this.findLatest();
+      const [latestResult, paymentAggregateResult] = await Promise.all([
+        this.findLatest(),
+        supabase.rpc("treasury_payment_aggregates"),
+      ]);
 
       if (!latestResult.ok || !latestResult.value) {
         return success({
@@ -115,30 +118,28 @@ export function createTreasurySnapshotRepository(
 
       const latest = latestResult.value;
 
-      // Sum revenue from payment_records for a rough aggregate
-      const { data: paymentData, error: paymentError } = await supabase
-        .from("payment_records")
-        .select("amount_settled")
-        .eq("status", "settled");
-
-      const totalRevenue = paymentError
-        ? (latest.revenue_total ?? 0)
-        : (paymentData as Array<{ amount_settled: number | null }>).reduce(
-            (sum: number, p: { amount_settled: number | null }) => sum + (p.amount_settled ?? 0),
-            0,
-          );
-
-      // Count settled payments
-      const { data: countData, error: countError } = await supabase
-        .from("payment_records")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "settled");
+      const paymentAggregates =
+        !paymentAggregateResult.error &&
+        paymentAggregateResult.data &&
+        typeof paymentAggregateResult.data === "object" &&
+        !Array.isArray(paymentAggregateResult.data)
+          ? (paymentAggregateResult.data as {
+              totalRevenue?: unknown;
+              totalPaidRequests?: unknown;
+            })
+          : null;
+      const totalRevenue =
+        paymentAggregates && Number.isFinite(Number(paymentAggregates.totalRevenue))
+          ? Number(paymentAggregates.totalRevenue)
+          : (latest.revenue_total ?? 0);
+      const totalPaidRequests =
+        paymentAggregates && Number.isFinite(Number(paymentAggregates.totalPaidRequests))
+          ? Number(paymentAggregates.totalPaidRequests)
+          : (latest.paid_request_count ?? 0);
 
       return success({
         totalRevenue,
-        totalPaidRequests: countError
-          ? (latest.paid_request_count ?? 0)
-          : ((countData as unknown as { count: number } | null)?.count ?? 0),
+        totalPaidRequests,
         latestBalance: latest.available_balance,
         latestStatus: latest.status,
       });
