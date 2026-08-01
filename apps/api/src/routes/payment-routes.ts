@@ -267,6 +267,7 @@ export function createPaymentRoutes(params: {
         premiumItemId: prepared.premiumItem.id,
         paymentRecordId: prepared.paymentRecordId,
         challengeReference: prepared.challenge.challengeReference,
+        // Return the resolved route (important when the request used `auto`).
         paymentRoute: prepared.challenge.paymentRoute,
         amountRequested: prepared.challenge.amountRequested,
         currency: prepared.challenge.currency,
@@ -457,7 +458,9 @@ export function createPaymentRoutes(params: {
       const premiumItem =
         premiumItemResult.ok && premiumItemResult.value ? premiumItemResult.value : null;
 
-      if (premiumItem?.content_type === "sponsored_monitor") {
+      // A replay of an already-settled challenge may issue a receipt again, but
+      // it must never create another paid watch or submit another RPC write.
+      if (premiumItem?.content_type === "sponsored_monitor" && result.newlySettled) {
         try {
           // Require real targetContract + watchSpecHash (or derive hash from watchSpec).
           // Campaign window comes from content_private (buyer-chosen) when present.

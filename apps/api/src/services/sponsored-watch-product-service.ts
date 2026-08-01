@@ -248,7 +248,7 @@ export function createSponsoredWatchProductService(deps: {
         paymentRecordId: challengeResult.paymentRecordId,
         challenge: {
           challengeReference: challengeResult.challenge.challengeReference,
-          paymentRoute: request.paymentRoute,
+          paymentRoute: challengeResult.challenge.paymentRoute,
           amountRequested: challengeResult.challenge.amountRequested,
           currency: challengeResult.challenge.currency,
           expiresAt: challengeResult.challenge.expiresAt,

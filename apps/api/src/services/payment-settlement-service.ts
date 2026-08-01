@@ -14,6 +14,8 @@ import type {
 
 export interface SettlementResult {
   settled: boolean;
+  /** True only for the request that atomically consumed an open challenge. */
+  newlySettled: boolean;
   paymentRecordId: string;
   verification: SettlementVerificationResult;
   isSponsoredWatch: boolean;
@@ -130,16 +132,32 @@ export class PaymentSettlementService {
       throw badRequest(`Payment record not found for challenge: ${params.challengeReference}`);
     }
 
+    // The challenge record is authoritative. Never let the caller switch rails
+    // or currencies when settling or replaying a challenge.
+    if (record.payment_route !== params.paymentRoute) {
+      throw badRequest(
+        `Payment route mismatch: challenge requires ${record.payment_route}`,
+      );
+    }
+    const expectedCurrency = (record.currency ?? "USDC").trim();
+    if (
+      params.currency !== undefined &&
+      params.currency.trim().toLowerCase() !== expectedCurrency.toLowerCase()
+    ) {
+      throw badRequest(`Currency mismatch: challenge requires ${expectedCurrency}`);
+    }
+
     // Check if already settled
     if (record.status === "settled") {
       const vPayerRef = record.payer_reference ?? undefined;
       return {
         settled: true,
+        newlySettled: false,
         paymentRecordId: record.id,
         verification: {
           verified: true,
           amountSettled: record.amount_settled ?? 0,
-          currency: record.currency ?? params.currency ?? "USDC",
+          currency: expectedCurrency,
           settlementReference: record.settlement_reference ?? params.settlementReference,
           ...(vPayerRef !== undefined ? { payerReference: vPayerRef } : {}),
         },
@@ -151,11 +169,12 @@ export class PaymentSettlementService {
     if (record.status === "expired") {
       return {
         settled: false,
+        newlySettled: false,
         paymentRecordId: record.id,
         verification: {
           verified: false,
           amountSettled: 0,
-          currency: params.currency ?? "USDC",
+          currency: expectedCurrency,
           settlementReference: params.settlementReference,
           errorMessage: "Challenge has expired",
         },
@@ -186,11 +205,12 @@ export class PaymentSettlementService {
 
       return {
         settled: false,
+        newlySettled: false,
         paymentRecordId: record.id,
         verification: {
           verified: false,
           amountSettled: 0,
-          currency: params.currency ?? record.currency ?? "USDC",
+          currency: expectedCurrency,
           settlementReference: params.settlementReference,
           errorMessage: "Challenge has expired",
         },
@@ -209,7 +229,7 @@ export class PaymentSettlementService {
       challengeReference: params.challengeReference,
       settlementReference: params.settlementReference,
       amountRequested: record.amount_requested ?? 0,
-      currency: params.currency ?? record.currency ?? "USDC",
+      currency: expectedCurrency,
       paymentRoute: params.paymentRoute,
       challengePayerReference: record.payer_reference,
       challengeExpiresAt: record.expires_at,
@@ -248,6 +268,7 @@ export class PaymentSettlementService {
 
       return {
         settled: false,
+        newlySettled: false,
         paymentRecordId: record.id,
         verification,
         isSponsoredWatch: false,
@@ -366,6 +387,7 @@ export class PaymentSettlementService {
 
     return {
       settled: true,
+      newlySettled: true,
       paymentRecordId: record.id,
       verification: verificationWithPayer,
       isSponsoredWatch: false, // Caller determines this from the premium item type

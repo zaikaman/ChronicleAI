@@ -24,6 +24,14 @@ import type { Web3Client } from "./web3-client-service.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Keep a fallback scan bounded even when a provider returns no logs. */
+const RPC_LOG_CHUNK_SIZE = 45n;
+const MAX_RPC_CALLS_PER_WATCH = 8;
+const MAX_RPC_LOG_CALLS_PER_WATCH = MAX_RPC_CALLS_PER_WATCH - 1; // reserve one call for eth_getBlock
+const MAX_RPC_BLOCK_SPAN = RPC_LOG_CHUNK_SIZE * BigInt(MAX_RPC_LOG_CALLS_PER_WATCH) - 1n;
+const RPC_RESCAN_INTERVAL_MS = 5 * 60_000;
+const MAX_RPC_EVENTS_PER_WATCH = 500;
+
 /** In-process single-flight so concurrent 60s ticks cannot double-publish one watch. */
 const completionInFlight = new Set<string>();
 
@@ -216,20 +224,21 @@ export function createSponsoredWatchService(params: {
       "https://sepolia.drpc.org",
     ].filter((u): u is string => Boolean(u));
 
-    const CHUNK_SIZE = 45n;
     let rawLogs: any[] = [];
+    let rpcCalls = 0;
 
     for (const rpcUrl of rpcUrls) {
+      if (rpcCalls >= MAX_RPC_CALLS_PER_WATCH) break;
       try {
         const client = createPublicClient({
           chain: sepolia,
           transport: http(rpcUrl, { timeout: 10_000 }),
         });
+        rpcCalls += 1;
         const latest = await client.getBlock();
         const latestTs = Number(latest.timestamp);
         const latestBlock = latest.number;
         const SEPOLIA_BLOCK_SECONDS = 12;
-        const MAX_SPAN = 2_000n;
         const blocksFromEnd = BigInt(
           Math.max(0, Math.ceil((latestTs - endsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
         );
@@ -243,14 +252,22 @@ export function createSponsoredWatchService(params: {
           fromBlock = toBlock;
           toBlock = tmp;
         }
-        if (toBlock - fromBlock > MAX_SPAN) {
-          fromBlock = toBlock - MAX_SPAN;
+        if (toBlock - fromBlock > MAX_RPC_BLOCK_SPAN) {
+          fromBlock = toBlock - MAX_RPC_BLOCK_SPAN;
         }
 
         const chunkLogs: any[] = [];
-        for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += CHUNK_SIZE) {
-          const chunkTo = chunkFrom + CHUNK_SIZE - 1n > toBlock ? toBlock : chunkFrom + CHUNK_SIZE - 1n;
+        for (
+          let chunkFrom = fromBlock;
+          chunkFrom <= toBlock && rpcCalls < MAX_RPC_CALLS_PER_WATCH;
+          chunkFrom += RPC_LOG_CHUNK_SIZE
+        ) {
+          const chunkTo =
+            chunkFrom + RPC_LOG_CHUNK_SIZE - 1n > toBlock
+              ? toBlock
+              : chunkFrom + RPC_LOG_CHUNK_SIZE - 1n;
           try {
+            rpcCalls += 1;
             const fetched = await client.getLogs({
               address: watch.target_contract as `0x${string}`,
               fromBlock: chunkFrom,
@@ -270,7 +287,7 @@ export function createSponsoredWatchService(params: {
       }
     }
 
-    return rawLogs.map((log) => {
+    return rawLogs.slice(0, MAX_RPC_EVENTS_PER_WATCH).map((log) => {
       const id = deterministicRpcEventId(log.transactionHash, log.logIndex);
       return {
         id,
@@ -299,7 +316,10 @@ export function createSponsoredWatchService(params: {
     });
   }
 
-  async function collectMatchingEvents(watch: SponsoredWatchRow) {
+  async function collectMatchingEvents(
+    watch: SponsoredWatchRow,
+    options: { forceRpcScan?: boolean } = {},
+  ) {
     if (!eventRepo) {
       return [];
     }
@@ -347,6 +367,15 @@ export function createSponsoredWatchService(params: {
       eventMatchesTargetContract(event, watch.target_contract),
     );
     if (dbMatched.length > 0) {
+      return dbMatched;
+    }
+
+    const lastMonitoredMs = watch.last_monitored_at
+      ? Date.parse(watch.last_monitored_at)
+      : Number.NaN;
+    const rpcScanRecentlyAttempted =
+      Number.isFinite(lastMonitoredMs) && Date.now() - lastMonitoredMs < RPC_RESCAN_INTERVAL_MS;
+    if (!options.forceRpcScan && rpcScanRecentlyAttempted) {
       return dbMatched;
     }
 
@@ -399,8 +428,10 @@ export function createSponsoredWatchService(params: {
   }
 
   async function activateWatch(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
+    // Activation is not a scan. Leave last_monitored_at empty so the first
+    // monitoring pass performs one bounded fallback lookup.
     const result = await watchRepo.updateStatus(watch.id, "monitoring", {
-      last_monitored_at: new Date().toISOString(),
+      last_monitored_at: null,
     });
     if (!result.ok) {
       throw new Error(`Failed to activate sponsored watch: ${result.error.message}`);
@@ -477,7 +508,7 @@ export function createSponsoredWatchService(params: {
   }
 
   async function generateReportForWatch(watch: SponsoredWatchRow) {
-    const matching = await collectMatchingEvents(watch);
+    const matching = await collectMatchingEvents(watch, { forceRpcScan: true });
     const spec = watchSpecFields(watch);
     const report = await reportService.generateReport({
       watchId: watch.id,
@@ -854,7 +885,8 @@ export function createSponsoredWatchService(params: {
         status: initialStatus,
         source_event_ids: [],
         monitored_event_count: 0,
-        last_monitored_at: initialStatus === "monitoring" ? new Date().toISOString() : null,
+        // Creation/activation is not a scan; the first cycle owns the initial lookup.
+        last_monitored_at: null,
       });
 
       if (!result.ok) {

@@ -130,6 +130,12 @@ export function publicAndLlmRateLimitMiddleware() {
     max: 60,
   });
 
+  const sponsoredWatchLimiter = rateLimitMiddleware({
+    name: "sponsored-watch",
+    windowMs: 60_000,
+    max: 10,
+  });
+
   const LLM_PATH_PREFIXES = [
     "/affiliates/agent",
     "/keeperhub/desk/agent-tick",
@@ -165,6 +171,14 @@ export function publicAndLlmRateLimitMiddleware() {
     // (protects misconfigured scrapers; real load is authenticated).
     if (LLM_PATH_PREFIXES.some((p) => req.path === p || req.path.startsWith(`${p}/`))) {
       llmLimiter(req, res, next);
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      req.path === "/payments/sponsored-watch/challenges"
+    ) {
+      sponsoredWatchLimiter(req, res, next);
       return;
     }
 
