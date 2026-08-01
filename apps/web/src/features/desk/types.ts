@@ -110,12 +110,7 @@ export interface DeskTicketLegSummary {
 export type DeskAuditPreflightStatus = "passed" | "failed" | "skipped" | "partial";
 export type DeskAuditKhSimulateStatus = "passed" | "failed" | "skipped" | "error";
 export type DeskAuditSubmitStatus = "started" | "skipped" | "failed";
-export type DeskAuditOutcomeStatus =
-  | "filled"
-  | "failed"
-  | "timeout"
-  | "unknown"
-  | "skipped";
+export type DeskAuditOutcomeStatus = "filled" | "failed" | "timeout" | "unknown" | "skipped";
 export type DeskAuditGasRegime = "normal" | "elevated" | "critical";
 export type DeskAuditRouting = "private_mempool" | "public";
 
@@ -304,17 +299,17 @@ export const DESK_STRATEGY_META: Array<{
 }> = [
   {
     id: "risk_defend",
-    label: "Risk defend",
-    description: "Aave health-factor defend and delever when HF drops under policy.",
+    label: "Risk protection",
+    description: "Protect the position when Aave health drops below policy.",
   },
   {
     id: "yield_rotation",
-    label: "Yield rotation",
-    description: "Rotate USDC book into higher APY venues when edge clears the bar.",
+    label: "Yield improvement",
+    description: "Move the USDC book toward better yield when the opportunity clears policy.",
   },
   {
     id: "oracle_amm",
-    label: "Oracle–AMM",
-    description: "Capped Uniswap fade when oracle vs AMM basis exceeds the band.",
+    label: "Price-gap opportunity",
+    description: "Act on a meaningful difference between oracle and market price.",
   },
 ];

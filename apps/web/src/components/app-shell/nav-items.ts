@@ -14,6 +14,7 @@ export interface AppNavItem {
   label: string;
   href: string;
   description: string;
+  group: "Core flow" | "Reading" | "Business";
   icon: LucideIcon;
 }
 
@@ -23,50 +24,57 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     id: "alerts",
     label: "Alerts",
     href: "/alerts",
-    description: "Live public market bulletins",
+    description: "Live onchain signals",
+    group: "Core flow",
     icon: Bell,
+  },
+  {
+    id: "desk",
+    label: "Desk",
+    href: "/desk",
+    description: "Policy-gated action review",
+    group: "Core flow",
+    icon: Landmark,
+  },
+  {
+    id: "activity",
+    label: "Activity",
+    href: "/activity",
+    description: "Public execution and proof trail",
+    group: "Core flow",
+    icon: Activity,
   },
   {
     id: "digests",
     label: "Digest",
     href: "/digests/latest",
-    description: "Latest daily intelligence report",
+    description: "Latest intelligence brief",
+    group: "Reading",
     icon: FileText,
   },
   {
     id: "publications",
     label: "Archive",
     href: "/publications",
-    description: "All publications in one feed",
+    description: "Past publications and proof records",
+    group: "Reading",
     icon: Archive,
-  },
-  {
-    id: "desk",
-    label: "Desk",
-    href: "/desk",
-    description: "Capital book, intents & trade tickets",
-    icon: Landmark,
   },
   {
     id: "premium",
     label: "Premium",
     href: "/premium",
-    description: "Paid deep analysis & sponsorships",
+    description: "Paid intelligence and sponsorships",
+    group: "Business",
     icon: Sparkles,
   },
   {
     id: "affiliates",
     label: "Affiliates",
     href: "/affiliates",
-    description: "Referral dashboard & payout agent",
+    description: "Referral dashboard and payout history",
+    group: "Business",
     icon: Users,
-  },
-  {
-    id: "activity",
-    label: "Activity",
-    href: "/activity",
-    description: "Public on-chain agent trail",
-    icon: Activity,
   },
 ];
 

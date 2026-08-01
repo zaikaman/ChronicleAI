@@ -12,16 +12,17 @@ import {
 import { RoutingBadge } from "../../components/routing-badge.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { flashbotsProtectStatusUrl, sepoliaTxUrl } from "../../lib/explorer.ts";
+import { ExecutionAuditMissing, ExecutionAuditTimeline } from "./ExecutionAuditTimeline.tsx";
+import { ProofMonoLink } from "./ProofMonoLink.tsx";
 import {
   formatUsdc,
   signalTypeLabel,
   strategyLabel,
+  ticketHeadline,
+  ticketLegLabel,
+  ticketOutcomeLabel,
+  ticketOutcomeVariant,
 } from "./format.ts";
-import {
-  ExecutionAuditMissing,
-  ExecutionAuditTimeline,
-} from "./ExecutionAuditTimeline.tsx";
-import { ProofMonoLink } from "./ProofMonoLink.tsx";
 import { useDeskTicket } from "./use-desk.ts";
 
 export function DeskTicketPage(): ReactElement {
@@ -68,17 +69,17 @@ export function DeskTicketPage(): ReactElement {
   }
 
   const { ticket, proofs } = state;
-  const title =
-    ticket.summary ??
-    `${strategyLabel(ticket.strategy)} · ${formatUsdc(ticket.notionalUsdc)}`;
+  const title = ticketHeadline(ticket);
 
   return (
     <Page data-testid="desk-ticket-page">
       <PageBackLink to="/desk/intents">Desk intents</PageBackLink>
       <PageHeader
         title={title}
-        description="Editorial trade ticket: signal that triggered the desk, decision under policy, execution legs, and on-chain proofs."
-        meta={<StatusBadge label="Trade ticket" variant="info" />}
+        description="Follow the signal, decision, execution, and proof for this trade."
+        meta={
+          <StatusBadge label={ticketOutcomeLabel(ticket)} variant={ticketOutcomeVariant(ticket)} />
+        }
         below={
           <>
             <span className="text-[11px] font-medium px-2 py-0.5 rounded-lg bg-muted border border-border/40 text-muted-foreground">
@@ -101,8 +102,8 @@ export function DeskTicketPage(): ReactElement {
             {signalTypeLabel(ticket.signalType)}
           </p>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-2xl">
-            Sepolia-native desk signal evaluated under hard policy. Full feature vector is available
-            on the premium desk feed.
+            The desk used this signal to decide whether an approved action was worth taking, then
+            checked that decision against policy before execution.
           </p>
           {proofs.signalHash ? (
             <div className="mt-4 pt-4 border-t border-border/50">
@@ -117,7 +118,7 @@ export function DeskTicketPage(): ReactElement {
       {ticket.agentThesis ? (
         <PageSection
           title="Agent thesis"
-          description="LLM desk PM proposal that informed this intent — policy still gated size and allow."
+          description="The reasoning that informed the proposal; policy still gated the size and action."
         >
           <Surface className="p-5" data-testid="desk-ticket-agent-thesis">
             <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -138,7 +139,10 @@ export function DeskTicketPage(): ReactElement {
       ) : null}
 
       {/* Decision */}
-      <PageSection title="Decision" description="Strategy choice, size, and policy reason codes.">
+      <PageSection
+        title="Decision"
+        description="Why the desk acted, how much, and what policy allowed."
+      >
         <Surface className="p-5">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -188,13 +192,10 @@ export function DeskTicketPage(): ReactElement {
       </PageSection>
 
       {/* Legs */}
-      <PageSection
-        title="Legs"
-        description="Protocol actions the desk executed (or planned) for this intent."
-      >
+      <PageSection title="Legs" description="The concrete actions that made up this trade.">
         {ticket.legs.length === 0 ? (
           <Surface className="p-6 text-sm text-muted-foreground">
-            No leg summary on this public ticket. Full leg payloads are on the premium desk feed.
+            This ticket does not include a public action summary.
           </Surface>
         ) : (
           <ol className="flex flex-col gap-2 list-none m-0 p-0">
@@ -211,19 +212,26 @@ export function DeskTicketPage(): ReactElement {
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    <span className="font-mono text-xs text-muted-foreground mr-2">
-                      {leg.protocol}
-                    </span>
-                    {leg.action}
-                  </p>
+                  <p className="text-sm font-medium text-foreground">{ticketLegLabel(leg)}</p>
                   {(leg.asset || leg.tokenIn || leg.tokenOut) && (
-                    <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-                      {[leg.asset, leg.tokenIn && leg.tokenOut ? `${leg.tokenIn}→${leg.tokenOut}` : null]
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Assets:{" "}
+                      {[
+                        leg.asset,
+                        leg.tokenIn && leg.tokenOut ? `${leg.tokenIn}→${leg.tokenOut}` : null,
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
                   )}
+                  <details className="mt-1 text-[11px] text-muted-foreground">
+                    <summary className="cursor-pointer select-none hover:text-foreground transition-colors">
+                      Technical step details
+                    </summary>
+                    <p className="mt-1 font-mono text-[10px]">
+                      {leg.protocol} · {leg.action}
+                    </p>
+                  </details>
                 </div>
               </Surface>
             ))}
@@ -240,7 +248,7 @@ export function DeskTicketPage(): ReactElement {
       {/* Execution audit — KeeperHub last mile spine */}
       <PageSection
         title="Execution audit"
-        description="KeeperHub last mile: preflight, submit, and outcome for this intent."
+        description="Safety checks, KeeperHub run, and final outcome."
         data-testid="desk-ticket-execution-audit"
       >
         {ticket.executionAudit && ticket.executionAudit.version === 1 ? (
@@ -271,9 +279,7 @@ export function DeskTicketPage(): ReactElement {
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <RoutingBadge
                 routing={ticket.routing}
-                routingApplied={
-                  ticket.routing === "private_mempool" ? "unknown" : ticket.routing
-                }
+                routingApplied={ticket.routing === "private_mempool" ? "unknown" : ticket.routing}
                 data-testid="ticket-routing-badge"
               />
             </div>
@@ -284,8 +290,7 @@ export function DeskTicketPage(): ReactElement {
                   : "Execution path: public mempool submission")}
             </p>
             <p className="mt-2 text-xs text-muted-foreground leading-relaxed max-w-2xl">
-              Private submission path on Sepolia — not a claim of mainnet-scale sandwich
-              protection.
+              Private submission path on Sepolia — not a claim of mainnet-scale sandwich protection.
             </p>
             {(() => {
               const protectUrl =
@@ -315,10 +320,7 @@ export function DeskTicketPage(): ReactElement {
       )}
 
       {/* Proofs */}
-      <PageSection
-        title="Proofs"
-        description="Registry ticket hash, explorer link, and KeeperHub run — proof before polish."
-      >
+      <PageSection title="Proofs" description="The receipt trail for this decision and execution.">
         <Surface className="p-5 flex flex-col gap-3" data-testid="desk-ticket-proofs">
           <ProofRow label="Ticket hash">
             {proofs.ticketHash ? (

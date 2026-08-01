@@ -12,13 +12,8 @@ import {
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { SkeletonPanel } from "../../components/ui/skeleton.tsx";
 import { chainLabel, sepoliaAddressUrl, truncateHash } from "../../lib/explorer.ts";
-import {
-  equityProgress,
-  formatHealthFactor,
-  formatUsdc,
-  strategyLabel,
-} from "./format.ts";
 import { ProofMonoLink } from "./ProofMonoLink.tsx";
+import { equityProgress, formatHealthFactor, formatUsdc, strategyLabel } from "./format.ts";
 import { DESK_STRATEGY_META } from "./types.ts";
 import { useDeskCapitalMoves, useDeskStatus } from "./use-desk.ts";
 
@@ -78,6 +73,22 @@ export function DeskStatusPage(): ReactElement {
         : hf < data.policy.hfWarn
           ? "warning"
           : "success";
+  const gateStatus = kill.armed
+    ? { label: "Blocked · kill switch", variant: "error" as const }
+    : data.paused
+      ? { label: "Paused", variant: "warning" as const }
+      : data.heartbeat.killEligible
+        ? { label: "Blocked · heartbeat", variant: "error" as const }
+        : data.heartbeat.stale
+          ? { label: "Heartbeat stale", variant: "warning" as const }
+          : data.agentEnabled === false
+            ? { label: "Agent fail-closed", variant: "warning" as const }
+            : { label: "Policy gate active", variant: "success" as const };
+  const heartbeatStatus = data.heartbeat.stale
+    ? { label: "Heartbeat stale", variant: "warning" as const }
+    : data.heartbeat.lastSeenAt
+      ? { label: "Heartbeat fresh", variant: "success" as const }
+      : { label: "No heartbeat", variant: "default" as const };
 
   return (
     <Page data-testid="desk-status-page">
@@ -111,6 +122,65 @@ export function DeskStatusPage(): ReactElement {
       />
 
       <PageSection
+        title="Decision lane"
+        description="Latest proposal and safety gates before KeeperHub can execute."
+        action={
+          <div className="flex gap-3">
+            <SectionLink to="/desk/intents">View intents →</SectionLink>
+            <SectionLink to="/activity?tab=proofs">Proof trail →</SectionLink>
+          </div>
+        }
+      >
+        <Surface className="p-5" data-testid="desk-decision-lane">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground mb-1">Latest desk proposal</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge
+                  label={data.lastAgent?.action ?? "No proposal yet"}
+                  variant={
+                    !data.lastAgent
+                      ? "default"
+                      : data.lastAgent.action === "hold" || data.lastAgent.action === "defer"
+                        ? "default"
+                        : data.lastAgent.action === "defend"
+                          ? "warning"
+                          : "info"
+                  }
+                />
+                {data.lastAgent?.strategy ? (
+                  <span className="text-xs text-muted-foreground">
+                    {strategyLabel(data.lastAgent.strategy)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <StatusBadge label={gateStatus.label} variant={gateStatus.variant} />
+              <StatusBadge label={heartbeatStatus.label} variant={heartbeatStatus.variant} />
+            </div>
+          </div>
+          {data.lastAgent ? (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Last proposal{" "}
+              {data.lastAgent.createdAt ? (
+                <TimestampDisplay timestamp={data.lastAgent.createdAt} />
+              ) : (
+                "—"
+              )}
+              {data.lastAgent.confidence != null
+                ? ` · ${(data.lastAgent.confidence * 100).toFixed(0)}% confidence`
+                : ""}
+            </p>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+              The desk will hold until a fresh proposal and heartbeat pass the policy gate.
+            </p>
+          )}
+        </Surface>
+      </PageSection>
+
+      <PageSection
         title="Book size"
         description="Desk equity versus target and hard ceiling. Top-ups and sweeps keep the book inside policy."
       >
@@ -132,6 +202,7 @@ export function DeskStatusPage(): ReactElement {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label="Desk equity as percent of max AUM"
+            tabIndex={0}
           >
             <div
               className="h-full rounded-full bg-foreground/70 transition-[width] duration-300"
@@ -153,13 +224,13 @@ export function DeskStatusPage(): ReactElement {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <WalletCard
             title="Treasury"
-            role="Revenue · buffer · desk funding"
+            description="Revenue · buffer · desk funding"
             address={data.treasuryWalletAddress}
             testId="desk-treasury-wallet"
           />
           <WalletCard
             title="Desk"
-            role="USDC book · strategy inventory"
+            description="USDC book · strategy inventory"
             address={data.deskWalletAddress}
             testId="desk-execution-wallet"
           />
@@ -258,11 +329,7 @@ export function DeskStatusPage(): ReactElement {
               <div>
                 <dt className="text-muted-foreground">Last trip</dt>
                 <dd className="text-foreground mt-0.5">
-                  {kill.lastTripAt ? (
-                    <TimestampDisplay timestamp={kill.lastTripAt} />
-                  ) : (
-                    "None"
-                  )}
+                  {kill.lastTripAt ? <TimestampDisplay timestamp={kill.lastTripAt} /> : "None"}
                 </dd>
               </div>
               <div>
@@ -302,11 +369,7 @@ export function DeskStatusPage(): ReactElement {
                     : "Fresh"
               }
               variant={
-                data.heartbeat.killEligible
-                  ? "error"
-                  : data.heartbeat.stale
-                    ? "warning"
-                    : "success"
+                data.heartbeat.killEligible ? "error" : data.heartbeat.stale ? "warning" : "success"
               }
             />
             {data.heartbeat.lastSeenAt ? (
@@ -384,9 +447,7 @@ export function DeskStatusPage(): ReactElement {
                 <div>
                   <dt className="text-muted-foreground">Strategy</dt>
                   <dd className="text-foreground mt-0.5">
-                    {data.lastAgent.strategy
-                      ? strategyLabel(data.lastAgent.strategy)
-                      : "—"}
+                    {data.lastAgent.strategy ? strategyLabel(data.lastAgent.strategy) : "—"}
                   </dd>
                 </div>
                 <div>
@@ -434,8 +495,8 @@ export function DeskStatusPage(): ReactElement {
           ))}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Basis band {data.policy.basisBps} bps · APY edge {data.policy.apyDeltaBps} bps · max
-          trade {formatUsdc(data.policy.maxTradeUsdc)}.
+          Basis band {data.policy.basisBps} bps · APY edge {data.policy.apyDeltaBps} bps · max trade{" "}
+          {formatUsdc(data.policy.maxTradeUsdc)}.
         </p>
       </PageSection>
 
@@ -485,19 +546,19 @@ export function DeskStatusPage(): ReactElement {
 
 function WalletCard({
   title,
-  role,
+  description,
   address,
   testId,
 }: {
   title: string;
-  role: string;
+  description: string;
   address: string | null;
   testId: string;
 }): ReactElement {
   return (
     <Surface className="p-4" data-testid={testId}>
       <p className="text-[11px] font-medium text-muted-foreground mb-1">{title}</p>
-      <p className="text-sm font-semibold text-foreground mb-2">{role}</p>
+      <p className="text-sm font-semibold text-foreground mb-2">{description}</p>
       {address ? (
         <a
           href={sepoliaAddressUrl(address)}
@@ -531,10 +592,7 @@ function CapitalMovesList({
   return (
     <div className="flex flex-col gap-2" data-testid="desk-capital-moves-preview">
       {moves.map((m) => (
-        <Surface
-          key={m.id}
-          className="px-4 py-3 flex flex-wrap items-center justify-between gap-2"
-        >
+        <Surface key={m.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2 min-w-0">
             <StatusBadge
               label={m.direction.replace(/_/g, " ")}
@@ -557,9 +615,7 @@ function CapitalMovesList({
           </div>
           <div className="flex items-center gap-3">
             <TimestampDisplay timestamp={m.createdAt} />
-            {m.txHash ? (
-              <ProofMonoLink value={m.txHash} href={m.explorerUrl} asTx />
-            ) : null}
+            {m.txHash ? <ProofMonoLink value={m.txHash} href={m.explorerUrl} asTx /> : null}
           </div>
         </Surface>
       ))}

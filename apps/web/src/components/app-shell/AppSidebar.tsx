@@ -1,8 +1,8 @@
-import { Search, X } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
 import { prefetchRoute } from "@/lib/route-prefetch.ts";
-import { APP_NAV_ITEMS, isActiveNavPath } from "./nav-items.ts";
+import { Search, X } from "lucide-react";
+import { type ReactNode, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { APP_NAV_ITEMS, type AppNavItem, isActiveNavPath } from "./nav-items.ts";
 
 interface AppSidebarProps {
   open: boolean;
@@ -21,11 +21,19 @@ export function AppSidebar({ open, onNavigate }: AppSidebarProps): ReactNode {
     const q = query.trim().toLowerCase();
     if (!q) return APP_NAV_ITEMS;
     return APP_NAV_ITEMS.filter(
-      (item) =>
-        item.label.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q),
+      (item) => item.label.toLowerCase().includes(q) || item.description.toLowerCase().includes(q),
     );
   }, [query]);
+
+  const groupedItems = useMemo(() => {
+    const groups = new Map<AppNavItem["group"], AppNavItem[]>();
+    for (const item of filtered) {
+      const items = groups.get(item.group) ?? [];
+      items.push(item);
+      groups.set(item.group, items);
+    }
+    return [...groups.entries()].map(([label, items]) => ({ label, items }));
+  }, [filtered]);
 
   return (
     <>
@@ -89,48 +97,57 @@ export function AppSidebar({ open, onNavigate }: AppSidebarProps): ReactNode {
         </div>
 
         <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 space-y-0.5">
-          {filtered.length === 0 ? (
-            <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-              No sections match
-            </p>
+          {groupedItems.length === 0 ? (
+            <p className="px-3 py-6 text-center text-xs text-muted-foreground">No sections match</p>
           ) : (
-            filtered.map((item) => {
-              const active = isActiveNavPath(location.pathname, item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  onClick={onNavigate}
-                  onMouseEnter={() => prefetchRoute(item.href)}
-                  onFocus={() => prefetchRoute(item.href)}
-                  title={item.description}
-                  className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-sm transition group ${
-                    active
-                      ? "bg-accent text-black font-medium"
-                      : "text-foreground hover:bg-muted"
-                  }`}
-                  aria-current={active ? "page" : undefined}
-                >
-                  <Icon
-                    className={`h-4 w-4 mt-0.5 shrink-0 ${
-                      active ? "text-black" : "text-muted-foreground group-hover:text-foreground"
-                    }`}
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{item.label}</span>
-                    <span
-                      className={`block text-xs font-normal truncate mt-0.5 ${
-                        active ? "text-black/70" : "text-muted-foreground"
-                      }`}
-                    >
-                      {item.description}
-                    </span>
-                  </span>
-                </Link>
-              );
-            })
+            <div className="space-y-4">
+              {groupedItems.map(({ label, items }) => (
+                <div key={label}>
+                  <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground">{label}</p>
+                  <div className="space-y-0.5">
+                    {items.map((item) => {
+                      const active = isActiveNavPath(location.pathname, item.href);
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.id}
+                          to={item.href}
+                          onClick={onNavigate}
+                          onMouseEnter={() => prefetchRoute(item.href)}
+                          onFocus={() => prefetchRoute(item.href)}
+                          title={item.description}
+                          className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-sm transition group ${
+                            active
+                              ? "bg-accent text-black font-medium"
+                              : "text-foreground hover:bg-muted"
+                          }`}
+                          aria-current={active ? "page" : undefined}
+                        >
+                          <Icon
+                            className={`h-4 w-4 mt-0.5 shrink-0 ${
+                              active
+                                ? "text-black"
+                                : "text-muted-foreground group-hover:text-foreground"
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate">{item.label}</span>
+                            <span
+                              className={`block text-xs font-normal truncate mt-0.5 ${
+                                active ? "text-black/70" : "text-muted-foreground"
+                              }`}
+                            >
+                              {item.description}
+                            </span>
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </nav>
 

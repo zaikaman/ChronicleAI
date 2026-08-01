@@ -1,3 +1,5 @@
+import type { DeskTicketLegSummary, DeskTicketNarrative } from "./types.ts";
+
 // Desk display helpers — calm, editorial labels
 
 export function formatUsdc(amount: number | null | undefined, fractionDigits = 2): string {
@@ -22,17 +24,199 @@ export function formatHealthFactor(hf: number | null | undefined): string {
   });
 }
 
+function humanizeIdentifier(value: string): string {
+  return value
+    .replace(/[:_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 export function strategyLabel(strategy: string | null | undefined): string {
   switch (strategy) {
     case "risk_defend":
-      return "Risk defend";
+      return "Risk protection";
     case "yield_rotation":
-      return "Yield rotation";
+      return "Yield improvement";
     case "oracle_amm":
-      return "Oracle–AMM";
+      return "Price-gap opportunity";
     default:
-      return strategy ?? "Unknown strategy";
+      return strategy ? humanizeIdentifier(strategy) : "Desk action";
   }
+}
+
+export function protocolLabel(protocol: string): string {
+  const normalized = protocol
+    .trim()
+    .toLowerCase()
+    .replace(/[-_:\s]+/g, "");
+  if (normalized.includes("uniswap")) return "Uniswap";
+  if (normalized.includes("aave")) return "Aave";
+  if (normalized.includes("cctp") || normalized.includes("circle")) {
+    return "Circle CCTP";
+  }
+  if (normalized.includes("keeperhub")) return "KeeperHub";
+  return humanizeIdentifier(protocol);
+}
+
+export function actionLabel(action: string): string {
+  const normalized = action
+    .trim()
+    .toLowerCase()
+    .replace(/[-_:\s]+/g, "");
+  if (
+    normalized.includes("swap") ||
+    normalized === "trade" ||
+    normalized === "exactinput" ||
+    normalized === "usdctoweth" ||
+    normalized === "wethtousdc"
+  ) {
+    return "Swap";
+  }
+  if (normalized.includes("supply") || normalized === "deposit" || normalized === "lend") {
+    return "Supply";
+  }
+  if (normalized.includes("withdraw") || normalized === "redeem" || normalized === "unstake") {
+    return "Withdraw";
+  }
+  if (normalized.includes("repay")) return "Repay debt";
+  if (normalized.includes("borrow")) return "Borrow";
+  if (normalized.includes("transfer") || normalized === "send") return "Transfer";
+  if (normalized.includes("approve")) return "Approve";
+  if (normalized === "wrap") return "Wrap";
+  if (normalized === "unwrap") return "Unwrap";
+  return humanizeIdentifier(action);
+}
+
+export function ticketLegLabel(leg: DeskTicketLegSummary): string {
+  const action = actionLabel(leg.action);
+  const protocol = protocolLabel(leg.protocol);
+  if (leg.tokenIn && leg.tokenOut) {
+    return `${action} ${leg.tokenIn} for ${leg.tokenOut} on ${protocol}`;
+  }
+  if (leg.asset) return `${action} ${leg.asset} on ${protocol}`;
+  return `${action} on ${protocol}`;
+}
+
+export function ticketLegSummary(legs: DeskTicketLegSummary[]): string | null {
+  if (legs.length === 0) return null;
+  const firstLeg = legs[0];
+  if (!firstLeg) return null;
+  const first = ticketLegLabel(firstLeg);
+  if (legs.length === 1) return `${first}.`;
+  const remaining = legs.length - 1;
+  return `${first}; ${remaining} additional step${remaining === 1 ? "" : "s"}.`;
+}
+
+export function ticketHeadline(
+  ticket: Pick<DeskTicketNarrative, "strategy" | "notionalUsdc">,
+): string {
+  const amount = ticket.notionalUsdc != null ? formatUsdc(ticket.notionalUsdc) : null;
+  switch (ticket.strategy) {
+    case "risk_defend":
+      return amount
+        ? `The desk protected the position with ${amount}`
+        : "The desk protected the position";
+    case "yield_rotation":
+      return `The desk moved ${amount ?? "funds"} toward better yield`;
+    case "oracle_amm":
+      return amount
+        ? `The desk acted on a market price gap with ${amount}`
+        : "The desk acted on a market price gap";
+    default: {
+      const action = ticket.strategy ? strategyLabel(ticket.strategy).toLowerCase() : null;
+      if (!action) return "The desk completed a recorded action";
+      return amount
+        ? `The desk completed a ${action} action with ${amount}`
+        : `The desk completed a ${action} action`;
+    }
+  }
+}
+
+type TicketOutcomeInput = Pick<
+  DeskTicketNarrative,
+  "executionAudit" | "executionAuditSummary" | "fillsCount" | "fillTxHashes"
+>;
+
+export type TicketOutcomeStatus =
+  | "filled"
+  | "failed"
+  | "timeout"
+  | "skipped"
+  | "unknown"
+  | "published";
+
+export function ticketOutcomeStatus(ticket: TicketOutcomeInput): TicketOutcomeStatus {
+  const recordedStatus = ticket.executionAudit?.stages.outcome.status;
+  if (recordedStatus && recordedStatus !== "unknown") return recordedStatus;
+  if (ticket.fillsCount > 0 || ticket.fillTxHashes.length > 0) return "filled";
+
+  // Older tickets only expose the generated one-line audit summary.
+  const legacySummary = ticket.executionAuditSummary?.toLowerCase() ?? "";
+  if (/\bfilled\b/.test(legacySummary)) return "filled";
+  if (/\bfailed\b/.test(legacySummary)) return "failed";
+  if (/\btimeout\b|\btimed out\b/.test(legacySummary)) return "timeout";
+  return "published";
+}
+
+export function ticketOutcomeLabel(ticket: TicketOutcomeInput): string {
+  switch (ticketOutcomeStatus(ticket)) {
+    case "filled":
+      return "Completed";
+    case "failed":
+      return "Not completed";
+    case "timeout":
+      return "Timed out";
+    case "skipped":
+      return "Skipped";
+    case "unknown":
+      return "Outcome unknown";
+    default:
+      return "Awaiting result";
+  }
+}
+
+export function ticketOutcomeVariant(
+  ticket: TicketOutcomeInput,
+): "default" | "success" | "warning" | "error" | "info" {
+  switch (ticketOutcomeStatus(ticket)) {
+    case "filled":
+      return "success";
+    case "failed":
+      return "error";
+    case "timeout":
+    case "skipped":
+      return "warning";
+    case "unknown":
+      return "default";
+    default:
+      return "info";
+  }
+}
+
+export function ticketExecutionNarrative(ticket: TicketOutcomeInput): string {
+  const status = ticketOutcomeStatus(ticket);
+  if (status === "filled") {
+    const preflight = ticket.executionAudit?.stages.preflight;
+    if (preflight?.status === "passed" && preflight.khSimulate?.status === "passed") {
+      return "Policy checks passed, then KeeperHub completed the trade.";
+    }
+    const fills = ticket.fillsCount;
+    return fills > 0
+      ? `The trade completed with ${fills} recorded fill${fills === 1 ? "" : "s"}.`
+      : "The trade completed successfully.";
+  }
+  if (status === "failed") {
+    return ticket.executionAudit?.stages.preflight.status === "failed"
+      ? "Policy checks stopped this trade before submission."
+      : "The trade did not complete. Open the ticket for the failed step and its proof.";
+  }
+  if (status === "timeout") {
+    return "The trade did not finish before the execution window closed.";
+  }
+  if (status === "skipped") return "This trade was recorded but skipped before execution.";
+  if (status === "unknown") return "The ticket is recorded, but its final outcome is unclear.";
+  return "The decision is recorded; this trade has not reported a completed outcome yet.";
 }
 
 export function signalTypeLabel(signalType: string | null | undefined): string {
@@ -91,7 +275,11 @@ export function capitalDirectionVariant(
   }
 }
 
-export function equityProgress(equity: number | null, target: number, max: number): {
+export function equityProgress(
+  equity: number | null,
+  target: number,
+  max: number,
+): {
   pctOfTarget: number;
   pctOfMax: number;
   band: "below_min" | "near_target" | "above_target" | "at_ceiling" | "unknown";
@@ -101,8 +289,7 @@ export function equityProgress(equity: number | null, target: number, max: numbe
   }
   const pctOfTarget = (equity / target) * 100;
   const pctOfMax = max > 0 ? (equity / max) * 100 : 0;
-  let band: "below_min" | "near_target" | "above_target" | "at_ceiling" | "unknown" =
-    "near_target";
+  let band: "below_min" | "near_target" | "above_target" | "at_ceiling" | "unknown" = "near_target";
   if (equity >= max) band = "at_ceiling";
   else if (equity > target * 1.05) band = "above_target";
   else if (equity < target * 0.8) band = "below_min";

@@ -8,13 +8,17 @@ interface AppStatusBarProps {
 }
 
 /**
- * Thin context strip under the top nav — same role as PalletMan's connection bar.
- * Surfaces which desk section the reader is in and that the feed is live.
+ * Thin context strip under the top nav.
+ * Surfaces the current product section and whether it is live, published, or product-focused.
  */
-export function AppStatusBar({
-  sectionLabel,
-  sectionDescription,
-}: AppStatusBarProps): ReactNode {
+export function AppStatusBar({ sectionLabel, sectionDescription }: AppStatusBarProps): ReactNode {
+  const isLiveSurface = ["Alerts", "Desk", "Activity"].includes(sectionLabel);
+  const status = isLiveSurface
+    ? { label: "Live feed", variant: "success" as const }
+    : sectionLabel === "Premium" || sectionLabel === "Affiliates"
+      ? { label: "Product", variant: "default" as const }
+      : { label: "Published", variant: "default" as const };
+
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-frame text-sm shrink-0">
       <div className="flex items-center gap-2 min-w-0">
@@ -22,16 +26,13 @@ export function AppStatusBar({
         <span className="text-muted-foreground truncate">
           <span className="text-foreground font-medium">{sectionLabel}</span>
           {sectionDescription ? (
-            <span className="hidden sm:inline">
-              {" "}
-              · {sectionDescription}
-            </span>
+            <span className="hidden sm:inline"> · {sectionDescription}</span>
           ) : null}
         </span>
       </div>
 
-      <Badge variant="success" className="ml-auto shrink-0">
-        Live
+      <Badge variant={status.variant} className="ml-auto shrink-0">
+        {status.label}
       </Badge>
     </div>
   );

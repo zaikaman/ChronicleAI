@@ -693,11 +693,11 @@ const TABS: {
     payouts: number;
   }) => string | number | null;
 }[] = [
+  { id: "proofs", label: "Proofs & Logs", badge: (s) => `${s.succeededLogs + s.failedLogs}` },
   { id: "overview", label: "Overview" },
   { id: "trading", label: "Desk & Trading" },
-  { id: "proofs", label: "Proofs & Logs", badge: (s) => `${s.succeededLogs + s.failedLogs}` },
-  { id: "financials", label: "Financials & Revenue", badge: (s) => `${s.settledPayments}` },
   { id: "all", label: "All Activity" },
+  { id: "financials", label: "Financials & Revenue", badge: (s) => `${s.settledPayments}` },
 ];
 
 export function ActivityPage(): ReactElement {
@@ -711,16 +711,15 @@ export function ActivityPage(): ReactElement {
   const entityType = entityTypeRaw.length > 0 ? entityTypeRaw : null;
 
   const tabParam = searchParams.get("tab") as ActivityTab | null;
+  // Activity is the public proof destination; overview remains available as an explicit tab.
   const activeTab: ActivityTab =
     tabParam && ["overview", "trading", "proofs", "financials", "all"].includes(tabParam)
       ? tabParam
-      : entityId
-        ? "proofs"
-        : "overview";
+      : "proofs";
 
   const handleTabChange = (newTab: ActivityTab) => {
     const next = new URLSearchParams(searchParams);
-    if (newTab === "overview") {
+    if (newTab === "proofs") {
       next.delete("tab");
     } else {
       next.set("tab", newTab);
@@ -770,7 +769,7 @@ export function ActivityPage(): ReactElement {
     <Page data-testid="activity-page">
       <PageHeader
         title="Agent Activity"
-        description="Public trail of publications, on-chain proofs, desk capital moves, trade tickets, subscription analytics, referral attribution, treasury health, and KeeperHub execution outcomes."
+        description="Public execution and proof trail for KeeperHub actions, desk tickets, registry receipts, and supporting operations."
         meta={<SectionLink to="/desk">Open desk →</SectionLink>}
       />
 
@@ -790,7 +789,7 @@ export function ActivityPage(): ReactElement {
       ) : !data ? (
         <EmptyState
           title="No activity yet"
-          description="Agent activity will appear here once ChronicleAI publishes alerts, digests, or settles payments."
+          description="Public proof events will appear here once ChronicleAI records alerts, desk actions, or KeeperHub runs."
           data-testid="activity-empty"
         />
       ) : (
@@ -836,7 +835,7 @@ export function ActivityPage(): ReactElement {
 
           {/* Tab Content Section Container */}
           <div className="space-y-10 sm:space-y-14">
-            {/* TAB 1: OVERVIEW */}
+            {/* TAB: OVERVIEW */}
             {(activeTab === "overview" || activeTab === "all") && (
               <>
                 <PageSection
@@ -864,7 +863,7 @@ export function ActivityPage(): ReactElement {
               </>
             )}
 
-            {/* TAB 2: TRADING & DESK */}
+            {/* TAB: TRADING & DESK */}
             {(activeTab === "trading" || activeTab === "all") && (
               <>
                 <PageSection
@@ -893,7 +892,7 @@ export function ActivityPage(): ReactElement {
               </>
             )}
 
-            {/* TAB 3: PROOFS & LOGS */}
+            {/* TAB: PROOFS & LOGS */}
             {(activeTab === "proofs" || activeTab === "all") && (
               <>
                 <PageSection
@@ -989,7 +988,7 @@ export function ActivityPage(): ReactElement {
               </>
             )}
 
-            {/* TAB 4: FINANCIALS & REVENUE */}
+            {/* TAB: FINANCIALS & REVENUE */}
             {(activeTab === "financials" || activeTab === "all") && (
               <>
                 <PageSection
