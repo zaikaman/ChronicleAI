@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS public.system_control_state (
   CONSTRAINT system_control_state_singleton CHECK (id = 'default')
 );
 
+ALTER TABLE public.system_control_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_control_state FORCE ROW LEVEL SECURITY;
+
 INSERT INTO public.system_control_state (id, groq_key_index)
 VALUES ('default', 0)
 ON CONFLICT (id) DO NOTHING;

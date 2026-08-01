@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS public.affiliate_agent_jobs (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.affiliate_agent_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.affiliate_agent_jobs FORCE ROW LEVEL SECURITY;
+
 CREATE INDEX IF NOT EXISTS idx_affiliate_agent_jobs_wallet ON public.affiliate_agent_jobs (affiliate_wallet);
 CREATE INDEX IF NOT EXISTS idx_affiliate_agent_jobs_created_at ON public.affiliate_agent_jobs (created_at DESC);
 

@@ -48,21 +48,11 @@ ALTER TABLE public.execution_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.execution_logs FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS execution_logs_select_public ON public.execution_logs;
-CREATE POLICY execution_logs_select_public
-  ON public.execution_logs
-  FOR SELECT
-  TO anon, authenticated
-  USING (true);
 
 ALTER TABLE public.treasury_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.treasury_snapshots FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS treasury_snapshots_select_public ON public.treasury_snapshots;
-CREATE POLICY treasury_snapshots_select_public
-  ON public.treasury_snapshots
-  FOR SELECT
-  TO anon, authenticated
-  USING (true);
 
 -- ── Deny-by-default operational / private tables ─────────────────────────────
 -- RLS enabled, no policies for anon/authenticated ⇒ no access.

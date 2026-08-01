@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS public.public_alerts (
   title TEXT NOT NULL,
   summary TEXT NOT NULL,
   source_references JSONB NOT NULL DEFAULT '[]'::jsonb,
-  audience TEXT NOT NULL DEFAULT 'public' CHECK (audience IN ('public', 'premium', 'operator')),
+  audience TEXT NOT NULL DEFAULT 'public' CHECK (audience IN ('public', 'premium')),
   destinations JSONB,
   delivery_status TEXT NOT NULL DEFAULT 'draft' CHECK (delivery_status IN (
     'draft', 'queued', 'published', 'partial_failure', 'failed'
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS public.daily_digests (
   highlights JSONB NOT NULL DEFAULT '[]'::jsonb,
   analysis TEXT,
   source_event_ids UUID[] NOT NULL DEFAULT '{}',
-  audience TEXT NOT NULL DEFAULT 'public' CHECK (audience IN ('public', 'premium', 'operator')),
+  audience TEXT NOT NULL DEFAULT 'public' CHECK (audience IN ('public', 'premium')),
   publication_status TEXT NOT NULL DEFAULT 'draft' CHECK (publication_status IN (
     'draft', 'queued', 'published', 'partial_failure', 'failed'
   )),
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS public.execution_logs (
   action_type TEXT NOT NULL CHECK (action_type IN (
     'monitor', 'generate_alert', 'publish_alert',
     'generate_digest', 'publish_digest',
-    'payment', 'treasury_check', 'operator_notification'
+    'payment', 'treasury_check', 'notification'
   )),
   entity_type TEXT,
   entity_id UUID,

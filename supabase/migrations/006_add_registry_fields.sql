@@ -32,6 +32,6 @@ ALTER TABLE public.execution_logs
   CHECK (action_type IN (
     'monitor', 'generate_alert', 'publish_alert',
     'generate_digest', 'publish_digest',
-    'payment', 'treasury_check', 'operator_notification',
+    'payment', 'treasury_check', 'notification',
     'registry_write', 'payout'
   ));
