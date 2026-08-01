@@ -203,8 +203,14 @@ export interface KeeperHubWriteClient {
   /**
    * Transfer treasury USDC to a recipient (human USDC units, e.g. 12.5).
    * Requires KEEPERHUB_WORKFLOW_TRANSFER (transfer workflow ID).
+   * Pass a stable key for retriable business operations. When omitted, the
+   * transfer payload is used so retries do not create a new key.
    */
-  sendTransfer(to: string, amountUsdc: number): Promise<KeeperHubWriteReceipt>;
+  sendTransfer(
+    to: string,
+    amountUsdc: number,
+    idempotencyKey?: string,
+  ): Promise<KeeperHubWriteReceipt>;
 }
 
 /** IDEA-aligned ChronicleRegistry ABI fragment (encoding helpers / Para path). */
@@ -997,7 +1003,7 @@ export function createKeeperHubWriteClient(
       );
     },
 
-    async sendTransfer(to, amountUsdc) {
+    async sendTransfer(to, amountUsdc, requestedIdempotencyKey) {
       const workflowId = requireWorkflowId(workflowIds, "transfer");
       const usdcAddress = config.usdcAddress.trim();
       if (!/^0x[0-9a-fA-F]{40}$/.test(usdcAddress)) {
@@ -1006,7 +1012,8 @@ export function createKeeperHubWriteClient(
         );
       }
       const decimals = config.usdcDecimals ?? 6;
-      const idempotencyKey = `chronicle-usdc-transfer-${to}-${amountUsdc}-${Date.now()}`;
+      const idempotencyKey =
+        requestedIdempotencyKey?.trim() || `chronicle-usdc-transfer-${to}-${amountUsdc}`;
 
       return runViaMcpOrRest(
         "transfer",

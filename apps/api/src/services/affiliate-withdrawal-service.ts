@@ -185,7 +185,7 @@ export function createAffiliateWithdrawalService(deps: {
 
       try {
         const transfer = web3Client.sendAffiliateTransfer ?? web3Client.sendTransfer;
-        const receipt = await transfer(wallet, amount);
+        const receipt = await transfer(wallet, amount, `affiliate-withdrawal-${withdrawal.id}`);
         transferReceipt = {
           txHash: receipt.txHash,
           ...(receipt.keeperHubRunId ? { keeperHubRunId: receipt.keeperHubRunId } : {}),

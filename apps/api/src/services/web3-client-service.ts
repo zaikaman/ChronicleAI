@@ -165,10 +165,18 @@ export interface Web3Client {
    * Send USDC from the treasury wallet (human USDC units, e.g. 12.5).
    * Production: Para MPC ERC-20 transfer when configured, else KeeperHub transfer.
    */
-  sendTransfer(to: string, amountUsdc: number): Promise<OnChainWriteReceipt>;
+  sendTransfer(
+    to: string,
+    amountUsdc: number,
+    idempotencyKey?: string,
+  ): Promise<OnChainWriteReceipt>;
 
   /** Send an affiliate payout on the x402 payment rail (Base Sepolia by default). */
-  sendAffiliateTransfer?(to: string, amountUsdc: number): Promise<OnChainWriteReceipt>;
+  sendAffiliateTransfer?(
+    to: string,
+    amountUsdc: number,
+    idempotencyKey?: string,
+  ): Promise<OnChainWriteReceipt>;
 }
 
 /** Full ABI used by Para / direct-EOA paths (includes view helpers). */
@@ -609,11 +617,12 @@ function createParaWeb3Client(
       return receiptWithGas(receipt, network);
     },
 
-    sendTransfer: (to, amountUsdc) => paraClient.sendTransfer(to, amountUsdc),
+    sendTransfer: (to, amountUsdc, idempotencyKey) =>
+      paraClient.sendTransfer(to, amountUsdc, idempotencyKey),
     ...(affiliateParaClient
       ? {
-          sendAffiliateTransfer: (to: string, amountUsdc: number) =>
-            affiliateParaClient.sendTransfer(to, amountUsdc),
+          sendAffiliateTransfer: (to: string, amountUsdc: number, idempotencyKey?: string) =>
+            affiliateParaClient.sendTransfer(to, amountUsdc, idempotencyKey),
         }
       : {}),
   };
@@ -696,8 +705,10 @@ function createKeeperHubBackedWeb3Client(
       kh.publishTradeTicket(ticketHash, signalHash, intentHash, contentUri),
     recordCapitalMove: (moveId, from, to, amountUsdc, reasonHash) =>
       kh.recordCapitalMove(moveId, from, to, amountUsdc, reasonHash),
-    sendTransfer: (to, amountUsdc) => kh.sendTransfer(to, amountUsdc),
-    sendAffiliateTransfer: (to, amountUsdc) => affiliateKh.sendTransfer(to, amountUsdc),
+    sendTransfer: (to, amountUsdc, idempotencyKey) =>
+      kh.sendTransfer(to, amountUsdc, idempotencyKey),
+    sendAffiliateTransfer: (to, amountUsdc, idempotencyKey) =>
+      affiliateKh.sendTransfer(to, amountUsdc, idempotencyKey),
   };
 }
 

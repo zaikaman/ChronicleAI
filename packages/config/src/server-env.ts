@@ -319,7 +319,8 @@ export interface ServerEnv {
   keeperhubMcpLangchainAgent: boolean;
   /**
    * Pre-imported KeeperHub workflow IDs (maps 1:1 to workflows/keeperhub/*.workflow.json).
-   * Required for each write action — Direct Execution is disabled; missing IDs fail hard.
+   * Each ID is optional at boot and is required only when its corresponding feature is used.
+   * Direct Execution is disabled; missing IDs fail hard at the feature boundary.
    */
   /** Write path */
   keeperhubWorkflowPublishAlert: string | undefined;
@@ -857,14 +858,33 @@ export function assertProductionReadiness(env: ServerEnv): void {
 
   const errors: string[] = [];
 
-  const hasKeeperHub =
-    Boolean(env.keeperhubApiKey?.trim()) &&
-    Boolean(env.keeperhubApiBaseUrl?.trim()) &&
-    Boolean(env.chronicleRegistryAddress?.trim());
+  const keeperHubCoreErrors: string[] = [];
+  const keeperHubApiKey = env.keeperhubApiKey?.trim() ?? "";
+  const keeperHubApiBaseUrl = env.keeperhubApiBaseUrl?.trim() ?? "";
+  const chronicleRegistryAddress = env.chronicleRegistryAddress?.trim() ?? "";
 
-  if (!hasKeeperHub) {
+  if (!keeperHubApiKey || !keeperHubApiKey.startsWith("kh_")) {
+    keeperHubCoreErrors.push("KEEPERHUB_API_KEY (kh_ organization key)");
+  }
+  if (!keeperHubApiBaseUrl) {
+    keeperHubCoreErrors.push("KEEPERHUB_API_BASE_URL");
+  } else {
+    try {
+      const parsed = new URL(keeperHubApiBaseUrl);
+      if (parsed.protocol !== "https:") {
+        keeperHubCoreErrors.push("KEEPERHUB_API_BASE_URL (must use https)");
+      }
+    } catch {
+      keeperHubCoreErrors.push("KEEPERHUB_API_BASE_URL (must be an absolute URL)");
+    }
+  }
+  if (!EVM_ADDRESS_RE.test(chronicleRegistryAddress)) {
+    keeperHubCoreErrors.push("CHRONICLE_REGISTRY_ADDRESS (valid 0x EVM address)");
+  }
+
+  if (keeperHubCoreErrors.length > 0) {
     errors.push(
-      "KeeperHub is required in production: configure KEEPERHUB_API_KEY + KEEPERHUB_API_BASE_URL + CHRONICLE_REGISTRY_ADDRESS; Para MPC may only provide custody/signing behind KeeperHub workflows",
+      `KeeperHub core configuration is required in production: configure ${keeperHubCoreErrors.join(" + ")}; workflow IDs remain feature-scoped and are validated when their feature executes. Para MPC may only provide custody/signing behind KeeperHub workflows`,
     );
   }
 

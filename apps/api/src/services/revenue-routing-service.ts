@@ -400,7 +400,11 @@ export function createRevenueRoutingService(
         const usdcAmount = amount;
 
         try {
-          const transferReceipt = await web3Client.sendTransfer(recipient, usdcAmount);
+          const transferReceipt = await web3Client.sendTransfer(
+            recipient,
+            usdcAmount,
+            `payout-${payoutId}`,
+          );
           transferHashes.set(payoutId, {
             txHash: transferReceipt.txHash,
             ...(transferReceipt.keeperHubRunId

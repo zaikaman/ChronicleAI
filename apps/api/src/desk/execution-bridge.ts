@@ -377,7 +377,10 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
     if (!config.apiBaseUrl?.trim() || !config.apiKey?.trim()) return false;
     if (!config.apiKey.startsWith("kh_")) return false;
     if (!action) {
-      return Object.values(workflowIds).some((id) => Boolean(id?.trim()));
+      return (Object.keys(ACTION_KEY) as DeskWorkflowAction[]).some((candidate) => {
+        const key = ACTION_KEY[candidate];
+        return Boolean(workflowIds[key]?.trim());
+      });
     }
     try {
       requireWorkflowId(action);

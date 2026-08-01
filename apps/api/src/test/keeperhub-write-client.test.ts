@@ -140,15 +140,26 @@ describe("createKeeperHubWriteClient", () => {
       workflowIds: { transfer: "wf_transfer" },
     });
 
-    const receipt = await client.sendTransfer("0x" + "22".repeat(20), 12.5);
-    const xferCall = fetchMock.mock.calls.find((c) =>
+    const recipient = "0x" + "22".repeat(20);
+    const receipt = await client.sendTransfer(recipient, 12.5);
+    const retryReceipt = await client.sendTransfer(recipient, 12.5);
+    const xferCalls = fetchMock.mock.calls.filter((c) =>
       String(c[0]).includes("/api/workflows/wf_transfer/execute"),
     );
-    expect(xferCall).toBeDefined();
+    expect(xferCalls).toHaveLength(2);
+    const xferCall = xferCalls[0];
+    const retryXferCall = xferCalls[1];
     const xferBody = JSON.parse(String((xferCall?.[1] as RequestInit).body));
     expect(xferBody.input.tokenAddress).toBe("0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238");
     expect(xferBody.input.amount).toBe("12.5");
+    expect(new Headers((xferCall?.[1] as RequestInit).headers).get("Idempotency-Key")).toBe(
+      "chronicle-usdc-transfer-0x" + "22".repeat(20) + "-12.5",
+    );
+    expect(
+      new Headers((retryXferCall?.[1] as RequestInit).headers).get("Idempotency-Key"),
+    ).toBe(new Headers((xferCall?.[1] as RequestInit).headers).get("Idempotency-Key"));
     expect(receipt.keeperHubRunId).toBe("exec_xfer_1");
+    expect(retryReceipt.keeperHubRunId).toBe("exec_xfer_1");
     expect(receipt.txHash).toBe("0x" + "cd".repeat(32));
     expect(
       fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/execute/transfer")),

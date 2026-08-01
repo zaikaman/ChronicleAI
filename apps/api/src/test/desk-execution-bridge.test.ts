@@ -28,6 +28,18 @@ describe("execution-bridge", () => {
     );
   });
 
+  it("does not report an empty workflow rail as configured", () => {
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: { publicFallbacks: {} },
+    });
+
+    expect(bridge.isConfigured()).toBe(false);
+    expect(bridge.isConfigured("defend")).toBe(false);
+  });
+
   it("POSTs workflow execute and polls to completion", async () => {
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       const u = String(url);
