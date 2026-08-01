@@ -61,17 +61,62 @@ export default defineConfig({
 
           // Wallet / web3 stack — large, only needed when wallet is loaded
           if (
-            id.includes("@rainbow-me/rainbowkit") ||
             id.includes("node_modules/wagmi/") ||
-            id.includes("node_modules/@wagmi/") ||
-            id.includes("node_modules/viem/") ||
-            id.includes("node_modules/@walletconnect/") ||
-            id.includes("node_modules/@reown/") ||
-            id.includes("node_modules/@metamask/") ||
-            id.includes("node_modules/@coinbase/") ||
-            id.includes("node_modules/ox/")
+            id.includes("node_modules/@wagmi/")
           ) {
-            return "web3-vendor";
+            return "wallet-wagmi";
+          }
+
+          // Keep WalletConnect/Reown packages separate so a single package update
+          // does not invalidate the whole wallet stack or recreate a mega-chunk.
+          const normalizedId = id.replaceAll("\\", "/");
+          const walletPackage = normalizedId.match(
+            /node_modules\/(\@walletconnect|\@reown)\/([^/]+)/,
+          );
+          if (walletPackage?.[1] && walletPackage[2]) {
+            return `wallet-${walletPackage[1].slice(1)}-${walletPackage[2]}`;
+          }
+
+          const viemCjsModule = normalizedId.match(
+            /node_modules\/viem\/_cjs\/([^/]+)/,
+          );
+          if (viemCjsModule?.[1]) {
+            if (
+              viemCjsModule[1] === "actions" ||
+              viemCjsModule[1] === "utils" ||
+              viemCjsModule[1] === "errors" ||
+              viemCjsModule[1] === "accounts"
+            ) {
+              return "wallet-viem-cjs-core";
+            }
+            return `wallet-viem-cjs-${viemCjsModule[1]}`;
+          }
+
+          if (normalizedId.includes("node_modules/@metamask/sdk/")) {
+            return "wallet-metamask-sdk";
+          }
+
+          if (
+            normalizedId.includes("node_modules/socket.io-client/") ||
+            normalizedId.includes("node_modules/socket.io-parser/") ||
+            normalizedId.includes("node_modules/engine.io-client/") ||
+            normalizedId.includes("node_modules/engine.io-parser/") ||
+            normalizedId.includes("node_modules/@socket.io/")
+          ) {
+            return "wallet-metamask-realtime";
+          }
+
+          if (
+            normalizedId.includes("node_modules/cross-fetch/") ||
+            normalizedId.includes("node_modules/openapi-fetch/") ||
+            normalizedId.includes("node_modules/eventemitter2/") ||
+            normalizedId.includes("node_modules/uuid/")
+          ) {
+            return "wallet-metamask-runtime";
+          }
+
+          if (normalizedId.includes("node_modules/@safe-global/")) {
+            return "wallet-safe";
           }
 
           // Icons
