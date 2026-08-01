@@ -10,16 +10,35 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const saved = localStorage.getItem("theme") as Theme;
+function readStoredTheme(): Theme {
+  try {
+    if (typeof window === "undefined") return "dark";
+
+    const saved = window.localStorage.getItem("theme");
     if (saved === "dark" || saved === "light") return saved;
-    return "dark"; // Default to dark for ChronicleAI
-  });
+  } catch {
+    // Storage can be disabled, blocked, or throw in privacy-restricted browsers.
+  }
+
+  return "dark";
+}
+
+function persistTheme(theme: Theme): void {
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("theme", theme);
+    }
+  } catch {
+    // Theme state still works for this session when persistence is unavailable.
+  }
+}
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
 
   const setTheme = (t: Theme) => {
     setThemeState(t);
-    localStorage.setItem("theme", t);
+    persistTheme(t);
   };
 
   useEffect(() => {

@@ -6,7 +6,7 @@ import { type ReactElement, useCallback, useEffect, useId, useMemo, useState } f
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { formatPaymentRoute, sortPaymentRoutes } from "./payment-route-labels.ts";
 
-import { API_BASE } from "../../lib/api.ts";
+import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
 
 const FALLBACK_DISCOVERY: AgentPaymentsDiscovery = {
   version: "1",
@@ -154,7 +154,7 @@ export function AgentPaymentsPanel({
     const controller = new AbortController();
     void (async () => {
       try {
-        const res = await fetch(`${API_BASE}/payments`, {
+        const res = await fetchWithTimeout(`${API_BASE}/payments`, {
           signal: controller.signal,
           headers: { Accept: "application/json" },
         });

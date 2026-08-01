@@ -12,7 +12,7 @@ import {
 } from "../../components/page-chrome.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 
-import { API_BASE } from "../../lib/api.ts";
+import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
 
 interface WatchAuditTrail {
   createTxHash: string | null;
@@ -106,7 +106,7 @@ export function SponsoredWatchDetailPage(): ReactElement {
   const { watchId } = useParams<{ watchId: string }>();
   const [state, setState] = useState<WatchState>({ status: "loading" });
 
-  const fetchWatch = useCallback(async () => {
+  const fetchWatch = useCallback(async (signal?: AbortSignal) => {
     if (!watchId) {
       setState({ status: "not-found" });
       return;
@@ -114,7 +114,10 @@ export function SponsoredWatchDetailPage(): ReactElement {
 
     setState({ status: "loading" });
     try {
-      const response = await fetch(`${API_BASE}/premium/watches/${encodeURIComponent(watchId)}`);
+      const response = await fetchWithTimeout(
+        `${API_BASE}/premium/watches/${encodeURIComponent(watchId)}`,
+        signal ? { signal } : undefined,
+      );
       if (response.status === 404) {
         setState({ status: "not-found" });
         return;
@@ -126,6 +129,7 @@ export function SponsoredWatchDetailPage(): ReactElement {
       const data = (await response.json()) as WatchDetail;
       setState({ status: "success", data });
     } catch (error) {
+      if (signal?.aborted) return;
       setState({
         status: "error",
         error: error instanceof Error ? error.message : "Unknown error fetching watch",
@@ -134,7 +138,9 @@ export function SponsoredWatchDetailPage(): ReactElement {
   }, [watchId]);
 
   useEffect(() => {
-    void fetchWatch();
+    const controller = new AbortController();
+    void fetchWatch(controller.signal);
+    return () => controller.abort();
   }, [fetchWatch]);
 
   if (state.status === "loading") {
@@ -177,7 +183,7 @@ export function SponsoredWatchDetailPage(): ReactElement {
         <RetryState
           title="Failed to load sponsored watch"
           message={state.error}
-          onRetry={fetchWatch}
+          onRetry={() => void fetchWatch()}
           data-testid="watch-detail-error"
         />
       </Page>

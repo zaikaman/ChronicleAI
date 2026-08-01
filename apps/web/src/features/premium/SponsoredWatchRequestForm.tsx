@@ -1,14 +1,14 @@
 // Custom sponsored watch purchase form (Loop 4)
 // Buyer submits a target contract + campaign window, pays via x402, gets dual on-chain trail.
 
-import { type ReactElement, useCallback, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { Surface } from "../../components/page-chrome.tsx";
 import { isEvmAddress, useWallet } from "../wallet";
 import { settlePayment } from "./use-premium.ts";
 
-import { API_BASE } from "../../lib/api.ts";
+import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
 const WEB_PAYMENT_ROUTE = "x402" as const;
 
 type FormStep =
@@ -162,6 +162,11 @@ export function SponsoredWatchRequestForm({
   const [error, setError] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<PreparedChallenge | null>(null);
   const [settledWatch, setSettledWatch] = useState<SettledWatch | null>(null);
+  const prepareControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => prepareControllerRef.current?.abort();
+  }, []);
 
   const handlePrepare = useCallback(async () => {
     setError(null);
@@ -180,15 +185,21 @@ export function SponsoredWatchRequestForm({
     }
 
     setStep("preparing");
+    prepareControllerRef.current?.abort();
+    const controller = new AbortController();
+    prepareControllerRef.current = controller;
     try {
       let payer = wallet.address;
       if (!payer) {
         payer = await wallet.connect();
       }
 
-      const response = await fetch(`${API_BASE}/payments/sponsored-watch/challenges`, {
+      const response = await fetchWithTimeout(
+        `${API_BASE}/payments/sponsored-watch/challenges`,
+        {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
         body: JSON.stringify({
           targetContract: targetContract.trim(),
           eventSignature: eventSignature.trim() || undefined,
@@ -197,7 +208,8 @@ export function SponsoredWatchRequestForm({
           paymentRoute: WEB_PAYMENT_ROUTE,
           payerReference: payer ?? undefined,
         }),
-      });
+        },
+      );
 
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -208,8 +220,13 @@ export function SponsoredWatchRequestForm({
       setPrepared(data);
       setStep("challenge_ready");
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : "Failed to prepare sponsored watch");
       setStep("error");
+    } finally {
+      if (prepareControllerRef.current === controller) {
+        prepareControllerRef.current = null;
+      }
     }
   }, [targetContract, eventSignature, description, durationHours, wallet]);
 

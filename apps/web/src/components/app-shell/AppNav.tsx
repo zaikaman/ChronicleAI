@@ -1,5 +1,5 @@
 import { ArrowLeft, Menu } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { Link } from "react-router-dom";
 import { ConnectWalletButton } from "@/features/wallet";
 import { Badge } from "../ui/badge.tsx";
@@ -7,6 +7,7 @@ import { Badge } from "../ui/badge.tsx";
 interface AppNavProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  menuButtonRef?: Ref<HTMLButtonElement>;
   sectionLabel?: string;
 }
 
@@ -17,6 +18,7 @@ interface AppNavProps {
 export function AppNav({
   sidebarOpen,
   onToggleSidebar,
+  menuButtonRef,
   sectionLabel = "Desk",
 }: AppNavProps): ReactNode {
   return (
@@ -26,12 +28,14 @@ export function AppNav({
     >
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={onToggleSidebar}
-          className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl text-foreground hover:bg-muted transition-colors shrink-0"
+          className="md:hidden inline-flex h-11 w-11 items-center justify-center rounded-xl text-foreground hover:bg-muted transition-colors shrink-0"
           aria-label={sidebarOpen ? "Close navigation" : "Open navigation"}
           aria-expanded={sidebarOpen}
           aria-controls="app-sidebar"
+          aria-haspopup="dialog"
         >
           <Menu className="h-4 w-4" />
         </button>

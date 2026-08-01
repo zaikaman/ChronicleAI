@@ -48,6 +48,10 @@ export function AppSidebar({ open, onNavigate }: AppSidebarProps): ReactNode {
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
         `}
         aria-label="Product navigation"
+        aria-labelledby={open ? "app-sidebar-title" : undefined}
+        aria-modal={open ? true : undefined}
+        role={open ? "dialog" : undefined}
+        tabIndex={-1}
       >
         {/* Mobile drawer header with close */}
         <div className="md:hidden flex items-center justify-between gap-2 px-3 py-3 border-b border-border">
@@ -55,12 +59,15 @@ export function AppSidebar({ open, onNavigate }: AppSidebarProps): ReactNode {
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background shrink-0">
               CAI
             </div>
-            <span className="text-sm font-semibold text-foreground">Sections</span>
+            <span id="app-sidebar-title" className="text-sm font-semibold text-foreground">
+              Sections
+            </span>
           </div>
           <button
+            id="app-sidebar-close"
             type="button"
             onClick={onNavigate}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             aria-label="Close navigation"
           >
             <X className="h-4 w-4" />

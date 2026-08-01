@@ -1,7 +1,7 @@
 // Client-side referral capture (?ref=code) + first-touch wallet attribution.
 
 import { signAffiliateAuth } from "./affiliate-auth.ts";
-import { API_BASE } from "./api.ts";
+import { API_BASE, fetchWithTimeout } from "./api.ts";
 
 const STORAGE_KEY = "chronicle_referral_ref";
 const ATTRIBUTED_KEY = "chronicle_referral_attributed_wallet";
@@ -68,7 +68,7 @@ export async function attributeReferralOnConnect(
 
   try {
     const auth = await signAffiliateAuth(wallet, signMessage);
-    const response = await fetch(`${API_BASE}/affiliates/attribute`, {
+    const response = await fetchWithTimeout(`${API_BASE}/affiliates/attribute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

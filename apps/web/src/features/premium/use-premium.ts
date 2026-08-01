@@ -2,8 +2,14 @@
 
 import type { PaginationMeta, PremiumItemTeaserResponse } from "@chronicleai/schemas";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
-import { API_BASE, apiGetJson, apiPostJson, toErrorMessage } from "../../lib/api.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  API_BASE,
+  apiGetJson,
+  apiPostJson,
+  fetchWithTimeout,
+  toErrorMessage,
+} from "../../lib/api.ts";
 import { EMPTY_PAGINATION, normalizePaginationMeta } from "../../lib/pagination.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
 
@@ -145,8 +151,19 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
     amountRequested: number;
     currency: string;
   } | null>(null);
+  const accessControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      accessControllerRef.current?.abort();
+      accessControllerRef.current = null;
+    };
+  }, []);
 
   const accessItem = useCallback(async (itemId: string, accessReceipt?: string, payerReference?: string) => {
+    accessControllerRef.current?.abort();
+    const controller = new AbortController();
+    accessControllerRef.current = controller;
     setIsLoading(true);
     setError(null);
     setData(null);
@@ -169,9 +186,10 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
         ? `${API_BASE}/premium/items/${itemId}?payer=${encodeURIComponent(payerReference)}`
         : `${API_BASE}/premium/items/${itemId}`;
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         headers,
         credentials: "include",
+        signal: controller.signal,
       });
 
       if (response.status === 200) {
@@ -232,9 +250,13 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
 
       throw new Error(`Unexpected response: ${response.statusText}`);
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : "Failed to access premium item");
     } finally {
-      setIsLoading(false);
+      if (accessControllerRef.current === controller) {
+        accessControllerRef.current = null;
+        setIsLoading(false);
+      }
     }
   }, []);
 

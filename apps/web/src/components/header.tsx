@@ -109,10 +109,11 @@ export function Header(): ReactNode {
 
         <button
           type="button"
-          className="hidden max-[850px]:flex items-center justify-center w-10 h-10 cursor-pointer"
+          className="hidden max-[850px]:flex h-11 w-11 items-center justify-center cursor-pointer"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileMenuOpen}
+          aria-controls="mobile-navigation"
         >
           <HamburgerIcon isOpen={mobileMenuOpen} />
         </button>
@@ -126,6 +127,7 @@ export function Header(): ReactNode {
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.3, ease }}
             className="hidden max-[850px]:block overflow-hidden"
+            id="mobile-navigation"
           >
             <div className="px-6 pb-4">
               <nav className="space-y-0" aria-label="Mobile">

@@ -62,6 +62,7 @@ export function defaultUsdcEip712Name(chainId: number): string {
 }
 
 const CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes
+const FACILITATOR_REQUEST_TIMEOUT_MS = 15_000;
 
 const USDC_EIP3009_ABI = parseAbi([
   "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)",
@@ -871,6 +872,11 @@ export class X402PaymentAdapter implements PaymentAdapter {
     let bestErrorRank = -1;
 
     for (const url of settleUrls) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        FACILITATOR_REQUEST_TIMEOUT_MS,
+      );
       try {
         const headers = await buildFacilitatorAuthHeaders(url, this.cdpCredentials, "POST");
         const hasAuth = Boolean(headers.Authorization);
@@ -883,6 +889,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
           method: "POST",
           headers,
           body: JSON.stringify(settleBody),
+          signal: controller.signal,
         });
 
         const rawText = await response.text();
@@ -965,6 +972,8 @@ export class X402PaymentAdapter implements PaymentAdapter {
           bestErrorRank = 10;
           bestError = msg;
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 

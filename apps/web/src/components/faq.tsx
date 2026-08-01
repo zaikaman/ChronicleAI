@@ -55,28 +55,27 @@ function FAQItem({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{ duration: 0.5, ease, delay: index * 0.05 }}
-      onClick={onToggle}
-      className="cursor-pointer rounded-2xl bg-frame p-5 shadow-sm sm:p-6"
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onToggle();
-        }
-      }}
-      aria-expanded={isOpen}
+      className="rounded-2xl bg-frame p-5 shadow-sm sm:p-6"
+      role="listitem"
     >
-      <div className="flex w-full items-center justify-between gap-4 text-left">
+      <button
+        type="button"
+        className="flex min-h-11 w-full items-center justify-between gap-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        aria-controls={`faq-answer-${index}`}
+        id={`faq-question-${index}`}
+      >
         <span className="text-base font-medium text-foreground sm:text-lg">{faq.question}</span>
-        <motion.div
+        <motion.span
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.3, ease }}
           className="shrink-0"
+          aria-hidden="true"
         >
           <ChevronDown className="h-5 w-5 text-muted-foreground" />
-        </motion.div>
-      </div>
+        </motion.span>
+      </button>
       <AnimatePresence initial={false}>
         {isOpen && (
           <motion.div
@@ -85,6 +84,9 @@ function FAQItem({
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.3, ease }}
             className="overflow-hidden"
+            id={`faq-answer-${index}`}
+            role="region"
+            aria-labelledby={`faq-question-${index}`}
           >
             <p className="pt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
               {faq.answer}

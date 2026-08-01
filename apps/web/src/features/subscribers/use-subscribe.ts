@@ -1,9 +1,9 @@
 // Paid monthly x402 newsletter subscribe (footer CTA)
 // Flow: email → connect wallet → issue challenge → EIP-712 sign → settle → entitlement
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isEvmAddress, signX402Settlement, useWallet } from "../wallet";
-import { API_BASE } from "../../lib/api.ts";
+import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
 import { attributeReferralOnConnect, getStoredReferralRef } from "../../lib/referral.ts";
 
 /** Matches server default NEWSLETTER_MONTHLY_PRICE_USDC. */
@@ -77,8 +77,18 @@ export function useSubscribe(): UseSubscribeResult {
   const [priceAmount, setPriceAmount] = useState(DEFAULT_NEWSLETTER_PRICE_USDC);
   const [priceCurrency, setPriceCurrency] = useState("USDC");
   const [subscription, setSubscription] = useState<NewsletterSubscriptionSummary | null>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = null;
+    };
+  }, []);
 
   const reset = useCallback(() => {
+    requestControllerRef.current?.abort();
+    requestControllerRef.current = null;
     setStep("idle");
     setMessage(null);
     setSubscription(null);
@@ -102,6 +112,10 @@ export function useSubscribe(): UseSubscribeResult {
 
       setMessage(null);
       setSubscription(null);
+
+      requestControllerRef.current?.abort();
+      const controller = new AbortController();
+      requestControllerRef.current = controller;
 
       try {
         // 1. Connect wallet
@@ -137,15 +151,19 @@ export function useSubscribe(): UseSubscribeResult {
         setMessage("Creating x402 payment challenge…");
 
         const referralAddress = resolveReferralAddress();
-        const challengeResponse = await fetch(`${API_BASE}/subscribers/newsletter/subscribe`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: trimmed,
-            payerReference: payer,
-            ...(referralAddress ? { referralAddress } : {}),
-          }),
-        });
+        const challengeResponse = await fetchWithTimeout(
+          `${API_BASE}/subscribers/newsletter/subscribe`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              email: trimmed,
+              payerReference: payer,
+              ...(referralAddress ? { referralAddress } : {}),
+            }),
+          },
+        );
 
         const challengeBody = (await challengeResponse.json().catch(() => ({}))) as {
           error?: string;
@@ -209,14 +227,18 @@ export function useSubscribe(): UseSubscribeResult {
         setStep("settling");
         setMessage("Settling payment and activating your subscription…");
 
-        const settleResponse = await fetch(`${API_BASE}/subscribers/newsletter/settlements`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            challengeReference,
-            settlementReference,
-          }),
-        });
+        const settleResponse = await fetchWithTimeout(
+          `${API_BASE}/subscribers/newsletter/settlements`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              challengeReference,
+              settlementReference,
+            }),
+          },
+        );
 
         const settleBody = (await settleResponse.json().catch(() => ({}))) as {
           settled?: boolean;
@@ -276,9 +298,14 @@ export function useSubscribe(): UseSubscribeResult {
         );
         return true;
       } catch (err) {
+        if (controller.signal.aborted) return false;
         setStep("error");
         setMessage(err instanceof Error ? err.message : "Subscription failed. Please try again.");
         return false;
+      } finally {
+        if (requestControllerRef.current === controller) {
+          requestControllerRef.current = null;
+        }
       }
     },
     [wallet],

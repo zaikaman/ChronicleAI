@@ -45,7 +45,7 @@ export function PaginationControls({
   const showTrailing = pages[pages.length - 1] != null && pages[pages.length - 1]! < totalPages;
 
   const btnBase =
-    "inline-flex items-center justify-center min-w-9 h-9 px-2.5 rounded-xl text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center min-w-11 h-11 px-2.5 rounded-xl text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed";
 
   return (
     <nav

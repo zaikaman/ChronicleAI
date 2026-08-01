@@ -10,12 +10,55 @@ export const API_BASE =
     import.meta.env.VITE_API_BASE_URL.trim()) ||
   "http://localhost:4000";
 
+/** Maximum time a browser request may wait on an API response. */
+export const API_REQUEST_TIMEOUT_MS = 15_000;
+
 /** Shared typed client (timeout + retry). Prefer over raw fetch. */
 export const apiClient = new ApiClient({
   baseUrl: API_BASE,
-  timeoutMs: 15_000,
+  timeoutMs: API_REQUEST_TIMEOUT_MS,
   retryCount: 1,
 });
+
+function combineSignals(...signals: AbortSignal[]): AbortSignal {
+  const controller = new AbortController();
+
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      return controller.signal;
+    }
+
+    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+  }
+
+  return controller.signal;
+}
+
+/**
+ * Raw-fetch escape hatch for requests that need cookies or custom headers.
+ * It keeps the caller's cancellation signal and adds a bounded timeout.
+ */
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = API_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(
+    () => timeoutController.abort(),
+    Math.max(1, timeoutMs),
+  );
+  const signal = init.signal
+    ? combineSignals(init.signal, timeoutController.signal)
+    : timeoutController.signal;
+
+  try {
+    return await fetch(input, { ...init, signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 export class ApiHttpError extends Error {
   public readonly status: number;
@@ -107,7 +150,7 @@ export async function apiPostJson<T>(
       ? path
       : `${API_BASE.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
