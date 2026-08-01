@@ -193,7 +193,7 @@ export function createPremiumRoutes(params: {
    * GET /premium/items
    *
    * List available premium intelligence item teasers (public-safe fields only).
-   * Query: page (default 1), limit (default 20, max 100), optional payer.
+   * Query: page (default 1), limit (default 20, max 100).
    *
    * Responses:
    *   200 - { items: PremiumItemTeaser[], pagination, unlockedItemIds?, receipts? }
@@ -222,30 +222,6 @@ export function createPremiumRoutes(params: {
       const page = result.value;
       const items = visibilityService.toTeaserList(page.items);
 
-      const rawPayer =
-        (typeof req.query.payer === "string" ? req.query.payer.trim() : null) ||
-        (typeof req.headers["x-payer-reference"] === "string"
-          ? (req.headers["x-payer-reference"] as string).trim()
-          : null);
-
-      const unlockedItemIds: string[] = [];
-      const receipts: Record<string, string> = {};
-
-      if (rawPayer) {
-        for (const item of items) {
-          const settledResult = await params.paymentRecordRepo.findSettledByPayer(item.id, rawPayer);
-          if (settledResult.ok && settledResult.value) {
-            unlockedItemIds.push(item.id);
-            const { token } = params.receiptService.issue({
-              premiumItemId: item.id,
-              payerReference: rawPayer,
-              paymentRecordId: settledResult.value.id,
-            });
-            receipts[item.id] = token;
-          }
-        }
-      }
-
       res.json({
         items,
         pagination: {
@@ -256,8 +232,10 @@ export function createPremiumRoutes(params: {
           hasNextPage: page.hasNextPage,
           hasPreviousPage: page.hasPreviousPage,
         },
-        unlockedItemIds,
-        receipts,
+        // Entitlements are returned only from the authenticated settlement
+        // response. A public wallet address is not an ownership proof.
+        unlockedItemIds: [],
+        receipts: {},
       });
     } catch (error) {
       next(error);
@@ -306,14 +284,6 @@ export function createPremiumRoutes(params: {
         return;
       }
 
-      const payerHeader = req.headers["x-payer-reference"];
-      const payerReference =
-        typeof payerHeader === "string" && payerHeader.trim()
-          ? payerHeader.trim()
-          : typeof req.query.payer === "string" && req.query.payer.trim()
-            ? req.query.payer.trim()
-            : undefined;
-
       const accessReceipt = extractAccessReceiptFromRequest({
         authorizationHeader:
           typeof req.headers.authorization === "string" ? req.headers.authorization : undefined,
@@ -328,7 +298,6 @@ export function createPremiumRoutes(params: {
         const accessResult = await accessService.accessPremiumItem({
           itemId: id,
           accessReceipt,
-          payerReference,
         });
 
         if (accessResult.allowed) {

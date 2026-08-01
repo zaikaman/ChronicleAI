@@ -133,22 +133,25 @@ describe("Premium Access Integration", () => {
       expect(mockPaymentRecordRepo.listByPremiumItem).not.toHaveBeenCalled();
     });
 
-    it("should grant access and issue receipt if payer reference matches a settled payment in DB", async () => {
+    it("should reject a wallet address without authenticated ownership proof", async () => {
       mockPremiumRepo.findById.mockResolvedValue({ ok: true, value: mockPremiumItem });
       mockPaymentRecordRepo.findSettledByPayer.mockResolvedValue({ ok: true, value: settledPayment });
       mockPaymentRecordRepo.findById.mockResolvedValue({ ok: true, value: settledPayment });
+      const issueSpy = vi.spyOn(receiptService, "issue");
 
-      const result = await accessService.accessPremiumItem({
-        itemId: "premium-deep-dive-001",
-        payerReference: "0xpayinguser",
-      });
+      try {
+        await expect(
+          accessService.accessPremiumItem({
+            itemId: "premium-deep-dive-001",
+            payerReference: "0xpayinguser",
+          }),
+        ).rejects.toThrow(PaymentRequiredError);
 
-      expect(result.allowed).toBe(true);
-      expect(result.accessReceipt).toBeDefined();
-      expect(mockPaymentRecordRepo.findSettledByPayer).toHaveBeenCalledWith(
-        "premium-deep-dive-001",
-        "0xpayinguser",
-      );
+        expect(mockPaymentRecordRepo.findSettledByPayer).not.toHaveBeenCalled();
+        expect(issueSpy).not.toHaveBeenCalled();
+      } finally {
+        issueSpy.mockRestore();
+      }
     });
 
     it("should deny access with a receipt for a different item", async () => {

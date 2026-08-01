@@ -1,7 +1,9 @@
 // Unit tests for payer_reference / referral_address normalization
 
 import { describe, expect, it } from "vitest";
+import { createInMemorySupabaseClient } from "./in-memory-supabase.ts";
 import {
+  createPaymentRecordRepository,
   normalizePayerReference,
   normalizeReferralAddress,
 } from "./payment-record-repository.ts";
@@ -48,5 +50,26 @@ describe("normalizeReferralAddress", () => {
     expect(normalizeReferralAddress(null)).toBeNull();
     expect(normalizeReferralAddress(undefined)).toBeNull();
     expect(normalizeReferralAddress("")).toBeNull();
+  });
+});
+
+describe("payment settlement consumption", () => {
+  it("compare-and-swaps an open payment record so concurrent settlement has one winner", async () => {
+    const client = createInMemorySupabaseClient();
+    await client.from("payment_records").insert({
+      id: "payment-cas-1",
+      status: "challenge_issued",
+      settlement_reference: null,
+    });
+
+    const repository = createPaymentRecordRepository(client as never);
+    const results = await Promise.all([
+      repository.markSettled("payment-cas-1", "settlement-cas-1", 5, "USDC"),
+      repository.markSettled("payment-cas-1", "settlement-cas-1", 5, "USDC"),
+    ]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toHaveLength(1);
+    expect(results.find((result) => !result.ok)?.error.code).toBe("CONFLICT");
   });
 });

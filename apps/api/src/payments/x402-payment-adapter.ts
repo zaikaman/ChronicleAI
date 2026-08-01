@@ -434,12 +434,14 @@ export class X402PaymentAdapter implements PaymentAdapter {
 
     // Path A: client already submitted on-chain — verify the transaction receipt.
     if (TX_HASH_RE.test(params.settlementReference.trim())) {
-      return this.verifyByTransactionHash({
-        txHash: params.settlementReference.trim(),
-        amountRequested: params.amountRequested,
+      return {
+        verified: false,
+        amountSettled: 0,
         currency: params.currency,
-        expectedValueAtomic,
-      });
+        settlementReference: params.settlementReference.trim(),
+        errorMessage:
+          "Raw transaction-hash settlement is disabled; submit the signed EIP-3009 authorization JSON for this challenge",
+      };
     }
 
     // Path B: EIP-712 authorization JSON — validate, submit transfer, confirm receipt.
@@ -469,7 +471,7 @@ export class X402PaymentAdapter implements PaymentAdapter {
       currency: params.currency,
       settlementReference: params.settlementReference,
       errorMessage:
-        "Settlement requires a JSON serialized EIP-712 authorization payload or an on-chain transaction hash",
+        "Settlement requires a JSON serialized EIP-3009 authorization payload",
     };
   }
 
@@ -762,48 +764,6 @@ export class X402PaymentAdapter implements PaymentAdapter {
       currency: params.currency,
       settlementReference: settleResult.transactionHash,
       payerReference: from,
-    };
-  }
-
-  private async verifyByTransactionHash(params: {
-    txHash: string;
-    amountRequested: number;
-    currency: string;
-    expectedValueAtomic: bigint;
-  }): Promise<SettlementVerificationResult> {
-    if (!this.treasuryWalletAddress || !ADDRESS_RE.test(this.treasuryWalletAddress)) {
-      return {
-        verified: false,
-        amountSettled: 0,
-        currency: params.currency,
-        settlementReference: params.txHash,
-        errorMessage: "Treasury wallet address is not configured for x402 settlement",
-      };
-    }
-
-    const receiptCheck = await this.confirmTransaction(params.txHash, {
-      to: this.treasuryWalletAddress,
-      minValue: params.expectedValueAtomic,
-    });
-
-    if (!receiptCheck.confirmed) {
-      return {
-        verified: false,
-        amountSettled: 0,
-        currency: params.currency,
-        settlementReference: params.txHash,
-        errorMessage:
-          receiptCheck.errorMessage ??
-          "Transaction receipt did not confirm a matching USDC transfer to treasury",
-      };
-    }
-
-    return {
-      verified: true,
-      amountSettled: params.amountRequested,
-      currency: params.currency,
-      settlementReference: params.txHash,
-      payerReference: receiptCheck.from,
     };
   }
 

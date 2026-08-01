@@ -3,7 +3,7 @@
 
 import type { PaymentStatus } from "@chronicleai/schemas";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { type Result, failure, success } from "./errors.ts";
+import { ConflictError, type Result, failure, success } from "./errors.ts";
 import {
   buildPaginatedResult,
   mapPostgrestError,
@@ -165,7 +165,28 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       if (normalizedPayer != null) {
         updates.payer_reference = normalizedPayer;
       }
-      return update(id, updates);
+      // Compare-and-swap: only one concurrent request can transition an open
+      // record to settled. The partial unique index on settlement_reference
+      // also prevents one transaction from settling a second record.
+      const { data, error } = await table()
+        .update(updates)
+        .eq("id", id)
+        .in("status", ["challenge_issued", "pending"])
+        .is("settlement_reference", null)
+        .select();
+
+      if (error) {
+        return failure(mapPostgrestError(error));
+      }
+      const settledRow = Array.isArray(data) ? data[0] : null;
+      if (!settledRow) {
+        return failure(
+          new ConflictError(
+            `Payment record ${id} was already settled or consumed by another request`,
+          ),
+        );
+      }
+      return success(settledRow as unknown as PaymentRecordRow);
     },
 
     async markUnderpaid(id) {

@@ -84,24 +84,9 @@ export class PremiumAccessService {
     const paymentRoute =
       params.paymentRoute ?? (item.payment_routes[0] as PaymentRoute) ?? "x402";
 
-    let receiptToken = params.accessReceipt?.trim();
-    let autoIssuedReceipt: string | undefined = undefined;
-
-    if (!receiptToken && params.payerReference?.trim()) {
-      const settledResult = await this.paymentRecordRepo.findSettledByPayer(
-        params.itemId,
-        params.payerReference.trim(),
-      );
-      if (settledResult.ok && settledResult.value) {
-        const issued = this.receiptService.issue({
-          paymentRecordId: settledResult.value.id,
-          premiumItemId: params.itemId,
-          payerReference: settledResult.value.payer_reference,
-        });
-        receiptToken = issued.token;
-        autoIssuedReceipt = issued.token;
-      }
-    }
+    // A client-supplied wallet address is intentionally ignored. Ownership is
+    // established only by a receipt issued after authenticated settlement.
+    const receiptToken = params.accessReceipt?.trim();
 
     if (!receiptToken) {
       throw new PaymentRequiredError(item, paymentRoute);
@@ -188,7 +173,6 @@ export class PremiumAccessService {
     return {
       allowed: true,
       content: fullContent,
-      ...(autoIssuedReceipt ? { accessReceipt: autoIssuedReceipt } : {}),
     };
   }
 

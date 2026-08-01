@@ -292,9 +292,7 @@ describe("X402PaymentAdapter", () => {
       });
 
       expect(result.verified).toBe(false);
-      expect(result.errorMessage).toMatch(
-        /JSON serialized EIP-712|transaction hash|settlement rail|RPC_URL/i,
-      );
+      expect(result.errorMessage).toMatch(/JSON serialized EIP-3009 authorization/i);
     });
 
     it("should reject a valid EIP-712 signature when no settlement rail is configured", async () => {
@@ -459,25 +457,13 @@ describe("X402PaymentAdapter", () => {
       expect(result.settlementReference).toBe(txHash);
     });
 
-    it("should verify an existing on-chain transaction hash via receipt check", async () => {
-      const payer = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    it("should reject the legacy raw transaction-hash settlement path", async () => {
       const txHash =
         "0x2222222222222222222222222222222222222222222222222222222222222222";
       const amount = 3;
 
       const railAdapter = new X402PaymentAdapter({
         treasuryWalletAddress: TREASURY,
-        verifyTransactionReceipt: async (hash, expected) => {
-          expect(hash).toBe(txHash);
-          expect(expected.to).toBe(TREASURY);
-          expect(expected.minValue).toBe(BigInt(Math.round(amount * 1_000_000)));
-          return {
-            confirmed: true,
-            from: payer,
-            to: TREASURY,
-            value: expected.minValue,
-          };
-        },
       });
 
       const result = await railAdapter.verifySettlement({
@@ -488,9 +474,9 @@ describe("X402PaymentAdapter", () => {
         paymentRoute: "x402",
       });
 
-      expect(result.verified).toBe(true);
+      expect(result.verified).toBe(false);
       expect(result.settlementReference).toBe(txHash);
-      expect(result.payerReference?.toLowerCase()).toBe(payer.toLowerCase());
+      expect(result.errorMessage).toMatch(/raw transaction-hash settlement is disabled/i);
     });
 
     it("should reject underpaid authorization before settlement rail", async () => {

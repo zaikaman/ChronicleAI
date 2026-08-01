@@ -338,4 +338,100 @@ describe("PaymentSettlementService", () => {
 
     expect(paymentRecordRepo.expireOpenChallenges).toHaveBeenCalled();
   });
+
+  it("allows a settlement reference to be consumed by only one of two items", async () => {
+    const settlementReference = "0xsharedsettlement00000000000000000000000000000000001";
+    const first = createMocks({
+      record: {
+        ...challengeRecord,
+        id: "payment-item-1",
+        premium_item_id: "premium-item-1",
+        challenge_reference: "challenge-item-1",
+      },
+      verification: {
+        verified: true,
+        amountSettled: 5,
+        currency: "USDC",
+        settlementReference,
+        payerReference: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
+      },
+    });
+    const second = createMocks({
+      record: {
+        ...challengeRecord,
+        id: "payment-item-2",
+        premium_item_id: "premium-item-2",
+        challenge_reference: "challenge-item-2",
+      },
+      verification: {
+        verified: true,
+        amountSettled: 5,
+        currency: "USDC",
+        settlementReference,
+        payerReference: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
+      },
+    });
+
+    let consumed = false;
+    const consumeOnce = async () => {
+      if (consumed) {
+        return {
+          ok: false as const,
+          error: { name: "ConflictError", code: "CONFLICT", message: "settlement already consumed", statusCode: 409 } as never,
+        };
+      }
+      consumed = true;
+      return { ok: true as const, value: first.settledRow };
+    };
+    vi.mocked(first.paymentRecordRepo.markSettled).mockImplementation(consumeOnce);
+    vi.mocked(second.paymentRecordRepo.markSettled).mockImplementation(consumeOnce);
+
+    const results = await Promise.allSettled([
+      first.service.settle({
+        challengeReference: "challenge-item-1",
+        settlementReference,
+        paymentRoute: "x402",
+      }),
+      second.service.settle({
+        challengeReference: "challenge-item-2",
+        settlementReference,
+        paymentRoute: "x402",
+      }),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+  });
+
+  it("does not report two concurrent submissions for one challenge as settled", async () => {
+    const { service, paymentRecordRepo, verification, settledRow } = createMocks();
+    let consumed = false;
+    vi.mocked(paymentRecordRepo.markSettled).mockImplementation(async () => {
+      if (consumed) {
+        return {
+          ok: false as const,
+          error: { name: "ConflictError", code: "CONFLICT", message: "settlement already consumed", statusCode: 409 } as never,
+        };
+      }
+      consumed = true;
+      return { ok: true as const, value: settledRow };
+    });
+
+    const results = await Promise.allSettled([
+      service.settle({
+        challengeReference: challengeRecord.challenge_reference!,
+        settlementReference: verification.settlementReference,
+        paymentRoute: "x402",
+      }),
+      service.settle({
+        challengeReference: challengeRecord.challenge_reference!,
+        settlementReference: verification.settlementReference,
+        paymentRoute: "x402",
+      }),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(paymentRecordRepo.markSettled).toHaveBeenCalledTimes(2);
+  });
 });
