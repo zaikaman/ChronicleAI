@@ -7,22 +7,22 @@ const faqs = [
   {
     question: "What is ChronicleAI?",
     answer:
-      "ChronicleAI is a proof-first onchain response desk. It detects meaningful market signals, explains what matters, applies hard policy, and sends only approved actions through KeeperHub. Alerts, registry receipts, and execution logs make the result independently verifiable.",
+      "ChronicleAI is a proof-first onchain response desk. It publishes public Alerts from meaningful onchain events, projects eligible Alerts into Desk Signals, applies hard policy, and sends only approved Actions through KeeperHub. The Alert → Signal → Action causal chain, registry receipts, and execution logs make every outcome independently verifiable.",
   },
   {
     question: "What is Chronicle Desk?",
     answer:
-      "Chronicle Desk is the review surface for proposed onchain responses. It shows the signal, structured proposal, policy checks, preflight result, and KeeperHub execution state before a transaction can be sent.",
+      "Chronicle Desk is the review and execution surface for Alert-backed Signals. It shows the originating Alert, structured proposal, policy checks, preflight result, and KeeperHub Action state before a transaction can be sent.",
   },
   {
     question: "How is content and trade activity verified?",
     answer:
-      "Approved desk actions run through KeeperHub and anchor a receipt on ChronicleRegistry. The alert, policy decision, transaction hash, and public execution trail stay linked, so anyone can inspect what happened without logging in.",
+      "Approved desk Actions run through KeeperHub and anchor a receipt on ChronicleRegistry. The Alert, Desk Signal, policy decision, transaction hash, and public execution trail stay linked on the causal chain, so anyone can inspect what happened without logging in.",
   },
   {
     question: "Can the LLM trade freely?",
     answer:
-      "No. The model outputs structured proposals only (propose, hold, defer, defend) with allowlisted strategies and size hints. Policy enforces notional caps, health-factor gates, cooldowns, gas regime, and kill-switch. If validation fails, the safe default is hold — no KeeperHub write.",
+      "No. Eligible Alerts become Signals first; the model then outputs structured proposals only (propose, hold, defer, defend) with allowlisted strategies and size hints. Policy enforces notional caps, health-factor gates, cooldowns, gas regime, and kill-switch. If validation fails, the safe default is hold — no KeeperHub write.",
   },
 ];
 
@@ -110,8 +110,8 @@ export function FAQ(): ReactNode {
             Common questions
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
-            Signals, policy checks, KeeperHub execution, and the registry proof behind every
-            approved action.
+            Alerts, Desk Signals, policy checks, KeeperHub Actions, and the registry proof behind
+            every approved run.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -124,7 +124,7 @@ export function FAQ(): ReactNode {
                 to="/alerts"
                 className="inline-flex cursor-pointer items-center rounded-xl bg-foreground px-6 py-2.5 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
               >
-                View live signal
+                View live alerts
               </Link>
             </motion.div>
             <motion.div

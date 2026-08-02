@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 const headline =
-  "ChronicleAI follows one visible loop: detect an onchain signal, explain what matters, apply hard policy, execute the approved action through KeeperHub, and publish the proof.";
+  "ChronicleAI follows one visible loop: publish a public Alert from onchain activity, project eligible Alerts into Desk Signals, apply hard policy, execute the approved Action through KeeperHub, and publish the proof.";
 
 export function BlurInHeadline(): ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);

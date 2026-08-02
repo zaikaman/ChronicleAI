@@ -7,27 +7,27 @@ import { Link } from "react-router-dom";
 const steps = [
   {
     icon: Activity,
-    title: "Detect the signal",
+    title: "Publish the Alert",
     description:
-      "ChronicleAI watches configured onchain events and turns meaningful activity into a sourced, plain-language alert.",
+      "ChronicleAI watches configured onchain events and turns meaningful activity into a sourced, plain-language public Alert with publication proof.",
   },
   {
     icon: BrainCircuit,
-    title: "Explain and propose",
+    title: "Project a Desk Signal",
     description:
-      "The agent explains why the signal matters, then produces a structured proposal using only the actions ChronicleAI allows.",
+      "Eligible Alerts become desk inputs. The Alert→Signal service maps the event into a structured Signal the desk can reason over — not every Alert trades.",
   },
   {
     icon: ShieldCheck,
     title: "Apply policy and preflight",
     description:
-      "Hard limits, health checks, pause state, routing, and preflight decide whether the action can proceed. If a check fails, the safe default is hold.",
+      "Hard limits, health checks, pause state, routing, and preflight decide whether an Action can proceed. If a check fails, the safe default is hold.",
   },
   {
     icon: Landmark,
-    title: "Execute and prove",
+    title: "Execute the Action and prove it",
     description:
-      "Approved actions run through KeeperHub. The resulting transaction, registry receipt, and execution trail remain linked for independent verification.",
+      "Approved Actions run through KeeperHub. The transaction, registry receipt, and execution trail stay linked on the originating Alert’s causal chain.",
   },
 ];
 
@@ -77,7 +77,8 @@ export function HowItWorks(): ReactNode {
             How it works
           </h2>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-foreground/60">
-            From a live onchain signal to a policy-approved KeeperHub transaction and public proof.
+            Alert → Signal → Action: from a public bulletin to a policy-approved KeeperHub
+            transaction and public proof.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
@@ -85,7 +86,7 @@ export function HowItWorks(): ReactNode {
                 to="/alerts"
                 className="inline-flex cursor-pointer items-center rounded-xl bg-foreground px-6 py-3 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
               >
-                View live signal
+                View live alerts
               </Link>
             </motion.div>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>

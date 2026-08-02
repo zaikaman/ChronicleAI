@@ -28,13 +28,13 @@ type AlertPreview = {
   summary: string;
 };
 
-function SignalCard({ latestAlert }: { latestAlert: AlertPreview | null }): ReactNode {
-  const headline = latestAlert?.title ?? "Awaiting the next signal";
+function AlertCardPreview({ latestAlert }: { latestAlert: AlertPreview | null }): ReactNode {
+  const headline = latestAlert?.title ?? "Awaiting the next alert";
   const body = latestAlert
     ? latestAlert.summary.length > 120
       ? `${latestAlert.summary.slice(0, 120)}…`
       : latestAlert.summary
-    : "ChronicleAI turns significant onchain activity into a plain-language alert.";
+    : "ChronicleAI turns significant onchain activity into a plain-language public Alert.";
 
   return (
     <motion.div
@@ -44,23 +44,23 @@ function SignalCard({ latestAlert }: { latestAlert: AlertPreview | null }): Reac
     >
       <div className="relative z-10 transition-transform duration-500 ease-out group-hover:scale-105">
         <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-black/10 px-3 py-1 text-xs font-semibold text-neutral-900">
-          <Activity className="h-3.5 w-3.5" /> 1 · Signal
+          <Activity className="h-3.5 w-3.5" /> 1 · Alert
         </div>
         <h3 className="mb-2 text-2xl font-medium leading-tight text-neutral-900 md:text-3xl">
-          A live event worth explaining
+          A public bulletin from chain
         </h3>
         <p className="text-sm text-neutral-700">
-          Raw onchain activity becomes a concise alert with the source and context a human can scan.
+          Onchain activity becomes a sourced Alert — the first input in the desk response loop.
         </p>
       </div>
 
       <div className="mt-6 rounded-2xl bg-neutral-950 p-4 text-white shadow-xl">
         <div className="flex items-center justify-between gap-2">
           <p className="font-semibold text-[10px] uppercase tracking-wider text-accent">
-            {latestAlert ? "Latest live signal" : "Live feed"}
+            {latestAlert ? "Latest public alert" : "Live feed"}
           </p>
           <span className="rounded-full bg-accent/20 px-2 py-0.5 font-mono text-[10px] text-accent">
-            Onchain
+            Desk input
           </span>
         </div>
         <h4 className="mt-2 line-clamp-1 text-sm font-semibold text-white">{headline}</h4>
@@ -97,14 +97,14 @@ function DecisionCard({
     >
       <div className="relative z-10 transition-transform duration-500 ease-out group-hover:scale-105">
         <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-          <Landmark className="h-3.5 w-3.5" /> 2 · Decision
+          <Landmark className="h-3.5 w-3.5" /> 2 · Signal
         </div>
         <h3 className="mb-2 text-xl font-medium leading-tight text-card-foreground md:text-2xl">
-          Policy-gated action
+          Alert becomes desk input
         </h3>
         <p className="text-sm text-card-foreground-muted">
-          The model proposes. Hard policy checks size, health, pause state, and route before
-          KeeperHub can execute.
+          Eligible Alerts project into Desk Signals. The model proposes; hard policy checks size,
+          health, pause state, and route before any Action.
         </p>
       </div>
 
@@ -149,14 +149,14 @@ function ProofCard({
     >
       <div className="max-w-xl transition-transform duration-500 ease-out group-hover:translate-x-1">
         <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-          <ShieldCheck className="h-3.5 w-3.5" /> 3 · Proof
+          <ShieldCheck className="h-3.5 w-3.5" /> 3 · Action
         </div>
         <h3 className="mb-2 text-xl font-medium leading-tight text-card-foreground md:text-2xl">
-          A result anyone can verify
+          Execute and prove
         </h3>
         <p className="text-sm text-card-foreground-muted">
-          Registry receipts and execution logs keep the signal, decision, and transaction connected
-          instead of asking users to trust a black box.
+          Policy-approved Actions run through KeeperHub. Registry receipts and logs keep Alert,
+          Signal, Decision, and transaction linked on one causal chain.
         </p>
       </div>
 
@@ -245,12 +245,12 @@ export function FeaturesBento(): ReactNode {
             Every step stays visible.
           </h2>
           <p className="mt-3 text-base leading-relaxed text-foreground/60">
-            Follow the same path a judge follows: signal, decision, execution, proof.
+            Follow the same path a judge follows: Alert → Signal → Action → Proof.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <SignalCard latestAlert={latestAlert} />
+          <AlertCardPreview latestAlert={latestAlert} />
           <DecisionCard
             equityUsdc={desk?.equityUsdc ?? null}
             healthFactor={desk?.healthFactor ?? null}

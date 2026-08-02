@@ -6,8 +6,8 @@ import { type ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 const navLinks = [
-  { label: "Alerts", href: "/alerts", description: "Live onchain signals" },
-  { label: "Desk", href: "/desk", description: "Policy-gated action review" },
+  { label: "Alerts", href: "/alerts", description: "Public bulletins that feed the desk" },
+  { label: "Desk", href: "/desk", description: "Signal → policy → action review" },
   { label: "Activity", href: "/activity", description: "Public execution and proof trail" },
   { label: "Digest", href: "/digests/latest", description: "Latest intelligence brief" },
   { label: "Archive", href: "/publications", description: "Past publications and proof records" },
@@ -118,7 +118,7 @@ export function Header(): ReactNode {
           <Link to="/alerts" className="group relative inline-flex items-center">
             <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-xl bg-accent" />
             <span className="relative z-10 px-5 py-2.5 rounded-xl bg-foreground text-background text-sm font-medium">
-              View live signal
+              View live alerts
             </span>
             <span className="relative -left-px z-10 w-9 h-9 rounded-xl flex items-center justify-center text-black">
               <ArrowDownRight className="w-4 h-4 transition-transform duration-300 group-hover:-rotate-45" />
@@ -191,7 +191,7 @@ export function Header(): ReactNode {
                   >
                     <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-2xl bg-accent" />
                     <span className="relative z-10 px-5 py-3 rounded-2xl bg-foreground text-background text-sm font-medium">
-                      View live signal
+                      View live alerts
                     </span>
                     <span className="relative -left-px z-10 w-10 h-10 rounded-2xl flex items-center justify-center text-foreground">
                       <ArrowDownRight className="w-4 h-4 transition-transform duration-300 group-hover:-rotate-45" />

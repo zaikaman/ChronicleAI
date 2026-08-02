@@ -88,7 +88,7 @@ export function AlertsPage(): ReactElement {
     <Page data-testid="alerts-list">
       <PageHeader
         title="Public Alerts"
-        description="Live public market bulletins from on-chain events — plain-language summaries with proof of publication."
+        description="Live public market bulletins from on-chain events. Eligible alerts project into desk signals — each card shows the Alert → Signal → Action causal chain with proof of publication."
         meta={
           !isLoading && !error ? (
             <span className="tabular-nums">

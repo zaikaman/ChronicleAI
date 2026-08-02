@@ -22,10 +22,10 @@ const fadeInScale = {
 };
 
 const logos: LogoItem[] = [
-  { node: <span className="text-[1em] font-semibold tracking-tight">Onchain signal</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Plain-language alert</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Public alert</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Desk signal</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Policy gate</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub execution</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub action</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Registry proof</span> },
 ];
 
@@ -38,7 +38,7 @@ function HeroDashboard(): ReactNode {
 
   const isLoading = alertsLoading || activityLoading || deskLoading;
 
-  const signals = useMemo(() => {
+  const liveAlerts = useMemo(() => {
     return alerts.slice(0, 3).map((alert) => {
       const networkLabel =
         typeof alert.chainId === "number" ? chainLabel(alert.chainId) : undefined;
@@ -93,10 +93,10 @@ function HeroDashboard(): ReactNode {
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
-            ChronicleAI · Signal to proof
+            ChronicleAI · Alert → Signal → Action
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-4xl">
-            One visible execution loop
+            One visible response loop
           </h2>
         </div>
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-black">
@@ -108,31 +108,31 @@ function HeroDashboard(): ReactNode {
         <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="mb-4 flex items-center justify-between gap-2">
             <span className="text-sm text-white/60">
-              {isLoading ? "Loading signals…" : "1 · Latest live signal"}
+              {isLoading ? "Loading alerts…" : "1 · Latest public alert"}
             </span>
             <span className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-black">
-              Onchain feed
+              Desk input
             </span>
           </div>
           <div className="space-y-3">
-            {signals.length === 0 && !isLoading ? (
+            {liveAlerts.length === 0 && !isLoading ? (
               <div className="rounded-xl bg-black/30 p-4 text-sm text-white/50">
-                No published alerts yet. Signals appear here when ChronicleAI detects a significant
-                onchain event.
+                No published alerts yet. Eligible alerts become desk signals when ChronicleAI
+                detects a significant onchain event.
               </div>
             ) : (
-              signals.map((s) => (
+              liveAlerts.map((alert) => (
                 <Link
-                  key={s.id}
-                  to={s.href}
+                  key={alert.id}
+                  to={alert.href}
                   className="flex items-center justify-between rounded-xl bg-black/30 p-3 transition-colors hover:bg-black/45"
                 >
                   <div className="min-w-0 pr-3">
-                    <p className="truncate text-sm font-medium">{s.name}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-white/45">{s.details}</p>
+                    <p className="truncate text-sm font-medium">{alert.name}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-white/45">{alert.details}</p>
                   </div>
                   <span className="flex-shrink-0 rounded-lg bg-accent/10 px-2 py-1 font-mono text-xs font-semibold text-accent">
-                    {s.tag}
+                    {alert.tag}
                   </span>
                 </Link>
               ))
@@ -147,7 +147,7 @@ function HeroDashboard(): ReactNode {
             data-testid="hero-desk-panel"
           >
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <Landmark className="h-4 w-4" />2 · Policy-gated desk
+              <Landmark className="h-4 w-4" />2 · Signal → Action
             </div>
             <p
               className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
@@ -163,14 +163,14 @@ function HeroDashboard(): ReactNode {
               <p className="mt-2 text-xs font-medium text-black/70">{lastAgentLine}</p>
             ) : (
               <p className="mt-2 text-xs text-black/55">
-                LLM proposes · policy decides · KeeperHub executes
+                Alert feeds signal · policy decides · KeeperHub acts
               </p>
             )}
           </Link>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck className="h-4 w-4 text-accent" />3 · Registry proof
+              <ShieldCheck className="h-4 w-4 text-accent" />3 · Action proof
             </div>
             {latestAnchoredDigest ? (
               <Link
@@ -194,8 +194,8 @@ function HeroDashboard(): ReactNode {
             ) : (
               <p className="text-sm leading-relaxed text-white/50">
                 {isLoading
-                  ? "Loading registry proofs…"
-                  : "No registry proof yet. Approved actions appear here after KeeperHub execution."}
+                  ? "Loading action proofs…"
+                  : "No action proof yet. Policy-approved KeeperHub runs appear here with a receipt."}
               </p>
             )}
           </div>
@@ -280,7 +280,7 @@ export function Hero(): ReactNode {
               ChronicleAI
             </motion.span>
             <motion.span className="block" variants={fadeInUp} transition={{ duration: 0.8, ease }}>
-              From signal to <span className="font-serif italic text-accent">verified action.</span>
+              Alert → Signal → <span className="font-serif italic text-accent">Action.</span>
             </motion.span>
           </h1>
 
@@ -289,9 +289,9 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            ChronicleAI explains what is happening onchain, applies hard policy, and sends only
-            approved actions through KeeperHub. Every outcome includes a transaction and an
-            auditable proof.
+            ChronicleAI publishes public Alerts from onchain events, projects eligible Alerts into
+            Desk Signals, and sends only policy-approved Actions through KeeperHub — with a
+            transaction and audit trail for every outcome.
           </motion.p>
 
           <motion.div
@@ -305,7 +305,7 @@ export function Hero(): ReactNode {
             >
               <span className="absolute inset-y-0 right-0 w-[calc(100%-2rem)] rounded-xl bg-accent max-[850px]:w-full" />
               <span className="relative z-10 rounded-xl bg-black px-6 py-3 font-medium text-white max-[850px]:flex-1">
-                View live signal
+                View live alerts
               </span>
               <span className="relative z-10 -left-px flex h-11 w-11 items-center justify-center rounded-xl text-black">
                 <ArrowDownRight className="h-5 w-5 transition-transform duration-300 group-hover:-rotate-45" />

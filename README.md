@@ -2,47 +2,59 @@
 
 > **The proof-first autonomous onchain response desk.**
 >
-> ChronicleAI turns a live market signal into a policy-approved KeeperHub transaction and publishes the proof.
+> ChronicleAI turns a live onchain event into a public Alert, projects eligible Alerts into Desk Signals, and only then converts a policy-approved Signal into a KeeperHub Action with public proof.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
-[![Tests](https://img.shields.io/badge/Tests-1054%20passing-brightgreen?style=for-the-badge)](README.md#verification)
+[![Tests](https://img.shields.io/badge/Tests-1074%20passing-brightgreen?style=for-the-badge)](README.md#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
 ## Demo first
 
-ChronicleAI turns a live onchain signal into a policy-approved KeeperHub transaction and publishes the proof.
+ChronicleAI makes the response path inspectable end to end:
 
-The core loop is deliberately small:
+**Alert → Signal → Action → Proof**
 
 ```mermaid
 flowchart LR
-    S[Live onchain signal] --> E[Plain-language alert]
-    E --> D[Desk proposal]
-    D --> G[Policy and preflight]
-    G --> K[KeeperHub workflow]
+    E[Onchain event] --> A[Public Alert]
+    A --> S[Desk Signal]
+    S --> G[Policy and preflight]
+    G --> K[KeeperHub Action]
     K --> T[Onchain transaction]
     T --> P[Registry receipt and audit trail]
 ```
 
-The alert explains why the action was proposed, the desk shows why it was allowed, and the proof surfaces show that KeeperHub actually executed it. Premium feeds, sponsored watches, treasury routing, and affiliate payouts extend this loop but are not required to understand the core demo.
+- **Alert** is the public bulletin: plain language, source, and publication proof.
+- **Signal** is the desk input projected from an eligible Alert (`alert-to-signal-service`).
+- **Action** is the policy-approved KeeperHub execution (intent / ticket / workflow run).
+- **Proof** is the linked receipt, run ID, transaction hash, and activity trail.
+
+Not every Alert becomes a trade. Some stay observation-only or deferred. The causal chain on each Alert card still shows what happened: `Alert → Signal → Decision → Action → Proof`.
+
+Premium feeds, sponsored watches, treasury routing, and affiliate payouts extend this loop but are not required to understand the core demo.
 
 ### The core demo
 
 | Step | Surface | Judge should see |
 | --- | --- | --- |
-| 1 | [Live alerts](https://chronicle-ai-web.vercel.app/alerts) | A real onchain signal and a plain-language explanation. |
-| 2 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | The proposed action, policy decision, and preflight status. |
-| 3 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, outcome, routing, and audit context. |
+| 1 | [Live alerts](https://chronicle-ai-web.vercel.app/alerts) | A real onchain event published as a public Alert, plus the Alert → Signal → Action causal chain. |
+| 2 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | The desk consuming Alert-backed Signals: proposal, policy decision, and preflight status. |
+| 3 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, outcome, routing, and audit context for the Action. |
 | 4 | [Example onchain proof](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | The transaction that anyone can verify independently. |
+
+### Source vs execution chains
+
+Intelligence can be observed on **Ethereum Mainnet** (primary signal source) while publication and desk execution run on **Ethereum Sepolia**. Alert cards label source chain and publication/execution chain separately so mainnet evidence is never confused with Sepolia fills.
 
 ## Full system overview
 
-ChronicleAI is an autonomous onchain market desk with a public memory: it turns market signals into sourced alerts and digests, offers premium machine-readable intelligence over x402/MPP, and can convert a policy-approved insight into an auditable KeeperHub execution.
+ChronicleAI is an autonomous onchain market desk with a public memory: it turns market activity into sourced Alerts and digests, offers premium machine-readable intelligence over x402/MPP, and can convert a policy-approved Alert-backed Signal into an auditable KeeperHub Action.
 
 This is the distinction from a generic trading bot:
 
-- It **publishes what it sees** instead of keeping reasoning private.
+- It **publishes what it sees** as Alerts instead of keeping reasoning private.
+- It **feeds the desk from those Alerts** — eligible Alerts become Desk Signals, not a separate black-box stream.
 - It **monetizes deeper intelligence** instead of treating research as an invisible prompt.
 - It **acts only after policy and preflight checks** instead of letting an LLM broadcast arbitrary calldata.
 - It **proves what happened** with registry receipts, KeeperHub run IDs, transaction hashes, routing metadata, and an activity trail.
@@ -51,18 +63,18 @@ This is the distinction from a generic trading bot:
 
 ```mermaid
 flowchart LR
-    S[Onchain signals] --> P[Chronicle publication]
-    P --> R[Registry proof]
-    P --> M[Premium intelligence]
-    P --> D[Desk proposal]
-    D --> G[Hard policy and preflight]
+    E[Onchain events] --> A[Public Alert]
+    A --> P[Registry proof]
+    A --> M[Premium intelligence]
+    A --> S[Desk Signal]
+    S --> G[Hard policy and preflight]
     G --> K[KeeperHub MCP and workflow]
-    K --> T[Onchain transaction]
-    T --> A[Activity and audit trail]
-    A --> P
+    K --> T[Onchain Action]
+    T --> X[Activity and audit trail]
+    X --> A
 ```
 
-The same intelligence can be read, paid for, acted on, and independently verified. KeeperHub owns the execution step; ChronicleAI owns the intelligence, policy, product experience, and proof layer around it.
+The same intelligence can be read, paid for, acted on, and independently verified. KeeperHub owns the execution step; ChronicleAI owns the intelligence, Alert→Signal projection, policy, product experience, and proof layer around it.
 
 ## Judge links
 
@@ -71,20 +83,22 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 | Source code | [github.com/zaikaman/ChronicleAI](https://github.com/zaikaman/ChronicleAI) |
 | Live activity and execution proof | [chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity) |
 | Live desk and audit timeline | [chronicle-ai-web.vercel.app/desk](https://chronicle-ai-web.vercel.app/desk) |
+| Live alerts and causal chains | [chronicle-ai-web.vercel.app/alerts](https://chronicle-ai-web.vercel.app/alerts) |
 | Registry contract | [`0xD8Deb4475a7E23E194Bc93f8739858Fb20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) |
 
 ## Supporting surfaces and capabilities
 
-- **Public intelligence:** alerts, daily digests, trade tickets, capital-move records, and proof-of-publication receipts.
+- **Public intelligence:** Alerts (desk inputs when eligible), daily digests, trade tickets, capital-move records, and proof-of-publication receipts.
+- **Alert → Signal projection:** [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) maps eligible event types into desk signal types (`event_flow`, `event_supply`, `liquidation_cluster`, `gas_regime`, …) and records causal metadata on the Alert.
 - **Premium intelligence:** HTTP 402 routing with x402/MPP adapters for machine-readable feeds and paid analysis.
-- **Desk reasoning:** LangChainJS with provider fallback; the model proposes, while hard policy gates the action.
+- **Desk reasoning:** LangChainJS with provider fallback; the model proposes from Signals, while hard policy gates the Action.
 - **KeeperHub execution:** configured workflows execute desk strategies, registry writes, transfers, and the kill switch. MCP is preferred; REST workflow execution remains a KeeperHub fallback.
 - **Reliability layer:** preflight simulation, idempotency keys, private routing for material desk actions, gas and routing metadata, kill-switch controls, and structured outcome handling.
 - **Operator UX:** public Activity, Alerts, Premium, and Desk views make the agent’s work inspectable instead of asking users to trust a black box.
 
 ## Deep proof set
 
-The core demo uses one signal-to-transaction path. The repository includes 33 KeeperHub workflow definitions (28 core workflows and 5 optional mainnet monitoring workflows); the following proof set is available for deeper inspection:
+The core demo uses one Alert→Signal→Action path. The repository includes 33 KeeperHub workflow definitions (28 core workflows and 5 optional mainnet monitoring workflows); the following proof set is available for deeper inspection:
 
 | Surface / workflow | Action | Transaction |
 | --- | --- | --- |
@@ -112,6 +126,7 @@ The core demo uses one signal-to-transaction path. The repository includes 33 Ke
 | Private routing | [`apps/api/src/services/keeperhub-private-capability.ts`](apps/api/src/services/keeperhub-private-capability.ts) and [`apps/api/src/services/routing-metadata.ts`](apps/api/src/services/routing-metadata.ts) | Strict private routing for desk and kill-switch actions, with honest public/sponsored routing for registry writes. |
 | x402 / MPP | [`apps/api/src/payments/x402-payment-adapter.ts`](apps/api/src/payments/x402-payment-adapter.ts) and [`apps/api/src/payments/mpp-payment-adapter.ts`](apps/api/src/payments/mpp-payment-adapter.ts) | Dual-protocol premium intelligence access and onchain receipt anchoring. |
 | Audit trail | [`apps/api/src/desk/execution-audit.ts`](apps/api/src/desk/execution-audit.ts) and [`apps/web/src/features/desk/ExecutionAuditTimeline.tsx`](apps/web/src/features/desk/ExecutionAuditTimeline.tsx) | Correlates policy/preflight, KeeperHub run logs, final receipts, gas, routing, and failure narratives. |
+| Alert → Signal | [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) | Projects eligible public Alerts into desk Signals and writes causal metadata back onto the Alert. |
 
 ### Execution routing policy
 
@@ -126,12 +141,13 @@ Private routing and gas sponsorship are mutually exclusive on the same transacti
 
 ## Reliability and observability
 
-- **Policy gate:** the LLM proposes a strategy; hard limits, position caps, minimum AUM, pause state, and kill-switch state decide whether it can execute.
+- **Policy gate:** the LLM proposes a strategy from a Desk Signal; hard limits, position caps, minimum AUM, pause state, and kill-switch state decide whether it can execute.
 - **Preflight:** a KeeperHub dry-run is captured before the live workflow when configured.
 - **Fail-closed private path:** a strict private route does not silently become a public desk trade. An explicitly configured public fallback is recorded as a different route.
 - **Idempotency:** execution keys and content hashes prevent duplicate registry publications and repeated capital actions.
 - **Terminal-state correctness:** `completed: true` is not treated as success when KeeperHub returns an error or failed node.
 - **Three-layer audit:** policy/preflight, KeeperHub execution logs, and final onchain receipt are correlated into one desk timeline.
+- **Causal Alert metadata:** signal status, policy verdict, action status, ticket, and transaction stay linked on the originating Alert.
 - **No invented fills:** a run without a real transaction hash remains pending, unknown, failed, or timed out.
 - **Kill switch:** missed heartbeats and failed safety conditions pause the desk and route residual defense through the dedicated kill-switch workflow.
 
@@ -140,28 +156,29 @@ Private routing and gas sponsorship are mutually exclusive on the same transacti
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Signal as Market / onchain signal
-    participant Chronicle as ChronicleAI intelligence
+    participant Event as Onchain event
+    participant Alert as Public Alert
+    participant Signal as Desk Signal
     participant Policy as Policy and risk gate
     participant Preflight as KeeperHub preflight
     participant MCP as KeeperHub MCP / workflow
-    participant Chain as Target chain
+    participant Chain as Execution chain
     participant Audit as Chronicle activity and audit
 
-    Signal->>Chronicle: Ingest event, pool, price, or risk signal
-    Chronicle->>Chronicle: Fuse sources and draft alert / digest / proposal
-    Chronicle->>Policy: Submit proposed desk action
-    Policy-->>Chronicle: Approve, hold, defend, or pause
+    Event->>Alert: Ingest event, publish plain-language Alert
+    Alert->>Signal: Project eligible Alert into desk Signal
+    Signal->>Policy: Submit proposed desk Action
+    Policy-->>Alert: Record verdict on causal chain
     alt Approved
-        Chronicle->>Preflight: Simulate configured KeeperHub action
-        Preflight-->>Chronicle: Revert check, gas, and routing metadata
-        Chronicle->>MCP: Discover and execute KeeperHub workflow
+        Alert->>Preflight: Simulate configured KeeperHub action
+        Preflight-->>Alert: Revert check, gas, and routing metadata
+        Alert->>MCP: Discover and execute KeeperHub workflow
         MCP->>Chain: Sign and broadcast through KeeperHub
         Chain-->>MCP: Receipt and transaction hash
         MCP-->>Audit: Execution ID, logs, outcome, and gas
-        Audit-->>Chronicle: Proof-first desk timeline
-    else Held or blocked
-        Chronicle->>Audit: Record policy / preflight reason and alert operator
+        Audit-->>Alert: Proof-first desk timeline + Alert causal update
+    else Held, deferred, or ignored
+        Alert->>Audit: Record policy / preflight reason; Alert stays public
     end
 ```
 
@@ -169,8 +186,10 @@ sequenceDiagram
 
 | Component | Source |
 | --- | --- |
+| Alert → Signal projection | [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) |
 | Desk execution bridge | [`apps/api/src/desk/execution-bridge.ts`](apps/api/src/desk/execution-bridge.ts) |
 | Desk trading agent | [`apps/api/src/desk/agent/desk-trading-agent.ts`](apps/api/src/desk/agent/desk-trading-agent.ts) |
+| Desk signal engine | [`apps/api/src/desk/signal-engine.ts`](apps/api/src/desk/signal-engine.ts) |
 | Policy and control plane | [`apps/api/src/desk/control-plane.ts`](apps/api/src/desk/control-plane.ts) |
 | KeeperHub MCP client | [`apps/api/src/services/keeperhub-mcp-client.ts`](apps/api/src/services/keeperhub-mcp-client.ts) |
 | Deterministic MCP execution | [`apps/api/src/services/keeperhub-mcp-execute.ts`](apps/api/src/services/keeperhub-mcp-execute.ts) |
@@ -179,6 +198,7 @@ sequenceDiagram
 | Execution audit | [`apps/api/src/desk/execution-audit.ts`](apps/api/src/desk/execution-audit.ts) |
 | CCTP treasury worker | [`apps/api/src/cctp/rebalance-service.ts`](apps/api/src/cctp/rebalance-service.ts) |
 | Activity UI | [`apps/web/src/features/activity/ActivityPage.tsx`](apps/web/src/features/activity/ActivityPage.tsx) |
+| Alerts UI + causal chain | [`apps/web/src/features/alerts/AlertCard.tsx`](apps/web/src/features/alerts/AlertCard.tsx) |
 | Desk UI | [`apps/web/src/features/desk/DeskStatusPage.tsx`](apps/web/src/features/desk/DeskStatusPage.tsx) |
 | Premium UI | [`apps/web/src/features/premium/PremiumPage.tsx`](apps/web/src/features/premium/PremiumPage.tsx) |
 | KeeperHub workflows | [`workflows/keeperhub/`](workflows/keeperhub) |
@@ -234,7 +254,7 @@ The local services run at:
 
 ## Verification
 
-The project reports **1,054 passing and 42 skipped tests** across 132 test files, plus 33 KeeperHub workflow definitions.
+The project reports **1,074 passing and 42 skipped tests** across 134 test files, plus 33 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check

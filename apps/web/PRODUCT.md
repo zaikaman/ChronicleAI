@@ -14,7 +14,7 @@ Public crypto readers scanning ChronicleAI for timely, verifiable on-chain marke
 
 ## Product Purpose
 
-ChronicleAI is an autonomous on-chain newspaper, paid intelligence feed, and policy-gated market desk. It monitors blockchain activity through KeeperHub, publishes public alerts and daily digests with proof-of-publication receipts, monetizes deeper analysis via x402/MPP micropayments, runs a closed-loop trading book (risk defend, yield rotation, oracle–AMM) where an LLM proposes under hard policy and KeeperHub executes, and exposes a transparent Activity trail for treasury health, desk intents, trade tickets, and execution outcomes. Success means readers can go from “what happened on-chain?” to a sourced, verifiable summary in seconds—and can confirm the agent actually executed, not only reasoned.
+ChronicleAI is an autonomous on-chain newspaper, paid intelligence feed, and policy-gated market desk. It monitors blockchain activity through KeeperHub, publishes public Alerts and daily digests with proof-of-publication receipts, projects eligible Alerts into Desk Signals (Alert → Signal → Action), monetizes deeper analysis via x402/MPP micropayments, runs a closed-loop trading book (risk defend, yield rotation, oracle–AMM) where an LLM proposes under hard policy and KeeperHub executes, and exposes a transparent Activity trail for treasury health, desk intents, trade tickets, and execution outcomes. Success means readers can go from “what happened on-chain?” to a sourced, verifiable summary in seconds—and can confirm the agent actually executed, not only reasoned.
 
 ## Brand Personality
 

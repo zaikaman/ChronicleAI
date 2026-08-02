@@ -76,7 +76,7 @@ export function DeskTicketPage(): ReactElement {
       <PageBackLink to="/desk/intents">Desk intents</PageBackLink>
       <PageHeader
         title={title}
-        description="Follow the signal, decision, execution, and proof for this trade."
+        description="Follow the Alert → Signal → Action path: decision, execution, and proof for this trade."
         meta={
           <StatusBadge label={ticketOutcomeLabel(ticket)} variant={ticketOutcomeVariant(ticket)} />
         }
