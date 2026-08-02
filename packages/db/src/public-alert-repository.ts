@@ -130,6 +130,7 @@ export interface PublicAlertRepository {
       summary?: string;
       sourceReferences?: string[];
       confidence?: string | null;
+      deterministicEvidence?: Record<string, unknown>;
     },
   ): Promise<Result<PublicAlertRow>>;
   updateCausalMetadata?(
@@ -330,6 +331,9 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       }
       if (content.confidence !== undefined) {
         update.confidence = content.confidence as PublicAlertRow["confidence"];
+      }
+      if (content.deterministicEvidence !== undefined) {
+        update.deterministic_evidence = content.deterministicEvidence;
       }
       const payload = buildUpdatePayload(update as unknown as Record<string, unknown>);
       const { data: rows, error } = await table().update(payload).eq("id", id).select().single();

@@ -2,6 +2,7 @@
 
 import type {
   MonitoredEventRepository,
+  MonitoredEventRow,
   PublicAlertRepository,
   ExecutionLogRepository,
 } from "@chronicleai/db";
@@ -44,6 +45,11 @@ import {
   alertSignalProjectionForEvent,
   type AlertToSignalService,
 } from "../services/alert-to-signal-service.ts";
+import {
+  createAaveFlowCorrelationService,
+  type AaveFlowCorrelation,
+  type AaveFlowCorrelationService,
+} from "../services/aave-flow-correlation-service.ts";
 
 export interface IngestionResult {
   accepted: boolean;
@@ -65,6 +71,21 @@ function sourceReferencesForPayload(payload: EventIngestionPayload): string[] {
     payload.blockNumber !== undefined ? `block:${payload.blockNumber}` : undefined,
     payload.logIndex !== undefined ? `log:${payload.logIndex}` : undefined,
     payload.sourceContract,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+function sourceReferencesForEvent(event: MonitoredEventRow): string[] {
+  return [
+    event.source_event_id,
+    event.transaction_hash,
+    event.block_hash,
+    event.block_number !== null && event.block_number !== undefined
+      ? `block:${event.block_number}`
+      : undefined,
+    event.log_index !== null && event.log_index !== undefined
+      ? `log:${event.log_index}`
+      : undefined,
+    event.source_contract,
   ].filter((value): value is string => typeof value === "string" && value.length > 0);
 }
 
@@ -130,6 +151,7 @@ export class EventIngestionHandler {
   private readonly contentService: PublicAlertContentService;
   private readonly publicationService: AlertPublicationService;
   private readonly clusterService: LiquidationClusterService;
+  private readonly aaveFlowCorrelationService: AaveFlowCorrelationService;
   private readonly premiumProductizer: PremiumProductizerService | null;
   private alertToSignalService: AlertToSignalService | null;
   /** Guard against recursive cluster re-entry. */
@@ -174,6 +196,10 @@ export class EventIngestionHandler {
       deps.execLogRepo,
     );
     this.clusterService = createLiquidationClusterService(deps.eventRepo);
+    this.aaveFlowCorrelationService = createAaveFlowCorrelationService({
+      eventRepo: deps.eventRepo,
+      alertRepo: deps.alertRepo,
+    });
   }
 
   setAlertToSignalService(service: AlertToSignalService | null): void {
@@ -309,6 +335,29 @@ export class EventIngestionHandler {
     // 4. Update event status to qualified
     await this.eventRepo.updateStatus(event.id, "qualified", qualification.score);
 
+    // Aave supply/withdraw pairs are genuine source events, but they should
+    // read as one rebalance context alert. Keep both monitored events and only
+    // suppress the redundant public projection when all identity fields match.
+    let aavePair: AaveFlowCorrelation | null = null;
+    try {
+      aavePair = await this.aaveFlowCorrelationService.findPair(event);
+    } catch (error) {
+      await this.execLogRepo.append({
+        action_type: "monitor",
+        entity_type: "monitored_event",
+        entity_id: event.id,
+        status: "failed",
+        message: "Aave flow correlation check failed; continuing with normal alert projection",
+        details: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+
+    if (aavePair) {
+      return await this.handleAaveFlowCorrelation(aavePair);
+    }
+
     // 5. Check for duplicate alert (source event OR cluster-key rate limit)
     const clusterKey = flowContext?.clusterKey ?? null;
     const dedupeKey = this.dedupeService.generateDedupeKey({
@@ -431,6 +480,104 @@ export class EventIngestionHandler {
     };
   }
 
+  private async handleAaveFlowCorrelation(
+    pair: AaveFlowCorrelation,
+  ): Promise<IngestionResult> {
+    const current = pair.currentEvent;
+    const counterpart = pair.counterpartEvent;
+    const anchor = pair.counterpartAlert;
+    const currentFlow = extractFlowContext(
+      current.raw_payload && typeof current.raw_payload === "object"
+        ? (current.raw_payload as Record<string, unknown>)
+        : null,
+    );
+    const sourceChainLabel = chainLabel(current.chain_id);
+    const assetLabel = current.asset_symbols?.filter(Boolean).join("/") || "the same reserve";
+    const values = [current.magnitude, counterpart.magnitude]
+      .map((magnitude) =>
+        magnitude && typeof magnitude.value === "number" && Number.isFinite(magnitude.value)
+          ? magnitude.value
+          : null,
+      )
+      .filter((value): value is number => value !== null);
+    const notional = values.length > 0 ? Math.max(...values) : null;
+    const notionalLabel =
+      notional !== null
+        ? `approximately $${notional.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+        : "a matching notional";
+    const flowLabel = (eventType: string): string =>
+      eventType === "protocol_withdraw" ? "withdrawal" : "supply";
+    const title = `${current.protocol ?? "Aave"} position rebalanced on ${chainLabel(current.chain_id)}`;
+    const summary =
+      `A matching Aave ${assetLabel} withdrawal and supply were observed for ${notionalLabel} ` +
+      `in ${pair.matchKind === "same_block" ? `the same ${sourceChainLabel} block` : `a short ${sourceChainLabel} window`}. ` +
+      `The ${flowLabel(current.event_type)} and ${flowLabel(counterpart.event_type)} remain retained ` +
+      `as separate source events; this public alert is their correlated context projection. ` +
+      `Publication and any execution context remain on ${chainLabel(ACTIVE_INTELLIGENCE_CHAIN_ID)}.`;
+    const existingEvidence =
+      anchor.deterministic_evidence && typeof anchor.deterministic_evidence === "object"
+        ? anchor.deterministic_evidence
+        : {};
+    const correlationEvidence = {
+      type: "aave_withdraw_supply_pair",
+      matchKind: pair.matchKind,
+      currentEventId: current.id,
+      counterpartEventId: counterpart.id,
+      currentSourceEventId: current.source_event_id,
+      counterpartSourceEventId: counterpart.source_event_id,
+      currentTransactionHash: current.transaction_hash,
+      counterpartTransactionHash: counterpart.transaction_hash,
+      blockNumber: current.block_number ?? counterpart.block_number,
+      assetSymbols: current.asset_symbols ?? counterpart.asset_symbols,
+      subjectAddress: currentFlow?.subjectAddress ?? null,
+    };
+    const sourceReferences = Array.from(
+      new Set([...anchor.source_references, ...sourceReferencesForEvent(current)]),
+    );
+
+    let anchorUpdateSucceeded = true;
+    if (this.alertRepo.updateContent) {
+      const anchorUpdate = await this.alertRepo.updateContent(anchor.id, {
+        title,
+        summary,
+        sourceReferences,
+        deterministicEvidence: {
+          ...existingEvidence,
+          aaveFlowCorrelation: correlationEvidence,
+        },
+      });
+      anchorUpdateSucceeded = anchorUpdate.ok;
+    }
+
+    await this.execLogRepo.append({
+      action_type: "publish_alert",
+      entity_type: "public_alert",
+      entity_id: anchor.id,
+      status: anchorUpdateSucceeded ? "succeeded" : "failed",
+      message: anchorUpdateSucceeded
+        ? "Aave withdraw/supply pair correlated; secondary public alert suppressed"
+        : "Aave withdraw/supply pair correlated; secondary public alert suppressed but anchor rewrite failed",
+      details: {
+        match_kind: pair.matchKind,
+        current_event_id: current.id,
+        counterpart_event_id: counterpart.id,
+        current_event_type: current.event_type,
+        counterpart_event_type: counterpart.event_type,
+        current_transaction_hash: current.transaction_hash,
+        counterpart_transaction_hash: counterpart.transaction_hash,
+        anchor_update_succeeded: anchorUpdateSucceeded,
+      },
+    });
+
+    return {
+      accepted: true,
+      statusCode: 202,
+      alertId: anchor.id,
+      message:
+        "Aave withdraw/supply pair correlated; raw event retained and secondary public alert suppressed",
+    };
+  }
+
   private async enrichAndPublishAlert(params: {
     alertId: string;
     eventId: string;
@@ -478,7 +625,13 @@ export class EventIngestionHandler {
 
       if (generationResult.success && generationResult.content) {
         generationSucceeded = true;
-        if (this.alertRepo.updateContent) {
+        const latestAlert = await this.alertRepo.findById(alertId);
+        const alreadyCorrelated =
+          latestAlert.ok &&
+          latestAlert.value.deterministic_evidence &&
+          typeof latestAlert.value.deterministic_evidence === "object" &&
+          "aaveFlowCorrelation" in latestAlert.value.deterministic_evidence;
+        if (this.alertRepo.updateContent && !alreadyCorrelated) {
           await this.alertRepo.updateContent(alertId, {
             title: generationResult.content.title,
             summary: generationResult.content.summary,

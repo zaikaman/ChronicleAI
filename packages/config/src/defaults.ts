@@ -81,6 +81,16 @@ export const BLOCK_MONITORING = {
 // ── Deduplication ───────────────────────────────────────
 export const DEDUPE_WINDOW_MS = 86_400_000; // 24 hours in milliseconds
 
+// Aave protocol-flow correlation
+/** Lookaround used to find same-block Aave flow counterparts in the event store. */
+export const AAVE_FLOW_CORRELATION_LOOKAROUND_MS = 5 * 60_000;
+/** Fallback time window when block numbers are unavailable. */
+export const AAVE_FLOW_CORRELATION_TIME_WINDOW_MS = 2 * 60_000;
+/** Maximum qualified events inspected for a single correlation check. */
+export const AAVE_FLOW_CORRELATION_MAX_CANDIDATES = 500;
+/** Relative USD tolerance used only when raw token amounts are unavailable. */
+export const AAVE_FLOW_CORRELATION_MAGNITUDE_TOLERANCE = 0.005;
+
 // ── Payment Defaults ────────────────────────────────────
 export const PAYMENT_CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes in milliseconds
 
@@ -318,4 +328,3 @@ export const CCTP_REBALANCE_SCHEDULE_INTERVAL_MS = 3 * 60_000; // 3m
  * Mint now starts as soon as Iris is complete; env kept for config compatibility.
  */
 export const CCTP_FORWARDING_FALLBACK_MS = 10 * 60_000; // 10m
-
