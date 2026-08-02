@@ -2,8 +2,8 @@
   "version": 1,
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
-    "name": "ChronicleAI Aave V3 Liquidation Monitor — Sepolia (Telegram bridge)",
-    "description": "Desk-grade: Event Tracker on Ethereum Sepolia Aave V3 Pool LiquidationCall → Telegram → Chronicle ingest. Re-homed from mainnet; same-chain as desk execution. FREE TIER Telegram bridge. Replace YOUR_TELEGRAM_INGEST_CHAT_ID."
+    "name": "ChronicleAI Aave V3 Liquidation Monitor — Ethereum Mainnet (Telegram bridge)",
+    "description": "Mainnet observation source: Event Tracker on Ethereum Mainnet Aave V3 Pool LiquidationCall → Telegram → Chronicle ingest. Mainnet liquidation data is never treated as local Sepolia risk. FREE TIER Telegram bridge. Replace YOUR_TELEGRAM_INGEST_CHAT_ID."
   },
   "nodes": [
     {
@@ -15,11 +15,11 @@
       },
       "data": {
         "type": "trigger",
-        "label": "Aave V3 LiquidationCall (Sepolia)",
+        "label": "Aave V3 LiquidationCall (Ethereum Mainnet)",
         "config": {
           "triggerType": "Event",
-          "network": "11155111",
-          "contractAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+          "network": "1",
+          "contractAddress": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
           "eventName": "LiquidationCall",
           "contractABI": "[{\"type\":\"event\",\"name\":\"LiquidationCall\",\"inputs\":[{\"indexed\":true,\"name\":\"collateralAsset\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"debtAsset\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"user\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"debtToCover\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"liquidatedCollateralAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"name\":\"liquidator\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"receiveAToken\",\"type\":\"bool\"}]}]"
         }
@@ -38,7 +38,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"LiquidationCall\",\"address\":\"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951\",\"transactionHash\":\"{{@trigger-liq:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-liq:Trigger.blockNumber}}\",\"args\":{\"collateralAsset\":\"{{@trigger-liq:Trigger.args.collateralAsset}}\",\"debtAsset\":\"{{@trigger-liq:Trigger.args.debtAsset}}\",\"user\":\"{{@trigger-liq:Trigger.args.user}}\",\"debtToCover\":\"{{@trigger-liq:Trigger.args.debtToCover}}\",\"liquidatedCollateralAmount\":\"{{@trigger-liq:Trigger.args.liquidatedCollateralAmount}}\",\"liquidator\":\"{{@trigger-liq:Trigger.args.liquidator}}\"},\"protocol\":\"Aave V3\"}}",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"LiquidationCall\",\"address\":\"0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2\",\"transactionHash\":\"{{@trigger-liq:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-liq:Trigger.blockNumber}}\",\"args\":{\"collateralAsset\":\"{{@trigger-liq:Trigger.args.collateralAsset}}\",\"debtAsset\":\"{{@trigger-liq:Trigger.args.debtAsset}}\",\"user\":\"{{@trigger-liq:Trigger.args.user}}\",\"debtToCover\":\"{{@trigger-liq:Trigger.args.debtToCover}}\",\"liquidatedCollateralAmount\":\"{{@trigger-liq:Trigger.args.liquidatedCollateralAmount}}\",\"liquidator\":\"{{@trigger-liq:Trigger.args.liquidator}}\"},\"protocol\":\"Aave V3 Ethereum Mainnet\"}}",
           "parseMode": "none"
         }
       }

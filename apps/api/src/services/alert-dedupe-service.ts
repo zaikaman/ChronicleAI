@@ -23,6 +23,8 @@ export interface AlertDedupeService {
     sourceEventId?: string | null;
     source: string;
     eventType: EventType;
+    /** Observation chain. Including it prevents cross-chain collisions. */
+    chainId?: number | null;
     clusterKey?: string | null;
     capturedAt?: string | null;
   }): string;
@@ -43,19 +45,20 @@ function hourBucket(iso: string | null | undefined): string {
 
 export function createAlertDedupeService(): AlertDedupeService {
   return {
-    generateDedupeKey({ sourceEventId, source, eventType, clusterKey, capturedAt }) {
+    generateDedupeKey({ sourceEventId, source, eventType, chainId, clusterKey, capturedAt }) {
+      const chainPrefix = chainId == null ? "" : `${chainId}-`;
       // Publication rate-limit by cluster for high-volume flow types
       if (clusterKey && CLUSTER_DEDUPE_TYPES.has(eventType)) {
         const bucket = hourBucket(capturedAt);
-        return `${source}-cluster-${eventType}-${clusterKey}-${bucket}`;
+        return `${source}-${chainPrefix}cluster-${eventType}-${clusterKey}-${bucket}`;
       }
 
       // liquidation_cluster already has stable windowed sourceEventId
       if (sourceEventId) {
-        return `${source}-${sourceEventId}-${eventType}`;
+        return `${source}-${chainPrefix}${sourceEventId}-${eventType}`;
       }
 
-      return `${source}-${eventType}-${Date.now()}`;
+      return `${source}-${chainPrefix}${eventType}-${Date.now()}`;
     },
 
     isWithinWindow(createdAt, options) {

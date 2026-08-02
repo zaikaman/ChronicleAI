@@ -13,6 +13,7 @@ const productionEnv = {
   mppSecret: "mpp_test_secret",
   x402FacilitatorUrl: undefined,
   rpcUrl: undefined,
+  mainnetRpcUrl: "https://mainnet.example",
   revenueFxMode: "auto",
   revenueEthPerCurrencyUnit: undefined,
   creatorRecoveryShare: 0.8,

@@ -2,8 +2,8 @@
   "version": 1,
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
-    "name": "ChronicleAI Aave V3 Withdraw Monitor — Sepolia (Telegram bridge)",
-    "description": "Desk-chain protocol flow: Event Tracker on Ethereum Sepolia Aave V3 Pool Withdraw → Telegram → Chronicle. Classified as protocol_withdraw. FREE TIER. Sparse Event trigger (not hot-path). One Event trigger per workflow (event-tracker registers nodes[0] only)."
+    "name": "ChronicleAI Aave V3 Withdraw Monitor — Ethereum Mainnet (Telegram bridge)",
+    "description": "Mainnet protocol-context source: Event Tracker on Ethereum Mainnet Aave V3 Pool Withdraw → Telegram → Chronicle. Classified as protocol_withdraw; no direct execution in v1. FREE TIER. Sparse Event trigger (not hot-path)."
   },
   "nodes": [
     {
@@ -12,11 +12,11 @@
       "position": { "x": 100, "y": 200 },
       "data": {
         "type": "trigger",
-        "label": "Aave V3 Withdraw (Sepolia)",
+        "label": "Aave V3 Withdraw (Ethereum Mainnet)",
         "config": {
           "triggerType": "Event",
-          "network": "11155111",
-          "contractAddress": "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+          "network": "1",
+          "contractAddress": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
           "eventName": "Withdraw",
           "contractABI": "[{\"type\":\"event\",\"name\":\"Withdraw\",\"inputs\":[{\"indexed\":true,\"name\":\"reserve\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"user\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount\",\"type\":\"uint256\"}]}]"
         }
@@ -32,7 +32,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "-1004373075093",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Withdraw\",\"address\":\"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951\",\"transactionHash\":\"{{@trigger-withdraw:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-withdraw:Trigger.blockNumber}}\",\"args\":{\"reserve\":\"{{@trigger-withdraw:Trigger.args.reserve}}\",\"user\":\"{{@trigger-withdraw:Trigger.args.user}}\",\"to\":\"{{@trigger-withdraw:Trigger.args.to}}\",\"amount\":\"{{@trigger-withdraw:Trigger.args.amount}}\"},\"protocol\":\"Aave V3\"}}",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Withdraw\",\"address\":\"0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2\",\"transactionHash\":\"{{@trigger-withdraw:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-withdraw:Trigger.blockNumber}}\",\"args\":{\"reserve\":\"{{@trigger-withdraw:Trigger.args.reserve}}\",\"user\":\"{{@trigger-withdraw:Trigger.args.user}}\",\"to\":\"{{@trigger-withdraw:Trigger.args.to}}\",\"amount\":\"{{@trigger-withdraw:Trigger.args.amount}}\"},\"protocol\":\"Aave V3 Ethereum Mainnet\"}}",
           "parseMode": "none"
         }
       }

@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Uniswap V3 USDC/WETH Large Swap Monitor (Telegram bridge)",
-    "description": "NEWSPAPER ONLY (not a desk execution input). FREE TIER: Schedule hourly (~720 schedule fires/mo; For Each can add more) → Query Swap events → size filter (~$500k+) → Telegram CHRONICLE_INGEST. Prefer a separate vanity account or leave disabled. Desk strategies use Sepolia desk-*-poll workflows instead. Set chatId to TELEGRAM_INGEST_CHAT_ID."
+    "description": "NEWSPAPER ONLY (not a desk execution input). FREE TIER: Schedule hourly (~720 schedule fires/mo; For Each can add more) → Query Ethereum Mainnet Swap events → size filter (~$500k+) → Telegram CHRONICLE_INGEST. Desk strategies use Sepolia desk-*-poll workflows instead. Set chatId to TELEGRAM_INGEST_CHAT_ID."
   },
   "nodes": [
     {
@@ -29,8 +29,8 @@
         "label": "Query USDC/WETH Swaps",
         "config": {
           "actionType": "web3/query-events",
-          "network": "11155111",
-          "contractAddress": "0x3289680dd4d6c10bb19b899729cda5eef58aeff1",
+          "network": "1",
+          "contractAddress": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
           "eventName": "Swap",
           "blockCount": "320",
           "abi": "[{\"type\":\"event\",\"name\":\"Swap\",\"inputs\":[{\"indexed\":true,\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"recipient\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount0\",\"type\":\"int256\"},{\"indexed\":false,\"name\":\"amount1\",\"type\":\"int256\"},{\"indexed\":false,\"name\":\"sqrtPriceX96\",\"type\":\"uint160\"},{\"indexed\":false,\"name\":\"liquidity\",\"type\":\"uint128\"},{\"indexed\":false,\"name\":\"tick\",\"type\":\"int24\"}]}]"
@@ -74,7 +74,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
-        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Swap\",\"address\":\"0x3289680dd4d6c10bb19b899729cda5eef58aeff1\",\"transactionHash\":\"{{@for-each-swap:For Each Swap.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-swap:For Each Swap.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-swap:For Each Swap.currentItem.logIndex}}\",\"args\":{\"amount0\":\"{{@for-each-swap:For Each Swap.currentItem.args.amount0}}\",\"amount1\":\"{{@for-each-swap:For Each Swap.currentItem.args.amount1}}\",\"sender\":\"{{@for-each-swap:For Each Swap.currentItem.args.sender}}\",\"recipient\":\"{{@for-each-swap:For Each Swap.currentItem.args.recipient}}\"},\"protocol\":\"Uniswap V3 Sepolia\"}}",
+        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Swap\",\"address\":\"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640\",\"transactionHash\":\"{{@for-each-swap:For Each Swap.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-swap:For Each Swap.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-swap:For Each Swap.currentItem.logIndex}}\",\"arrayLength\":{{@query-swaps:Query USDC/WETH Swaps.eventCount}},\"args\":{\"amount0\":\"{{@for-each-swap:For Each Swap.currentItem.args.amount0}}\",\"amount1\":\"{{@for-each-swap:For Each Swap.currentItem.args.amount1}}\",\"sender\":\"{{@for-each-swap:For Each Swap.currentItem.args.sender}}\",\"recipient\":\"{{@for-each-swap:For Each Swap.currentItem.args.recipient}}\"},\"protocol\":\"Uniswap V3 Ethereum Mainnet\"}}",
           "parseMode": "none"
         }
       }

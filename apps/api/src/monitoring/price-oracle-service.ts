@@ -1,11 +1,11 @@
 // On-chain price oracle via Chainlink aggregators (ETH/USD, LINK/USD)
 //
-// Hardening for flaky testnet RPCs:
-// - Shared public client with static chain + request timeout
+// Hardening for flaky RPCs:
+// - Per-chain public clients with static chain + request timeout
 // - Fresh cache + stale fallback so bursty traffic doesn't spam RPC
-// - Single-RPC constraint: never eth_call foreign-chain aggregator addresses
+// - Never eth_call foreign-chain aggregator addresses
 //   (they have no code on the RPC chain → empty 0x / "empty decimals" noise)
-// - ETH/LINK USD is global — serve the RPC-native feed for any requested chainId
+// - ETH/LINK USD is global, but Mainnet observations use MAINNET_RPC_URL when configured
 // - Chainlink USD feeds always use 8 decimals (skip flaky decimals() call)
 // - Single retry on empty/bad latestRoundData (common flaky RPC pattern)
 
@@ -48,10 +48,12 @@ export type PriceOracleEthCall = (to: string, data: string) => Promise<string>;
 
 export interface PriceOracleOptions {
   /**
-   * Chain the RPC_URL actually points at (default: Ethereum Sepolia).
-   * Used when a requested chain feed is not readable on this RPC.
+   * Chain the legacy rpcUrl argument points at (default: Ethereum Sepolia).
+   * Used when a requested chain does not have a dedicated URL.
    */
   rpcChainId?: number;
+  /** Dedicated RPC URLs keyed by the observation chain ID. */
+  rpcUrlsByChainId?: Partial<Record<number, string | undefined>>;
   /** Per-RPC call timeout in ms (default 6s). */
   timeoutMs?: number;
   /** Fresh cache TTL (default 60s). */
@@ -59,9 +61,12 @@ export interface PriceOracleOptions {
   /** Serve last good price for this long after TTL (default 30m). */
   staleTtlMs?: number;
   /**
-   * Optional eth_call override (tests). When set, RPC_URL is unused for reads.
+   * Optional shared eth_call override (tests). When set, the legacy RPC chain
+   * uses this callback instead of the URL-backed client.
    */
   ethCall?: PriceOracleEthCall;
+  /** Optional per-chain eth_call overrides for deterministic tests. */
+  ethCallsByChainId?: Partial<Record<number, PriceOracleEthCall>>;
 }
 
 type FeedCache = {
@@ -134,9 +139,26 @@ export function createPriceOracle(
   const ethCache = new Map<number, FeedCache>();
   const linkCache = new Map<number, FeedCache>();
 
-  let ethCall: PriceOracleEthCall | null = options?.ethCall ?? null;
-  if (!ethCall && rpcUrl?.trim()) {
-    ethCall = createRpcEthCall(rpcUrl.trim(), rpcChainId, timeoutMs);
+  const ethCallsByChainId = new Map<number, PriceOracleEthCall>();
+  for (const [rawChainId, url] of Object.entries(options?.rpcUrlsByChainId ?? {})) {
+    const chainId = Number(rawChainId);
+    if (Number.isInteger(chainId) && typeof url === "string" && url.trim()) {
+      ethCallsByChainId.set(chainId, createRpcEthCall(url.trim(), chainId, timeoutMs));
+    }
+  }
+  if (options?.ethCall) {
+    ethCallsByChainId.set(rpcChainId, options.ethCall);
+  } else if (rpcUrl?.trim() && !ethCallsByChainId.has(rpcChainId)) {
+    ethCallsByChainId.set(
+      rpcChainId,
+      createRpcEthCall(rpcUrl.trim(), rpcChainId, timeoutMs),
+    );
+  }
+  for (const [rawChainId, ethCall] of Object.entries(options?.ethCallsByChainId ?? {})) {
+    const chainId = Number(rawChainId);
+    if (Number.isInteger(chainId) && ethCall) {
+      ethCallsByChainId.set(chainId, ethCall);
+    }
   }
 
   function getCached(
@@ -170,9 +192,8 @@ export function createPriceOracle(
   async function readAggregatorOnce(
     feed: string,
     label: string,
+    ethCall: PriceOracleEthCall,
   ): Promise<number | null> {
-    if (!ethCall) return null;
-
     const roundData = encodeFunctionData({
       abi: AGGREGATOR_ABI,
       functionName: "latestRoundData",
@@ -196,12 +217,13 @@ export function createPriceOracle(
   async function readAggregator(
     feed: string,
     label: string,
+    ethCall: PriceOracleEthCall,
   ): Promise<number | null> {
     try {
-      return await readAggregatorOnce(feed, label);
+      return await readAggregatorOnce(feed, label, ethCall);
     } catch (firstError) {
       try {
-        return await readAggregatorOnce(feed, label);
+        return await readAggregatorOnce(feed, label, ethCall);
       } catch (secondError) {
         const msg =
           secondError instanceof Error
@@ -218,25 +240,19 @@ export function createPriceOracle(
   /**
    * Resolve which aggregator address to eth_call.
    *
-   * A single JSON-RPC endpoint can only see contracts on its own chain.
-   * Mainnet feed addresses eth_call'd on Sepolia return empty 0x (no code) —
-   * that produced the noisy `empty decimals result for ETH/USD@1` logs.
-   * ETH/USD and LINK/USD are global, so the RPC-native feed is always correct.
+   * Each configured JSON-RPC endpoint can only see contracts on its own chain.
+   * Resolve the feed and the client together so Mainnet observations never
+   * call the Mainnet feed through the Sepolia RPC.
    */
   function resolveReadableFeed(
     chainId: number,
     feedByChain: Readonly<Record<number, string>>,
-  ): { feed: string; viaChainId: number } | null {
-    const rpcFeed = feedByChain[rpcChainId];
-    if (rpcFeed) {
-      return { feed: rpcFeed, viaChainId: rpcChainId };
-    }
-    // No feed registered for the RPC chain — last resort primary (may fail).
-    const primary = feedByChain[chainId];
-    if (primary) {
-      return { feed: primary, viaChainId: chainId };
-    }
-    return null;
+  ): { feed: string; viaChainId: number; ethCall: PriceOracleEthCall } | null {
+    const viaChainId = ethCallsByChainId.has(chainId) ? chainId : rpcChainId;
+    const ethCall = ethCallsByChainId.get(viaChainId);
+    const feed = feedByChain[viaChainId] ?? feedByChain[chainId];
+    if (!ethCall || !feed) return null;
+    return { feed, viaChainId, ethCall };
   }
 
   async function readFeed(
@@ -248,10 +264,6 @@ export function createPriceOracle(
     const cached = getCached(cache, chainId);
     if (cached?.fresh) return cached.price;
 
-    if (!ethCall) {
-      return cached?.price ?? null;
-    }
-
     const attempt = resolveReadableFeed(chainId, feedByChain);
     if (!attempt) {
       return cached?.price ?? null;
@@ -260,6 +272,7 @@ export function createPriceOracle(
     const price = await readAggregator(
       attempt.feed,
       `${label}@${attempt.viaChainId}`,
+      attempt.ethCall,
     );
     if (price != null) {
       // Cache under both the requested and RPC chain so cross-chain event
@@ -271,7 +284,7 @@ export function createPriceOracle(
     if (cached) {
       return cached.price;
     }
-    const rpcStale = getCached(cache, rpcChainId);
+    const rpcStale = getCached(cache, attempt.viaChainId);
     return rpcStale?.price ?? null;
   }
 

@@ -4,6 +4,7 @@
 
 import {
   ACTIVE_INTELLIGENCE_CHAIN_ID,
+  PRIMARY_SIGNAL_CHAIN_ID,
   PREMIUM_CASCADE_MIN_LIQUIDATIONS,
   PREMIUM_CASCADE_MIN_TOTAL_USD,
   PREMIUM_CLUSTER_WINDOW_HOURS,
@@ -15,6 +16,7 @@ import {
   PREMIUM_MIN_CLUSTER_EVENTS,
   PREMIUM_STRUCTURED_FEED_PRICE_USDC,
   chainLabel,
+  isAllowedSignalSourceChain,
 } from "@chronicleai/config";
 import type {
   DailyDigestRow,
@@ -69,6 +71,7 @@ export interface PremiumProductizerService {
       | "summary"
       | "highlights"
       | "analysis"
+      | "chain_id"
     >;
     events: MonitoredEventRow[];
   }): Promise<ProductizerResult>;
@@ -112,6 +115,12 @@ function slugify(raw: string): string {
 
 function dayKey(iso: string): string {
   return iso.slice(0, 10);
+}
+
+function chainSlug(chainId: number): string {
+  if (chainId === PRIMARY_SIGNAL_CHAIN_ID) return "mainnet";
+  if (chainId === ACTIVE_INTELLIGENCE_CHAIN_ID) return "sepolia";
+  return `chain-${chainId}`;
 }
 
 function magnitudeValue(event: MonitoredEventRow): number | null {
@@ -410,6 +419,7 @@ export function createPremiumProductizerService(deps: {
     summaryPublic: string;
     contentPrivate: Record<string, unknown>;
     sourceEventIds: string[];
+    sourceChainId: number;
     priceAmount: number;
   }): Promise<{ item: PremiumIntelligenceItemRow | null; created: boolean; error?: string }> {
     const existing = await deps.premiumRepo.findBySlug(params.slug);
@@ -431,7 +441,7 @@ export function createPremiumProductizerService(deps: {
       price_currency: "USDC",
       payment_routes: config.paymentRoutes,
       status: "available",
-      source_chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      source_chain_id: params.sourceChainId,
     });
 
     if (!created.ok) {
@@ -575,6 +585,7 @@ export function createPremiumProductizerService(deps: {
     kind: "cluster" | "cascade";
     label: string;
     day: string;
+    sourceChainId: number;
     events: MonitoredEventRow[];
     liquidationUsd?: number;
     liquidationCount?: number;
@@ -582,8 +593,8 @@ export function createPremiumProductizerService(deps: {
     const result = emptyResult();
     const slug = slugify(
       params.kind === "cascade"
-        ? `deep-dive-cascade-${params.label}-${params.day}`
-        : `deep-dive-cluster-${params.label}-${params.day}`,
+        ? `deep-dive-cascade-${params.label}-${params.day}-${chainSlug(params.sourceChainId)}`
+        : `deep-dive-cluster-${params.label}-${params.day}-${chainSlug(params.sourceChainId)}`,
     );
 
     const exists = await slugExists(slug);
@@ -627,6 +638,7 @@ export function createPremiumProductizerService(deps: {
       summaryPublic: composed.summaryPublic,
       contentPrivate: composed.contentPrivate,
       sourceEventIds: params.events.map((e) => e.id),
+      sourceChainId: params.sourceChainId,
       priceAmount: deepDivePrice(config.deepDiveBasePriceUsdc, params.events.length),
     });
     recordEnsure(result, ensured, `exists:${slug}`);
@@ -660,6 +672,7 @@ export function createPremiumProductizerService(deps: {
       kind: cascade ? "cascade" : "cluster",
       label,
       day,
+      sourceChainId: related[0]?.chain_id ?? PRIMARY_SIGNAL_CHAIN_ID,
       events: related,
       liquidationUsd,
       liquidationCount: liquidations.length,
@@ -690,6 +703,7 @@ export function createPremiumProductizerService(deps: {
       kind: "cascade",
       label,
       day,
+      sourceChainId: firstLiquidation.chain_id,
       events: liquidations,
       liquidationUsd,
       liquidationCount: liquidations.length,
@@ -699,24 +713,26 @@ export function createPremiumProductizerService(deps: {
   async function loadQualifiedWindow(
     periodStart: string,
     periodEnd: string,
+    sourceChainId: number,
   ): Promise<MonitoredEventRow[]> {
     const listed = await deps.eventRepo.listInWindow({
       periodStart,
       periodEnd,
       status: "qualified",
-      chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      chainId: sourceChainId,
       limit: 2000,
     });
     if (!listed.ok) {
       throw new Error(listed.error.message);
     }
-    return listed.value.filter((event) => event.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID);
+    return listed.value.filter((event) => event.chain_id === sourceChainId);
   }
 
   /** LLM historical feeds for protocols that have enough lookback activity. */
   async function mintHistoricalForProtocols(
     triggerEvents: MonitoredEventRow[],
     asOf: Date,
+    sourceChainId: number,
   ): Promise<ProductizerResult> {
     const result = emptyResult();
     const protocols = new Set(
@@ -731,7 +747,7 @@ export function createPremiumProductizerService(deps: {
     const periodStart = new Date(
       asOf.getTime() - config.historicalLookbackDays * 24 * 60 * 60 * 1000,
     ).toISOString();
-    const histEvents = await loadQualifiedWindow(periodStart, periodEnd);
+    const histEvents = await loadQualifiedWindow(periodStart, periodEnd, sourceChainId);
     const histEndDay = dayKey(periodEnd);
 
     for (const protocol of protocols) {
@@ -743,7 +759,7 @@ export function createPremiumProductizerService(deps: {
         continue;
       }
 
-      const slug = slugify(`historical-feed-${protocol}-${histEndDay}`);
+      const slug = slugify(`historical-feed-${protocol}-${histEndDay}-${chainSlug(sourceChainId)}`);
       const exists = await slugExists(slug);
       if (exists === true) {
         result.skipped.push(`exists:${slug}`);
@@ -781,6 +797,7 @@ export function createPremiumProductizerService(deps: {
         summaryPublic: composed.summaryPublic,
         contentPrivate: composed.contentPrivate,
         sourceEventIds: protocolEvents.map((e) => e.id),
+        sourceChainId,
         priceAmount: config.historicalFeedPriceUsdc,
       });
       recordEnsure(result, ensured, `exists:${slug}`);
@@ -793,8 +810,8 @@ export function createPremiumProductizerService(deps: {
     async productizeAfterQualifiedEvent(event) {
       const result = emptyResult();
       try {
-        if (event.chain_id !== ACTIVE_INTELLIGENCE_CHAIN_ID) {
-          result.skipped.push(`legacy-chain-excluded:${event.chain_id}`);
+        if (!isAllowedSignalSourceChain(event.chain_id)) {
+          result.skipped.push(`unsupported-source-chain:${event.chain_id}`);
           return result;
         }
         const end = new Date(event.captured_at);
@@ -803,13 +820,19 @@ export function createPremiumProductizerService(deps: {
           return result;
         }
         const start = new Date(end.getTime() - config.clusterWindowHours * 60 * 60 * 1000);
-        const windowEvents = await loadQualifiedWindow(start.toISOString(), end.toISOString());
+        const windowEvents = await loadQualifiedWindow(
+          start.toISOString(),
+          end.toISOString(),
+          event.chain_id,
+        );
         // Ensure trigger is included even if status race
         if (!windowEvents.some((e) => e.id === event.id)) {
           windowEvents.push(event);
         }
         const key = clusterKeyForEvent(event);
-        const related = windowEvents.filter((e) => clusterKeyForEvent(e) === key);
+        const related = windowEvents.filter(
+          (e) => e.chain_id === event.chain_id && clusterKeyForEvent(e) === key,
+        );
         const clusterResult = await mintClusterOrCascade(related, key);
         // Also try window-wide multi-protocol liquidation cascade
         const cascadeResult =
@@ -826,7 +849,12 @@ export function createPremiumProductizerService(deps: {
     async productizeDigest({ digest, events }) {
       const result = emptyResult();
       try {
-        events = events.filter((event) => event.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID);
+        const sourceChainId = digest.chain_id ?? events[0]?.chain_id;
+        if (sourceChainId == null || !isAllowedSignalSourceChain(sourceChainId)) {
+          result.skipped.push(`unsupported-source-chain:${sourceChainId ?? "missing"}`);
+          return result;
+        }
+        events = events.filter((event) => event.chain_id === sourceChainId);
         if (events.length === 0) {
           result.skipped.push("digest-no-events");
           return result;
@@ -836,7 +864,7 @@ export function createPremiumProductizerService(deps: {
         const label = reportDate;
 
         // Structured feed: any non-empty digest window (machine MPP product)
-        const structuredSlug = slugify(`structured-feed-${reportDate}`);
+        const structuredSlug = slugify(`structured-feed-${reportDate}-${chainSlug(sourceChainId)}`);
         const structuredEnsure = await ensureItem({
           slug: structuredSlug,
           title: `Structured Feed — ${reportDate}`,
@@ -844,12 +872,13 @@ export function createPremiumProductizerService(deps: {
           summaryPublic: `Machine-readable feed of ${events.length} qualified events for ${reportDate}. Public digest is narrative-only; this SKU returns the full structured event payload.`,
           contentPrivate: buildStructuredFeedPrivate(events),
           sourceEventIds: events.map((e) => e.id),
+          sourceChainId,
           priceAmount: config.structuredFeedPriceUsdc,
         });
         recordEnsure(result, structuredEnsure, `exists:${structuredSlug}`);
 
         if (events.length >= config.digestMinEventsForDeepDive) {
-          const deepSlug = slugify(`deep-dive-digest-${reportDate}`);
+          const deepSlug = slugify(`deep-dive-digest-${reportDate}-${chainSlug(sourceChainId)}`);
           const exists = await slugExists(deepSlug);
           if (exists === true) {
             result.skipped.push(`exists:${deepSlug}`);
@@ -876,6 +905,7 @@ export function createPremiumProductizerService(deps: {
                 summaryPublic: composed.summaryPublic,
                 contentPrivate: composed.contentPrivate,
                 sourceEventIds: events.map((e) => e.id),
+                sourceChainId,
                 priceAmount: deepDivePrice(config.deepDiveBasePriceUsdc, events.length),
               });
               recordEnsure(result, deepEnsure, `exists:${deepSlug}`);
@@ -892,6 +922,7 @@ export function createPremiumProductizerService(deps: {
         const histResult = await mintHistoricalForProtocols(
           events,
           Number.isNaN(asOf.getTime()) ? new Date() : asOf,
+          sourceChainId,
         );
         return mergeResults(result, histResult);
       } catch (error) {

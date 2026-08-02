@@ -1,3 +1,4 @@
+import { ACTIVE_INTELLIGENCE_CHAIN_ID, PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config/chains";
 import { type ReactElement, useMemo, useState } from "react";
 import { Page, PageHeader } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
@@ -15,13 +16,16 @@ function formatEventTypeLabel(eventType: string): string {
 }
 
 export function AlertsPage(): ReactElement {
-  const { alerts, pagination, setPage, isLoading, error, refetch } = useAlerts(20);
   const [filters, setFilters] = useState<AlertFiltersState>({
     eventType: "",
     chainId: "",
     alertKind: "",
     signalStatus: "",
   });
+  const { alerts, pagination, setPage, isLoading, error, refetch } = useAlerts(
+    20,
+    filters.chainId || undefined,
+  );
 
   const visibleAlerts = useMemo(() => {
     return alerts.filter((alert) => alert.deliveryStatus !== "draft");
@@ -36,17 +40,11 @@ export function AlertsPage(): ReactElement {
   }, [visibleAlerts]);
 
   const chainOptions = useMemo(() => {
-    const chains = new Set<number>();
-    for (const alert of visibleAlerts) {
-      if (typeof alert.chainId === "number") chains.add(alert.chainId);
-    }
-    return [...chains]
-      .sort((a, b) => a - b)
-      .map((id) => ({
-        value: String(id),
-        label: chainLabel(id),
-      }));
-  }, [visibleAlerts]);
+    return [PRIMARY_SIGNAL_CHAIN_ID, ACTIVE_INTELLIGENCE_CHAIN_ID].map((id) => ({
+      value: String(id),
+      label: chainLabel(id),
+    }));
+  }, []);
 
   const alertKindOptions = useMemo(() => {
     const kinds = new Set<string>();

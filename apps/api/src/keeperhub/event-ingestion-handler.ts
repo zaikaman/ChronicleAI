@@ -6,7 +6,12 @@ import type {
   ExecutionLogRepository,
 } from "@chronicleai/db";
 import { ConflictError } from "@chronicleai/db";
-import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
+import {
+  ACTIVE_INTELLIGENCE_CHAIN_ID,
+  PRIMARY_SIGNAL_CHAIN_ID,
+  chainLabel,
+  isAllowedSignalSourceChain,
+} from "@chronicleai/config";
 import type { EventIngestionPayload, FlowContext } from "@chronicleai/schemas";
 import { extractFlowContext } from "../monitoring/flow-enrichment.ts";
 import {
@@ -63,6 +68,19 @@ function sourceReferencesForPayload(payload: EventIngestionPayload): string[] {
   ].filter((value): value is string => typeof value === "string" && value.length > 0);
 }
 
+/**
+ * The legacy database constraint is unique on (source, source_event_id).
+ * Keep the stored identifier chain-qualified so identical monitor IDs from
+ * Mainnet and Sepolia remain distinct without requiring another migration.
+ */
+export function chainQualifiedSourceEventId(
+  chainId: number,
+  sourceEventId: string,
+): string {
+  const prefix = `${chainId}:`;
+  return sourceEventId.startsWith(prefix) ? sourceEventId : `${prefix}${sourceEventId}`;
+}
+
 function deterministicEvidenceForPayload(
   payload: EventIngestionPayload,
   sourceDedupeKey: string,
@@ -80,13 +98,15 @@ function deterministicEvidenceForPayload(
     assetSymbols: payload.assetSymbols ?? null,
     magnitude: payload.magnitude ?? null,
     normalizedFeatures: payload.normalizedFeatures ?? {},
+    publicationChainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+    ...(payload.arrayLength !== undefined ? { arrayLength: payload.arrayLength } : {}),
     sourceDedupeKey,
   };
 }
 
 function deterministicAlertTitle(payload: EventIngestionPayload): string {
   const subject = payload.protocol ? `${payload.protocol} ${payload.eventType}` : payload.eventType;
-  return `${subject} observed on Ethereum Sepolia`;
+  return `${subject} observed on ${chainLabel(payload.chainId)}`;
 }
 
 function deterministicAlertSummary(
@@ -97,7 +117,7 @@ function deterministicAlertSummary(
     ? ` Magnitude: ${payload.magnitude.value} ${payload.magnitude.unit}.`
     : "";
   const tx = payload.transactionHash ? ` Source transaction: ${payload.transactionHash}.` : "";
-  return `Structured ${payload.eventType} evidence was observed on Ethereum Sepolia with qualification score ${score.toFixed(2)}.${magnitude}${tx} Interpretation is being enriched asynchronously.`;
+  return `Structured ${payload.eventType} evidence was observed on ${chainLabel(payload.chainId)} with qualification score ${score.toFixed(2)}.${magnitude}${tx} Publication and any execution context remain on ${chainLabel(ACTIVE_INTELLIGENCE_CHAIN_ID)}.`;
 }
 
 export class EventIngestionHandler {
@@ -161,11 +181,11 @@ export class EventIngestionHandler {
   }
 
   async ingest(payload: EventIngestionPayload, source = "keeperhub"): Promise<IngestionResult> {
-    if (payload.chainId !== ACTIVE_INTELLIGENCE_CHAIN_ID) {
+    if (!isAllowedSignalSourceChain(payload.chainId)) {
       return {
         accepted: false,
         statusCode: 400,
-        message: `Active intelligence ingestion is Sepolia-only; received chain ${payload.chainId}`,
+        message: `Unsupported signal source chain ${payload.chainId}; allowed sources are Ethereum Mainnet (${PRIMARY_SIGNAL_CHAIN_ID}) and Ethereum Sepolia (${ACTIVE_INTELLIGENCE_CHAIN_ID})`,
       };
     }
 
@@ -174,21 +194,28 @@ export class EventIngestionHandler {
 
     const sourceDedupeKey =
       payload.sourceDedupeKey ??
-      `${source}:${payload.eventType}:${payload.sourceEventId}`;
+      `${source}:${payload.chainId}:${payload.eventType}:${payload.sourceEventId}`;
+    const persistedSourceEventId = chainQualifiedSourceEventId(
+      payload.chainId,
+      payload.sourceEventId,
+    );
     const deterministicEvidence = deterministicEvidenceForPayload(
       payload,
       sourceDedupeKey,
     );
 
     // Ensure flowContext is mirrored into raw_payload for persistence / digests
-    const rawPayload = flowContext
-      ? { ...payload.rawPayload, flowContext, deterministicEvidence }
-      : { ...payload.rawPayload, deterministicEvidence };
+    const rawPayload = {
+      ...payload.rawPayload,
+      ...(payload.arrayLength !== undefined ? { arrayLength: payload.arrayLength } : {}),
+      ...(flowContext ? { flowContext } : {}),
+      deterministicEvidence,
+    };
 
     // 1. Persist the raw event first
     const eventResult = await this.eventRepo.create({
       source,
-      source_event_id: payload.sourceEventId,
+      source_event_id: persistedSourceEventId,
       event_type: payload.eventType,
       chain_id: payload.chainId,
       protocol: payload.protocol ?? null,
@@ -231,7 +258,7 @@ export class EventIngestionHandler {
       status: "started",
       message: `Event received: ${payload.eventType} on chain ${payload.chainId}`,
       details: {
-        source_event_id: payload.sourceEventId,
+        source_event_id: persistedSourceEventId,
         ...(flowContext
           ? {
               direction: flowContext.direction,
@@ -288,6 +315,7 @@ export class EventIngestionHandler {
       sourceEventId: payload.sourceEventId,
       source,
       eventType: payload.eventType,
+      chainId: payload.chainId,
       clusterKey,
       capturedAt: payload.capturedAt,
     });
@@ -339,11 +367,11 @@ export class EventIngestionHandler {
       alert_kind:
         payload.eventType === "liquidation" ||
         payload.eventType === "liquidation_cluster" ||
-        payload.eventType === "gas_spike"
+        (payload.eventType === "gas_spike" && payload.chainId === ACTIVE_INTELLIGENCE_CHAIN_ID)
           ? "desk_trigger"
           : "market_event",
       event_type: payload.eventType,
-      chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      chain_id: payload.chainId,
       publication_chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
       source_dedupe_key: sourceDedupeKey,
       signal_type: signalProjection?.signalType ?? null,

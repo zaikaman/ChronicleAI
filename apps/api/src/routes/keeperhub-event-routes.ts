@@ -55,7 +55,11 @@ export function createKeeperhubEventRoutes(
         accepted: result.accepted,
         message: result.message,
         eventType: normalized.payload.eventType,
+        chainId: normalized.payload.chainId,
         sourceEventId: normalized.payload.sourceEventId,
+        ...(normalized.payload.arrayLength !== undefined
+          ? { arrayLength: normalized.payload.arrayLength }
+          : {}),
         ...(normalized.payload.magnitude ? { magnitude: normalized.payload.magnitude } : {}),
         ...(result.alertId ? { alertId: result.alertId } : {}),
       });

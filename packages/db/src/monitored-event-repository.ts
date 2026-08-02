@@ -15,7 +15,11 @@ import type { MonitoredEventInsert, MonitoredEventRow, MonitoredEventUpdate } fr
 export interface MonitoredEventRepository {
   create(data: MonitoredEventInsert): Promise<Result<MonitoredEventRow>>;
   findById(id: string): Promise<Result<MonitoredEventRow>>;
-  findBySourceAndEventId(source: string, sourceEventId: string): Promise<MonitoredEventRow | null>;
+  findBySourceAndEventId(
+    source: string,
+    sourceEventId: string,
+    chainId?: number,
+  ): Promise<MonitoredEventRow | null>;
   updateStatus(id: string, status: string, score?: number): Promise<Result<MonitoredEventRow>>;
   list(
     params?: PaginationParams & {
@@ -62,11 +66,14 @@ export function createMonitoredEventRepository(supabase: SupabaseClient): Monito
       return expectRow(rows as unknown as MonitoredEventRow[], "MonitoredEvent", id);
     },
 
-    async findBySourceAndEventId(source, sourceEventId) {
-      const { data: rows, error } = await table()
+    async findBySourceAndEventId(source, sourceEventId, chainId) {
+      let query = table()
         .select("*")
         .eq("source", source)
         .eq("source_event_id", sourceEventId);
+      if (chainId !== undefined) query = query.eq("chain_id", chainId);
+
+      const { data: rows, error } = await query;
 
       if (error) {
         return null;

@@ -16,6 +16,7 @@ export interface ExistingDigestSummary {
   sourceEventIds: string[];
   publicationStatus: string;
   sourceEventRoot: string | null;
+  sourceChainId: number | null;
   periodStart: string;
   periodEnd: string;
 }
@@ -55,6 +56,7 @@ function toExistingDigestSummary(row: DailyDigestRow): ExistingDigestSummary {
     sourceEventIds: row.source_event_ids ?? [],
     publicationStatus: row.publication_status,
     sourceEventRoot: row.source_event_root ?? null,
+    sourceChainId: row.chain_id ?? null,
     periodStart: row.period_start,
     periodEnd: row.period_end,
   };

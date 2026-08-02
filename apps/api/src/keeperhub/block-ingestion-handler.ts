@@ -1,7 +1,7 @@
 // KeeperHub block-trigger ingestion: analyze real chain data and feed qualified events
 
 import type { ExecutionLogRepository } from "@chronicleai/db";
-import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
+import { isAllowedSignalSourceChain } from "@chronicleai/config";
 import type { BlockIngestionPayload, EventIngestionPayload } from "@chronicleai/schemas";
 import type { OnChainBlockService } from "../monitoring/on-chain-block-service.ts";
 import type { EventIngestionHandler, IngestionResult } from "./event-ingestion-handler.ts";
@@ -32,11 +32,11 @@ export class BlockIngestionHandler {
   async ingest(payload: BlockIngestionPayload): Promise<BlockIngestionResult> {
     const startedAt = Date.now();
 
-    if (payload.chainId !== ACTIVE_INTELLIGENCE_CHAIN_ID) {
+    if (!isAllowedSignalSourceChain(payload.chainId)) {
       return {
         accepted: false,
         statusCode: 400,
-        message: `Active block intelligence is Sepolia-only; received chain ${payload.chainId}`,
+        message: `Unsupported block signal source chain ${payload.chainId}; only Ethereum Mainnet and Ethereum Sepolia are allowed`,
         emitted: [],
       };
     }

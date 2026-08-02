@@ -60,7 +60,7 @@ export function AlertFilters({
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="chain-filter" className="text-xs font-medium text-muted-foreground">
-          Chain
+          Source chain
         </label>
         <select
           id="chain-filter"
@@ -70,7 +70,7 @@ export function AlertFilters({
           className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="" className="bg-frame text-foreground">
-            All Chains
+            Default: Ethereum Mainnet
           </option>
           {chainOptions.map((chain) => (
             <option key={chain.value} value={chain.value} className="bg-frame text-foreground">

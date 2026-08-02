@@ -9,12 +9,19 @@ export { CHAIN_ID_BASE_SEPOLIA, CHAIN_ID_SEPOLIA };
 export const CHAIN_ID_ETHEREUM = 1;
 export const CHAIN_ID_BASE = 8_453;
 
-/**
- * Active Chronicle intelligence/publication chain. Mainnet remains available
- * to historical readers only; new monitoring, alerts, digests, premium items,
- * and desk decisions must be explicitly Sepolia-scoped.
- */
+/** Primary chain observed by intelligence monitors and public products. */
+export const PRIMARY_SIGNAL_CHAIN_ID = CHAIN_ID_ETHEREUM;
+
+/** Active Chronicle execution/publication chain. */
 export const ACTIVE_INTELLIGENCE_CHAIN_ID = CHAIN_ID_SEPOLIA;
+
+/** Signal sources accepted by the ingestion boundary. */
+export const ALLOWED_SIGNAL_CHAIN_IDS = [
+  PRIMARY_SIGNAL_CHAIN_ID,
+  ACTIVE_INTELLIGENCE_CHAIN_ID,
+] as const;
+
+/** @deprecated Mainnet is a supported signal source; use PRIMARY_SIGNAL_CHAIN_ID. */
 export const LEGACY_INTELLIGENCE_CHAIN_ID = CHAIN_ID_ETHEREUM;
 
 /** Product primary ops testnet — registry proofs, desk execution, capital plane. */
@@ -25,6 +32,10 @@ export const PAYMENT_TESTNET_CHAIN_ID = CHAIN_ID_BASE_SEPOLIA;
 
 export function isActiveIntelligenceChain(chainId: number): boolean {
   return chainId === ACTIVE_INTELLIGENCE_CHAIN_ID;
+}
+
+export function isAllowedSignalSourceChain(chainId: number): boolean {
+  return (ALLOWED_SIGNAL_CHAIN_IDS as readonly number[]).includes(chainId);
 }
 
 export function isLegacyIntelligenceChain(chainId: number): boolean {

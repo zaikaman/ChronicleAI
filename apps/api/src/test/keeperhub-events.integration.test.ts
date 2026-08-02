@@ -135,6 +135,26 @@ describe("KeeperHub Event Ingestion - Integration", () => {
     expect(key1).toBe(key2);
   });
 
+  it("keeps dedupe keys distinct across observation chains", async () => {
+    const { createAlertDedupeService } = await import("../services/alert-dedupe-service.ts");
+
+    const service = createAlertDedupeService();
+    const mainnetKey = service.generateDedupeKey({
+      sourceEventId: "same-event-id",
+      source: "keeperhub",
+      eventType: "large_swap",
+      chainId: 1,
+    });
+    const sepoliaKey = service.generateDedupeKey({
+      sourceEventId: "same-event-id",
+      source: "keeperhub",
+      eventType: "large_swap",
+      chainId: 11_155_111,
+    });
+
+    expect(mainnetKey).not.toBe(sepoliaKey);
+  });
+
   it("all providers fail does not produce alert content", async () => {
     const langchainAgents = await import("../agents/langchain/index.ts");
     vi.spyOn(langchainAgents, "createChatModel").mockReturnValue({} as never);

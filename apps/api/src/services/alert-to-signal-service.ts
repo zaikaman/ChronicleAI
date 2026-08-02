@@ -1,4 +1,8 @@
-import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
+import {
+  ACTIVE_INTELLIGENCE_CHAIN_ID,
+  chainLabel,
+  isAllowedSignalSourceChain,
+} from "@chronicleai/config";
 import type { MonitoredEventRow, PublicAlertRepository, PublicAlertRow } from "@chronicleai/db";
 import type { DeskPolicyVerdict, DeskSignalType, EventType } from "@chronicleai/schemas";
 import type { SignalEngine } from "../desk/signal-engine.ts";
@@ -28,6 +32,8 @@ type Projection = {
 const EVENT_SIGNAL_PROJECTIONS: Partial<Record<EventType, Projection>> = {
   large_swap: { signalType: "event_flow", defaultActionStatus: "deferred" },
   volume_anomaly: { signalType: "event_flow", defaultActionStatus: "deferred" },
+  cex_inflow: { signalType: "event_flow", defaultActionStatus: "deferred" },
+  cex_outflow: { signalType: "event_flow", defaultActionStatus: "deferred" },
   stablecoin_mint: { signalType: "event_supply", defaultActionStatus: "ignored" },
   stablecoin_burn: { signalType: "event_supply", defaultActionStatus: "ignored" },
   protocol_deposit: {
@@ -59,6 +65,10 @@ function deterministicEvidence(
   return {
     eventType: event.event_type,
     chainId: event.chain_id,
+    sourceChainId: event.chain_id,
+    executionChainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+    sourceChain: chainLabel(event.chain_id),
+    executionChain: chainLabel(ACTIVE_INTELLIGENCE_CHAIN_ID),
     sourceEventId: event.source_event_id,
     transactionHash: event.transaction_hash,
     blockNumber: event.block_number,
@@ -73,6 +83,15 @@ function deterministicEvidence(
       event.normalized_evidence ??
       (rawRecord.normalizedFeatures as Record<string, unknown> | undefined) ??
       {},
+    publicationChainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+    executionEligibility:
+      event.event_type === "liquidation"
+        ? "observation_only"
+        : event.event_type === "liquidation_cluster"
+          ? "requires_fresh_sepolia_risk"
+          : event.event_type === "large_swap" || event.event_type === "volume_anomaly"
+            ? "event_microtrade_gate"
+            : "context_only",
   };
 }
 
@@ -104,6 +123,18 @@ function featuresFromEvent(event: MonitoredEventRow): DeskSignalFeatures {
     magnitudeUnit: magnitude && typeof magnitude.unit === "string" ? magnitude.unit : undefined,
     ...(gasGwei !== undefined ? { gasGwei } : {}),
     severity: event.significance_score ?? undefined,
+    sourceChainId: event.chain_id,
+    executionChainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+    sourceChain: chainLabel(event.chain_id),
+    executionChain: chainLabel(ACTIVE_INTELLIGENCE_CHAIN_ID),
+    executionEligibility:
+      event.event_type === "liquidation"
+        ? "observation_only"
+        : event.event_type === "liquidation_cluster"
+          ? "requires_fresh_sepolia_risk"
+          : event.event_type === "large_swap" || event.event_type === "volume_anomaly"
+            ? "event_microtrade_gate"
+            : "context_only",
   };
 }
 
@@ -134,7 +165,7 @@ export function createAlertToSignalService(deps: {
           ? deps.alertRepo.updateCausalMetadata.call(deps.alertRepo, alert.id, metadata)
           : Promise.resolve(null);
 
-      if (event.chain_id !== ACTIVE_INTELLIGENCE_CHAIN_ID) {
+      if (!isAllowedSignalSourceChain(event.chain_id)) {
         await updateAlert({
           signalStatus: "not_eligible",
           actionStatus: "ignored",
@@ -142,7 +173,7 @@ export function createAlertToSignalService(deps: {
         return {
           status: "not_eligible",
           actionStatus: "ignored",
-          reason: "Only Ethereum Sepolia observations can create desk signals",
+          reason: `Signal source chain ${event.chain_id} is not allowed`,
         };
       }
 
@@ -172,6 +203,10 @@ export function createAlertToSignalService(deps: {
             sourceEventId: event.source_event_id,
             eventType: event.event_type,
             chainId: event.chain_id,
+            sourceChainId: event.chain_id,
+            executionChainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+            sourceChain: chainLabel(event.chain_id),
+            executionChain: chainLabel(ACTIVE_INTELLIGENCE_CHAIN_ID),
             transactionHash: event.transaction_hash,
             blockNumber: event.block_number,
             blockHash: event.block_hash,

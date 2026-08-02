@@ -2,7 +2,7 @@
 // GET /premium/items - List available premium item teasers
 // GET /premium/items/:id - Access a premium item (returns 402 if not paid)
 
-import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
+import { ACTIVE_INTELLIGENCE_CHAIN_ID, PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config";
 import type {
   ExecutionLogRepository,
   PaymentRecordRepository,
@@ -17,6 +17,42 @@ import {
 } from "../services/premium-access-receipt-service.ts";
 import { PaymentRequiredError, PremiumAccessService } from "../services/premium-access-service.ts";
 import { PremiumContentVisibilityService } from "../services/premium-content-visibility-service.ts";
+
+function queryString(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
+}
+
+function hasExplicitChainScope(query: Record<string, unknown>): boolean {
+  return queryString(query.scope) !== undefined || queryString(query.chainId) !== undefined;
+}
+
+function premiumChainScope(req: { query: Record<string, unknown> }):
+  | { chainId: number }
+  | { error: string } {
+  const scope = queryString(req.query.scope)?.toLowerCase();
+  const chainValue = queryString(req.query.chainId);
+  const scopeChainId =
+    scope === undefined
+      ? undefined
+      : scope === "mainnet" || scope === "primary" || scope === "legacy"
+        ? PRIMARY_SIGNAL_CHAIN_ID
+        : scope === "sepolia" || scope === "active" || scope === "testnet"
+          ? ACTIVE_INTELLIGENCE_CHAIN_ID
+          : undefined;
+  if (scope !== undefined && scopeChainId === undefined) {
+    return { error: "scope must be mainnet or sepolia" };
+  }
+  const requestedChainId = chainValue === undefined ? undefined : Number(chainValue);
+  if (chainValue !== undefined && requestedChainId !== 1 && requestedChainId !== ACTIVE_INTELLIGENCE_CHAIN_ID) {
+    return { error: `Unsupported premium source chain: ${chainValue}` };
+  }
+  if (scopeChainId !== undefined && requestedChainId !== undefined && scopeChainId !== requestedChainId) {
+    return { error: "scope and chainId select different premium source chains" };
+  }
+  return { chainId: requestedChainId ?? scopeChainId ?? PRIMARY_SIGNAL_CHAIN_ID };
+}
 
 function formatWatchListItem(watch: {
   id: string;
@@ -210,10 +246,16 @@ export function createPremiumRoutes(params: {
         return;
       }
 
+      const selectedScope = premiumChainScope(req);
+      if ("error" in selectedScope) {
+        res.status(400).json({ error: selectedScope.error });
+        return;
+      }
+
       const result = await params.premiumRepo.listTeasersPage({
         page: parsed.page,
         limit: parsed.limit,
-        chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+        chainId: selectedScope.chainId,
       });
 
       if (!result.ok) {
@@ -281,6 +323,18 @@ export function createPremiumRoutes(params: {
 
       // Check if item is available
       if (itemResult.value.status !== "available") {
+        res.status(404).json({ error: "Premium item not found" });
+        return;
+      }
+
+      const selectedScope = hasExplicitChainScope(req.query)
+        ? premiumChainScope(req)
+        : { chainId: itemResult.value.source_chain_id ?? PRIMARY_SIGNAL_CHAIN_ID };
+      if ("error" in selectedScope) {
+        res.status(400).json({ error: selectedScope.error });
+        return;
+      }
+      if ((itemResult.value.source_chain_id ?? PRIMARY_SIGNAL_CHAIN_ID) !== selectedScope.chainId) {
         res.status(404).json({ error: "Premium item not found" });
         return;
       }

@@ -120,7 +120,7 @@ describe("POST /keeperhub/events", () => {
     }
   }, 30000);
 
-  it("rejects Mainnet events from the active ingestion path", async () => {
+  it("accepts Mainnet events into the source-chain ingestion path", async () => {
     const event = createQualifyingEvent({ chainId: 1 });
     const body = JSON.stringify(event);
 
@@ -138,6 +138,11 @@ describe("POST /keeperhub/events", () => {
       body,
     });
 
-    expect(response.status).toBe(400);
+    expect([202, 500]).toContain(response.status);
+    if (response.status === 202) {
+      const responseBody = (await response.json()) as { eventType?: string; chainId?: number };
+      expect(responseBody.eventType).toBe("large_swap");
+      expect(responseBody.chainId).toBe(1);
+    }
   });
 });

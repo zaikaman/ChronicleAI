@@ -4,8 +4,12 @@ import {
   CHAIN_ID_BASE_SEPOLIA,
   CHAIN_ID_ETHEREUM,
   CHAIN_ID_SEPOLIA,
+  ACTIVE_INTELLIGENCE_CHAIN_ID,
+  ALLOWED_SIGNAL_CHAIN_IDS,
   PAYMENT_TESTNET_CHAIN_ID,
+  PRIMARY_SIGNAL_CHAIN_ID,
   PRIMARY_TESTNET_CHAIN_ID,
+  isAllowedSignalSourceChain,
   registryNetworkLabelFromExplorerUrl,
   txExplorerUrl,
 } from "./chains.ts";
@@ -27,6 +31,17 @@ describe("PRIMARY_TESTNET_CHAIN_ID", () => {
   it("is Ethereum Sepolia (ops / desk / registry)", () => {
     expect(PRIMARY_TESTNET_CHAIN_ID).toBe(11_155_111);
     expect(PRIMARY_TESTNET_CHAIN_ID).toBe(CHAIN_ID_SEPOLIA);
+  });
+});
+
+describe("signal and execution chain policy", () => {
+  it("uses Mainnet for signals and Sepolia for execution/publication", () => {
+    expect(PRIMARY_SIGNAL_CHAIN_ID).toBe(CHAIN_ID_ETHEREUM);
+    expect(ACTIVE_INTELLIGENCE_CHAIN_ID).toBe(CHAIN_ID_SEPOLIA);
+    expect(ALLOWED_SIGNAL_CHAIN_IDS).toEqual([CHAIN_ID_ETHEREUM, CHAIN_ID_SEPOLIA]);
+    expect(isAllowedSignalSourceChain(CHAIN_ID_ETHEREUM)).toBe(true);
+    expect(isAllowedSignalSourceChain(CHAIN_ID_SEPOLIA)).toBe(true);
+    expect(isAllowedSignalSourceChain(CHAIN_ID_BASE_SEPOLIA)).toBe(false);
   });
 });
 

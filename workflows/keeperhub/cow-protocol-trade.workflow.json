@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "enabled": false,
+  "enabled": true,
   "exportedAt": "2026-07-11T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI CoW Protocol Large Trade Monitor (Telegram bridge)",
-  "description": "ARCHIVED/DISABLED: CoW has no verified active Ethereum Sepolia source in Chronicle v1. Preserve Mainnet history only; it is excluded from active intelligence and desk inputs."
+  "description": "Mainnet context source: monitor large CoW Protocol trades on Ethereum Mainnet. Alerts, digests, premium intelligence, and desk context only; no direct execution in v1."
   },
   "nodes": [
     {
@@ -75,7 +75,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Trade\",\"address\":\"0x9008D19f58AAbD9eD0D60971565AA8510560ab41\",\"transactionHash\":\"{{@for-each-trade:For Each Trade.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-trade:For Each Trade.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-trade:For Each Trade.currentItem.logIndex}}\",\"args\":{\"owner\":\"{{@for-each-trade:For Each Trade.currentItem.args.owner}}\",\"sellToken\":\"{{@for-each-trade:For Each Trade.currentItem.args.sellToken}}\",\"buyToken\":\"{{@for-each-trade:For Each Trade.currentItem.args.buyToken}}\",\"sellAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.sellAmount}}\",\"buyAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.buyAmount}}\",\"feeAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.feeAmount}}\"},\"protocol\":\"CoW Protocol\"}}",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Trade\",\"address\":\"0x9008D19f58AAbD9eD0D60971565AA8510560ab41\",\"transactionHash\":\"{{@for-each-trade:For Each Trade.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-trade:For Each Trade.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-trade:For Each Trade.currentItem.logIndex}}\",\"arrayLength\":{{@query-trades:Query CoW Trades.eventCount}},\"args\":{\"owner\":\"{{@for-each-trade:For Each Trade.currentItem.args.owner}}\",\"sellToken\":\"{{@for-each-trade:For Each Trade.currentItem.args.sellToken}}\",\"buyToken\":\"{{@for-each-trade:For Each Trade.currentItem.args.buyToken}}\",\"sellAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.sellAmount}}\",\"buyAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.buyAmount}}\",\"feeAmount\":\"{{@for-each-trade:For Each Trade.currentItem.args.feeAmount}}\"},\"protocol\":\"CoW Protocol Ethereum Mainnet\"}}",
           "parseMode": "none"
         }
       }

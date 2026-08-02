@@ -179,10 +179,14 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     premiumProductizer: deps.premiumProductizer ?? null,
   });
 
-  // RPC_URL is Ethereum Sepolia for desk/registry; oracle falls back to that
-  // feed when events cite other chainIds (ETH/USD is global).
+  // RPC_URL is Ethereum Sepolia for desk/registry. Mainnet event enrichment
+  // uses MAINNET_RPC_URL so source-chain reads stay on the observed network.
   const priceOracle = createPriceOracle(env.rpcUrl, {
-    rpcChainId: 11_155_111,
+    rpcChainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+    rpcUrlsByChainId: {
+      [CHAIN_ID_ETHEREUM]: env.mainnetRpcUrl,
+      [ACTIVE_INTELLIGENCE_CHAIN_ID]: env.rpcUrl,
+    },
     timeoutMs: 6_000,
   });
   const eventNormalizer = createEventNormalizer(priceOracle);
@@ -709,7 +713,11 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
 
 // ── US2: Daily Digest Routes ───────────────────────────
 
-import { ACTIVE_INTELLIGENCE_CHAIN_ID, DIGEST_SCHEDULE_GRACE_MINUTES } from "@chronicleai/config";
+import {
+  ACTIVE_INTELLIGENCE_CHAIN_ID,
+  CHAIN_ID_ETHEREUM,
+  DIGEST_SCHEDULE_GRACE_MINUTES,
+} from "@chronicleai/config";
 import { DigestRunHandler } from "../keeperhub/digest-run-handler.ts";
 import { createChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import { createDigestEventSelectionService } from "../services/digest-event-selection-service.ts";
@@ -862,9 +870,7 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
   });
 
   const windowService = createDigestWindowService(deps.digestRepo);
-  const eventSelectionService = createDigestEventSelectionService(deps.eventRepo, {
-    chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
-  });
+  const eventSelectionService = createDigestEventSelectionService(deps.eventRepo);
   const digestProviderConfigs = createProviderConfigs(env);
   digestProviderConfigs.groq = {
     ...digestProviderConfigs.groq,
@@ -1229,12 +1235,12 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
   }
 
   const priceOracle = createPriceOracle(env.rpcUrl, {
-    rpcChainId: 11_155_111,
+    rpcChainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
     timeoutMs: 6_000,
   });
   const fxService = createRevenueFxService({
     priceOracle,
-    chainId: mapNetworkToChainId(env.keeperhubNetwork, 11_155_111),
+    chainId: mapNetworkToChainId(env.keeperhubNetwork, ACTIVE_INTELLIGENCE_CHAIN_ID),
     mode: env.revenueFxMode,
     staticEthPerCurrencyUnit: env.revenueEthPerCurrencyUnit,
   });

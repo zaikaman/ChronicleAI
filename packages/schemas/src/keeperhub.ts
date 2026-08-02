@@ -29,6 +29,8 @@ export interface EventIngestionPayload {
   sourceContract?: string;
   normalizedFeatures?: Record<string, unknown>;
   sourceDedupeKey?: string;
+  /** Numeric count emitted by an upstream array query, when present. */
+  arrayLength?: number;
   /** Deterministic flow enrichment; also mirrored into rawPayload.flowContext. */
   flowContext?: FlowContext;
 }
@@ -53,6 +55,8 @@ export interface RawOnChainEventPayload {
   protocol?: string;
   /** Optional already-known magnitude override from an upstream workflow step. */
   magnitude?: { value: number; unit: string };
+  /** Numeric count emitted by an upstream array query, when present. */
+  arrayLength?: number;
 }
 
 /**
@@ -74,7 +78,7 @@ export interface BlockIngestionPayload {
 export interface DigestRunPayload {
   periodStart: string;
   periodEnd: string;
-  /** Desk digests are the default product surface; market is explicit. */
+  /** Market/Mainnet digests are the default product surface; desk is explicit. */
   digestKind?: "market" | "desk";
 }
 

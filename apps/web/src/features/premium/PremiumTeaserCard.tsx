@@ -3,6 +3,7 @@ import type React from "react";
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { ButtonSpinner } from "../../components/ui/spinner.tsx";
 import { formatPaymentRoute, sortPaymentRoutes } from "./payment-route-labels.ts";
+import { chainLabel } from "../../lib/explorer.ts";
 
 interface PremiumTeaserCardProps {
   item: PremiumItemTeaserResponse & {
@@ -51,6 +52,9 @@ export function PremiumTeaserCard({
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {unlocked ? <StatusBadge label="Purchased" variant="success" /> : null}
         {contentType ? <StatusBadge label={contentType} variant="info" /> : null}
+        {typeof item.sourceChainId === "number" ? (
+          <StatusBadge label={`Source: ${chainLabel(item.sourceChainId)}`} variant="default" />
+        ) : null}
         {routes.map((route) => {
           const display = formatPaymentRoute(route);
           return (

@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "enabled": false,
+  "enabled": true,
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI CEX USDC Transfer Monitor (Telegram bridge)",
-  "description": "ARCHIVED/DISABLED: no verified Ethereum Sepolia CEX source exists. Preserve the Mainnet workflow for explicit historical replay only; Chronicle never synthesizes CEX labels on Sepolia."
+  "description": "Mainnet context source: monitor large USDC transfers associated with configured CEX addresses on Ethereum Mainnet. Alerts, digests, premium intelligence, and desk context only; no direct execution in v1."
   },
   "nodes": [
     {
@@ -75,7 +75,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "-1004373075093",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Transfer\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer.currentItem.logIndex}}\",\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.value}}\"},\"protocol\":\"Circle\"}}",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Transfer\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer.currentItem.logIndex}}\",\"arrayLength\":{{@query-transfers:Query USDC Transfers.eventCount}},\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer.currentItem.args.value}}\"},\"protocol\":\"CEX USDC Ethereum Mainnet\"}}",
           "parseMode": "none"
         }
       }

@@ -9,7 +9,10 @@ import type {
   MonitoredEventRepository,
   PublicAlertRepository,
 } from "@chronicleai/db";
-import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
+import {
+  ACTIVE_INTELLIGENCE_CHAIN_ID,
+  PRIMARY_SIGNAL_CHAIN_ID,
+} from "@chronicleai/config";
 import type { DigestRunPayload } from "@chronicleai/schemas";
 import type {
   DigestEventSelectionService,
@@ -88,7 +91,9 @@ export class DigestRunHandler {
   }
 
   async runDigest(payload: DigestRunPayload, _source = "keeperhub"): Promise<DigestRunResult> {
-    const digestKind = payload.digestKind ?? "desk";
+    const digestKind = payload.digestKind ?? "market";
+    const sourceChainId =
+      digestKind === "desk" ? ACTIVE_INTELLIGENCE_CHAIN_ID : PRIMARY_SIGNAL_CHAIN_ID;
     // 1. Validate the reporting window
     const windowValidation = this.windowService.validateWindow({
       periodStart: payload.periodStart,
@@ -164,12 +169,14 @@ export class DigestRunHandler {
     const eventSelection = await this.eventSelectionService.selectEvents({
       periodStart: payload.periodStart,
       periodEnd: payload.periodEnd,
+      chainId: sourceChainId,
     });
 
     // 4. Generate digest content (LLM only — no template fallback)
     const reportDate = (new Date(payload.periodEnd).toISOString().split("T")[0]) ?? "unknown-date";
     const causalSources = await this.resolveCausalSources(
       eventSelection.events.map((event) => event.id),
+      sourceChainId,
     );
 
     await this.execLogRepo.append({
@@ -246,7 +253,7 @@ export class DigestRunHandler {
       analysis: digestContent.analysis ?? null,
       source_event_ids: digestContent.sourceEventIds,
       digest_kind: digestKind,
-      chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      chain_id: sourceChainId,
       publication_chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
       source_alert_ids: causalSources.alertIds,
       source_signal_ids: causalSources.signalIds,
@@ -367,6 +374,7 @@ export class DigestRunHandler {
         highlights: digestContent.highlights,
         analysis: digestContent.analysis ?? null,
         eventIds: eventSelection.events.map((e) => e.id),
+        sourceChainId,
       });
     }
 
@@ -380,7 +388,7 @@ export class DigestRunHandler {
     };
   }
 
-  private async resolveCausalSources(eventIds: string[]): Promise<{
+  private async resolveCausalSources(eventIds: string[], sourceChainId: number): Promise<{
     alertIds: string[];
     signalIds: string[];
     intentIds: string[];
@@ -394,7 +402,7 @@ export class DigestRunHandler {
       if (!alertResult.ok) return empty;
 
       const alerts = alertResult.value.filter(
-        (alert) => alert.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID,
+        (alert) => alert.chain_id === sourceChainId,
       );
       const alertIds = alerts.map((alert) => alert.id);
       if (alertIds.length === 0) return empty;
@@ -500,6 +508,9 @@ export class DigestRunHandler {
         highlights: existing.highlights,
         analysis: existing.analysis,
         eventIds: existing.sourceEventIds,
+        sourceChainId:
+          existing.sourceChainId ??
+          (payload.digestKind === "desk" ? ACTIVE_INTELLIGENCE_CHAIN_ID : PRIMARY_SIGNAL_CHAIN_ID),
       });
     }
 
@@ -558,6 +569,7 @@ export class DigestRunHandler {
     highlights: string[];
     analysis: string | null;
     eventIds: string[];
+    sourceChainId: number;
   }): Promise<void> {
     if (!this.premiumProductizer) {
       return;
@@ -568,7 +580,7 @@ export class DigestRunHandler {
         periodStart: params.periodStart,
         periodEnd: params.periodEnd,
         status: "qualified",
-        chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+        chainId: params.sourceChainId,
         limit: 2000,
       });
       const eventsForPremium = fullEvents.ok
@@ -580,7 +592,7 @@ export class DigestRunHandler {
             }),
           )).filter(
             (e): e is NonNullable<typeof e> =>
-              e != null && e.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID,
+              e != null && e.chain_id === params.sourceChainId,
           );
 
       if (eventsForPremium.length === 0) {
@@ -597,6 +609,7 @@ export class DigestRunHandler {
           summary: params.summary,
           highlights: params.highlights,
           analysis: params.analysis,
+          chain_id: params.sourceChainId,
         },
         events: eventsForPremium,
       });

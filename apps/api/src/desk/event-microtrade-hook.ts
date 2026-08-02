@@ -10,6 +10,7 @@
  * inventory covers notional. Enabled by default (env can disable).
  */
 
+import { ACTIVE_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
 import type { DeskStrategy } from "@chronicleai/schemas";
 import type {
   DeskLeg,
@@ -41,6 +42,8 @@ export interface EventMicrotradeTrigger {
   capturedAt?: string | null | undefined;
   /** Optional on-chain tx for provenance in reason codes / tickets. */
   transactionHash?: string | null | undefined;
+  /** Observation/source chain. Execution remains on the active Sepolia desk. */
+  sourceChainId?: number | null | undefined;
   source?: "monitored_event" | "desk_gas_regime" | undefined;
 }
 
@@ -268,6 +271,9 @@ export function evaluateEventMicrotradeEligibility(
   const eventTriggers = input.triggers.filter(
     (t) =>
       isEventMicrotradeTriggerType(t.eventType) &&
+      (t.eventType !== "gas_spike" ||
+        t.sourceChainId == null ||
+        t.sourceChainId === ACTIVE_INTELLIGENCE_CHAIN_ID) &&
       triggerWithinLookback(t, now, input.lookbackMs),
   );
 
@@ -336,6 +342,9 @@ export function planEventMicrotrade(
   }
   if (trigger.transactionHash) {
     provenance.push(`event_tx=${trigger.transactionHash}`);
+  }
+  if (trigger.sourceChainId != null) {
+    provenance.push(`source_chain_id=${trigger.sourceChainId}`);
   }
   if (trigger.source) {
     provenance.push(`source=${trigger.source}`);

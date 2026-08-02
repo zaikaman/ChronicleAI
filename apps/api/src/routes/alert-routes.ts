@@ -2,7 +2,11 @@
 // Returns newest-first public alerts with page-based pagination, plus by-id lookup
 // for HTTPS on-chain content URIs.
 
-import { ACTIVE_INTELLIGENCE_CHAIN_ID, LEGACY_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
+import {
+  ACTIVE_INTELLIGENCE_CHAIN_ID,
+  PRIMARY_SIGNAL_CHAIN_ID,
+  isAllowedSignalSourceChain,
+} from "@chronicleai/config";
 import type {
   DeskSignalRepository,
   DeskSignalRow,
@@ -126,21 +130,41 @@ function queryString(value: unknown): string | undefined {
   return undefined;
 }
 
+function hasExplicitChainScope(query: Record<string, unknown>): boolean {
+  return queryString(query.scope) !== undefined || queryString(query.chainId) !== undefined;
+}
+
 function chainScope(req: { query: Record<string, unknown> }):
   | { chainId: number }
   | { error: string } {
   const scope = queryString(req.query.scope)?.toLowerCase();
   const chainValue = queryString(req.query.chainId);
-  if (scope === "legacy" || scope === "mainnet" || chainValue === "1") {
-    return { chainId: LEGACY_INTELLIGENCE_CHAIN_ID };
+  const scopeChainId =
+    scope === undefined
+      ? undefined
+      : scope === "legacy" || scope === "mainnet" || scope === "primary"
+        ? PRIMARY_SIGNAL_CHAIN_ID
+        : scope === "sepolia" || scope === "active" || scope === "testnet"
+          ? ACTIVE_INTELLIGENCE_CHAIN_ID
+          : undefined;
+  if (scope !== undefined && scopeChainId === undefined) {
+    return { error: "scope must be mainnet or sepolia" };
   }
-  if (scope === "all") {
-    return { error: "Use scope=legacy for archived Mainnet alerts or the default Sepolia scope" };
+  const requestedChainId = chainValue === undefined ? undefined : Number(chainValue);
+  const hasValidRequestedChain =
+    requestedChainId !== undefined &&
+    Number.isInteger(requestedChainId) &&
+    isAllowedSignalSourceChain(requestedChainId);
+  if (
+    chainValue !== undefined &&
+    !hasValidRequestedChain
+  ) {
+    return { error: `Unsupported alert source chain: ${chainValue}` };
   }
-  if (chainValue !== undefined && chainValue !== String(ACTIVE_INTELLIGENCE_CHAIN_ID)) {
-    return { error: `Unsupported active alert chain: ${chainValue}` };
+  if (scopeChainId !== undefined && requestedChainId !== undefined && scopeChainId !== requestedChainId) {
+    return { error: "scope and chainId select different source chains" };
   }
-  return { chainId: ACTIVE_INTELLIGENCE_CHAIN_ID };
+  return { chainId: requestedChainId ?? scopeChainId ?? PRIMARY_SIGNAL_CHAIN_ID };
 }
 
 export function createAlertRoutes(
@@ -256,7 +280,9 @@ export function createAlertRoutes(
       }
 
       const alert = result.value;
-      const scope = chainScope(req);
+      const scope = hasExplicitChainScope(req.query)
+        ? chainScope(req)
+        : { chainId: alert.chain_id ?? PRIMARY_SIGNAL_CHAIN_ID };
       if ("error" in scope) {
         res.status(400).json({ error: scope.error });
         return;

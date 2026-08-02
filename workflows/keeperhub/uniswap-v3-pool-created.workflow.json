@@ -2,8 +2,8 @@
   "version": 1,
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
-    "name": "ChronicleAI Uniswap V3 PoolCreated Monitor — Sepolia (Telegram bridge)",
-    "description": "Desk-chain newspaper: Event Tracker on Ethereum Sepolia Uniswap V3 Factory PoolCreated → Telegram → Chronicle ingest. Re-homed from mainnet. Not an execution input for desk strategies. FREE TIER Telegram bridge. Replace YOUR_TELEGRAM_INGEST_CHAT_ID."
+    "name": "ChronicleAI Uniswap V3 PoolCreated Monitor — Ethereum Mainnet (Telegram bridge)",
+    "description": "Mainnet observation source: Event Tracker on Ethereum Mainnet Uniswap V3 Factory PoolCreated → Telegram → Chronicle ingest. Pool creation remains non-qualifying/ignored in v1. Not an execution input for desk strategies. FREE TIER Telegram bridge. Replace YOUR_TELEGRAM_INGEST_CHAT_ID."
   },
   "nodes": [
     {
@@ -15,11 +15,11 @@
       },
       "data": {
         "type": "trigger",
-        "label": "Uniswap V3 PoolCreated (Sepolia)",
+        "label": "Uniswap V3 PoolCreated (Ethereum Mainnet)",
         "config": {
           "triggerType": "Event",
-          "network": "11155111",
-          "contractAddress": "0x0227628f3F023bb0B980b67D528571c95c6DaC1c",
+          "network": "1",
+          "contractAddress": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
           "eventName": "PoolCreated",
           "contractABI": "[{\"type\":\"event\",\"name\":\"PoolCreated\",\"inputs\":[{\"indexed\":true,\"name\":\"token0\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"token1\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"fee\",\"type\":\"uint24\"},{\"indexed\":false,\"name\":\"tickSpacing\",\"type\":\"int24\"},{\"indexed\":false,\"name\":\"pool\",\"type\":\"address\"}]}]"
         }
@@ -38,7 +38,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"PoolCreated\",\"address\":\"0x0227628f3F023bb0B980b67D528571c95c6DaC1c\",\"transactionHash\":\"{{@trigger-pool:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-pool:Trigger.blockNumber}}\",\"args\":{\"token0\":\"{{@trigger-pool:Trigger.args.token0}}\",\"token1\":\"{{@trigger-pool:Trigger.args.token1}}\",\"fee\":\"{{@trigger-pool:Trigger.args.fee}}\",\"pool\":\"{{@trigger-pool:Trigger.args.pool}}\"},\"protocol\":\"Uniswap V3\"}}",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"PoolCreated\",\"address\":\"0x1F98431c8aD98523631AE4a59f267346ea31F984\",\"transactionHash\":\"{{@trigger-pool:Trigger.transactionHash}}\",\"blockNumber\":\"{{@trigger-pool:Trigger.blockNumber}}\",\"args\":{\"token0\":\"{{@trigger-pool:Trigger.args.token0}}\",\"token1\":\"{{@trigger-pool:Trigger.args.token1}}\",\"fee\":\"{{@trigger-pool:Trigger.args.fee}}\",\"pool\":\"{{@trigger-pool:Trigger.args.pool}}\"},\"protocol\":\"Uniswap V3 Ethereum Mainnet\"}}",
           "parseMode": "none"
         }
       }
