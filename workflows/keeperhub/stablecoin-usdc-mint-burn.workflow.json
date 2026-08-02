@@ -80,93 +80,6 @@
       }
     },
     {
-      "id": "query-transfers",
-      "type": "action",
-      "position": { "x": 320, "y": 600 },
-      "data": {
-        "type": "action",
-        "label": "Query USDC Transfer Fallback",
-        "config": {
-          "actionType": "web3/query-events",
-          "network": "1",
-          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-          "eventName": "Transfer",
-          "blockCount": "320",
-          "abi": "[{\"type\":\"event\",\"name\":\"Transfer\",\"inputs\":[{\"indexed\":true,\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"value\",\"type\":\"uint256\"}]}]"
-        }
-      }
-    },
-    {
-      "id": "for-each-transfer",
-      "type": "action",
-      "position": { "x": 560, "y": 600 },
-      "data": {
-        "type": "action",
-        "label": "For Each Transfer Fallback",
-        "config": {
-          "actionType": "For Each",
-          "arraySource": "{{@query-transfers:Query USDC Transfer Fallback.events}}",
-          "maxIterations": "50"
-        }
-      }
-    },
-    {
-      "id": "condition-transfer-mint",
-      "type": "action",
-      "position": { "x": 800, "y": 520 },
-      "data": {
-        "type": "action",
-        "label": "Transfer from zero → Mint",
-        "config": {
-          "actionType": "Condition",
-          "condition": "{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}} == \"0x0000000000000000000000000000000000000000\" && {{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}} >= 1000000000000"
-        }
-      }
-    },
-    {
-      "id": "post-transfer-mint-telegram",
-      "type": "action",
-      "position": { "x": 1040, "y": 480 },
-      "data": {
-        "type": "action",
-        "label": "Telegram zero-address mint → Chronicle",
-        "config": {
-          "actionType": "telegram/send-message",
-          "chatId": "-1004373075093",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Transfer\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.logIndex}}\",\"arrayLength\":{{@query-transfers:Query USDC Transfer Fallback.eventCount}},\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}}\"},\"protocol\":\"Circle Ethereum Mainnet USDC\",\"fallback\":\"zero_address\"}}",
-          "parseMode": "none"
-        }
-      }
-    },
-    {
-      "id": "condition-transfer-burn",
-      "type": "action",
-      "position": { "x": 800, "y": 760 },
-      "data": {
-        "type": "action",
-        "label": "Transfer to zero → Burn",
-        "config": {
-          "actionType": "Condition",
-          "condition": "{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}} == \"0x0000000000000000000000000000000000000000\" && {{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}} >= 1000000000000"
-        }
-      }
-    },
-    {
-      "id": "post-transfer-burn-telegram",
-      "type": "action",
-      "position": { "x": 1040, "y": 720 },
-      "data": {
-        "type": "action",
-        "label": "Telegram zero-address burn → Chronicle",
-        "config": {
-          "actionType": "telegram/send-message",
-          "chatId": "-1004373075093",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Transfer\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.logIndex}}\",\"arrayLength\":{{@query-transfers:Query USDC Transfer Fallback.eventCount}},\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}}\"},\"protocol\":\"Circle Ethereum Mainnet USDC\",\"fallback\":\"zero_address\"}}",
-          "parseMode": "none"
-        }
-      }
-    },
-    {
       "id": "query-burns",
       "type": "action",
       "position": { "x": 320, "y": 360 },
@@ -256,36 +169,6 @@
       "id": "e8",
       "source": "condition-burn-large",
       "target": "post-burn-telegram",
-      "sourceHandle": "true",
-      "type": "animated"
-    },
-    { "id": "e9", "source": "trigger-schedule", "target": "query-transfers" },
-    { "id": "e10", "source": "query-transfers", "target": "for-each-transfer" },
-    {
-      "id": "e11",
-      "source": "for-each-transfer",
-      "target": "condition-transfer-mint",
-      "sourceHandle": "loop",
-      "type": "animated"
-    },
-    {
-      "id": "e12",
-      "source": "condition-transfer-mint",
-      "target": "post-transfer-mint-telegram",
-      "sourceHandle": "true",
-      "type": "animated"
-    },
-    {
-      "id": "e13",
-      "source": "for-each-transfer",
-      "target": "condition-transfer-burn",
-      "sourceHandle": "loop",
-      "type": "animated"
-    },
-    {
-      "id": "e14",
-      "source": "condition-transfer-burn",
-      "target": "post-transfer-burn-telegram",
       "sourceHandle": "true",
       "type": "animated"
     }

@@ -2,7 +2,6 @@ import type React from "react";
 
 export interface AlertFiltersState {
   eventType: string;
-  chainId: string;
   alertKind: string;
   signalStatus: string;
 }
@@ -16,7 +15,6 @@ interface AlertFiltersProps {
   filters: AlertFiltersState;
   onChange: (filters: AlertFiltersState) => void;
   eventTypeOptions: AlertFilterOption[];
-  chainOptions: AlertFilterOption[];
   alertKindOptions: AlertFilterOption[];
   signalStatusOptions: AlertFilterOption[];
   "data-testid"?: string;
@@ -26,7 +24,6 @@ export function AlertFilters({
   filters,
   onChange,
   eventTypeOptions,
-  chainOptions,
   alertKindOptions,
   signalStatusOptions,
   "data-testid": dataTestId = "alert-filters",
@@ -53,28 +50,6 @@ export function AlertFilters({
           {eventTypeOptions.map((type) => (
             <option key={type.value} value={type.value} className="bg-frame text-foreground">
               {type.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="chain-filter" className="text-xs font-medium text-muted-foreground">
-          Source chain
-        </label>
-        <select
-          id="chain-filter"
-          data-testid="chain-filter"
-          value={filters.chainId}
-          onChange={(e) => onChange({ ...filters, chainId: e.target.value })}
-          className="px-3.5 py-2 bg-frame border border-border rounded-xl text-foreground text-sm cursor-pointer min-w-[180px] focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="" className="bg-frame text-foreground">
-            Default: Ethereum Mainnet
-          </option>
-          {chainOptions.map((chain) => (
-            <option key={chain.value} value={chain.value} className="bg-frame text-foreground">
-              {chain.label}
             </option>
           ))}
         </select>

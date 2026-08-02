@@ -1,9 +1,7 @@
-import { ACTIVE_INTELLIGENCE_CHAIN_ID, PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config/chains";
 import { type ReactElement, useMemo, useState } from "react";
 import { Page, PageHeader } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
-import { chainLabel } from "../../lib/explorer.ts";
 import { AlertCard } from "./AlertCard.tsx";
 import { AlertFilters, type AlertFiltersState } from "./AlertFilters.tsx";
 import { isAlertVisibleInPublicUi } from "./alert-visibility.ts";
@@ -19,14 +17,10 @@ function formatEventTypeLabel(eventType: string): string {
 export function AlertsPage(): ReactElement {
   const [filters, setFilters] = useState<AlertFiltersState>({
     eventType: "",
-    chainId: "",
     alertKind: "",
     signalStatus: "",
   });
-  const { alerts, pagination, setPage, isLoading, error, refetch } = useAlerts(
-    20,
-    filters.chainId || undefined,
-  );
+  const { alerts, pagination, setPage, isLoading, error, refetch } = useAlerts(20);
 
   const visibleAlerts = useMemo(() => {
     return alerts.filter(isAlertVisibleInPublicUi);
@@ -39,13 +33,6 @@ export function AlertsPage(): ReactElement {
     }
     return [...types].sort().map((value) => ({ value, label: formatEventTypeLabel(value) }));
   }, [visibleAlerts]);
-
-  const chainOptions = useMemo(() => {
-    return [PRIMARY_SIGNAL_CHAIN_ID, ACTIVE_INTELLIGENCE_CHAIN_ID].map((id) => ({
-      value: String(id),
-      label: chainLabel(id),
-    }));
-  }, []);
 
   const alertKindOptions = useMemo(() => {
     const kinds = new Set<string>();
@@ -68,9 +55,6 @@ export function AlertsPage(): ReactElement {
       if (filters.eventType && alert.eventType !== filters.eventType) {
         return false;
       }
-      if (filters.chainId && String(alert.chainId ?? "") !== filters.chainId) {
-        return false;
-      }
       if (filters.alertKind && alert.alertKind !== filters.alertKind) {
         return false;
       }
@@ -79,10 +63,10 @@ export function AlertsPage(): ReactElement {
       }
       return true;
     });
-  }, [visibleAlerts, filters.eventType, filters.chainId, filters.alertKind, filters.signalStatus]);
+  }, [visibleAlerts, filters.eventType, filters.alertKind, filters.signalStatus]);
 
   const hasActiveFilters = Boolean(
-    filters.eventType || filters.chainId || filters.alertKind || filters.signalStatus,
+    filters.eventType || filters.alertKind || filters.signalStatus,
   );
 
   return (
@@ -125,14 +109,12 @@ export function AlertsPage(): ReactElement {
       ) : (
         <>
           {(eventTypeOptions.length > 0 ||
-            chainOptions.length > 0 ||
             alertKindOptions.length > 0 ||
             signalStatusOptions.length > 0) && (
             <AlertFilters
               filters={filters}
               onChange={setFilters}
               eventTypeOptions={eventTypeOptions}
-              chainOptions={chainOptions}
               alertKindOptions={alertKindOptions}
               signalStatusOptions={signalStatusOptions}
             />
@@ -141,7 +123,7 @@ export function AlertsPage(): ReactElement {
           {hasActiveFilters && filteredAlerts.length === 0 ? (
             <EmptyState
               title="No matching alerts"
-              description="No alerts on this page match the selected filters. Try a different event type, chain, or page."
+              description="No alerts on this page match the selected filters. Try a different event type or page."
               data-testid="alerts-filtered-empty"
             />
           ) : (
