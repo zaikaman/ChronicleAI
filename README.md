@@ -103,18 +103,18 @@ The core demo uses one Alert→Signal→Action path. The repository includes 33 
 | Surface / workflow | Action | Transaction |
 | --- | --- | --- |
 | Desk Oracle Arbitrage | Uniswap V3 swap via KeeperHub private route | [0xf7c52b28…0a3d0b6](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) |
-| Desk Yield Rotation | Aave V3 supply via KeeperHub | [0x5a17e7b5…3ec0cc61](https://sepolia.etherscan.io/tx/0x5a17e7b561bceb585faa45ff05f0bdabe18e216e1b40f67525cc47cf3ec0cc61) |
-| Desk Treasury Sweep | Treasury transfer workflow | [0x47d1f3b9…4cebeeda](https://sepolia.etherscan.io/tx/0x47d1f3b90396e4fd63168f056d027cf0c9c8bd90949041f749bb249e4cebeeda) |
-| Daily Digest | `ChronicleRegistry.publishDigest` | [0xe25efe40…38d204](https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204) |
-| Intelligence Alert | `ChronicleRegistry.publishAlert` | [0x4acf30c4…bcc62f6a](https://sepolia.etherscan.io/tx/0x4acf30c4948dd0ddcde8c1377af22fc1c6acd01662b7470a785ae293bcc62f6a) |
-| Desk Capital Top-up | `recordCapitalMove` workflow | [0x7aac47c6…f224bf](https://sepolia.etherscan.io/tx/0x7aac47c61d30b15a7cb381423731fbd61936e086c5e54402a7a3d54395f224bf) |
-| Trade Ticket | `ChronicleRegistry.recordTradeTicket` | [0xaf1c821f…a1952](https://sepolia.etherscan.io/tx/0xaf1c821f6edbd78af9f6f63d0a982d311d5db05dc217db3787a61179ca4a1952) |
+| Desk Yield Rotation | Aave V3 supply via KeeperHub | [0xe3ec19ab…a358a0d](https://sepolia.etherscan.io/tx/0xe3ec19aba7cb0dea4b33a9af1c50438c82b4cd1eaaa2f7ec9f903c6a6a358a0d) |
+| Desk Treasury Sweep | Treasury transfer workflow | [0xe779d061…22daec](https://sepolia.etherscan.io/tx/0xe779d061163f8dc24b76e203fa478c38eeb6e7cc2ee75936cbba6ccc1922daec) |
+| Daily Digest | `ChronicleRegistry.publishDigest` | [0x763d66cc…b54402](https://sepolia.etherscan.io/tx/0x763d66cc087c6d1ed6258b1d4f7a0a3d77977db23618529172d79af3aeb54402) |
+| Intelligence Alert | `ChronicleRegistry.publishAlert` | [0xba4e9a2e…580107](https://sepolia.etherscan.io/tx/0xba4e9a2edb82ed3bc2c43ebb3db4ad3a089aa5c93552c49b89484d0d47580107) |
+| Desk Capital Top-up | `recordCapitalMove` workflow | [0x32bb346e…d80f31](https://sepolia.etherscan.io/tx/0x32bb346e10c8143cd61ac512a83aa653915d972637f8565e08e47c38e2d80f31) |
+| Trade Ticket | `ChronicleRegistry.recordTradeTicket` | [0xe3ec19ab…a358a0d](https://sepolia.etherscan.io/tx/0xe3ec19aba7cb0dea4b33a9af1c50438c82b4cd1eaaa2f7ec9f903c6a6a358a0d) |
 | Capital Move | `ChronicleRegistry.recordCapitalMove` | [0x254764d5…172c5](https://sepolia.etherscan.io/tx/0x254764d54457a753ad1e2ff6f3e9dec483bfcbdfa7f56a0630ddba0753b172c5) |
-| x402 Premium Receipt | `recordPremiumReceipt` | [0x9e109ac9…2d96](https://sepolia.etherscan.io/tx/0x9e109ac9caa345206c9fb863adcb5dfe9c966df8969b434af9c5f3f7f2c62d96) |
+| x402 Premium Receipt | `recordPremiumReceipt` | [0x6e798e84…8687d7](https://sepolia.etherscan.io/tx/0x6e798e84fb52b2a4c5b0d1755e071e647be83ed477b9780ca23d9d5c738687d7) |
 | MPP Premium Receipt | `recordPremiumReceipt` | [0x881691e5…be4b](https://sepolia.etherscan.io/tx/0x881691e5ce03e68524ab6ce2e4d2519d051ddc77438eb79240985ac76393be4b) |
-| Sponsored Watch | `createSponsoredWatch` | [0xcc5eb3b6…85b2](https://sepolia.etherscan.io/tx/0xcc5eb3b64e1ceb743e99a98525707b3594c36dfec91f1bbb497b2a4e64d785b2) |
-| Sponsored Report | `publishSponsoredReport` | [0x92d63e8b…bdf7](https://sepolia.etherscan.io/tx/0x92d63e8b3912e6fc57b19637cbbb158d20fce8e801997bce6a0489c68846bdf7) |
-| Affiliate Payout | `recordAffiliatePayout` | [0xd4739e92…d7fc](https://sepolia.etherscan.io/tx/0xd4739e92b6ae88f61d06c63cd10e22794da86f058356484f7decced41af2d7fc) |
+| Sponsored Watch | `createSponsoredWatch` | [0xea0673ac…f16049](https://sepolia.etherscan.io/tx/0xea0673acee0a64ac70d841ff4ec82e1f03e5b8fb8784e9b922d53a8c8ef16049) |
+| Sponsored Report | `publishSponsoredReport` | [0x70627259…c82ca](https://sepolia.etherscan.io/tx/0x70627259da1fe644610f096bab07973c0be5241b5242d44e1b2457070c6c82ca) |
+| Affiliate Payout | `recordAffiliatePayout` | [0xb0d42603…c92302](https://sepolia.etherscan.io/tx/0xb0d42603e1a941e6e2fd548155c16cee47bb35647d0257d725971d63edc92302) |
 
 ## KeeperHub integration
 
