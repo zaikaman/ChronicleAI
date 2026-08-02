@@ -1,3 +1,4 @@
+import { ACTIVE_INTELLIGENCE_CHAIN_ID, PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config/chains";
 import type { ReactElement } from "react";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { chainLabel } from "../../lib/explorer.ts";
@@ -44,6 +45,8 @@ export function LatestDigestPage(): ReactElement {
   }
 
   const { data: digest } = state;
+  const sourceChainId = digest.chainId ?? PRIMARY_SIGNAL_CHAIN_ID;
+  const publicationChainId = digest.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID;
 
   return (
     <div data-testid="digest-latest" className="max-w-4xl mx-auto">
@@ -80,7 +83,7 @@ export function LatestDigestPage(): ReactElement {
             {digest.publicationStatus.replace(/_/g, " ")}
           </span>
           <span className="text-xs text-muted-foreground">
-            {digest.digestKind ?? "desk"} · {chainLabel(digest.chainId ?? 11155111)} ·{" "}
+            {digest.digestKind ?? "market"} · Source: {chainLabel(sourceChainId)} · Published/Executed: {chainLabel(publicationChainId)} ·{" "}
             {digest.sourceAlertIds.length} alerts / {digest.sourceSignalIds.length} signals
           </span>
         </div>

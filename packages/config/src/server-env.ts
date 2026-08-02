@@ -248,7 +248,7 @@ export interface ServerEnv {
   /**
    * Ethereum mainnet JSON-RPC for newspaper gas/volume block analysis (chainId 1).
    * Required when gas-volume-block-monitor (or any chainId=1 block ingest) is live.
-   * Override with MAINNET_RPC_URL / ETH_RPC_URL.
+   * Set MAINNET_RPC_URL explicitly; it must not be conflated with RPC_URL.
    */
   mainnetRpcUrl: string | undefined;
   /**
@@ -900,6 +900,12 @@ export function assertProductionReadiness(env: ServerEnv): void {
     );
   }
 
+  if (!env.mainnetRpcUrl?.trim()) {
+    errors.push(
+      "MAINNET_RPC_URL is required in production for Ethereum Mainnet signal ingestion; keep RPC_URL on Ethereum Sepolia",
+    );
+  }
+
   if (env.revenueFxMode === "static" && env.revenueEthPerCurrencyUnit == null) {
     errors.push("REVENUE_FX_MODE=static requires REVENUE_ETH_PER_CURRENCY_UNIT > 0");
   }
@@ -1245,8 +1251,7 @@ export function loadServerEnv(): ServerEnv {
       (revenueFxMode === "static" || revenueFxMode === "auto" ? 0.000001 : undefined),
     chronicleRegistryAddress: optionalEnv("CHRONICLE_REGISTRY_ADDRESS"),
     rpcUrl: optionalEnv("RPC_URL"),
-    mainnetRpcUrl:
-      optionalEnv("MAINNET_RPC_URL")?.trim() || optionalEnv("ETH_RPC_URL")?.trim() || undefined,
+    mainnetRpcUrl: optionalEnv("MAINNET_RPC_URL")?.trim() || undefined,
     baseRpcUrl: optionalEnv("BASE_RPC_URL")?.trim() || undefined,
     paraApiKey: optionalEnv("PARA_API_KEY"),
     paraEnvironment: parseParaEnvironment(optionalEnv("PARA_ENVIRONMENT", "BETA")),

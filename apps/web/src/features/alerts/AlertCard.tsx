@@ -237,7 +237,11 @@ export function AlertCard({
   "data-testid": dataTestId = "alert-card",
 }: AlertCardProps): React.ReactElement {
   const eventLabel = formatEventType(alert.eventType);
-  const networkLabel = typeof alert.chainId === "number" ? chainLabel(alert.chainId) : null;
+  const sourceLabel =
+    typeof alert.chainId === "number" ? `Source: ${chainLabel(alert.chainId)}` : null;
+  const publicationLabel = `Published/Executed: ${chainLabel(
+    alert.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID,
+  )}`;
 
   const content = (
     <>
@@ -260,14 +264,16 @@ export function AlertCard({
       <p className="text-muted-foreground text-sm leading-relaxed mb-4">{alert.summary}</p>
 
       {(eventLabel ||
-        networkLabel ||
+        sourceLabel ||
+        publicationLabel ||
         alert.protocol ||
         alert.flowContext?.direction ||
         alert.flowContext?.fromLabel ||
         alert.flowContext?.toLabel) && (
         <div className="flex flex-wrap gap-2 mb-4" data-testid="alert-flow-chips">
           {eventLabel ? <span className={chipClassName()}>{eventLabel}</span> : null}
-          {networkLabel ? <span className={chipClassName()}>{networkLabel}</span> : null}
+          {sourceLabel ? <span className={chipClassName()}>{sourceLabel}</span> : null}
+          <span className={chipClassName()}>{publicationLabel}</span>
           {alert.protocol ? <span className={chipClassName()}>{alert.protocol}</span> : null}
           {formatDirection(alert.flowContext?.direction) ? (
             <span className={chipClassName()} data-testid="alert-direction-chip">

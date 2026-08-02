@@ -121,9 +121,10 @@ export function createOnChainBlockService(
 
   if (!anyRpcConfigured) {
     return {
-      async analyzeBlock() {
+      async analyzeBlock(payload) {
         throw new Error(
-          "RPC_URL is not configured — block analysis requires a live JSON-RPC endpoint",
+          `RPC_URL is not configured for chain ${payload.chainId} (${chainLabel(payload.chainId)}). ` +
+            `Set ${rpcEnvHintForChain(payload.chainId)} so block analysis can use a live JSON-RPC endpoint.`,
         );
       },
     };
@@ -143,13 +144,13 @@ export function createOnChainBlockService(
         const label = chainLabel(payload.chainId);
         const hint = rpcEnvHintForChain(payload.chainId);
         throw new Error(
-          `No RPC URL configured for chain ${payload.chainId} (${label}). ` +
+          `RPC_URL is not configured for chain ${payload.chainId} (${label}). ` +
             `Set ${hint} so block ${payload.blockNumber} is fetched on the correct network.`,
         );
       }
 
       const client = clientFor(payload.chainId, rpcUrl);
-      let block;
+      let block: Awaited<ReturnType<PublicClient["getBlock"]>>;
       try {
         block = await client.getBlock({
           blockNumber: BigInt(payload.blockNumber),

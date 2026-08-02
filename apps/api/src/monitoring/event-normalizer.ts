@@ -84,6 +84,24 @@ function numberField(value: number | string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function parseArrayLength(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isInteger(value) && value >= 0 ? value : undefined;
+  }
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    const parsed = Number(value.trim());
+    return Number.isSafeInteger(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function arrayLengthValidationError(body: Record<string, unknown>): string | null {
+  if (!Object.prototype.hasOwnProperty.call(body, "arrayLength")) return null;
+  return parseArrayLength(body.arrayLength) === undefined
+    ? "arrayLength is present but must be a numeric integer greater than or equal to 0"
+    : null;
+}
+
 function attachCanonicalEvidence(
   payload: EventIngestionPayload,
   raw: RawOnChainEventPayload,
@@ -98,6 +116,9 @@ function attachCanonicalEvidence(
     ...(raw.blockHash ? { blockHash: raw.blockHash } : {}),
     ...(numberField(raw.logIndex) !== undefined ? { logIndex: numberField(raw.logIndex) } : {}),
     ...(raw.address ? { sourceContract: raw.address } : {}),
+    ...(parseArrayLength(raw.arrayLength) !== undefined
+      ? { arrayLength: parseArrayLength(raw.arrayLength) }
+      : {}),
     sourceDedupeKey,
     normalizedFeatures: {
       ...(payload.normalizedFeatures ?? {}),
@@ -110,6 +131,7 @@ function attachCanonicalEvidence(
       blockHash: raw.blockHash ?? null,
       logIndex: numberField(raw.logIndex) ?? null,
       sourceContract: raw.address ?? null,
+      ...(raw.arrayLength !== undefined ? { arrayLength: raw.arrayLength } : {}),
     },
   };
 }
@@ -612,6 +634,9 @@ function toClassifiedPayload(body: Record<string, unknown>): EventIngestionPaylo
       typeof body.sourceDedupeKey === "string"
         ? body.sourceDedupeKey
         : `${Number(body.chainId)}:${String(body.eventType)}:${String(body.sourceEventId)}`,
+    ...(parseArrayLength(body.arrayLength) !== undefined
+      ? { arrayLength: parseArrayLength(body.arrayLength) }
+      : {}),
   };
 
   // Honour pre-attached flowContext on classified path; else enrich lightly.
@@ -664,6 +689,9 @@ function toRawPayload(body: Record<string, unknown>): RawOnChainEventPayload | n
     ...(body.magnitude && typeof body.magnitude === "object"
       ? { magnitude: body.magnitude as { value: number; unit: string } }
       : {}),
+    ...(parseArrayLength(body.arrayLength) !== undefined
+      ? { arrayLength: parseArrayLength(body.arrayLength) }
+      : {}),
   };
 }
 
@@ -673,6 +701,9 @@ export function createEventNormalizer(priceOracle: PriceOracle): EventNormalizer
       if (!body || typeof body !== "object") {
         return { ok: false, error: "Request body must be a JSON object" };
       }
+
+      const arrayLengthError = arrayLengthValidationError(body);
+      if (arrayLengthError) return { ok: false, error: arrayLengthError };
 
       // Path A: already-classified Chronicle event
       if (isClassifiedEvent(body)) {

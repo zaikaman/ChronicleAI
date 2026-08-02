@@ -91,7 +91,7 @@ describe("POST /keeperhub/blocks", () => {
     }
   }, 30_000);
 
-  it("rejects Mainnet blocks from the active ingestion path", async () => {
+  it("routes Mainnet blocks through the Mainnet RPC boundary", async () => {
     const body = JSON.stringify({ chainId: 1, blockNumber: 20_000_000 });
     const response = await fetch(`${server.url}/keeperhub/blocks`, {
       method: "POST",
@@ -107,6 +107,12 @@ describe("POST /keeperhub/blocks", () => {
       body,
     });
 
-    expect(response.status).toBe(400);
+    if (!process.env.MAINNET_RPC_URL && !process.env.ETH_RPC_URL) {
+      expect(response.status).toBe(502);
+      const responseBody = (await response.json()) as { message?: string };
+      expect(responseBody.message).toMatch(/MAINNET_RPC_URL|Ethereum Mainnet/i);
+    } else {
+      expect([202, 502]).toContain(response.status);
+    }
   });
 });

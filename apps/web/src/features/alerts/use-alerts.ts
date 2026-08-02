@@ -96,12 +96,13 @@ interface AlertsPageResult {
 async function fetchAlertsPage(
   page: number,
   limit: number,
+  chainId?: string,
   signal?: AbortSignal,
 ): Promise<AlertsPageResult> {
   const data = await apiGetJson<{
     items: Array<Record<string, unknown>>;
     pagination?: unknown;
-  }>("/alerts", { signal, params: { page, limit } });
+  }>("/alerts", { signal, params: { page, limit, ...(chainId ? { chainId } : {}) } });
 
   const items = (data.items ?? []).map(mapAlert);
   return {
@@ -114,12 +115,12 @@ async function fetchAlertsPage(
   };
 }
 
-export function useAlerts(limit = DEFAULT_LIMIT): AlertsState {
+export function useAlerts(limit = DEFAULT_LIMIT, chainId?: string): AlertsState {
   const [page, setPage] = useState(1);
 
   const query = useQuery({
-    queryKey: queryKeys.alerts.list(page, limit),
-    queryFn: ({ signal }) => fetchAlertsPage(page, limit, signal),
+    queryKey: queryKeys.alerts.list(page, limit, chainId),
+    queryFn: ({ signal }) => fetchAlertsPage(page, limit, chainId, signal),
     placeholderData: (previous) => previous,
   });
 

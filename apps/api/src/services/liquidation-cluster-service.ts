@@ -42,13 +42,21 @@ function floorToWindowStart(capturedAtMs: number, windowMinutes: number): number
   return Math.floor(capturedAtMs / windowMs) * windowMs;
 }
 
+function chainQualifiedSourceEventId(chainId: number, sourceEventId: string): string {
+  const prefix = `${chainId}:`;
+  return sourceEventId.startsWith(prefix) ? sourceEventId : `${prefix}${sourceEventId}`;
+}
+
 export function buildLiquidationClusterSourceEventId(
   chainId: number,
   windowStartIso: string,
   protocol: string,
 ): string {
   const protoKey = protocol.toLowerCase().replace(/\s+/g, "-");
-  return `liq-cluster-${chainId}-${protoKey}-${windowStartIso}`;
+  return chainQualifiedSourceEventId(
+    chainId,
+    `liq-cluster-${chainId}-${protoKey}-${windowStartIso}`,
+  );
 }
 
 export function createLiquidationClusterService(
@@ -103,11 +111,22 @@ export function createLiquidationClusterService(
         windowStartIso,
         protocolLabel,
       );
-      const existing = await eventRepo.findBySourceAndEventId("chronicle", sourceEventId);
-      if (existing) return null;
-      // Also check keeperhub source in case it was ingested under another source label
-      const existingKh = await eventRepo.findBySourceAndEventId("keeperhub", sourceEventId);
-      if (existingKh) return null;
+      const legacySourceEventId = sourceEventId.slice(`${chainId}:`.length);
+      for (const candidateSourceEventId of [sourceEventId, legacySourceEventId]) {
+        const existing = await eventRepo.findBySourceAndEventId(
+          "chronicle",
+          candidateSourceEventId,
+          chainId,
+        );
+        if (existing) return null;
+        // Also check keeperhub source in case it was ingested under another source label
+        const existingKh = await eventRepo.findBySourceAndEventId(
+          "keeperhub",
+          candidateSourceEventId,
+          chainId,
+        );
+        if (existingKh) return null;
+      }
 
       const assetSet = new Set<string>();
       for (const e of liquidations) {

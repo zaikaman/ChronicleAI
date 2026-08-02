@@ -1,3 +1,4 @@
+import { ACTIVE_INTELLIGENCE_CHAIN_ID, PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config/chains";
 import type { ReactElement } from "react";
 import { Link, useParams } from "react-router-dom";
 import { StatusBadge } from "../../components/data-primitives.tsx";
@@ -85,6 +86,8 @@ export function DigestDetailPage(): ReactElement {
       : digest.publicationStatus === "partial_failure"
         ? "warning"
         : "error";
+  const sourceChainId = digest.chainId ?? PRIMARY_SIGNAL_CHAIN_ID;
+  const publicationChainId = digest.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID;
 
   return (
     <Page data-testid="digest-detail">
@@ -98,7 +101,7 @@ export function DigestDetailPage(): ReactElement {
               variant={statusVariant}
             />
             <StatusBadge
-              label={`${digest.digestKind ?? "desk"} · ${chainLabel(digest.chainId ?? 11155111)}`}
+              label={`${digest.digestKind ?? "market"} · Source: ${chainLabel(sourceChainId)} · Published/Executed: ${chainLabel(publicationChainId)}`}
               variant="info"
             />
           </div>

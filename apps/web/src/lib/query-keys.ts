@@ -3,7 +3,8 @@
 export const queryKeys = {
   alerts: {
     all: ["alerts"] as const,
-    list: (page: number, limit: number) => ["alerts", "list", page, limit] as const,
+    list: (page: number, limit: number, chainId?: string) =>
+      ["alerts", "list", page, limit, chainId ?? null] as const,
     detail: (alertId: string) => ["alerts", "detail", alertId] as const,
   },
   digests: {

@@ -1,13 +1,27 @@
 // Digest routes: GET /digests, GET /digests/latest, GET /digests/:id
 // Returns published public digests for feed + HTTPS content URI resolution
 
-import { ACTIVE_INTELLIGENCE_CHAIN_ID, LEGACY_INTELLIGENCE_CHAIN_ID } from "@chronicleai/config";
+import { ACTIVE_INTELLIGENCE_CHAIN_ID, PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config";
 import type { DailyDigestRepository, DailyDigestRow } from "@chronicleai/db";
 import type { DigestSections } from "@chronicleai/schemas";
 import { Router, type Router as RouterType } from "express";
 import { notFound } from "../errors.ts";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
 import { parseSectionsFromAnalysis } from "../services/digest-generation-service.ts";
+
+function queryString(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
+}
+
+function hasExplicitScope(query: Record<string, unknown>): boolean {
+  return (
+    queryString(query.scope) !== undefined ||
+    queryString(query.chainId) !== undefined ||
+    queryString(query.kind) !== undefined
+  );
+}
 
 export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterType {
   const router: RouterType = Router();
@@ -21,9 +35,17 @@ export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterTyp
     const rawScope =
       typeof req.query.scope === "string" ? req.query.scope.toLowerCase() : undefined;
     const rawKind = typeof req.query.kind === "string" ? req.query.kind : undefined;
-    if (rawScope && rawScope !== "legacy" && rawScope !== "mainnet") {
+    const scopeChainId =
+      rawScope === undefined
+        ? undefined
+        : rawScope === "legacy" || rawScope === "mainnet" || rawScope === "primary"
+          ? PRIMARY_SIGNAL_CHAIN_ID
+          : rawScope === "sepolia" || rawScope === "active" || rawScope === "testnet"
+            ? ACTIVE_INTELLIGENCE_CHAIN_ID
+            : undefined;
+    if (rawScope !== undefined && scopeChainId === undefined) {
       return {
-        error: "Use scope=legacy for archived Mainnet digests or the default Sepolia scope",
+        error: "scope must be mainnet or sepolia",
       };
     }
     const rawChainId = typeof req.query.chainId === "string" ? req.query.chainId : undefined;
@@ -34,14 +56,20 @@ export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterTyp
     ) {
       return { error: `Unsupported digest chain: ${rawChainId}` };
     }
-    const chainId =
-      rawScope === "legacy" || rawScope === "mainnet" || rawChainId === "1"
-        ? LEGACY_INTELLIGENCE_CHAIN_ID
-        : ACTIVE_INTELLIGENCE_CHAIN_ID;
-    const digestKind = rawKind ?? "desk";
+    const requestedChainId = rawChainId === undefined ? undefined : Number(rawChainId);
+    if (
+      scopeChainId !== undefined &&
+      requestedChainId !== undefined &&
+      scopeChainId !== requestedChainId
+    ) {
+      return { error: "scope and chainId select different digest source chains" };
+    }
+    const digestKind = rawKind ?? "market";
     if (digestKind !== "market" && digestKind !== "desk") {
       return { error: "kind must be market or desk" };
     }
+    const chainId =
+      requestedChainId ?? scopeChainId ?? (digestKind === "desk" ? ACTIVE_INTELLIGENCE_CHAIN_ID : PRIMARY_SIGNAL_CHAIN_ID);
     return { chainId, digestKind };
   }
 
@@ -147,7 +175,12 @@ export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterTyp
       }
 
       const digest = result.value;
-      const selectedScope = scope(req);
+      const selectedScope = hasExplicitScope(req.query)
+        ? scope(req)
+        : {
+            chainId: digest?.chain_id ?? PRIMARY_SIGNAL_CHAIN_ID,
+            digestKind: digest?.digest_kind ?? "market",
+          } as const;
       if ("error" in selectedScope) {
         res.status(400).json({ error: selectedScope.error });
         return;
@@ -156,7 +189,7 @@ export function createDigestRoutes(digestRepo: DailyDigestRepository): RouterTyp
         !digest ||
         digest.audience !== "public" ||
         !digest.published_at ||
-        (digest.chain_id ?? ACTIVE_INTELLIGENCE_CHAIN_ID) !== selectedScope.chainId ||
+        (digest.chain_id ?? PRIMARY_SIGNAL_CHAIN_ID) !== selectedScope.chainId ||
         (digest.digest_kind ?? "market") !== selectedScope.digestKind
       ) {
         next(notFound("Digest not found"));
@@ -226,7 +259,7 @@ function formatDigestResponse(digest: DailyDigestRow): Record<string, unknown> {
     keeperHubRunId: digest.keeper_hub_run_id ?? undefined,
     explorerUrl: digest.explorer_url ?? undefined,
     digestKind: digest.digest_kind ?? "market",
-    chainId: digest.chain_id ?? ACTIVE_INTELLIGENCE_CHAIN_ID,
+    chainId: digest.chain_id ?? PRIMARY_SIGNAL_CHAIN_ID,
     publicationChainId: digest.publication_chain_id ?? ACTIVE_INTELLIGENCE_CHAIN_ID,
     sourceAlertIds: digest.source_alert_ids ?? [],
     sourceSignalIds: digest.source_signal_ids ?? [],

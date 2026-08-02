@@ -29,6 +29,7 @@ import type {
   ExecutionLogStatus,
 } from "@chronicleai/schemas";
 import { DESK_STRATEGIES } from "@chronicleai/schemas";
+import { ACTIVE_INTELLIGENCE_CHAIN_ID, PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config";
 import { capitalLog, deskLog } from "../lib/logger.ts";
 import { softAppendExecutionLog } from "../services/keeperhub-execution-log.ts";
 import {
@@ -1310,7 +1311,11 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       });
       let rows: MonitoredEventRow[] = [];
       if (qualified.ok) {
-        rows = qualified.value.filter((r) => isEventMicrotradeTriggerType(r.event_type));
+        rows = qualified.value.filter(
+          (r) =>
+            isEventMicrotradeTriggerType(r.event_type) &&
+            (r.event_type !== "gas_spike" || r.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID),
+        );
       }
       if (rows.length === 0) {
         // listInWindow without status (e.g. status column filter unavailable)
@@ -1322,7 +1327,10 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         });
         if (anyStatus.ok) {
           rows = anyStatus.value.filter(
-            (r) => isEventMicrotradeTriggerType(r.event_type) && r.status === "qualified",
+            (r) =>
+              isEventMicrotradeTriggerType(r.event_type) &&
+              r.status === "qualified" &&
+              (r.event_type !== "gas_spike" || r.chain_id === ACTIVE_INTELLIGENCE_CHAIN_ID),
           );
         }
       }
@@ -1336,6 +1344,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         eventType: r.event_type,
         capturedAt: r.captured_at || r.created_at,
         transactionHash: r.transaction_hash,
+        sourceChainId: r.chain_id,
         source: "monitored_event" as const,
       }));
     } catch (error) {
@@ -1875,6 +1884,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
           signal: DeskSignalRow | null;
           strategy: DeskStrategy;
           synthetic?: boolean | undefined;
+          blockedReason?: string | undefined;
         }> = [];
         for (const signal of signalsResult.value) {
           if (signal.policy_verdict === "ignore" || signal.policy_verdict === "defer") {
@@ -1882,7 +1892,42 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
           }
           const strategy = strategyForSignalType(signal.signal_type);
           if (!strategy) continue;
-          candidates.push({ signal, strategy });
+          const evidence = signal.source_evidence ?? {};
+          const sources = signal.sources ?? {};
+          const eventType =
+            typeof evidence.eventType === "string"
+              ? evidence.eventType
+              : typeof sources.eventType === "string"
+                ? sources.eventType
+                : undefined;
+          const sourceChainId =
+            asNumber(evidence.sourceChainId) ??
+            asNumber(sources.sourceChainId) ??
+            (eventType
+              ? asNumber(evidence.chainId) ?? asNumber(sources.chainId)
+              : undefined);
+          let blockedReason: string | undefined;
+          if (eventType === "liquidation") {
+            blockedReason = "individual_liquidation_observation_only";
+          } else if (
+            eventType === "gas_spike" &&
+            sourceChainId !== ACTIVE_INTELLIGENCE_CHAIN_ID
+          ) {
+            blockedReason = "mainnet_gas_context_only";
+          } else if (eventType === "liquidation_cluster") {
+            const healthFactor = mark.aave.healthFactor;
+            if (
+              healthFactor == null ||
+              !Number.isFinite(healthFactor) ||
+              healthFactor >= deps.config.hfWarn
+            ) {
+              blockedReason =
+                sourceChainId === PRIMARY_SIGNAL_CHAIN_ID
+                  ? "mainnet_liquidation_requires_local_sepolia_risk"
+                  : "liquidation_cluster_requires_local_risk_condition";
+            }
+          }
+          candidates.push({ signal, strategy, ...(blockedReason ? { blockedReason } : {}) });
         }
 
         // Force-maintenance may need yield_rotation even when APY signals were soft-deferred.
@@ -1914,6 +1959,23 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
           const match = candidates.find((c) => c.strategy === strategy);
           if (!match) continue;
           seen.add(strategy);
+
+          if (match.blockedReason) {
+            evaluations.push({
+              signalId: match.signal?.id ?? null,
+              signalType: match.signal?.signal_type ?? strategy,
+              strategy,
+              planAction: "deferred",
+              reasonCodes: ["execution_family_gate", match.blockedReason],
+            });
+            await syncAlertCausalMetadata(match.signal, {
+              ...(match.signal?.policy_verdict
+                ? { policyVerdict: match.signal.policy_verdict }
+                : {}),
+              actionStatus: "deferred",
+            });
+            continue;
+          }
 
           if (!authorizedStrategies.has(strategy)) {
             evaluations.push({

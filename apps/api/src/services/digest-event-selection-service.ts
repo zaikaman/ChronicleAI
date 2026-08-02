@@ -25,6 +25,8 @@ export interface DigestEventSelectionService {
     periodStart: string;
     periodEnd: string;
     maxEvents?: number;
+    /** Overrides the service default for market/Mainnet vs desk/Sepolia runs. */
+    chainId?: number;
   }): Promise<EventSelectionResult>;
 }
 
@@ -137,13 +139,14 @@ export function createDigestEventSelectionService(
   options: { chainId?: number } = {},
 ): DigestEventSelectionService {
   return {
-    async selectEvents({ periodStart, periodEnd, maxEvents = 10 }) {
+    async selectEvents({ periodStart, periodEnd, maxEvents = 10, chainId }) {
+      const selectedChainId = chainId ?? options.chainId;
       // Prefer window query when available; fall back to list+filter
       const windowResult = await eventRepo.listInWindow({
         periodStart,
         periodEnd,
         status: "qualified",
-        ...(options.chainId !== undefined ? { chainId: options.chainId } : {}),
+        ...(selectedChainId !== undefined ? { chainId: selectedChainId } : {}),
         limit: 500,
       });
 
@@ -154,7 +157,7 @@ export function createDigestEventSelectionService(
       } else {
         const result = await eventRepo.list({
           status: "qualified",
-          ...(options.chainId !== undefined ? { chainId: options.chainId } : {}),
+          ...(selectedChainId !== undefined ? { chainId: selectedChainId } : {}),
           limit: 100,
         });
         if (!result.ok) {
@@ -172,23 +175,23 @@ export function createDigestEventSelectionService(
       const allInWindow = await eventRepo.listInWindow({
         periodStart,
         periodEnd,
-        ...(options.chainId !== undefined ? { chainId: options.chainId } : {}),
+        ...(selectedChainId !== undefined ? { chainId: selectedChainId } : {}),
         limit: 500,
       });
       const totalEvents = allInWindow.ok ? allInWindow.value.length : windowEvents.length;
       const scopedEvents =
-        options.chainId === undefined
+        selectedChainId === undefined
           ? windowEvents
-          : windowEvents.filter((event) => event.chain_id === options.chainId);
+          : windowEvents.filter((event) => event.chain_id === selectedChainId);
       const selected = selectDiverseEvents(scopedEvents, maxEvents).map(mapEvent);
 
       return {
         events: selected,
         totalEvents:
-          options.chainId === undefined
+          selectedChainId === undefined
             ? totalEvents
             : allInWindow.ok
-              ? allInWindow.value.filter((event) => event.chain_id === options.chainId).length
+              ? allInWindow.value.filter((event) => event.chain_id === selectedChainId).length
               : scopedEvents.length,
         qualifiedEvents: scopedEvents.length,
       };

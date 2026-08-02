@@ -15,6 +15,7 @@ export interface PremiumItemTeaser {
   slug: string;
   title: string;
   summaryPublic: string;
+  sourceChainId?: number;
   contentType: string;
   priceAmount: number;
   priceCurrency: string;
@@ -30,6 +31,7 @@ export type PremiumTeaserSource = Pick<
   | "slug"
   | "title"
   | "summary_public"
+  | "source_chain_id"
   | "content_type"
   | "price_amount"
   | "price_currency"
@@ -81,6 +83,7 @@ export class PremiumContentVisibilityService {
       slug: row.slug,
       title: row.title,
       summaryPublic: row.summary_public,
+      ...(row.source_chain_id !== undefined ? { sourceChainId: row.source_chain_id } : {}),
       contentType: row.content_type,
       priceAmount: row.price_amount,
       priceCurrency: row.price_currency,
@@ -100,6 +103,7 @@ export class PremiumContentVisibilityService {
       slug: row.slug,
       title: row.title,
       summaryPublic: row.summary_public,
+      ...(row.source_chain_id !== undefined ? { sourceChainId: row.source_chain_id } : {}),
       contentType: row.content_type,
       priceAmount: row.price_amount,
       priceCurrency: row.price_currency,

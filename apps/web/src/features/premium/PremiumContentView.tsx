@@ -6,6 +6,7 @@ import type React from "react";
 import { useState } from "react";
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
+import { chainLabel } from "../../lib/explorer.ts";
 
 interface PremiumContentViewProps {
   content: Record<string, unknown>;
@@ -458,6 +459,14 @@ export function PremiumContentView({
       ? privatePayload.generationProvider
       : null;
   const usedLlm = privatePayload.usedLlm === true;
+  const sourceChainId =
+    typeof content.sourceChainId === "number"
+      ? content.sourceChainId
+      : typeof content.source_chain_id === "number"
+        ? content.source_chain_id
+        : typeof privatePayload.sourceChainId === "number"
+          ? privatePayload.sourceChainId
+          : undefined;
 
   const sections: ContentSection[] = Array.isArray(privatePayload.sections)
     ? (privatePayload.sections as ContentSection[])
@@ -543,6 +552,11 @@ export function PremiumContentView({
             {eventCount != null ? (
               <span className="px-2 py-0.5 rounded-lg bg-muted border border-border/40">
                 {eventCount} source event{eventCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            {sourceChainId !== undefined ? (
+              <span className="px-2 py-0.5 rounded-lg bg-muted border border-border/40">
+                Source: {chainLabel(sourceChainId)}
               </span>
             ) : null}
             {generationProvider && usedLlm ? (

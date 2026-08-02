@@ -86,6 +86,31 @@ describe("price-oracle-service", () => {
     expect(calledAddresses.some((a) => a === MAINNET_ETH)).toBe(false);
   });
 
+  it("uses the dedicated Mainnet RPC for Mainnet observations", async () => {
+    const callsByChain: Record<number, string[]> = { 1: [], 11_155_111: [] };
+    const makeCall = (chainId: number, price: bigint): PriceOracleEthCall =>
+      async (to, data) => {
+        callsByChain[chainId]?.push(to.toLowerCase());
+        if (data.slice(0, 10) === ROUND_SELECTOR) {
+          return encodeRound(price * 10n ** 8n);
+        }
+        return "0x";
+      };
+
+    const oracle = createPriceOracle(undefined, {
+      rpcChainId: 11_155_111,
+      ethCallsByChainId: {
+        1: makeCall(1, 3200n),
+        11_155_111: makeCall(11_155_111, 2500n),
+      },
+    });
+
+    expect(await oracle.getEthUsdPrice(1)).toBe(3200);
+    expect(await oracle.getEthUsdPrice(11_155_111)).toBe(2500);
+    expect(callsByChain[1]).toEqual([MAINNET_ETH]);
+    expect(callsByChain[11_155_111]).toEqual([SEPOLIA_ETH]);
+  });
+
   it("returns null when RPC-native latestRoundData is empty", async () => {
     const ethCall: PriceOracleEthCall = async () => "0x";
 

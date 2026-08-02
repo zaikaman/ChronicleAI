@@ -183,6 +183,8 @@ export interface PremiumItemTeaserResponse {
   id: string;
   title: string;
   summaryPublic: string;
+  /** Observation/source chain for the premium intelligence item. */
+  sourceChainId?: number;
   priceAmount: number;
   priceCurrency: string;
   paymentRoutes: string[];

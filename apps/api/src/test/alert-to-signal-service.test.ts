@@ -7,7 +7,7 @@ import { createAlertToSignalService } from "../services/alert-to-signal-service.
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 
-function alertRow(id = "alert-1"): PublicAlertRow {
+function alertRow(id = "alert-1", chainId = ACTIVE_INTELLIGENCE_CHAIN_ID): PublicAlertRow {
   return {
     id,
     monitored_event_id: "event-1",
@@ -33,7 +33,7 @@ function alertRow(id = "alert-1"): PublicAlertRow {
     created_at: "2026-08-01T00:00:00.000Z",
     updated_at: "2026-08-01T00:00:00.000Z",
     alert_kind: "desk_trigger",
-    chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
+    chain_id: chainId,
     publication_chain_id: ACTIVE_INTELLIGENCE_CHAIN_ID,
     source_dedupe_key: "source-1",
     signal_status: "pending",
@@ -127,11 +127,11 @@ function testHarness() {
 }
 
 describe("AlertToSignalService", () => {
-  it("projects a Sepolia liquidation into exactly one risk-defend signal with evidence", async () => {
+  it("projects a Mainnet liquidation into one Sepolia risk-context signal with provenance", async () => {
     const harness = testHarness();
     const result = await harness.service.project({
-      alert: alertRow(),
-      event: eventRow(),
+      alert: alertRow("alert-1", 1),
+      event: eventRow({ chain_id: 1, source_event_id: "1:mainnet-tx-1-0" }),
     });
 
     expect(result).toMatchObject({
@@ -146,12 +146,14 @@ describe("AlertToSignalService", () => {
       chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
       dedupeKey: "alert:alert-1",
       sourceAlertId: "alert-1",
-      sourceEventId: "sepolia-tx-1-0",
+      sourceEventId: "1:mainnet-tx-1-0",
       signalOrigin: "alert",
     });
     expect(harness.inputs[0]?.sourceEvidence).toMatchObject({
       eventType: "liquidation",
-      chainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
+      chainId: 1,
+      sourceChainId: 1,
+      executionChainId: ACTIVE_INTELLIGENCE_CHAIN_ID,
       blockNumber: 100,
       logIndex: 0,
     });
@@ -189,11 +191,33 @@ describe("AlertToSignalService", () => {
     });
   });
 
-  it("rejects Mainnet observations from the executable projection path", async () => {
+  it("projects CEX observations into non-trading desk context", async () => {
     const harness = testHarness();
     const result = await harness.service.project({
       alert: alertRow(),
-      event: eventRow({ chain_id: 1 }),
+      event: eventRow({
+        event_type: "cex_inflow",
+        asset_symbols: ["USDC"],
+        raw_payload: { flowContext: { venue: "CEX" } },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      status: "created",
+      signalType: "event_flow",
+      actionStatus: "deferred",
+    });
+    expect(harness.inputs[0]?.sourceEvidence).toMatchObject({
+      eventType: "cex_inflow",
+      executionEligibility: "context_only",
+    });
+  });
+
+  it("rejects unsupported observations from the executable projection path", async () => {
+    const harness = testHarness();
+    const result = await harness.service.project({
+      alert: alertRow(),
+      event: eventRow({ chain_id: 8453 }),
     });
 
     expect(result).toMatchObject({

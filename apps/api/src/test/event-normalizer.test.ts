@@ -16,6 +16,39 @@ function stubOracle(ethUsd: number | null = 3000): PriceOracle {
 }
 
 describe("event-normalizer", () => {
+  it("preserves a numeric zero arrayLength for an empty query result", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const result = await normalizer.normalize({
+      sourceEventId: "classified-empty-array",
+      eventType: "large_swap",
+      chainId: 1,
+      arrayLength: 0,
+      capturedAt: "2026-07-28T00:00:00Z",
+      magnitude: { value: 2_000_000, unit: "USD" },
+      rawPayload: { arrayLength: 0 },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payload.arrayLength).toBe(0);
+    expect(result.payload.rawPayload.arrayLength).toBe(0);
+  });
+
+  it("fails visibly when arrayLength is malformed instead of accepting a null result", async () => {
+    const normalizer = createEventNormalizer(stubOracle());
+    const result = await normalizer.normalize({
+      sourceEventId: "classified-malformed-array",
+      eventType: "large_swap",
+      chainId: 1,
+      arrayLength: null,
+      magnitude: { value: 2_000_000, unit: "USD" },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/arrayLength/);
+  });
+
   it("passes through classified Chronicle events", async () => {
     const normalizer = createEventNormalizer(stubOracle());
     const result = await normalizer.normalize({
@@ -281,7 +314,7 @@ describe("event-normalizer", () => {
     const result = await normalizer.normalize({
       chainId: 11_155_111,
       eventName: "Transfer",
-      address: "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
+      address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
       transactionHash: "0xtransfer-mint",
       logIndex: 3,
       args: {
@@ -304,7 +337,7 @@ describe("event-normalizer", () => {
     const result = await normalizer.normalize({
       chainId: 11_155_111,
       eventName: "Transfer",
-      address: "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
+      address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
       transactionHash: "0xtransfer-burn",
       logIndex: 4,
       args: {

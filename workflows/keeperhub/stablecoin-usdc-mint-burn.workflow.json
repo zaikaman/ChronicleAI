@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI USDC Mint/Burn Monitor (Telegram bridge)",
-  "description": "NEWSPAPER ONLY. FREE TIER: Schedule hourly → Query verified Circle USDC Mint and Burn on Ethereum Sepolia → size filter (~$1M+) → Telegram CHRONICLE_INGEST. Chronicle classifies as stablecoin_mint / stablecoin_burn."
+  "description": "NEWSPAPER ONLY. FREE TIER: Schedule hourly → Query verified Circle USDC Mint and Burn on Ethereum Mainnet → size filter (~$1M+) → Telegram CHRONICLE_INGEST. Chronicle classifies as stablecoin_mint / stablecoin_burn."
   },
   "nodes": [
     {
@@ -29,8 +29,8 @@
         "label": "Query USDC Mints",
         "config": {
           "actionType": "web3/query-events",
-          "network": "11155111",
-          "contractAddress": "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
+          "network": "1",
+          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
           "eventName": "Mint",
           "blockCount": "320",
           "abi": "[{\"type\":\"event\",\"name\":\"Mint\",\"inputs\":[{\"indexed\":true,\"name\":\"minter\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount\",\"type\":\"uint256\"}]}]"
@@ -74,7 +74,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "-1004373075093",
-        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Mint\",\"address\":\"0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238\",\"transactionHash\":\"{{@for-each-mint:For Each Mint.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-mint:For Each Mint.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-mint:For Each Mint.currentItem.logIndex}}\",\"args\":{\"minter\":\"{{@for-each-mint:For Each Mint.currentItem.args.minter}}\",\"to\":\"{{@for-each-mint:For Each Mint.currentItem.args.to}}\",\"amount\":\"{{@for-each-mint:For Each Mint.currentItem.args.amount}}\"},\"protocol\":\"Circle Sepolia USDC\"}}",
+        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Mint\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-mint:For Each Mint.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-mint:For Each Mint.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-mint:For Each Mint.currentItem.logIndex}}\",\"arrayLength\":{{@query-mints:Query USDC Mints.eventCount}},\"args\":{\"minter\":\"{{@for-each-mint:For Each Mint.currentItem.args.minter}}\",\"to\":\"{{@for-each-mint:For Each Mint.currentItem.args.to}}\",\"amount\":\"{{@for-each-mint:For Each Mint.currentItem.args.amount}}\"},\"protocol\":\"Circle Ethereum Mainnet USDC\"}}",
           "parseMode": "none"
         }
       }
@@ -88,8 +88,8 @@
         "label": "Query USDC Transfer Fallback",
         "config": {
           "actionType": "web3/query-events",
-          "network": "11155111",
-          "contractAddress": "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
+          "network": "1",
+          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
           "eventName": "Transfer",
           "blockCount": "320",
           "abi": "[{\"type\":\"event\",\"name\":\"Transfer\",\"inputs\":[{\"indexed\":true,\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"value\",\"type\":\"uint256\"}]}]"
@@ -133,7 +133,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "-1004373075093",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Transfer\",\"address\":\"0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.logIndex}}\",\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}}\"},\"protocol\":\"Circle Sepolia USDC\",\"fallback\":\"zero_address\"}}",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Transfer\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.logIndex}}\",\"arrayLength\":{{@query-transfers:Query USDC Transfer Fallback.eventCount}},\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}}\"},\"protocol\":\"Circle Ethereum Mainnet USDC\",\"fallback\":\"zero_address\"}}",
           "parseMode": "none"
         }
       }
@@ -161,7 +161,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "-1004373075093",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Transfer\",\"address\":\"0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.logIndex}}\",\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}}\"},\"protocol\":\"Circle Sepolia USDC\",\"fallback\":\"zero_address\"}}",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Transfer\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.logIndex}}\",\"arrayLength\":{{@query-transfers:Query USDC Transfer Fallback.eventCount}},\"args\":{\"from\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.from}}\",\"to\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.to}}\",\"value\":\"{{@for-each-transfer:For Each Transfer Fallback.currentItem.args.value}}\"},\"protocol\":\"Circle Ethereum Mainnet USDC\",\"fallback\":\"zero_address\"}}",
           "parseMode": "none"
         }
       }
@@ -175,8 +175,8 @@
         "label": "Query USDC Burns",
         "config": {
           "actionType": "web3/query-events",
-          "network": "11155111",
-          "contractAddress": "0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238",
+          "network": "1",
+          "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
           "eventName": "Burn",
           "blockCount": "320",
           "abi": "[{\"type\":\"event\",\"name\":\"Burn\",\"inputs\":[{\"indexed\":true,\"name\":\"burner\",\"type\":\"address\"},{\"indexed\":false,\"name\":\"amount\",\"type\":\"uint256\"}]}]"
@@ -220,7 +220,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "-1004373075093",
-        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":11155111,\"eventName\":\"Burn\",\"address\":\"0x1c7D4B196Cb0C7B01D743fBC6116a902379C7238\",\"transactionHash\":\"{{@for-each-burn:For Each Burn.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-burn:For Each Burn.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-burn:For Each Burn.currentItem.logIndex}}\",\"args\":{\"burner\":\"{{@for-each-burn:For Each Burn.currentItem.args.burner}}\",\"amount\":\"{{@for-each-burn:For Each Burn.currentItem.args.amount}}\"},\"protocol\":\"Circle Sepolia USDC\"}}",
+        "message": "CHRONICLE_INGEST v1\n{\"kind\":\"event\",\"payload\":{\"chainId\":1,\"eventName\":\"Burn\",\"address\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"transactionHash\":\"{{@for-each-burn:For Each Burn.currentItem.transactionHash}}\",\"blockNumber\":\"{{@for-each-burn:For Each Burn.currentItem.blockNumber}}\",\"logIndex\":\"{{@for-each-burn:For Each Burn.currentItem.logIndex}}\",\"arrayLength\":{{@query-burns:Query USDC Burns.eventCount}},\"args\":{\"burner\":\"{{@for-each-burn:For Each Burn.currentItem.args.burner}}\",\"amount\":\"{{@for-each-burn:For Each Burn.currentItem.args.amount}}\"},\"protocol\":\"Circle Ethereum Mainnet USDC\"}}",
           "parseMode": "none"
         }
       }
