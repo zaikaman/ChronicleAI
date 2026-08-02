@@ -6,6 +6,7 @@ import { EmptyState, LoadingState, RetryState } from "../../components/state-vie
 import { chainLabel } from "../../lib/explorer.ts";
 import { AlertCard } from "./AlertCard.tsx";
 import { AlertFilters, type AlertFiltersState } from "./AlertFilters.tsx";
+import { isAlertVisibleInPublicUi } from "./alert-visibility.ts";
 import { useAlerts } from "./use-alerts.ts";
 
 function formatEventTypeLabel(eventType: string): string {
@@ -28,7 +29,7 @@ export function AlertsPage(): ReactElement {
   );
 
   const visibleAlerts = useMemo(() => {
-    return alerts.filter((alert) => alert.deliveryStatus !== "draft");
+    return alerts.filter(isAlertVisibleInPublicUi);
   }, [alerts]);
 
   const eventTypeOptions = useMemo(() => {

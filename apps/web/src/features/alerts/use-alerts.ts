@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { apiGetJson, toErrorMessage } from "../../lib/api.ts";
 import { EMPTY_PAGINATION, normalizePaginationMeta } from "../../lib/pagination.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
+import { isAlertVisibleInPublicUi } from "./alert-visibility.ts";
 
 export interface AlertsState {
   alerts: PublicAlertResponse[];
@@ -104,7 +105,7 @@ async function fetchAlertsPage(
     pagination?: unknown;
   }>("/alerts", { signal, params: { page, limit, ...(chainId ? { chainId } : {}) } });
 
-  const items = (data.items ?? []).map(mapAlert);
+  const items = (data.items ?? []).map(mapAlert).filter(isAlertVisibleInPublicUi);
   return {
     alerts: items,
     pagination: normalizePaginationMeta(data.pagination, {

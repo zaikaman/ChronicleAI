@@ -190,6 +190,7 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       const limit = Math.min(100, Math.max(1, limitParam));
 
       let query = table().select(ALERT_WITH_EVENT_SELECT);
+      query = query.neq("delivery_status", "queued");
       if (filters?.chainId !== undefined) query = query.eq("chain_id", filters.chainId);
       if (filters?.alertKind) query = query.eq("alert_kind", filters.alertKind);
       if (filters?.signalStatus) query = query.eq("signal_status", filters.signalStatus);
@@ -215,6 +216,7 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       });
 
       let query = table().select(ALERT_WITH_EVENT_SELECT, { count: "exact" });
+      query = query.neq("delivery_status", "queued");
       if (params?.chainId !== undefined) query = query.eq("chain_id", params.chainId);
       if (params?.alertKind) query = query.eq("alert_kind", params.alertKind);
       if (params?.signalStatus) query = query.eq("signal_status", params.signalStatus);

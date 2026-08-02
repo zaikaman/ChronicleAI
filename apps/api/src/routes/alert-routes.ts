@@ -287,7 +287,11 @@ export function createAlertRoutes(
         res.status(400).json({ error: scope.error });
         return;
       }
-      if ((alert.chain_id ?? null) !== scope.chainId || alert.delivery_status === "draft") {
+      if (
+        (alert.chain_id ?? null) !== scope.chainId ||
+        alert.delivery_status === "draft" ||
+        alert.delivery_status === "queued"
+      ) {
         next(notFound("Alert not found"));
         return;
       }

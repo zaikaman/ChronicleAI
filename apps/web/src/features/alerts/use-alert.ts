@@ -4,6 +4,7 @@ import type { PublicAlertResponse } from "@chronicleai/schemas";
 import { useQuery } from "@tanstack/react-query";
 import { apiGetJson, isNotFoundError, toErrorMessage } from "../../lib/api.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
+import { isAlertVisibleInPublicUi } from "./alert-visibility.ts";
 
 export type AlertDetailState =
   | { status: "loading" }
@@ -108,8 +109,10 @@ export function useAlert(alertId: string | undefined): {
     state = isNotFoundError(query.error)
       ? { status: "not-found" }
       : { status: "error", error: toErrorMessage(query.error, "Failed to fetch alert") };
-  } else if (query.data) {
+  } else if (query.data && isAlertVisibleInPublicUi(query.data)) {
     state = { status: "success", data: query.data };
+  } else if (query.data) {
+    state = { status: "not-found" };
   } else {
     state = { status: "loading" };
   }

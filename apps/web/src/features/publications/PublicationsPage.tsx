@@ -10,6 +10,7 @@ import {
 } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { isAlertVisibleInPublicUi } from "../alerts/alert-visibility.ts";
 import { useAlerts } from "../alerts/use-alerts.ts";
 import { useDigests } from "../digests/use-digests.ts";
 import { usePremiumTeasers } from "../premium/use-premium.ts";
@@ -132,7 +133,7 @@ export function PublicationsPage(): ReactElement {
   } = usePremiumTeasers(undefined, 10);
 
   const visibleAlerts = useMemo(
-    () => alerts.filter((alert) => alert.deliveryStatus !== "draft"),
+    () => alerts.filter(isAlertVisibleInPublicUi),
     [alerts],
   );
 
