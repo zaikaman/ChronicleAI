@@ -108,10 +108,10 @@ The core demo uses one Alert→Signal→Action path. The repository includes 33 
 | Desk Oracle Arbitrage | Uniswap V3 swap via KeeperHub private route | [0xf7c52b28…0a3d0b6](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) |
 | Desk Yield Rotation | Uniswap LINK→USDC swap via KeeperHub | [0xa6ccb246…51279d2a](https://sepolia.etherscan.io/tx/0xa6ccb2467f04e4159a0219fba7a3de307a2e196487cc6242d80493b851279d2a) |
 | Desk Treasury Sweep | Treasury transfer workflow | [0xe779d061…22daec](https://sepolia.etherscan.io/tx/0xe779d061163f8dc24b76e203fa478c38eeb6e7cc2ee75936cbba6ccc1922daec) |
-| Daily Digest | `ChronicleRegistry.publishDigest` | [0x763d66cc…b54402](https://sepolia.etherscan.io/tx/0x763d66cc087c6d1ed6258b1d4f7a0a3d77977db23618529172d79af3aeb54402) |
-| Intelligence Alert | `ChronicleRegistry.publishAlert` | [0xba4e9a2e…580107](https://sepolia.etherscan.io/tx/0xba4e9a2edb82ed3bc2c43ebb3db4ad3a089aa5c93552c49b89484d0d47580107) |
+| Daily Digest | `ChronicleRegistry.publishDigest` | [0xe25efe40…38d204](https://sepolia.etherscan.io/tx/0xe25efe406b08c852aafdca4b990d02c480707fd0c814c0bca852c679ed38d204) |
+| Intelligence Alert | `ChronicleRegistry.publishAlert` | [0x4acf30c4…bcc62f6a](https://sepolia.etherscan.io/tx/0x4acf30c4948dd0ddcde8c1377af22fc1c6acd01662b7470a785ae293bcc62f6a) |
 | Desk Capital Top-up | `recordCapitalMove` workflow | [0x32bb346e…d80f31](https://sepolia.etherscan.io/tx/0x32bb346e10c8143cd61ac512a83aa653915d972637f8565e08e47c38e2d80f31) |
-| Trade Ticket | `ChronicleRegistry.recordTradeTicket` | [0xe3ec19ab…a358a0d](https://sepolia.etherscan.io/tx/0xe3ec19aba7cb0dea4b33a9af1c50438c82b4cd1eaaa2f7ec9f903c6a6a358a0d) |
+| Trade Ticket | `ChronicleRegistry.recordTradeTicket` | [0xaf1c821f…a1952](https://sepolia.etherscan.io/tx/0xaf1c821f6edbd78af9f6f63d0a982d311d5db05dc217db3787a61179ca4a1952) |
 | Capital Move | `ChronicleRegistry.recordCapitalMove` | [0x254764d5…172c5](https://sepolia.etherscan.io/tx/0x254764d54457a753ad1e2ff6f3e9dec483bfcbdfa7f56a0630ddba0753b172c5) |
 | x402 Premium Receipt | `recordPremiumReceipt` | [0x6e798e84…8687d7](https://sepolia.etherscan.io/tx/0x6e798e84fb52b2a4c5b0d1755e071e647be83ed477b9780ca23d9d5c738687d7) |
 | MPP Premium Receipt | `recordPremiumReceipt` | [0x881691e5…be4b](https://sepolia.etherscan.io/tx/0x881691e5ce03e68524ab6ce2e4d2519d051ddc77438eb79240985ac76393be4b) |
