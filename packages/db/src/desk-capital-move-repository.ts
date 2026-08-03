@@ -21,6 +21,8 @@ export interface DeskCapitalMoveRepository {
   create(data: DeskCapitalMoveInsert): Promise<Result<DeskCapitalMoveRow>>;
   update(id: string, updates: DeskCapitalMoveUpdate): Promise<Result<DeskCapitalMoveRow>>;
   findById(id: string): Promise<Result<DeskCapitalMoveRow | null>>;
+  /** Find an existing move by its funding transaction hash. */
+  findByTxHash?(txHash: string): Promise<Result<DeskCapitalMoveRow | null>>;
   findLatestByDirection(
     direction: DeskCapitalDirection,
   ): Promise<Result<DeskCapitalMoveRow | null>>;
@@ -90,6 +92,13 @@ export function createDeskCapitalMoveRepository(
 
     async findById(id) {
       const { data, error } = await table().select("*").eq("id", id).limit(1);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(maybeRow((data ?? []) as DeskCapitalMoveRow[]));
+    },
+
+    async findByTxHash(txHash) {
+      const { data, error } = await table().select("*").eq("tx_hash", txHash).limit(1);
 
       if (error) return failure(mapPostgrestError(error));
       return success(maybeRow((data ?? []) as DeskCapitalMoveRow[]));

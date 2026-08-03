@@ -13,6 +13,8 @@ import type { ServerEnv } from "@chronicleai/config";
 import { ParaRestClient } from "@getpara/rest-sdk";
 import { createParaRestViemAccount } from "@getpara/rest-sdk/viem";
 import {
+  decodeEventLog,
+  formatUnits,
   http,
   type Address,
   type Hash,
@@ -171,6 +173,14 @@ export interface Web3Client {
     idempotencyKey?: string,
   ): Promise<OnChainWriteReceipt>;
 
+  /** Verify the receipt contains the exact expected treasury → desk USDC transfer. */
+  verifyTransfer?(
+    txHash: string,
+    expectedFrom: string,
+    expectedTo: string,
+    amountUsdc: number,
+  ): Promise<TransferVerification>;
+
   /** Send an affiliate payout on the x402 payment rail (Base Sepolia by default). */
   sendAffiliateTransfer?(
     to: string,
@@ -195,6 +205,83 @@ const VIEM_REGISTRY_ABI = parseAbi([
 const ERC20_TRANSFER_ABI = parseAbi([
   "function transfer(address to, uint256 amount) returns (bool)",
 ]);
+
+const ERC20_TRANSFER_EVENT_ABI = parseAbi([
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+]);
+
+export interface TransferVerification {
+  valid: boolean;
+  actualFrom?: string;
+  actualTo?: string;
+  actualAmountUsdc?: number;
+  error?: string;
+}
+
+async function verifyErc20Transfer(input: {
+  rpcUrl?: string;
+  network: string;
+  usdcAddress: string;
+  txHash: string;
+  expectedFrom: string;
+  expectedTo: string;
+  amountUsdc: number;
+}): Promise<TransferVerification> {
+  if (!input.rpcUrl?.trim()) {
+    return { valid: false, error: "RPC_URL is required to verify treasury transfers" };
+  }
+
+  try {
+    const chain = chainFromId(mapNetworkToChainId(input.network, 11_155_111));
+    const client = createPublicClient({ chain, transport: http(input.rpcUrl) });
+    const receipt = await client.getTransactionReceipt({ hash: input.txHash as Hash });
+    if (receipt.status !== "success") {
+      return { valid: false, error: `Transfer transaction ${input.txHash} was not successful` };
+    }
+
+    const expectedToken = input.usdcAddress.toLowerCase();
+    const expectedFrom = input.expectedFrom.toLowerCase();
+    const expectedTo = input.expectedTo.toLowerCase();
+    const expectedAmount = parseUnits(String(input.amountUsdc), 6);
+    const transfers = receipt.logs
+      .filter((log) => log.address.toLowerCase() === expectedToken)
+      .flatMap((log) => {
+        try {
+          const decoded = decodeEventLog({
+            abi: ERC20_TRANSFER_EVENT_ABI,
+            data: log.data,
+            topics: log.topics,
+          });
+          if (decoded.eventName !== "Transfer") return [];
+          return [{ from: decoded.args.from, to: decoded.args.to, amount: decoded.args.value }];
+        } catch {
+          return [];
+        }
+      });
+    const match = transfers.find(
+      (transfer) =>
+        transfer.from.toLowerCase() === expectedFrom &&
+        transfer.to.toLowerCase() === expectedTo &&
+        transfer.amount === expectedAmount,
+    );
+    if (match) return { valid: true };
+
+    const observed = transfers[0];
+    return {
+      valid: false,
+      ...(observed
+        ? {
+            actualFrom: observed.from,
+            actualTo: observed.to,
+            actualAmountUsdc: Number(formatUnits(observed.amount, 6)),
+          }
+        : {}),
+      error: `Expected ${input.amountUsdc} USDC from ${input.expectedFrom} to ${input.expectedTo}, but the receipt did not contain that transfer`,
+    };
+  } catch (error) {
+    return { valid: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 function asBytes32(value: string): Hex {
   return toBytes32Hash(value) as Hex;
@@ -426,13 +513,24 @@ function createHybridParaKeeperHubWeb3Client(
       kh.recordCapitalMove(moveId, from, to, amountUsdc, reasonHash),
 
     /** Every demo-visible treasury transfer must execute through KeeperHub. */
-    async sendTransfer(to, amountUsdc) {
+    async sendTransfer(to, amountUsdc, idempotencyKey) {
       if (!(amountUsdc > 0) || !Number.isFinite(amountUsdc)) {
         throw new Error(`Invalid USDC transfer amount: ${amountUsdc}`);
       }
       console.info(`[web3] Treasury transfer ${amountUsdc} USDC → public KeeperHub workflow path`);
-      return kh.sendTransfer(to, amountUsdc);
+      return kh.sendTransfer(to, amountUsdc, idempotencyKey);
     },
+
+    verifyTransfer: (txHash, expectedFrom, expectedTo, amountUsdc) =>
+      verifyErc20Transfer({
+        rpcUrl: env.rpcUrl,
+        network: env.keeperhubNetwork,
+        usdcAddress: env.deskUsdcAddress,
+        txHash,
+        expectedFrom,
+        expectedTo,
+        amountUsdc,
+      }),
 
     sendAffiliateTransfer: (to, amountUsdc) => affiliateKh.sendTransfer(to, amountUsdc),
   };
@@ -619,6 +717,16 @@ function createParaWeb3Client(
 
     sendTransfer: (to, amountUsdc, idempotencyKey) =>
       paraClient.sendTransfer(to, amountUsdc.toString(), idempotencyKey),
+    verifyTransfer: (txHash, expectedFrom, expectedTo, amountUsdc) =>
+      verifyErc20Transfer({
+        rpcUrl: env.rpcUrl,
+        network: env.keeperhubNetwork,
+        usdcAddress: env.deskUsdcAddress,
+        txHash,
+        expectedFrom,
+        expectedTo,
+        amountUsdc,
+      }),
     ...(affiliateParaClient
       ? {
           sendAffiliateTransfer: (to: string, amountUsdc: number, idempotencyKey?: string) =>
@@ -707,6 +815,16 @@ function createKeeperHubBackedWeb3Client(
       kh.recordCapitalMove(moveId, from, to, amountUsdc, reasonHash),
     sendTransfer: (to, amountUsdc, idempotencyKey) =>
       kh.sendTransfer(to, amountUsdc, idempotencyKey),
+    verifyTransfer: (txHash, expectedFrom, expectedTo, amountUsdc) =>
+      verifyErc20Transfer({
+        rpcUrl: env.rpcUrl,
+        network: env.keeperhubNetwork,
+        usdcAddress: env.deskUsdcAddress,
+        txHash,
+        expectedFrom,
+        expectedTo,
+        amountUsdc,
+      }),
     sendAffiliateTransfer: (to, amountUsdc, idempotencyKey) =>
       affiliateKh.sendTransfer(to, amountUsdc, idempotencyKey),
   };
@@ -919,6 +1037,17 @@ function createDirectEoaWeb3Client(env: ServerEnv): Web3Client {
         explorerUrl: explorerUrlFor(receipt.transactionHash, network),
       };
     },
+
+    verifyTransfer: (txHash, expectedFrom, expectedTo, amountUsdc) =>
+      verifyErc20Transfer({
+        rpcUrl,
+        network,
+        usdcAddress: env.deskUsdcAddress,
+        txHash,
+        expectedFrom,
+        expectedTo,
+        amountUsdc,
+      }),
   };
 }
 

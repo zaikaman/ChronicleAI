@@ -3,6 +3,7 @@
  * Decisions are pure policy; execution uses real Para / KeeperHub clients only.
  */
 
+import { randomUUID } from "node:crypto";
 import type {
   DeskCapitalMoveRepository,
   DeskCapitalMoveRow,
@@ -875,18 +876,23 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
       let explorerUrl: string | undefined;
       let keeperHubRunId: string | undefined;
       let transferPath: TreasuryTransferPath | "web3" | "para" | undefined;
+      const transferIdempotencyKey = `chronicle-desk-topup-${randomUUID()}`;
 
       // Every demo-visible top-up uses the KeeperHub-backed Web3 facade when it
       // is available; Para is only a fallback for non-KeeperHub dev/test clients.
       if (web3 && (web3.isKeeperHubBacked() || !paraTreasury)) {
         transferPath = web3.isKeeperHubBacked() ? "keeperhub" : "web3";
-        const receipt = await web3.sendTransfer(desk, amountUsdc);
+        const receipt = await web3.sendTransfer(desk, amountUsdc, transferIdempotencyKey);
         txHash = receipt.txHash;
         explorerUrl = receipt.explorerUrl;
         keeperHubRunId = receipt.keeperHubRunId;
       } else if (paraTreasury) {
         transferPath = "para";
-        const receipt = await paraTreasury.sendTransfer(desk, amountUsdc.toString());
+        const receipt = await paraTreasury.sendTransfer(
+          desk,
+          amountUsdc.toString(),
+          transferIdempotencyKey,
+        );
         txHash = receipt.txHash;
         explorerUrl = receipt.explorerUrl;
         keeperHubRunId = receipt.keeperHubRunId;
@@ -928,6 +934,86 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
           decision: { action: "topup", amountUsdc, reason, direction: "topup" },
           errorMessage,
         };
+      }
+
+      if (web3?.isKeeperHubBacked()) {
+        if (!web3.verifyTransfer) {
+          const errorMessage = "KeeperHub transfer verification is not configured";
+          await logCapitalOutcome({
+            status: "failed",
+            message: errorMessage,
+            direction: "topup",
+            amountUsdc,
+            reason,
+            startedAt,
+            details: { reason: "transfer_verifier_unavailable", tx_hash: txHash },
+          });
+          return {
+            decision: { action: "topup", amountUsdc, reason, direction: "topup" },
+            txHash,
+            explorerUrl,
+            keeperHubRunId,
+            errorMessage,
+          };
+        }
+
+        const verification = await web3.verifyTransfer(
+          txHash,
+          treasury,
+          desk,
+          amountUsdc,
+        );
+        if (!verification.valid) {
+          const errorMessage = verification.error ?? "KeeperHub transfer receipt validation failed";
+          await logCapitalOutcome({
+            status: "failed",
+            message: errorMessage,
+            direction: "topup",
+            amountUsdc,
+            reason,
+            startedAt,
+            details: {
+              reason: "transfer_receipt_mismatch",
+              tx_hash: txHash,
+              expected_from: treasury,
+              expected_to: desk,
+              actual_from: verification.actualFrom ?? null,
+              actual_to: verification.actualTo ?? null,
+              actual_amount_usdc: verification.actualAmountUsdc ?? null,
+            },
+          });
+          return {
+            decision: { action: "topup", amountUsdc, reason, direction: "topup" },
+            txHash,
+            explorerUrl,
+            keeperHubRunId,
+            errorMessage,
+          };
+        }
+      }
+
+      if (capitalMoves.findByTxHash) {
+        const existing = await capitalMoves.findByTxHash(txHash);
+        if (!existing.ok) throw existing.error;
+        if (existing.value) {
+          await logCapitalOutcome({
+            status: "succeeded",
+            message: `Desk capital top-up already recorded (${amountUsdc} USDC)`,
+            direction: "topup",
+            amountUsdc,
+            reason,
+            entityId: existing.value.id,
+            startedAt,
+            details: { tx_hash: txHash, duplicate: true },
+          });
+          return {
+            decision: { action: "topup", amountUsdc, reason, direction: "topup" },
+            move: existing.value,
+            txHash,
+            explorerUrl,
+            keeperHubRunId,
+          };
+        }
       }
 
       const move = await recordMove({

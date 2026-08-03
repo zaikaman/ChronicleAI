@@ -122,6 +122,7 @@ describe("capital manager top-up path selection", () => {
 
     const web3 = {
       sendTransfer: web3Send,
+      verifyTransfer: vi.fn().mockResolvedValue({ valid: true }),
       isKeeperHubBacked: () => true,
       isParaTreasuryBacked: () => true,
     } as unknown as Web3Client;
@@ -138,7 +139,11 @@ describe("capital manager top-up path selection", () => {
 
     const result = await manager.executeTopup(75, "test_large_topup");
     expect(result.errorMessage).toBeUndefined();
-    expect(web3Send).toHaveBeenCalledWith(desk.toLowerCase(), 75);
+    expect(web3Send).toHaveBeenCalledWith(
+      desk.toLowerCase(),
+      75,
+      expect.stringMatching(/^chronicle-desk-topup-/),
+    );
     expect(paraSend).not.toHaveBeenCalled();
     expect(result.keeperHubRunId).toBe("run-kh-1");
     expect(result.txHash).toBe("0xabc");
@@ -163,6 +168,7 @@ describe("capital manager top-up path selection", () => {
       paraTreasury: { sendTransfer: paraSend } as unknown as ParaTreasuryClient,
       web3: {
         sendTransfer: web3Send,
+        verifyTransfer: vi.fn().mockResolvedValue({ valid: true }),
         isKeeperHubBacked: () => true,
         isParaTreasuryBacked: () => true,
       } as unknown as Web3Client,
@@ -171,7 +177,11 @@ describe("capital manager top-up path selection", () => {
 
     const result = await manager.executeTopup(10, "test_small_topup");
     expect(result.errorMessage).toBeUndefined();
-    expect(web3Send).toHaveBeenCalledWith(desk.toLowerCase(), 10);
+    expect(web3Send).toHaveBeenCalledWith(
+      desk.toLowerCase(),
+      10,
+      expect.stringMatching(/^chronicle-desk-topup-/),
+    );
     expect(paraSend).not.toHaveBeenCalled();
   });
 
@@ -188,6 +198,7 @@ describe("capital manager top-up path selection", () => {
       capitalMoves: mockCapitalMoves() as never,
       web3: {
         sendTransfer: web3Send,
+        verifyTransfer: vi.fn().mockResolvedValue({ valid: true }),
         isKeeperHubBacked: () => true,
         isParaTreasuryBacked: () => false,
       } as unknown as Web3Client,
@@ -196,6 +207,40 @@ describe("capital manager top-up path selection", () => {
 
     const result = await manager.executeTopup(5, "test_web3_only");
     expect(result.errorMessage).toBeUndefined();
-    expect(web3Send).toHaveBeenCalledWith(desk.toLowerCase(), 5);
+    expect(web3Send).toHaveBeenCalledWith(
+      desk.toLowerCase(),
+      5,
+      expect.stringMatching(/^chronicle-desk-topup-/),
+    );
+  });
+
+  it("rejects a KeeperHub receipt that is not treasury to desk", async () => {
+    const capitalMoves = mockCapitalMoves();
+    const web3Send = vi.fn().mockResolvedValue({
+      txHash: "0xwrong-transfer",
+      keeperHubRunId: "run-wrong-transfer",
+    });
+
+    const manager = createCapitalManager({
+      config: policy(),
+      deskWalletAddress: desk,
+      treasuryAddress: treasury,
+      capitalMoves: capitalMoves as never,
+      web3: {
+        sendTransfer: web3Send,
+        verifyTransfer: vi.fn().mockResolvedValue({
+          valid: false,
+          error: "Observed desk-to-desk transfer",
+        }),
+        isKeeperHubBacked: () => true,
+        isParaTreasuryBacked: () => false,
+      } as unknown as Web3Client,
+      treasuryPrivateTransferThresholdUsdc: 50,
+    });
+
+    const result = await manager.executeTopup(10, "test_wrong_transfer");
+
+    expect(result.errorMessage).toBe("Observed desk-to-desk transfer");
+    expect(capitalMoves.create).not.toHaveBeenCalled();
   });
 });
