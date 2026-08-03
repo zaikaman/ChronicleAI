@@ -152,7 +152,7 @@ describe("routing-metadata", () => {
   describe("treasury transfer path selection", () => {
     const threshold = 50;
 
-    it("uses the public KeeperHub path regardless of amount", () => {
+    it("uses the Para treasury signer regardless of amount when available", () => {
       expect(
         selectTreasuryTransferPath({
           amountUsdc: 50,
@@ -160,7 +160,7 @@ describe("routing-metadata", () => {
           keeperHubTransferConfigured: true,
           paraAvailable: true,
         }),
-      ).toBe("keeperhub");
+      ).toBe("para");
       expect(
         selectTreasuryTransferPath({
           amountUsdc: 15200,
@@ -168,10 +168,10 @@ describe("routing-metadata", () => {
           keeperHubTransferConfigured: true,
           paraAvailable: true,
         }),
-      ).toBe("keeperhub");
+      ).toBe("para");
     });
 
-    it("routes every configured transfer through KeeperHub, including below threshold", () => {
+    it("routes every transfer through Para, including below threshold", () => {
       expect(
         selectTreasuryTransferPath({
           amountUsdc: 12.5,
@@ -179,7 +179,7 @@ describe("routing-metadata", () => {
           keeperHubTransferConfigured: true,
           paraAvailable: true,
         }),
-      ).toBe("keeperhub");
+      ).toBe("para");
       expect(
         selectTreasuryTransferPath({
           amountUsdc: 49.99,
@@ -187,18 +187,18 @@ describe("routing-metadata", () => {
           keeperHubTransferConfigured: true,
           paraAvailable: true,
         }),
-      ).toBe("keeperhub");
+      ).toBe("para");
     });
 
-    it("throws when Para is the only direct transfer path", () => {
-      expect(() =>
+    it("uses Para when KeeperHub is unavailable", () => {
+      expect(
         selectTreasuryTransferPath({
           amountUsdc: 100,
           thresholdUsdc: threshold,
           keeperHubTransferConfigured: false,
           paraAvailable: true,
         }),
-      ).toThrow(/KeeperHub transfer workflow is required/);
+      ).toBe("para");
     });
 
     it("uses keeperhub when Para unavailable and KH transfer configured", () => {

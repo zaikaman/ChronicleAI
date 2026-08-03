@@ -66,15 +66,9 @@ export interface CapitalManagerDeps {
   deskWalletAddress: string;
   treasuryAddress: string;
   capitalMoves: DeskCapitalMoveRepository;
-  /**
-   * Para MPC treasury client (small top-ups when web3 hybrid is absent, or
-   * when the KeeperHub-backed public transfer path is unavailable).
-   */
+  /** Para MPC treasury signer used for desk top-ups. */
   paraTreasury?: ParaTreasuryClient | null;
-  /**
-   * Preferred treasury transfer surface. Hybrid web3 uses the public KeeperHub
-   * transfer workflow when configured. Use when available.
-   */
+  /** Web3 client used for receipt verification and non-KeeperHub fallback transfers. */
   web3?: Web3Client | null;
   /** KH bridge for desk → treasury sweep / emergency (always private + strict). */
   executionBridge?: ExecutionBridge | null;
@@ -84,11 +78,7 @@ export interface CapitalManagerDeps {
   execLogRepo?: ExecutionLogRepository | null;
   /** Kill-switch arm flag (hydrated from desk_control_state; routes set this). */
   isKillSwitchArmed?: () => boolean;
-  /**
-   * USDC notional at/above which top-ups must not use Para alone when a
-   * KeeperHub-backed web3 transfer path exists.
-   * Env: TREASURY_PRIVATE_TRANSFER_THRESHOLD_USDC (default 50).
-   */
+  /** Legacy routing threshold retained for API compatibility. */
   treasuryPrivateTransferThresholdUsdc?: number;
 }
 
@@ -878,15 +868,26 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
       let transferPath: TreasuryTransferPath | "web3" | "para" | undefined;
       const transferIdempotencyKey = `chronicle-desk-topup-${randomUUID()}`;
 
-      // Every demo-visible top-up uses the KeeperHub-backed Web3 facade when it
-      // is available; Para is only a fallback for non-KeeperHub dev/test clients.
-      if (web3 && (web3.isKeeperHubBacked() || !paraTreasury)) {
-        transferPath = web3.isKeeperHubBacked() ? "keeperhub" : "web3";
-        const receipt = await web3.sendTransfer(desk, amountUsdc, transferIdempotencyKey);
-        txHash = receipt.txHash;
-        explorerUrl = receipt.explorerUrl;
-        keeperHubRunId = receipt.keeperHubRunId;
-      } else if (paraTreasury) {
+      if (!web3?.verifyTransfer) {
+        const errorMessage = "Treasury transfer verification is not configured";
+        await logCapitalOutcome({
+          status: "failed",
+          message: errorMessage,
+          direction: "topup",
+          amountUsdc,
+          reason,
+          startedAt,
+          details: { reason: "transfer_verifier_unavailable" },
+        });
+        return {
+          decision: { action: "topup", amountUsdc, reason, direction: "topup" },
+          errorMessage,
+        };
+      }
+
+      // KeeperHub's configured transfer workflow is desk-signed, so it cannot
+      // move funds out of the treasury. Use the Para MPC treasury signer first.
+      if (paraTreasury) {
         transferPath = "para";
         const receipt = await paraTreasury.sendTransfer(
           desk,
@@ -896,9 +897,16 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
         txHash = receipt.txHash;
         explorerUrl = receipt.explorerUrl;
         keeperHubRunId = receipt.keeperHubRunId;
+      } else if (web3 && !web3.isKeeperHubBacked()) {
+        transferPath = "web3";
+        const receipt = await web3.sendTransfer(desk, amountUsdc, transferIdempotencyKey);
+        txHash = receipt.txHash;
+        explorerUrl = receipt.explorerUrl;
+        keeperHubRunId = receipt.keeperHubRunId;
       } else {
-        const errorMessage =
-          "No treasury transfer client configured (Para MPC or Web3/KeeperHub transfer)";
+        const errorMessage = web3?.isKeeperHubBacked()
+          ? "KeeperHub transfer workflow is desk-signed; configure the Para treasury signer for top-ups"
+          : "No treasury transfer client configured (Para MPC or non-KeeperHub Web3 transfer)";
         await logCapitalOutcome({
           status: "failed",
           message: errorMessage,
@@ -936,60 +944,38 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
         };
       }
 
-      if (web3?.isKeeperHubBacked()) {
-        if (!web3.verifyTransfer) {
-          const errorMessage = "KeeperHub transfer verification is not configured";
-          await logCapitalOutcome({
-            status: "failed",
-            message: errorMessage,
-            direction: "topup",
-            amountUsdc,
-            reason,
-            startedAt,
-            details: { reason: "transfer_verifier_unavailable", tx_hash: txHash },
-          });
-          return {
-            decision: { action: "topup", amountUsdc, reason, direction: "topup" },
-            txHash,
-            explorerUrl,
-            keeperHubRunId,
-            errorMessage,
-          };
-        }
-
-        const verification = await web3.verifyTransfer(
+      const verification = await web3.verifyTransfer(
           txHash,
           treasury,
           desk,
           amountUsdc,
         );
-        if (!verification.valid) {
-          const errorMessage = verification.error ?? "KeeperHub transfer receipt validation failed";
-          await logCapitalOutcome({
-            status: "failed",
-            message: errorMessage,
-            direction: "topup",
-            amountUsdc,
-            reason,
-            startedAt,
-            details: {
-              reason: "transfer_receipt_mismatch",
-              tx_hash: txHash,
-              expected_from: treasury,
-              expected_to: desk,
-              actual_from: verification.actualFrom ?? null,
-              actual_to: verification.actualTo ?? null,
-              actual_amount_usdc: verification.actualAmountUsdc ?? null,
-            },
-          });
-          return {
-            decision: { action: "topup", amountUsdc, reason, direction: "topup" },
-            txHash,
-            explorerUrl,
-            keeperHubRunId,
-            errorMessage,
-          };
-        }
+      if (!verification.valid) {
+        const errorMessage = verification.error ?? "Treasury transfer receipt validation failed";
+        await logCapitalOutcome({
+          status: "failed",
+          message: errorMessage,
+          direction: "topup",
+          amountUsdc,
+          reason,
+          startedAt,
+          details: {
+            reason: "transfer_receipt_mismatch",
+            tx_hash: txHash,
+            expected_from: treasury,
+            expected_to: desk,
+            actual_from: verification.actualFrom ?? null,
+            actual_to: verification.actualTo ?? null,
+            actual_amount_usdc: verification.actualAmountUsdc ?? null,
+          },
+        });
+        return {
+          decision: { action: "topup", amountUsdc, reason, direction: "topup" },
+          txHash,
+          explorerUrl,
+          keeperHubRunId,
+          errorMessage,
+        };
       }
 
       if (capitalMoves.findByTxHash) {

@@ -94,12 +94,12 @@ describe("resolveTreasuryTransferPath / isKeeperHubTransferConfigured", () => {
     ).toBe(false);
   });
 
-  it("selects public KeeperHub at every amount when fully configured", () => {
+  it("selects Para MPC at every amount when available", () => {
     expect(resolveTreasuryTransferPath(baseEnv(), 50, { paraAvailable: true })).toBe(
-      "keeperhub",
+      "para",
     );
     expect(resolveTreasuryTransferPath(baseEnv(), 12, { paraAvailable: true })).toBe(
-      "keeperhub",
+      "para",
     );
   });
 });
@@ -108,8 +108,11 @@ describe("capital manager top-up path selection", () => {
   const desk = "0x1111111111111111111111111111111111111111";
   const treasury = "0x2222222222222222222222222222222222222222";
 
-  it("routes large top-up through web3 (KH-backed) not Para alone", async () => {
-    const paraSend = vi.fn();
+  it("routes large top-up through the Para treasury signer when KH is also configured", async () => {
+    const paraSend = vi.fn().mockResolvedValue({
+      txHash: "0xpara-large",
+      explorerUrl: "https://sepolia.etherscan.io/tx/0xpara-large",
+    });
     const web3Send = vi.fn().mockResolvedValue({
       txHash: "0xabc",
       explorerUrl: "https://sepolia.etherscan.io/tx/0xabc",
@@ -139,17 +142,17 @@ describe("capital manager top-up path selection", () => {
 
     const result = await manager.executeTopup(75, "test_large_topup");
     expect(result.errorMessage).toBeUndefined();
-    expect(web3Send).toHaveBeenCalledWith(
+    expect(paraSend).toHaveBeenCalledWith(
       desk.toLowerCase(),
-      75,
+      "75",
       expect.stringMatching(/^chronicle-desk-topup-/),
     );
-    expect(paraSend).not.toHaveBeenCalled();
-    expect(result.keeperHubRunId).toBe("run-kh-1");
-    expect(result.txHash).toBe("0xabc");
+    expect(web3Send).not.toHaveBeenCalled();
+    expect(result.keeperHubRunId).toBeUndefined();
+    expect(result.txHash).toBe("0xpara-large");
   });
 
-  it("routes small top-ups through KeeperHub when both clients exist", async () => {
+  it("routes small top-ups through Para when both clients exist", async () => {
     const paraSend = vi.fn().mockResolvedValue({
       txHash: "0xpara",
       explorerUrl: "https://sepolia.etherscan.io/tx/0xpara",
@@ -177,15 +180,15 @@ describe("capital manager top-up path selection", () => {
 
     const result = await manager.executeTopup(10, "test_small_topup");
     expect(result.errorMessage).toBeUndefined();
-    expect(web3Send).toHaveBeenCalledWith(
+    expect(paraSend).toHaveBeenCalledWith(
       desk.toLowerCase(),
-      10,
+      "10",
       expect.stringMatching(/^chronicle-desk-topup-/),
     );
-    expect(paraSend).not.toHaveBeenCalled();
+    expect(web3Send).not.toHaveBeenCalled();
   });
 
-  it("uses web3 when Para is absent even for small amounts", async () => {
+  it("uses non-KeeperHub web3 when Para is absent", async () => {
     const web3Send = vi.fn().mockResolvedValue({
       txHash: "0xweb3",
       keeperHubRunId: "run-2",
@@ -199,7 +202,7 @@ describe("capital manager top-up path selection", () => {
       web3: {
         sendTransfer: web3Send,
         verifyTransfer: vi.fn().mockResolvedValue({ valid: true }),
-        isKeeperHubBacked: () => true,
+        isKeeperHubBacked: () => false,
         isParaTreasuryBacked: () => false,
       } as unknown as Web3Client,
       treasuryPrivateTransferThresholdUsdc: 50,
@@ -214,11 +217,10 @@ describe("capital manager top-up path selection", () => {
     );
   });
 
-  it("rejects a KeeperHub receipt that is not treasury to desk", async () => {
+  it("rejects a treasury receipt that is not treasury to desk", async () => {
     const capitalMoves = mockCapitalMoves();
-    const web3Send = vi.fn().mockResolvedValue({
+    const paraSend = vi.fn().mockResolvedValue({
       txHash: "0xwrong-transfer",
-      keeperHubRunId: "run-wrong-transfer",
     });
 
     const manager = createCapitalManager({
@@ -226,8 +228,8 @@ describe("capital manager top-up path selection", () => {
       deskWalletAddress: desk,
       treasuryAddress: treasury,
       capitalMoves: capitalMoves as never,
+      paraTreasury: { sendTransfer: paraSend } as unknown as ParaTreasuryClient,
       web3: {
-        sendTransfer: web3Send,
         verifyTransfer: vi.fn().mockResolvedValue({
           valid: false,
           error: "Observed desk-to-desk transfer",
@@ -241,6 +243,7 @@ describe("capital manager top-up path selection", () => {
     const result = await manager.executeTopup(10, "test_wrong_transfer");
 
     expect(result.errorMessage).toBe("Observed desk-to-desk transfer");
+    expect(paraSend).toHaveBeenCalled();
     expect(capitalMoves.create).not.toHaveBeenCalled();
   });
 });

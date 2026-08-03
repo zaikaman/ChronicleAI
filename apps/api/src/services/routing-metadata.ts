@@ -157,8 +157,8 @@ export interface SelectTreasuryTransferPathInput {
 /**
  * Path selection for treasury `sendTransfer` (revenue, affiliate, capital top-up).
  *
- * Policy: use the configured KeeperHub transfer workflow on the public mempool.
- *   Para is never a direct demo-visible execution path.
+ * Policy: use the configured Para MPC treasury signer when available.
+ *   KeeperHub is only a fallback when no Para treasury signer exists.
  *   else throw
  */
 export function selectTreasuryTransferPath(
@@ -166,13 +166,11 @@ export function selectTreasuryTransferPath(
 ): TreasuryTransferPath {
   void input.amountUsdc;
   void input.thresholdUsdc;
+  if (input.paraAvailable) {
+    return "para";
+  }
   if (input.keeperHubTransferConfigured) {
     return "keeperhub";
-  }
-  if (input.paraAvailable) {
-    throw new Error(
-      "KeeperHub transfer workflow is required for demo-visible treasury transfers; Para cannot broadcast directly",
-    );
   }
   throw new Error(
     "No treasury transfer path configured — set PARA_API_KEY and/or KEEPERHUB_WORKFLOW_TRANSFER",

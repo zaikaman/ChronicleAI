@@ -1080,7 +1080,7 @@ export function createWeb3Client(
   if (paraClient && keeperHub) {
     console.info(
       "[web3] Production path: Para MPC + KeeperHub hybrid " +
-        `(treasury transfers: ≥${env.treasuryPrivateTransferThresholdUsdc} USDC → KH private when transfer workflow set; else Para)`,
+        "(Para MPC signs treasury transfers; KeeperHub handles material workflow writes)",
     );
     return createHybridParaKeeperHubWeb3Client(env, paraClient, logOpts);
   }
