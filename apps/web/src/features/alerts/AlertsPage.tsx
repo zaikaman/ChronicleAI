@@ -4,7 +4,6 @@ import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { AlertCard } from "./AlertCard.tsx";
 import { AlertFilters, type AlertFiltersState } from "./AlertFilters.tsx";
-import { isAlertVisibleInPublicUi } from "./alert-visibility.ts";
 import { useAlerts } from "./use-alerts.ts";
 
 function formatEventTypeLabel(eventType: string): string {
@@ -14,70 +13,81 @@ function formatEventTypeLabel(eventType: string): string {
     .join(" ");
 }
 
+function emptyCopy(scope: AlertFiltersState["scope"]): { title: string; description: string } {
+  switch (scope) {
+    case "market":
+      return {
+        title: "No market Alerts yet",
+        description:
+          "Market-event Alerts appear here when significant on-chain activity is detected on the primary signal source.",
+      };
+    case "desk":
+      return {
+        title: "No Desk-trigger Alerts yet",
+        description:
+          "Desk-trigger Alerts appear when Chronicle Desk records a material condition — health factor, oracle basis, APY differential, gas regime, or capital move — that produces a non-ignore decision.",
+      };
+    default:
+      return {
+        title: "No alerts yet",
+        description:
+          "Public Alerts appear here from market events and Desk-native conditions. Each card shows the causal chain with publication proof.",
+      };
+  }
+}
+
+const STATIC_ALERT_KIND_OPTIONS = [
+  { value: "market_event", label: "Market event" },
+  { value: "desk_trigger", label: "Desk trigger" },
+];
+
+const STATIC_SIGNAL_STATUS_OPTIONS = [
+  { value: "not_eligible", label: "Not eligible" },
+  { value: "pending", label: "Pending" },
+  { value: "created", label: "Created" },
+  { value: "failed", label: "Failed" },
+];
+
 export function AlertsPage(): ReactElement {
   const [filters, setFilters] = useState<AlertFiltersState>({
+    scope: "all",
     eventType: "",
     alertKind: "",
     signalStatus: "",
   });
-  const { alerts, pagination, setPage, isLoading, error, refetch } = useAlerts(20);
 
-  const visibleAlerts = useMemo(() => {
-    return alerts.filter(isAlertVisibleInPublicUi);
-  }, [alerts]);
+  const serverFilters = useMemo(
+    () => ({
+      scope: filters.scope,
+      ...(filters.eventType ? { eventType: filters.eventType } : {}),
+      ...(filters.alertKind ? { alertKind: filters.alertKind } : {}),
+      ...(filters.signalStatus ? { signalStatus: filters.signalStatus } : {}),
+    }),
+    [filters.scope, filters.eventType, filters.alertKind, filters.signalStatus],
+  );
+
+  const { alerts, pagination, setPage, isLoading, error, refetch } = useAlerts(20, serverFilters);
 
   const eventTypeOptions = useMemo(() => {
     const types = new Set<string>();
-    for (const alert of visibleAlerts) {
+    for (const alert of alerts) {
       if (alert.eventType) types.add(alert.eventType);
     }
     return [...types].sort().map((value) => ({ value, label: formatEventTypeLabel(value) }));
-  }, [visibleAlerts]);
+  }, [alerts]);
 
-  const alertKindOptions = useMemo(() => {
-    const kinds = new Set<string>();
-    for (const alert of visibleAlerts) {
-      if (alert.alertKind) kinds.add(alert.alertKind);
-    }
-    return [...kinds].sort().map((value) => ({ value, label: formatEventTypeLabel(value) }));
-  }, [visibleAlerts]);
-
-  const signalStatusOptions = useMemo(() => {
-    const statuses = new Set<string>();
-    for (const alert of visibleAlerts) {
-      if (alert.signalStatus) statuses.add(alert.signalStatus);
-    }
-    return [...statuses].sort().map((value) => ({ value, label: formatEventTypeLabel(value) }));
-  }, [visibleAlerts]);
-
-  const filteredAlerts = useMemo(() => {
-    return visibleAlerts.filter((alert) => {
-      if (filters.eventType && alert.eventType !== filters.eventType) {
-        return false;
-      }
-      if (filters.alertKind && alert.alertKind !== filters.alertKind) {
-        return false;
-      }
-      if (filters.signalStatus && alert.signalStatus !== filters.signalStatus) {
-        return false;
-      }
-      return true;
-    });
-  }, [visibleAlerts, filters.eventType, filters.alertKind, filters.signalStatus]);
-
-  const hasActiveFilters = Boolean(
-    filters.eventType || filters.alertKind || filters.signalStatus,
-  );
+  const hasActiveFilters = Boolean(filters.eventType || filters.alertKind || filters.signalStatus);
+  const empty = emptyCopy(filters.scope);
 
   return (
     <Page data-testid="alerts-list">
       <PageHeader
-        title="Public Alerts"
-        description="Live public market bulletins from on-chain events. Eligible alerts project into desk signals — each card shows the Alert → Signal → Action causal chain with proof of publication."
+        title="Alerts"
+        description="Public bulletins from market events and Chronicle Desk conditions. Market Alerts observe on-chain activity; Desk-trigger Alerts record material Desk-native decisions. Each card shows Alert → Signal (when applicable) → Decision → Action → Proof."
         meta={
           !isLoading && !error ? (
-            <span className="tabular-nums">
-              {visibleAlerts.length} alert{visibleAlerts.length !== 1 ? "s" : ""}
+            <span className="tabular-nums" data-testid="alerts-count">
+              {pagination.total} alert{pagination.total !== 1 ? "s" : ""}
               {pagination.totalPages > 1
                 ? ` · page ${pagination.page}/${pagination.totalPages}`
                 : ""}
@@ -100,35 +110,31 @@ export function AlertsPage(): ReactElement {
           onRetry={refetch}
           data-testid="alerts-error"
         />
-      ) : visibleAlerts.length === 0 && pagination.page === 1 ? (
-        <EmptyState
-          title="No alerts yet"
-          description="Public alerts will appear here when significant on-chain events are detected."
-          data-testid="alerts-empty"
-        />
       ) : (
         <>
-          {(eventTypeOptions.length > 0 ||
-            alertKindOptions.length > 0 ||
-            signalStatusOptions.length > 0) && (
-            <AlertFilters
-              filters={filters}
-              onChange={setFilters}
-              eventTypeOptions={eventTypeOptions}
-              alertKindOptions={alertKindOptions}
-              signalStatusOptions={signalStatusOptions}
-            />
-          )}
+          <AlertFilters
+            filters={filters}
+            onChange={setFilters}
+            eventTypeOptions={eventTypeOptions}
+            alertKindOptions={STATIC_ALERT_KIND_OPTIONS}
+            signalStatusOptions={STATIC_SIGNAL_STATUS_OPTIONS}
+          />
 
-          {hasActiveFilters && filteredAlerts.length === 0 ? (
+          {alerts.length === 0 && pagination.page === 1 && !hasActiveFilters ? (
+            <EmptyState
+              title={empty.title}
+              description={empty.description}
+              data-testid="alerts-empty"
+            />
+          ) : alerts.length === 0 ? (
             <EmptyState
               title="No matching alerts"
-              description="No alerts on this page match the selected filters. Try a different event type or page."
+              description="No alerts match the selected scope and filters. Try a different source, kind, or page."
               data-testid="alerts-filtered-empty"
             />
           ) : (
             <div className="flex flex-col gap-4">
-              {filteredAlerts.map((alert) => (
+              {alerts.map((alert) => (
                 <AlertCard key={alert.id} alert={alert} data-testid={`alert-${alert.id}`} />
               ))}
             </div>

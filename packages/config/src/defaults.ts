@@ -112,6 +112,13 @@ export const DESK_AGENT_LLM_FALLBACK_ORDER = LLM_FALLBACK_ORDER;
 // ── Alert Generation Defaults ───────────────────────────
 export const ALERT_GENERATION_TIMEOUT_MS = 30_000; // 30 seconds per provider
 
+/**
+ * Alert generation should sample the rotated Groq pool, then fall back to
+ * OpenAI. Trying every configured key serially can delay publication for
+ * minutes when the pool is rate-limited.
+ */
+export const PUBLIC_ALERT_MAX_GROQ_KEY_ATTEMPTS = 2;
+
 // ── Digest Generation Defaults ──────────────────────────
 /** Longer timeout: digests synthesize many events into a full report. */
 export const DIGEST_GENERATION_TIMEOUT_MS = 60_000; // 60 seconds per provider

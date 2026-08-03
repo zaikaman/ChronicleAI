@@ -396,6 +396,11 @@ export interface DeskControlPlaneDeps {
   signals: DeskSignalRepository;
   /** Optional public Alert repository for live causal-chain updates. */
   alertRepo?: PublicAlertRepository | null | undefined;
+  /**
+   * Optional Desk-trigger Alert service for capital / microtrade / signal Alerts.
+   * Failures are best-effort and must never block safe Desk execution.
+   */
+  deskTriggerAlerts?: import("../services/desk-trigger-alert-service.ts").DeskTriggerAlertService | null;
   executionBridge?: ExecutionBridge | null;
 
   /**
@@ -835,11 +840,48 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
       actionKeeperHubRunId?: string | null;
       actionExplorerUrl?: string | null;
     },
+    /** Explicit Alert id when no signal linkage exists (capital / microtrade). */
+    explicitAlertId?: string | null,
   ): Promise<void> {
-    const alertId = signal?.source_alert_id?.trim();
+    let alertId = explicitAlertId?.trim() || signal?.source_alert_id?.trim() || null;
+
+    // Fallback: resolve by intent/ticket when the Signal has no source_alert_id.
+    if (!alertId && deps.deskTriggerAlerts) {
+      try {
+        if (metadata.intentId) {
+          const byIntent = await deps.deskTriggerAlerts.findByIntentId(metadata.intentId);
+          if (byIntent) alertId = byIntent.id;
+        }
+        if (!alertId && metadata.ticketId) {
+          const byTicket = await deps.deskTriggerAlerts.findByTicketId(metadata.ticketId);
+          if (byTicket) alertId = byTicket.id;
+        }
+      } catch {
+        // non-fatal lookup
+      }
+    }
+
+    if (!alertId) return;
+
+    if (deps.deskTriggerAlerts && metadata.actionStatus) {
+      try {
+        await deps.deskTriggerAlerts.updateAfterExecution(alertId, {
+          ...metadata,
+          actionStatus: metadata.actionStatus,
+        });
+        return;
+      } catch (error) {
+        deskLog.warn("desk-trigger alert update failed", {
+          alertId,
+          signalId: signal?.id ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     const alertRepo = deps.alertRepo;
     const updateCausalMetadata = alertRepo?.updateCausalMetadata;
-    if (!alertId || !alertRepo || !updateCausalMetadata) return;
+    if (!alertRepo || !updateCausalMetadata) return;
 
     try {
       const result = await updateCausalMetadata.call(alertRepo, alertId, metadata);
@@ -1718,7 +1760,7 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         );
       }
 
-      const capital = await deps.capitalManager.tick({
+      const capitalTickInput = {
         treasuryUsdc,
         treasurySafetyBufferEth: deps.treasurySafetyBufferEth,
         treasuryEthBalance: treasuryEth ?? undefined,
@@ -1752,7 +1794,53 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
             : {}),
         lastFreePowderFillAtMs,
         suppressMaxAumSweep,
-      });
+      };
+
+      // Evaluate first so a Desk-trigger Alert can be created before execution.
+      // Publication failure must never cancel the capital action.
+      const preDecision = deps.capitalManager.decide(capitalTickInput);
+      let capitalAlertId: string | null = null;
+      if (deps.deskTriggerAlerts && preDecision.action !== "none") {
+        try {
+          const alertResult = await deps.deskTriggerAlerts.createFromCapital({
+            decision: preDecision,
+          });
+          capitalAlertId = alertResult?.alert.id ?? null;
+        } catch (error) {
+          deskLog.warn("capital desk-trigger alert create failed (non-blocking)", {
+            action: preDecision.action,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      const capital = await deps.capitalManager.tick(capitalTickInput);
+
+      if (capitalAlertId && deps.deskTriggerAlerts) {
+        const actionStatus: AlertActionStatus = capital.errorMessage
+          ? "failed"
+          : capital.txHash
+            ? "filled"
+            : capital.decision.action === "none"
+              ? "ignored"
+              : "submitted";
+        try {
+          await deps.deskTriggerAlerts.updateAfterExecution(capitalAlertId, {
+            actionStatus,
+            policyVerdict: capital.decision.action === "none" ? "ignore" : "trade",
+            ...(capital.txHash ? { actionTransactionHash: capital.txHash } : {}),
+            ...(capital.keeperHubRunId
+              ? { actionKeeperHubRunId: capital.keeperHubRunId }
+              : {}),
+            ...(capital.explorerUrl ? { actionExplorerUrl: capital.explorerUrl } : {}),
+          });
+        } catch (error) {
+          deskLog.warn("capital desk-trigger alert update failed (non-blocking)", {
+            alertId: capitalAlertId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       if (capital.decision.reason === "awaiting_cctp_rebalance") {
         // P2-10: chatty tick detail at debug; one-line summary stays available.
@@ -2367,6 +2455,45 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
             // failed KH executions do not spam retries within the window.
             await touchLastEventMicrotradeAt();
 
+            // Attach or create a public Alert for the microtrade (reuse market Alert
+            // when the monitored event already has one). Never blocks execution.
+            let microtradeAlertId: string | null = null;
+            if (deps.deskTriggerAlerts) {
+              try {
+                let existingAlertId: string | null = null;
+                const monitoredEventId = eligibility.trigger?.monitoredEventId ?? null;
+                if (monitoredEventId && deps.alertRepo?.listByEventIds) {
+                  const alerts = await deps.alertRepo.listByEventIds([monitoredEventId]);
+                  if (alerts.ok && alerts.value[0]) {
+                    existingAlertId = alerts.value[0].id;
+                  }
+                }
+                const alertResult = await deps.deskTriggerAlerts.createOrAttachForMicrotrade({
+                  existingAlertId,
+                  monitoredEventId,
+                  eventType: eligibility.trigger?.eventType ?? null,
+                  transactionHash: eligibility.trigger?.transactionHash ?? null,
+                  sourceChainId: eligibility.trigger?.sourceChainId ?? null,
+                  notionalUsdc: planResult.plan.notionalUsdc,
+                  strategy,
+                  mode: planResult.mode,
+                  reasonCodes: evalResult.intent.reason_codes ?? planResult.plan.reasonCodes,
+                });
+                microtradeAlertId = alertResult?.alert.id ?? null;
+                if (microtradeAlertId) {
+                  await deps.deskTriggerAlerts.updateAfterExecution(microtradeAlertId, {
+                    actionStatus: "pending",
+                    policyVerdict: "trade",
+                    intentId: evalResult.intent.id,
+                  });
+                }
+              } catch (error) {
+                deskLog.warn("microtrade desk-trigger alert failed (non-blocking)", {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+
             if (execute && deskAddress) {
               const execResult = await deps.strategyRunner.executeIntent({
                 intentId: evalResult.intent.id,
@@ -2381,6 +2508,42 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
                 },
               });
               executions.push(execResult);
+              if (microtradeAlertId) {
+                const executionActionStatus: AlertActionStatus =
+                  execResult.intent.status === "filled"
+                    ? "filled"
+                    : execResult.intent.status === "failed"
+                      ? "failed"
+                      : "submitted";
+                await syncAlertCausalMetadata(
+                  null,
+                  {
+                    policyVerdict: "trade",
+                    actionStatus: executionActionStatus,
+                    intentId: evalResult.intent.id,
+                    ...(execResult.ticket?.ticket.id
+                      ? { ticketId: execResult.ticket.ticket.id }
+                      : {}),
+                    ...(execResult.receipt?.txHash
+                      ? { actionTransactionHash: execResult.receipt.txHash }
+                      : {}),
+                    ...(execResult.receipt?.keeperHubRunId || execResult.ticket?.keeperHubRunId
+                      ? {
+                          actionKeeperHubRunId:
+                            execResult.receipt?.keeperHubRunId ??
+                            execResult.ticket?.keeperHubRunId,
+                        }
+                      : {}),
+                    ...(execResult.receipt?.explorerUrl || execResult.ticket?.explorerUrl
+                      ? {
+                          actionExplorerUrl:
+                            execResult.receipt?.explorerUrl ?? execResult.ticket?.explorerUrl,
+                        }
+                      : {}),
+                  },
+                  microtradeAlertId,
+                );
+              }
               if (execResult.intent.status === "filled") {
                 await touchLastMaintenanceAt(
                   execResult.intent.reason_codes ?? planResult.plan.reasonCodes,
@@ -2561,6 +2724,11 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
           errorMessage ?? "Execution reported failure",
           keeperHubRunId,
         );
+        await syncAlertCausalMetadata(null, {
+          actionStatus: "failed",
+          intentId,
+          ...(keeperHubRunId ? { actionKeeperHubRunId: keeperHubRunId } : {}),
+        });
         return { intent: failed };
       }
 
@@ -2606,6 +2774,18 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
           notionalUsdc: filled.notional_usdc,
         });
       }
+
+      // Best-effort Alert causal update via intent_id / ticket_id when no Signal exists.
+      const primaryTx = fills[0]?.txHash;
+      await syncAlertCausalMetadata(null, {
+        policyVerdict: "trade",
+        actionStatus: "filled",
+        intentId: filled.id,
+        ...(ticket?.ticket.id ? { ticketId: ticket.ticket.id } : {}),
+        ...(primaryTx ? { actionTransactionHash: primaryTx } : {}),
+        ...(keeperHubRunId ? { actionKeeperHubRunId: keeperHubRunId } : {}),
+        ...(ticket?.explorerUrl ? { actionExplorerUrl: ticket.explorerUrl } : {}),
+      });
 
       return { intent: filled, ticket };
     },

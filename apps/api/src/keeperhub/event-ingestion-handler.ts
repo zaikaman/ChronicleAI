@@ -141,6 +141,25 @@ function deterministicAlertSummary(
   return `Structured ${payload.eventType} evidence was observed on ${chainLabel(payload.chainId)} with qualification score ${score.toFixed(2)}.${magnitude}${tx} Publication and any execution context remain on ${chainLabel(ACTIVE_INTELLIGENCE_CHAIN_ID)}.`;
 }
 
+type ExecutionLogEntry = Parameters<ExecutionLogRepository["append"]>[0];
+
+async function appendExecutionLogSafely(
+  repository: ExecutionLogRepository,
+  entry: ExecutionLogEntry,
+): Promise<void> {
+  try {
+    const result = await repository.append(entry);
+    if (!result.ok) {
+      console.error("[event-ingestion] execution log write failed:", result.error.message);
+    }
+  } catch (error) {
+    console.error(
+      "[event-ingestion] execution log write threw:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
 export class EventIngestionHandler {
   private readonly eventRepo: MonitoredEventRepository;
   private readonly alertRepo: PublicAlertRepository;
@@ -312,7 +331,7 @@ export class EventIngestionHandler {
 
     if (!qualification.qualified) {
       await this.eventRepo.updateStatus(event.id, "ignored");
-      await this.execLogRepo.append({
+      await appendExecutionLogSafely(this.execLogRepo, {
         action_type: "monitor",
         entity_type: "monitored_event",
         entity_id: event.id,
@@ -342,7 +361,7 @@ export class EventIngestionHandler {
     try {
       aavePair = await this.aaveFlowCorrelationService.findPair(event);
     } catch (error) {
-      await this.execLogRepo.append({
+      await appendExecutionLogSafely(this.execLogRepo, {
         action_type: "monitor",
         entity_type: "monitored_event",
         entity_id: event.id,
@@ -375,7 +394,7 @@ export class EventIngestionHandler {
       existingAlert &&
       this.dedupeService.isWithinWindow(existingAlert.created_at, { clusterScoped })
     ) {
-      await this.execLogRepo.append({
+      await appendExecutionLogSafely(this.execLogRepo, {
         action_type: "publish_alert",
         entity_type: "public_alert",
         entity_id: existingAlert.id,
@@ -599,7 +618,7 @@ export class EventIngestionHandler {
     let generationSucceeded = false;
 
     try {
-      await this.execLogRepo.append({
+      await appendExecutionLogSafely(this.execLogRepo, {
         action_type: "generate_alert",
         entity_type: "monitored_event",
         entity_id: eventId,
@@ -644,7 +663,7 @@ export class EventIngestionHandler {
             generationProvider: generationResult.providerUsed,
           });
         }
-        await this.execLogRepo.append({
+        await appendExecutionLogSafely(this.execLogRepo, {
           action_type: "generate_alert",
           entity_type: "public_alert",
           entity_id: alertId,
@@ -656,7 +675,7 @@ export class EventIngestionHandler {
           },
         });
       } else {
-        await this.execLogRepo.append({
+        await appendExecutionLogSafely(this.execLogRepo, {
           action_type: "generate_alert",
           entity_type: "public_alert",
           entity_id: alertId,
@@ -672,7 +691,7 @@ export class EventIngestionHandler {
         });
       }
     } catch (error) {
-      await this.execLogRepo.append({
+      await appendExecutionLogSafely(this.execLogRepo, {
         action_type: "generate_alert",
         entity_type: "public_alert",
         entity_id: alertId,
@@ -686,7 +705,7 @@ export class EventIngestionHandler {
         alertId,
         payload.transactionHash ?? payload.sourceEventId,
       );
-      await this.execLogRepo.append({
+      await appendExecutionLogSafely(this.execLogRepo, {
         action_type: "publish_alert",
         entity_type: "public_alert",
         entity_id: alertId,
@@ -705,7 +724,7 @@ export class EventIngestionHandler {
       });
     } catch (error) {
       await this.alertRepo.updateDeliveryStatus(alertId, "partial_failure");
-      await this.execLogRepo.append({
+      await appendExecutionLogSafely(this.execLogRepo, {
         action_type: "publish_alert",
         entity_type: "public_alert",
         entity_id: alertId,

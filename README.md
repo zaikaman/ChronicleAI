@@ -2,7 +2,7 @@
 
 > **The proof-first autonomous onchain response desk.**
 >
-> ChronicleAI turns a live onchain event into a public Alert, projects eligible Alerts into Desk Signals, and only then converts a policy-approved Signal into a KeeperHub Action with public proof.
+> ChronicleAI publishes public Alerts from market events and Desk-native conditions, links eligible Alerts to Desk Signals when applicable, and converts policy-approved decisions into KeeperHub Actions with public proof.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
 [![Tests](https://img.shields.io/badge/Tests-1074%20passing-brightgreen?style=for-the-badge)](README.md#verification)
@@ -13,24 +13,26 @@
 
 ChronicleAI makes the response path inspectable end to end:
 
-**Alert → Signal → Action → Proof**
+**Alert → Signal (optional) → Decision → Action → Proof**
 
 ```mermaid
 flowchart LR
-    E[Onchain event] --> A[Public Alert]
+    E[Market event or Desk condition] --> A[Public Alert]
     A --> S[Desk Signal]
     S --> G[Policy and preflight]
     G --> K[KeeperHub Action]
     K --> T[Onchain transaction]
     T --> P[Registry receipt and audit trail]
+    A -.->|direct capital decision| G
 ```
 
-- **Alert** is the public bulletin: plain language, source, and publication proof.
-- **Signal** is the desk input projected from an eligible Alert (`alert-to-signal-service`).
-- **Action** is the policy-approved KeeperHub execution (intent / ticket / workflow run).
+- **Alert** is the public bulletin: market-event or desk-trigger, plain language, source, and publication proof.
+- **Signal** is the desk input when applicable — projected from an eligible market Alert, or created from a Desk-native poll and linked back to a desk-trigger Alert. Direct capital decisions may omit this step.
+- **Decision** is the policy verdict (`trade`, `defend`, `defer`) recorded on the Alert.
+- **Action** is the policy-approved KeeperHub execution (intent / ticket / workflow run) when the decision is not deferred.
 - **Proof** is the linked receipt, run ID, transaction hash, and activity trail.
 
-Not every Alert becomes a trade. Some stay observation-only or deferred. The causal chain on each Alert card still shows what happened: `Alert → Signal → Decision → Action → Proof`.
+Alerts originate from **market events** (external onchain observations) or **Desk state** (health-factor breaches, oracle/AMM dislocations, APY differentials, gas regimes, capital conditions). Not every Alert becomes a trade — some stay observation-only or deferred. An end-to-end path is only called verified when a real decision, intent/action, and transaction proof exist.
 
 Premium feeds, sponsored watches, treasury routing, and affiliate payouts extend this loop but are not required to understand the core demo.
 
@@ -38,14 +40,14 @@ Premium feeds, sponsored watches, treasury routing, and affiliate payouts extend
 
 | Step | Surface | Judge should see |
 | --- | --- | --- |
-| 1 | [Live alerts](https://chronicle-ai-web.vercel.app/alerts) | A real onchain event published as a public Alert, plus the Alert → Signal → Action causal chain. |
+| 1 | [Live alerts](https://chronicle-ai-web.vercel.app/alerts) | Market and Desk-trigger Alerts with the causal chain (Signal optional for direct capital decisions). |
 | 2 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | The desk consuming Alert-backed Signals: proposal, policy decision, and preflight status. |
 | 3 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, outcome, routing, and audit context for the Action. |
 | 4 | [Example onchain proof](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | The transaction that anyone can verify independently. |
 
 ### Source vs execution chains
 
-Intelligence can be observed on **Ethereum Mainnet** (primary signal source) while publication and desk execution run on **Ethereum Sepolia**. Alert cards label source chain and publication/execution chain separately so mainnet evidence is never confused with Sepolia fills.
+The unified Alerts feed includes **Mainnet market Alerts** and **Sepolia Desk-trigger Alerts**. Intelligence can be observed on **Ethereum Mainnet** (primary market source) while publication and desk execution run on **Ethereum Sepolia**. Alert cards label source chain and publication/execution chain separately so mainnet evidence is never confused with Sepolia fills.
 
 ## Full system overview
 
@@ -53,8 +55,8 @@ ChronicleAI is an autonomous onchain market desk with a public memory: it turns 
 
 This is the distinction from a generic trading bot:
 
-- It **publishes what it sees** as Alerts instead of keeping reasoning private.
-- It **feeds the desk from those Alerts** — eligible Alerts become Desk Signals, not a separate black-box stream.
+- It **publishes what it sees** as Alerts — both market events and Desk-native conditions — instead of keeping reasoning private.
+- It **links Desk Signals to Alerts** — market Alerts project into Signals; Desk-native polls create desk-trigger Alerts and link back. Registry/publication failure never blocks a safe Desk action.
 - It **monetizes deeper intelligence** instead of treating research as an invisible prompt.
 - It **acts only after policy and preflight checks** instead of letting an LLM broadcast arbitrary calldata.
 - It **proves what happened** with registry receipts, KeeperHub run IDs, transaction hashes, routing metadata, and an activity trail.
@@ -88,8 +90,9 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 
 ## Supporting surfaces and capabilities
 
-- **Public intelligence:** Alerts (desk inputs when eligible), daily digests, trade tickets, capital-move records, and proof-of-publication receipts.
-- **Alert → Signal projection:** [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) maps eligible event types into desk signal types (`event_flow`, `event_supply`, `liquidation_cluster`, `gas_regime`, …) and records causal metadata on the Alert.
+- **Public intelligence:** Alerts (market-event and desk-trigger), daily digests, trade tickets, capital-move records, and proof-of-publication receipts.
+- **Alert → Signal projection:** [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) maps eligible market event types into desk signal types and records causal metadata on the Alert.
+- **Desk-trigger Alerts:** [`apps/api/src/services/desk-trigger-alert-service.ts`](apps/api/src/services/desk-trigger-alert-service.ts) creates deterministic public Alerts from non-ignore Desk signals, capital decisions, and event-linked microtrades — no LLM copy, best-effort publication.
 - **Premium intelligence:** HTTP 402 routing with x402/MPP adapters for machine-readable feeds and paid analysis.
 - **Desk reasoning:** LangChainJS with provider fallback; the model proposes from Signals, while hard policy gates the Action.
 - **KeeperHub execution:** configured workflows execute desk strategies, registry writes, transfers, and the kill switch. MCP is preferred; REST workflow execution remains a KeeperHub fallback.
@@ -127,6 +130,7 @@ The core demo uses one Alert→Signal→Action path. The repository includes 33 
 | x402 / MPP | [`apps/api/src/payments/x402-payment-adapter.ts`](apps/api/src/payments/x402-payment-adapter.ts) and [`apps/api/src/payments/mpp-payment-adapter.ts`](apps/api/src/payments/mpp-payment-adapter.ts) | Dual-protocol premium intelligence access and onchain receipt anchoring. |
 | Audit trail | [`apps/api/src/desk/execution-audit.ts`](apps/api/src/desk/execution-audit.ts) and [`apps/web/src/features/desk/ExecutionAuditTimeline.tsx`](apps/web/src/features/desk/ExecutionAuditTimeline.tsx) | Correlates policy/preflight, KeeperHub run logs, final receipts, gas, routing, and failure narratives. |
 | Alert → Signal | [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) | Projects eligible public Alerts into desk Signals and writes causal metadata back onto the Alert. |
+| Desk-trigger Alerts | [`apps/api/src/services/desk-trigger-alert-service.ts`](apps/api/src/services/desk-trigger-alert-service.ts) | Deterministic public desk_trigger Alerts from non-ignore signals, capital decisions, and event microtrades. |
 
 ### Execution routing policy
 
@@ -147,7 +151,7 @@ Private routing and gas sponsorship are mutually exclusive on the same transacti
 - **Idempotency:** execution keys and content hashes prevent duplicate registry publications and repeated capital actions.
 - **Terminal-state correctness:** `completed: true` is not treated as success when KeeperHub returns an error or failed node.
 - **Three-layer audit:** policy/preflight, KeeperHub execution logs, and final onchain receipt are correlated into one desk timeline.
-- **Causal Alert metadata:** signal status, policy verdict, action status, ticket, and transaction stay linked on the originating Alert.
+- **Causal Alert metadata:** signal status (optional for direct capital decisions), policy verdict, action status, ticket, and transaction stay linked on the originating Alert.
 - **No invented fills:** a run without a real transaction hash remains pending, unknown, failed, or timed out.
 - **Kill switch:** missed heartbeats and failed safety conditions pause the desk and route residual defense through the dedicated kill-switch workflow.
 
@@ -187,6 +191,7 @@ sequenceDiagram
 | Component | Source |
 | --- | --- |
 | Alert → Signal projection | [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) |
+| Desk-trigger Alert service | [`apps/api/src/services/desk-trigger-alert-service.ts`](apps/api/src/services/desk-trigger-alert-service.ts) |
 | Desk execution bridge | [`apps/api/src/desk/execution-bridge.ts`](apps/api/src/desk/execution-bridge.ts) |
 | Desk trading agent | [`apps/api/src/desk/agent/desk-trading-agent.ts`](apps/api/src/desk/agent/desk-trading-agent.ts) |
 | Desk signal engine | [`apps/api/src/desk/signal-engine.ts`](apps/api/src/desk/signal-engine.ts) |
@@ -254,7 +259,7 @@ The local services run at:
 
 ## Verification
 
-The project reports **1,074 passing and 42 skipped tests** across 134 test files, plus 33 KeeperHub workflow definitions.
+The project reports **1,100 passing and 42 skipped tests** across 136 test files, plus 33 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check

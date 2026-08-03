@@ -78,9 +78,21 @@ function mapAlertWithEvent(row: Record<string, unknown>): PublicAlertRow {
   };
 }
 
+/** Unified feed scope: mainnet market + Sepolia desk triggers, or a single kind. */
+export type PublicAlertFeedScope = "all" | "market" | "desk";
+
 export interface PublicAlertListFilters {
   chainId?: number;
+  /** Multi-chain filter (OR). Takes precedence over chainId when set. */
+  chainIds?: number[];
   alertKind?: AlertKind;
+  /**
+   * Unified product scope:
+   * - all: Mainnet market_event + Sepolia desk_trigger
+   * - market: market_event only
+   * - desk: desk_trigger only
+   */
+  feedScope?: PublicAlertFeedScope;
   signalStatus?: AlertSignalStatus;
   eventType?: EventType;
   policyVerdict?: DeskPolicyVerdict;
@@ -91,6 +103,11 @@ export interface PublicAlertRepository {
   create(data: PublicAlertInsert): Promise<Result<PublicAlertRow>>;
   findById(id: string): Promise<Result<PublicAlertRow>>;
   findByDedupeKey(dedupeKey: string): Promise<PublicAlertRow | null>;
+  /** Lookup by source_dedupe_key for Desk-trigger reuse. */
+  findBySourceDedupeKey?(sourceDedupeKey: string): Promise<PublicAlertRow | null>;
+  /** Lookup for execution callbacks when no Desk Signal exists. */
+  findByIntentId?(intentId: string): Promise<PublicAlertRow | null>;
+  findByTicketId?(ticketId: string): Promise<PublicAlertRow | null>;
   /** Newest-first; limit-only convenience for internal consumers. */
   list(limitParam?: number, filters?: PublicAlertListFilters): Promise<Result<PublicAlertRow[]>>;
   /** Page-based list with exact total for public feeds. */
@@ -150,6 +167,53 @@ export interface PublicAlertRepository {
   ): Promise<Result<PublicAlertRow>>;
 }
 
+/** Primary (Mainnet) and active (Sepolia) chain IDs for unified feed scope. */
+const PRIMARY_CHAIN_ID = 1;
+const ACTIVE_CHAIN_ID = 11_155_111;
+
+type FilterableQuery = {
+  eq: (column: string, value: unknown) => FilterableQuery;
+  in: (column: string, values: unknown[]) => FilterableQuery;
+  or: (filters: string) => FilterableQuery;
+  neq: (column: string, value: unknown) => FilterableQuery;
+};
+
+function applyAlertListFilters<T extends FilterableQuery>(
+  query: T,
+  filters?: PublicAlertListFilters,
+): T {
+  let q: FilterableQuery = query.neq("delivery_status", "queued");
+
+  if (filters?.feedScope === "all") {
+    // Mainnet market Alerts + Sepolia Desk-trigger Alerts (server-side union).
+    q = q.or(
+      `and(chain_id.eq.${PRIMARY_CHAIN_ID},alert_kind.eq.market_event),and(chain_id.eq.${ACTIVE_CHAIN_ID},alert_kind.eq.desk_trigger)`,
+    );
+  } else if (filters?.feedScope === "market") {
+    q = q.eq("alert_kind", "market_event");
+    if (filters.chainId !== undefined) q = q.eq("chain_id", filters.chainId);
+    else if (filters.chainIds && filters.chainIds.length > 0) q = q.in("chain_id", filters.chainIds);
+  } else if (filters?.feedScope === "desk") {
+    q = q.eq("alert_kind", "desk_trigger");
+    if (filters.chainId !== undefined) q = q.eq("chain_id", filters.chainId);
+    else if (filters.chainIds && filters.chainIds.length > 0) q = q.in("chain_id", filters.chainIds);
+  } else {
+    if (filters?.chainIds && filters.chainIds.length > 0) {
+      q = q.in("chain_id", filters.chainIds);
+    } else if (filters?.chainId !== undefined) {
+      q = q.eq("chain_id", filters.chainId);
+    }
+    if (filters?.alertKind) q = q.eq("alert_kind", filters.alertKind);
+  }
+
+  if (filters?.signalStatus) q = q.eq("signal_status", filters.signalStatus);
+  if (filters?.eventType) q = q.eq("event_type", filters.eventType);
+  if (filters?.policyVerdict) q = q.eq("policy_verdict", filters.policyVerdict);
+  if (filters?.actionStatus) q = q.eq("action_status", filters.actionStatus);
+
+  return q as T;
+}
+
 export function createPublicAlertRepository(supabase: SupabaseClient): PublicAlertRepository {
   const table = () => supabase.from("public_alerts");
 
@@ -186,17 +250,52 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       return (rows?.[0] as unknown as PublicAlertRow) ?? null;
     },
 
+    async findBySourceDedupeKey(sourceDedupeKey) {
+      const { data: rows, error } = await table()
+        .select("*")
+        .eq("source_dedupe_key", sourceDedupeKey)
+        .limit(1);
+
+      if (error) {
+        return null;
+      }
+
+      return (rows?.[0] as unknown as PublicAlertRow) ?? null;
+    },
+
+    async findByIntentId(intentId) {
+      const { data: rows, error } = await table()
+        .select(ALERT_WITH_EVENT_SELECT)
+        .eq("intent_id", intentId)
+        .limit(1);
+
+      if (error) {
+        return null;
+      }
+
+      const mapped = (rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>));
+      return mapped[0] ?? null;
+    },
+
+    async findByTicketId(ticketId) {
+      const { data: rows, error } = await table()
+        .select(ALERT_WITH_EVENT_SELECT)
+        .eq("ticket_id", ticketId)
+        .limit(1);
+
+      if (error) {
+        return null;
+      }
+
+      const mapped = (rows ?? []).map((r) => mapAlertWithEvent(r as Record<string, unknown>));
+      return mapped[0] ?? null;
+    },
+
     async list(limitParam = 50, filters = {}) {
       const limit = Math.min(100, Math.max(1, limitParam));
 
       let query = table().select(ALERT_WITH_EVENT_SELECT);
-      query = query.neq("delivery_status", "queued");
-      if (filters?.chainId !== undefined) query = query.eq("chain_id", filters.chainId);
-      if (filters?.alertKind) query = query.eq("alert_kind", filters.alertKind);
-      if (filters?.signalStatus) query = query.eq("signal_status", filters.signalStatus);
-      if (filters?.eventType) query = query.eq("event_type", filters.eventType);
-      if (filters?.policyVerdict) query = query.eq("policy_verdict", filters.policyVerdict);
-      if (filters?.actionStatus) query = query.eq("action_status", filters.actionStatus);
+      query = applyAlertListFilters(query as unknown as FilterableQuery, filters) as any;
 
       const { data: rows, error } = await query
         .order("published_at", { ascending: false })
@@ -216,13 +315,7 @@ export function createPublicAlertRepository(supabase: SupabaseClient): PublicAle
       });
 
       let query = table().select(ALERT_WITH_EVENT_SELECT, { count: "exact" });
-      query = query.neq("delivery_status", "queued");
-      if (params?.chainId !== undefined) query = query.eq("chain_id", params.chainId);
-      if (params?.alertKind) query = query.eq("alert_kind", params.alertKind);
-      if (params?.signalStatus) query = query.eq("signal_status", params.signalStatus);
-      if (params?.eventType) query = query.eq("event_type", params.eventType);
-      if (params?.policyVerdict) query = query.eq("policy_verdict", params.policyVerdict);
-      if (params?.actionStatus) query = query.eq("action_status", params.actionStatus);
+      query = applyAlertListFilters(query as unknown as FilterableQuery, params) as any;
 
       const {
         data: rows,

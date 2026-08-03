@@ -10,10 +10,11 @@ type Row = Record<string, unknown>;
 
 interface Filter {
   column: string;
-  op: "eq" | "neq" | "gte" | "lte" | "gt" | "lt" | "in" | "is" | "not";
+  op: "eq" | "neq" | "gte" | "lte" | "gt" | "lt" | "in" | "is" | "not" | "or";
   value: unknown;
   /** For op === "not": the inner PostgREST operator (e.g. "is", "eq"). */
   notOp?: string;
+  orClause?: string;
 }
 
 interface QueryState {
@@ -72,6 +73,95 @@ function compareValues(
   }
 }
 
+function splitByCommaTopLevel(str: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (char === "(") depth++;
+    else if (char === ")") depth--;
+    if (char === "," && depth === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function parseValue(valStr: string): unknown {
+  const trimmed = valStr.trim();
+  if (trimmed === "null") return null;
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
+  if (!Number.isNaN(Number(trimmed)) && trimmed !== "") return Number(trimmed);
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed.slice(1, -1);
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed.slice(1, -1);
+  return trimmed;
+}
+
+function evalSingleCond(row: Row, condStr: string): boolean {
+  const trimmed = condStr.trim();
+  if (trimmed.startsWith("and(") && trimmed.endsWith(")")) {
+    const inner = trimmed.slice(4, -1);
+    const subConds = splitByCommaTopLevel(inner);
+    return subConds.every((c) => evalSingleCond(row, c));
+  }
+  if (trimmed.startsWith("or(") && trimmed.endsWith(")")) {
+    const inner = trimmed.slice(3, -1);
+    const subConds = splitByCommaTopLevel(inner);
+    return subConds.some((c) => evalSingleCond(row, c));
+  }
+
+  const firstDot = trimmed.indexOf(".");
+  if (firstDot === -1) return true;
+  const col = trimmed.slice(0, firstDot);
+  const rest = trimmed.slice(firstDot + 1);
+  const secondDot = rest.indexOf(".");
+  if (secondDot === -1) return true;
+  const op = rest.slice(0, secondDot);
+  const valStr = rest.slice(secondDot + 1);
+
+  const actual = row[col];
+  const expected = parseValue(valStr);
+
+  switch (op) {
+    case "eq":
+      return actual === expected || String(actual) === String(expected);
+    case "neq":
+      return actual !== expected && String(actual) !== String(expected);
+    case "gt":
+      return compareValues(actual, expected, "gt");
+    case "gte":
+      return compareValues(actual, expected, "gte");
+    case "lt":
+      return compareValues(actual, expected, "lt");
+    case "lte":
+      return compareValues(actual, expected, "lte");
+    case "is":
+      if (expected === null) return isNullish(actual);
+      return actual === expected;
+    case "in": {
+      let valuesStr = valStr.trim();
+      if (valuesStr.startsWith("(") && valuesStr.endsWith(")")) {
+        valuesStr = valuesStr.slice(1, -1);
+      }
+      const list = valuesStr.split(",").map(parseValue);
+      return list.some((item) => actual === item || String(actual) === String(item));
+    }
+    default:
+      return true;
+  }
+}
+
+function evalOrClause(row: Row, clause: string): boolean {
+  const topConds = splitByCommaTopLevel(clause);
+  return topConds.some((cond) => evalSingleCond(row, cond));
+}
+
 function matchesFilter(row: Row, filter: Filter): boolean {
   const actual = row[filter.column];
   switch (filter.op) {
@@ -102,6 +192,8 @@ function matchesFilter(row: Row, filter: Filter): boolean {
       };
       return !matchesFilter(row, inner);
     }
+    case "or":
+      return evalOrClause(row, String(filter.orClause || filter.value));
     default:
       return true;
   }
@@ -252,6 +344,15 @@ class InMemoryQueryBuilder implements PromiseLike<{
       filters: [
         ...this.state.filters,
         { column, op: "not", value, notOp: operator },
+      ],
+    });
+  }
+
+  or(clause: string): InMemoryQueryBuilder {
+    return this.clone({
+      filters: [
+        ...this.state.filters,
+        { column: "*", op: "or", value: clause, orClause: clause },
       ],
     });
   }

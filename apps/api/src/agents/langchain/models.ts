@@ -23,6 +23,8 @@ export interface CreateChatModelOptions {
   temperature?: number | undefined;
   modelOverride?: string | undefined;
   maxTokens?: number | undefined;
+  /** Limit how many rotated Groq keys are expanded into sequential attempts. */
+  maxGroqKeyAttempts?: number | undefined;
 }
 
 const GROQ_CAP_FLAG = Symbol.for("chronicleai.groqInputCap");
@@ -237,7 +239,7 @@ export function createChatModelsInOrder(
     preferredProvider?: LLMProvider | undefined;
   } = {},
 ): Array<{ provider: LLMProvider; model: ChronicleChatModel; config: LLMProviderConfig }> {
-  const { preferredProvider, ...modelOpts } = options;
+  const { preferredProvider, maxGroqKeyAttempts, ...modelOpts } = options;
   const out: Array<{
     provider: LLMProvider;
     model: ChronicleChatModel;
@@ -257,7 +259,11 @@ export function createChatModelsInOrder(
         config.rotateGroqKeys === false ? [] : getGroqApiKeys(process.env);
       if (groqKeys.length > 0) {
         const startIndex = advanceAndGetGroqKeyIndex(groqKeys.length);
-        for (let i = 0; i < groqKeys.length; i++) {
+        const keyAttempts = Math.min(
+          groqKeys.length,
+          Math.max(1, Math.floor(maxGroqKeyAttempts ?? groqKeys.length)),
+        );
+        for (let i = 0; i < keyAttempts; i++) {
           const keyIndex = (startIndex + i) % groqKeys.length;
           const apiKey = groqKeys[keyIndex]!;
           if (!apiKey.trim()) continue;

@@ -4,6 +4,7 @@ import {
   ALERT_GENERATION_TIMEOUT_MS,
   chainLabel,
   LLM_FALLBACK_ORDER,
+  PUBLIC_ALERT_MAX_GROQ_KEY_ATTEMPTS,
 } from "@chronicleai/config";
 import type { LLMGenerationAttemptRepository } from "@chronicleai/db";
 import type { Confidence, EventType, FlowContext, LLMProvider } from "@chronicleai/schemas";
@@ -192,7 +193,9 @@ export function createPublicAlertContentService(
     async generateAlert(input) {
       const prompt = buildPrompt(input);
       const attempts: ProviderAttemptResult[] = [];
-      const models = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER);
+      const models = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER, {
+        maxGroqKeyAttempts: PUBLIC_ALERT_MAX_GROQ_KEY_ATTEMPTS,
+      });
 
       for (let i = 0; i < models.length; i++) {
         const { provider, model } = models[i]!;

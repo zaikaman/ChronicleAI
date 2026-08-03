@@ -46,6 +46,9 @@ function mapAlert(raw: Record<string, unknown>): PublicAlertResponse {
   }
   if (typeof raw.publicationChainId === "number") alert.publicationChainId = raw.publicationChainId;
   if (typeof raw.sourceDedupeKey === "string") alert.sourceDedupeKey = raw.sourceDedupeKey;
+  if (typeof raw.sourceTriggerLabel === "string") {
+    alert.sourceTriggerLabel = raw.sourceTriggerLabel;
+  }
   if (typeof raw.signalType === "string")
     alert.signalType = raw.signalType as NonNullable<PublicAlertResponse["signalType"]>;
   if (["not_eligible", "pending", "created", "failed"].includes(String(raw.signalStatus))) {

@@ -7,22 +7,27 @@ const faqs = [
   {
     question: "What is ChronicleAI?",
     answer:
-      "ChronicleAI is a proof-first onchain response desk. It publishes public Alerts from meaningful onchain events, projects eligible Alerts into Desk Signals, applies hard policy, and sends only approved Actions through KeeperHub. The Alert → Signal → Action causal chain, registry receipts, and execution logs make every outcome independently verifiable.",
+      "ChronicleAI is a proof-first onchain response desk. It publishes public Alerts from market events and Desk-native conditions, links eligible Alerts to Desk Signals when applicable, applies hard policy, and sends only approved Actions through KeeperHub. The causal chain (Alert → Signal when present → Decision → Action → Proof), registry receipts, and execution logs make every outcome independently verifiable.",
+  },
+  {
+    question: "What kinds of Alerts does ChronicleAI publish?",
+    answer:
+      "Two kinds. Market-event Alerts observe external onchain activity (swaps, liquidations, volume). Desk-trigger Alerts record material Desk-native conditions — health-factor breaches, oracle/AMM dislocations, APY differentials, gas regimes, and capital moves (top-up, sweep, free inventory, emergency return) — whenever policy produces a non-ignore decision. Direct capital decisions may skip the Signal step: Alert → Decision → Action → Proof.",
   },
   {
     question: "What is Chronicle Desk?",
     answer:
-      "Chronicle Desk is the review and execution surface for Alert-backed Signals. It shows the originating Alert, structured proposal, policy checks, preflight result, and KeeperHub Action state before a transaction can be sent.",
+      "Chronicle Desk is the review and execution surface for Signals and capital decisions. It shows the originating Alert (when present), structured proposal, policy checks, preflight result, and KeeperHub Action state before a transaction can be sent.",
   },
   {
     question: "How is content and trade activity verified?",
     answer:
-      "Approved desk Actions run through KeeperHub and anchor a receipt on ChronicleRegistry. The Alert, Desk Signal, policy decision, transaction hash, and public execution trail stay linked on the causal chain, so anyone can inspect what happened without logging in.",
+      "An end-to-end path is only called verified when a real decision, intent or action, and transaction proof exist. Approved Actions run through KeeperHub and may anchor a receipt on ChronicleRegistry. The Alert, optional Signal, policy decision, transaction hash, and public execution trail stay linked on the causal chain.",
   },
   {
     question: "Can the LLM trade freely?",
     answer:
-      "No. Eligible Alerts become Signals first; the model then outputs structured proposals only (propose, hold, defer, defend) with allowlisted strategies and size hints. Policy enforces notional caps, health-factor gates, cooldowns, gas regime, and kill-switch. If validation fails, the safe default is hold — no KeeperHub write.",
+      "No. Eligible Alerts become Signals first when applicable; the model then outputs structured proposals only (propose, hold, defer, defend) with allowlisted strategies and size hints. Policy enforces notional caps, health-factor gates, cooldowns, gas regime, and kill-switch. If validation fails, the safe default is hold — no KeeperHub write. Registry or publication failure never blocks a safe Desk action.",
   },
 ];
 

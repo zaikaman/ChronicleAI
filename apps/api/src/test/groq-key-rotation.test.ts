@@ -94,6 +94,23 @@ describe("createProviderConfigs & createChatModelsInOrder Groq Rotation", () => 
     expect(models[0]!.config.apiKey).toBe("affiliate_key");
   });
 
+  it("can cap sequential Groq attempts before falling back to another provider", () => {
+    const providerConfigs = {
+      gemini: { apiKey: "", model: "gemini-2.0-flash" },
+      openai: { apiKey: "openai_key_test", model: "gpt-4o-mini" },
+      groq: { apiKey: "rot_key_1", model: "llama-3.3-70b-versatile" },
+    };
+
+    const models = createChatModelsInOrder(providerConfigs, LLM_FALLBACK_ORDER, {
+      maxGroqKeyAttempts: 2,
+    });
+
+    expect(models).toHaveLength(3);
+    expect(models[0]!.config.apiKey).toBe("rot_key_1");
+    expect(models[1]!.config.apiKey).toBe("rot_key_2");
+    expect(models[2]!.provider).toBe("openai");
+  });
+
   it("persists key rotation index to database and restores index on boot", async () => {
     const client = createInMemorySupabaseClient();
     const repo = createSystemControlStateRepository(client as any);

@@ -1,6 +1,12 @@
 // Public alerts routes: GET /alerts, GET /alerts/:id
 // Returns newest-first public alerts with page-based pagination, plus by-id lookup
 // for HTTPS on-chain content URIs.
+//
+// Unified feed scopes:
+//   scope=all    — Mainnet market_event + Sepolia desk_trigger
+//   scope=market — market_event Alerts
+//   scope=desk   — desk_trigger Alerts
+// Legacy chain scopes (mainnet/sepolia) remain for explicit chain filters.
 
 import {
   ACTIVE_INTELLIGENCE_CHAIN_ID,
@@ -10,12 +16,14 @@ import {
 import type {
   DeskSignalRepository,
   DeskSignalRow,
+  PublicAlertFeedScope,
   PublicAlertRepository,
   PublicAlertRow,
 } from "@chronicleai/db";
 import { Router, type Router as RouterType } from "express";
 import { notFound } from "../errors.ts";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
+import { sourceTriggerLabelFromAlert } from "../services/desk-trigger-alert-service.ts";
 
 function formatSignalResponse(signal: DeskSignalRow): Record<string, unknown> {
   return {
@@ -34,6 +42,17 @@ function formatSignalResponse(signal: DeskSignalRow): Record<string, unknown> {
   };
 }
 
+function hasCausalSignal(alert: PublicAlertRow, signal?: DeskSignalRow | null): boolean {
+  if (signal) return true;
+  if (alert.desk_signal_id) return true;
+  // Direct capital decisions use capital_tick with signal_status not_eligible.
+  if (alert.signal_status === "not_eligible" && !alert.desk_signal_id) return false;
+  if (alert.signal_type === "capital_tick" && alert.signal_status === "not_eligible") {
+    return false;
+  }
+  return Boolean(alert.signal_type && alert.signal_status === "created");
+}
+
 function formatAlertResponse(
   alert: PublicAlertRow,
   signal?: DeskSignalRow | null,
@@ -43,6 +62,9 @@ function formatAlertResponse(
   const signalType = alert.signal_type ?? signal?.signal_type ?? undefined;
   const policyVerdict = alert.policy_verdict ?? signal?.policy_verdict ?? undefined;
   const chainId = alert.chain_id ?? undefined;
+  const includeSignal = hasCausalSignal(alert, signal);
+  const sourceTriggerLabel = sourceTriggerLabelFromAlert(alert);
+
   return {
     id: alert.id,
     title: alert.title,
@@ -67,6 +89,7 @@ function formatAlertResponse(
     alertKind: alert.alert_kind ?? "market_event",
     publicationChainId: alert.publication_chain_id ?? ACTIVE_INTELLIGENCE_CHAIN_ID,
     sourceDedupeKey: alert.source_dedupe_key ?? alert.dedupe_key ?? undefined,
+    ...(sourceTriggerLabel ? { sourceTriggerLabel } : {}),
     signalType,
     signalStatus,
     policyVerdict,
@@ -85,7 +108,23 @@ function formatAlertResponse(
         (typeof alert.deterministic_evidence?.sourceEventId === "string"
           ? alert.deterministic_evidence.sourceEventId
           : (alert.monitored_event_id ?? undefined)),
-      ...(signal ? { signal: formatSignalResponse(signal) } : {}),
+      ...(includeSignal && signal ? { signal: formatSignalResponse(signal) } : {}),
+      ...(includeSignal && !signal && signalType
+        ? {
+            signal: {
+              id: alert.desk_signal_id ?? alert.id,
+              signalType,
+              origin: "desk_read" as const,
+              chainId: chainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID,
+              policyVerdict: policyVerdict ?? "ignore",
+              severity: 0,
+              features: {},
+              sources: {},
+              dedupeKey: alert.source_dedupe_key ?? alert.dedupe_key ?? alert.id,
+              createdAt: alert.created_at,
+            },
+          }
+        : {}),
       ...(policyVerdict
         ? {
             decision: {
@@ -134,11 +173,36 @@ function hasExplicitChainScope(query: Record<string, unknown>): boolean {
   return queryString(query.scope) !== undefined || queryString(query.chainId) !== undefined;
 }
 
-function chainScope(req: { query: Record<string, unknown> }):
+type AlertListScope =
+  | { feedScope: PublicAlertFeedScope }
   | { chainId: number }
-  | { error: string } {
+  | { error: string };
+
+/**
+ * Resolve list scope from query.
+ * Product scopes: all | market | desk
+ * Legacy chain scopes: mainnet | sepolia | active | legacy | primary | testnet
+ */
+function resolveListScope(req: { query: Record<string, unknown> }): AlertListScope {
   const scope = queryString(req.query.scope)?.toLowerCase();
   const chainValue = queryString(req.query.chainId);
+
+  if (scope === "all" || scope === "market" || scope === "desk") {
+    if (chainValue !== undefined) {
+      const requestedChainId = Number(chainValue);
+      if (
+        !Number.isInteger(requestedChainId) ||
+        !isAllowedSignalSourceChain(requestedChainId)
+      ) {
+        return { error: `Unsupported alert source chain: ${chainValue}` };
+      }
+      // Product scope + optional chain narrow: pass both via feedScope + chainId
+      // by returning feedScope; chain filter applied in list handler via chainId param.
+      return { feedScope: scope };
+    }
+    return { feedScope: scope };
+  }
+
   const scopeChainId =
     scope === undefined
       ? undefined
@@ -147,24 +211,45 @@ function chainScope(req: { query: Record<string, unknown> }):
         : scope === "sepolia" || scope === "active" || scope === "testnet"
           ? ACTIVE_INTELLIGENCE_CHAIN_ID
           : undefined;
+
   if (scope !== undefined && scopeChainId === undefined) {
-    return { error: "scope must be mainnet or sepolia" };
+    return { error: "scope must be all, market, desk, mainnet, or sepolia" };
   }
+
   const requestedChainId = chainValue === undefined ? undefined : Number(chainValue);
   const hasValidRequestedChain =
     requestedChainId !== undefined &&
     Number.isInteger(requestedChainId) &&
     isAllowedSignalSourceChain(requestedChainId);
-  if (
-    chainValue !== undefined &&
-    !hasValidRequestedChain
-  ) {
+
+  if (chainValue !== undefined && !hasValidRequestedChain) {
     return { error: `Unsupported alert source chain: ${chainValue}` };
   }
-  if (scopeChainId !== undefined && requestedChainId !== undefined && scopeChainId !== requestedChainId) {
+
+  if (
+    scopeChainId !== undefined &&
+    requestedChainId !== undefined &&
+    scopeChainId !== requestedChainId
+  ) {
     return { error: "scope and chainId select different source chains" };
   }
+
+  // Default product feed is unified (mainnet market + sepolia desk) when no
+  // explicit chain/scope is provided — matches the Alerts UI "All" default.
+  if (scope === undefined && chainValue === undefined) {
+    return { feedScope: "all" };
+  }
+
   return { chainId: requestedChainId ?? scopeChainId ?? PRIMARY_SIGNAL_CHAIN_ID };
+}
+
+function resolveDetailScope(req: {
+  query: Record<string, unknown>;
+}): { chainId?: number; feedScope?: PublicAlertFeedScope } | { error: string } {
+  if (!hasExplicitChainScope(req.query)) {
+    return {};
+  }
+  return resolveListScope(req);
 }
 
 export function createAlertRoutes(
@@ -179,8 +264,12 @@ export function createAlertRoutes(
    * List public alerts with newest-first ordering (page-based).
    *
    * Query parameters:
-   *   page  - Page number (1-based, default 1)
-   *   limit - Page size (1-100, default 20)
+   *   page       - Page number (1-based, default 1)
+   *   limit      - Page size (1-100, default 20)
+   *   scope      - all | market | desk | mainnet | sepolia
+   *   chainId    - Explicit source chain filter
+   *   alertKind  - market_event | desk_trigger (server-side; pagination-accurate)
+   *   signalStatus, eventType, policyVerdict, actionStatus
    *
    * Responses:
    *   200 - { items: PublicAlert[], pagination: PaginationMeta }
@@ -196,19 +285,34 @@ export function createAlertRoutes(
         return;
       }
 
-      const scope = chainScope(req);
+      const scope = resolveListScope(req);
       if ("error" in scope) {
         res.status(400).json({ error: scope.error });
         return;
       }
 
+      const alertKindParam = queryString(req.query.alertKind);
+      const chainValue = queryString(req.query.chainId);
+      const requestedChainId =
+        chainValue !== undefined && Number.isInteger(Number(chainValue))
+          ? Number(chainValue)
+          : undefined;
+
       const result = await alertRepo.listPage({
         page: parsed.page,
         limit: parsed.limit,
-        chainId: scope.chainId,
-        ...(queryString(req.query.alertKind)
-          ? { alertKind: queryString(req.query.alertKind) as "market_event" | "desk_trigger" }
-          : {}),
+        ...("feedScope" in scope
+          ? {
+              feedScope: scope.feedScope,
+              ...(requestedChainId !== undefined ? { chainId: requestedChainId } : {}),
+            }
+          : { chainId: scope.chainId }),
+        // Server-side alertKind only when not already implied by feedScope.
+        ...("feedScope" in scope && scope.feedScope !== "all"
+          ? {}
+          : alertKindParam
+            ? { alertKind: alertKindParam as "market_event" | "desk_trigger" }
+            : {}),
         ...(queryString(req.query.signalStatus)
           ? {
               signalStatus: queryString(req.query.signalStatus) as
@@ -249,7 +353,39 @@ export function createAlertRoutes(
         return;
       }
 
-      res.json(fromDbPage(result.value, formatAlertResponse));
+      // Optionally hydrate signals for list items that have desk_signal_id.
+      const items = result.value.items;
+      const signalById = new Map<string, DeskSignalRow>();
+      if (signalRepo) {
+        const ids = [
+          ...new Set(
+            items
+              .map((a) => a.desk_signal_id)
+              .filter((id): id is string => typeof id === "string" && id.length > 0),
+          ),
+        ];
+        await Promise.all(
+          ids.map(async (id) => {
+            const found = await signalRepo.findById(id);
+            if (found.ok && found.value) signalById.set(id, found.value);
+          }),
+        );
+      }
+
+      res.json(
+        fromDbPage(
+          {
+            ...result.value,
+            items: items.map((alert) => {
+              const sig = alert.desk_signal_id
+                ? (signalById.get(alert.desk_signal_id) ?? null)
+                : null;
+              return formatAlertResponse(alert, sig);
+            }),
+          },
+          (item) => item,
+        ),
+      );
     } catch (error) {
       next(error);
     }
@@ -280,20 +416,43 @@ export function createAlertRoutes(
       }
 
       const alert = result.value;
-      const scope = hasExplicitChainScope(req.query)
-        ? chainScope(req)
-        : { chainId: alert.chain_id ?? PRIMARY_SIGNAL_CHAIN_ID };
+      const scope = resolveDetailScope(req);
       if ("error" in scope) {
         res.status(400).json({ error: scope.error });
         return;
       }
-      if (
-        (alert.chain_id ?? null) !== scope.chainId ||
-        alert.delivery_status === "draft" ||
-        alert.delivery_status === "queued"
-      ) {
+
+      if (alert.delivery_status === "draft" || alert.delivery_status === "queued") {
         next(notFound("Alert not found"));
         return;
+      }
+
+      // When an explicit chain/product scope is provided, enforce it.
+      if ("feedScope" in scope && scope.feedScope) {
+        const kind = alert.alert_kind ?? "market_event";
+        const chain = alert.chain_id ?? null;
+        if (scope.feedScope === "market" && kind !== "market_event") {
+          next(notFound("Alert not found"));
+          return;
+        }
+        if (scope.feedScope === "desk" && kind !== "desk_trigger") {
+          next(notFound("Alert not found"));
+          return;
+        }
+        if (scope.feedScope === "all") {
+          const ok =
+            (kind === "market_event" && chain === PRIMARY_SIGNAL_CHAIN_ID) ||
+            (kind === "desk_trigger" && chain === ACTIVE_INTELLIGENCE_CHAIN_ID);
+          if (!ok) {
+            next(notFound("Alert not found"));
+            return;
+          }
+        }
+      } else if ("chainId" in scope && scope.chainId !== undefined) {
+        if ((alert.chain_id ?? null) !== scope.chainId) {
+          next(notFound("Alert not found"));
+          return;
+        }
       }
 
       let signal: DeskSignalRow | null = null;

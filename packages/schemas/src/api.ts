@@ -66,6 +66,11 @@ export interface PublicAlertResponse {
   alertKind?: AlertKind;
   publicationChainId?: number;
   sourceDedupeKey?: string;
+  /**
+   * Typed Desk-trigger source label for UI (e.g. "Health factor", "Capital top-up").
+   * Present on desk_trigger Alerts; omit for market_event.
+   */
+  sourceTriggerLabel?: string;
   signalType?: DeskSignalType;
   signalStatus?: AlertSignalStatus;
   policyVerdict?: DeskPolicyVerdict;

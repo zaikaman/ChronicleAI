@@ -9,6 +9,13 @@ import {
 } from "../../components/data-primitives.tsx";
 import { PublicationProof } from "../../components/publication-proof.tsx";
 import { chainLabel, txExplorerUrl } from "../../lib/explorer.ts";
+import {
+  alertActionStepLabel,
+  alertHasSignalStep,
+  alertKindBadgeLabel,
+  alertSourceOriginLabel,
+  isDeskTriggerAlert,
+} from "./alert-card-presentation.ts";
 
 interface AlertCardProps {
   alert: PublicAlertResponse;
@@ -75,8 +82,11 @@ function formatCausalLabel(value?: string | null): string {
     .join(" ");
 }
 
-function signalStatusCopy(status?: PublicAlertResponse["signalStatus"]): string {
-  switch (status) {
+function signalStatusCopy(alert: PublicAlertResponse): string {
+  if (!alertHasSignalStep(alert)) {
+    return isDeskTriggerAlert(alert) ? "Direct decision" : "No signal created";
+  }
+  switch (alert.signalStatus) {
     case "created":
       return "Signal created";
     case "failed":
@@ -89,9 +99,10 @@ function signalStatusCopy(status?: PublicAlertResponse["signalStatus"]): string 
 }
 
 function signalStatusVariant(
-  status?: PublicAlertResponse["signalStatus"],
+  alert: PublicAlertResponse,
 ): "default" | "success" | "warning" | "error" | "info" {
-  switch (status) {
+  if (!alertHasSignalStep(alert)) return "default";
+  switch (alert.signalStatus) {
     case "created":
       return "success";
     case "failed":
@@ -103,15 +114,44 @@ function signalStatusVariant(
   }
 }
 
+function actionStatusVariant(
+  status?: PublicAlertResponse["actionStatus"],
+): "default" | "success" | "warning" | "error" | "info" {
+  switch (status) {
+    case "filled":
+      return "success";
+    case "submitted":
+    case "pending":
+      return "info";
+    case "deferred":
+      return "warning";
+    case "failed":
+      return "error";
+    case "ignored":
+    case "not_created":
+    default:
+      return "default";
+  }
+}
+
 function noActionReason(alert: PublicAlertResponse): string | null {
-  if (alert.signalStatus === "not_eligible") {
+  if (alert.policyVerdict === "defer" || alert.actionStatus === "deferred") {
+    return "Decision deferred — no Action was executed. The Alert remains public with the recorded evidence.";
+  }
+  if (!alertHasSignalStep(alert) && alert.actionStatus === "pending") {
+    return "Direct Desk decision recorded; Action pending execution proof.";
+  }
+  if (alert.signalStatus === "not_eligible" && !isDeskTriggerAlert(alert)) {
     return "The event was recorded, but no desk signal was created because this event type has no executable strategy.";
   }
   if (alert.signalStatus === "failed") {
     return "The Alert remains visible; signal projection failed and can be retried without changing the recorded evidence.";
   }
-  if (alert.actionStatus === "ignored" || alert.actionStatus === "deferred") {
-    return `The signal was recorded, but the desk action was ${formatCausalLabel(alert.actionStatus).toLowerCase()}.`;
+  if (alert.actionStatus === "ignored") {
+    return "The signal was recorded, but the desk action was ignored.";
+  }
+  if (alert.actionStatus === "failed") {
+    return "Action failed. The Alert and Decision remain public; retry does not rewrite the recorded evidence.";
   }
   return null;
 }
@@ -130,14 +170,19 @@ function CausalChain({
       alert.actionStatus ||
       alert.intentId ||
       alert.ticketId ||
-      alert.transactionHash,
+      alert.transactionHash ||
+      alert.actionTransactionHash ||
+      isDeskTriggerAlert(alert),
   );
   if (!hasCausalData) return null;
 
-  const action = alert.causalChain?.action;
+  const showSignal = alertHasSignalStep(alert);
   const proof = alert.causalChain?.proof;
-  const proofHref = proof?.explorerUrl ?? alert.explorerUrl;
+  const proofHref = proof?.explorerUrl ?? alert.actionExplorerUrl ?? alert.explorerUrl;
   const reason = noActionReason(alert);
+  const isDeferred =
+    alert.policyVerdict === "defer" || alert.actionStatus === "deferred";
+  const actionLabel = alertActionStepLabel(alert);
 
   return (
     <div
@@ -149,42 +194,67 @@ function CausalChain({
           Causal chain
         </p>
         <StatusBadge
-          label={signalStatusCopy(alert.signalStatus)}
-          variant={signalStatusVariant(alert.signalStatus)}
+          label={signalStatusCopy(alert)}
+          variant={signalStatusVariant(alert)}
           data-testid="alert-signal-status"
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs">
+      <div
+        className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs"
+        data-testid="alert-causal-steps"
+        aria-label={
+          showSignal
+            ? "Alert, Signal, Decision, Action, Proof"
+            : "Alert, Decision, Action, Proof"
+        }
+      >
         <span className={`${chipClassName()} text-foreground`}>Alert</span>
+
+        {showSignal ? (
+          <>
+            <span className="text-muted-foreground" aria-hidden="true">
+              →
+            </span>
+            <span className={chipClassName()} data-testid="alert-causal-signal-step">
+              Signal{alert.signalType ? ` · ${formatCausalLabel(alert.signalType)}` : ""}
+            </span>
+          </>
+        ) : null}
+
         <span className="text-muted-foreground" aria-hidden="true">
           →
         </span>
-        <span className={chipClassName()}>
-          Signal{alert.signalType ? ` · ${formatCausalLabel(alert.signalType)}` : ""}
-        </span>
-        <span className="text-muted-foreground" aria-hidden="true">
-          →
-        </span>
-        <span className={chipClassName()}>
+        <span className={chipClassName()} data-testid="alert-causal-decision-step">
           Decision{alert.policyVerdict ? ` · ${formatCausalLabel(alert.policyVerdict)}` : ""}
         </span>
+
         <span className="text-muted-foreground" aria-hidden="true">
           →
         </span>
-        {linkable || !alert.ticketId ? (
-          <span className={chipClassName()}>
-            Action · {formatCausalLabel(action?.status ?? alert.actionStatus)}
+        {isDeferred ? (
+          <span
+            className={chipClassName()}
+            data-testid="alert-causal-action-step"
+            title="Deferred decisions do not produce an Action"
+          >
+            {actionLabel}
+          </span>
+        ) : linkable || !alert.ticketId ? (
+          <span className={chipClassName()} data-testid="alert-causal-action-step">
+            {actionLabel}
           </span>
         ) : (
           <Link
             to={`/desk/tickets/${encodeURIComponent(alert.ticketId)}`}
             className={`${chipClassName()} hover:border-accent/60 hover:text-foreground transition-colors`}
             data-testid="alert-ticket-link"
+            onClick={(event) => event.stopPropagation()}
           >
-            Action · {formatCausalLabel(action?.status ?? alert.actionStatus)}
+            {actionLabel}
           </Link>
         )}
+
         <span className="text-muted-foreground" aria-hidden="true">
           →
         </span>
@@ -200,7 +270,9 @@ function CausalChain({
             Proof
           </a>
         ) : (
-          <span className={chipClassName()}>Proof · pending</span>
+          <span className={chipClassName()} data-testid="alert-proof-pending">
+            Proof · pending
+          </span>
         )}
       </div>
 
@@ -214,12 +286,20 @@ function CausalChain({
         {alert.actionStatus ? (
           <span data-testid="alert-action-status">
             Action:{" "}
-            <strong className="text-foreground">{formatCausalLabel(alert.actionStatus)}</strong>
+            <StatusBadge
+              label={formatCausalLabel(alert.actionStatus)}
+              variant={actionStatusVariant(alert.actionStatus)}
+            />
           </span>
         ) : null}
-        {alert.transactionHash ? (
-          <code className="font-mono text-[11px] text-foreground" title={alert.transactionHash}>
-            tx {alert.transactionHash.slice(0, 10)}…{alert.transactionHash.slice(-6)}
+        {alert.actionTransactionHash || alert.transactionHash ? (
+          <code
+            className="font-mono text-[11px] text-foreground"
+            title={alert.actionTransactionHash ?? alert.transactionHash}
+            data-testid="alert-tx-hash"
+          >
+            tx {(alert.actionTransactionHash ?? alert.transactionHash)!.slice(0, 10)}…
+            {(alert.actionTransactionHash ?? alert.transactionHash)!.slice(-6)}
           </code>
         ) : null}
       </div>
@@ -236,8 +316,11 @@ export function AlertCard({
   linkable = true,
   "data-testid": dataTestId = "alert-card",
 }: AlertCardProps): React.ReactElement {
+  const desk = isDeskTriggerAlert(alert);
   const eventLabel = formatEventType(alert.eventType);
-  const sourceLabel =
+  const kindBadge = alertKindBadgeLabel(alert);
+  const sourceOrigin = alertSourceOriginLabel(alert);
+  const sourceChainLabel =
     typeof alert.chainId === "number" ? `Source: ${chainLabel(alert.chainId)}` : null;
   const publicationLabel = `Published/Executed: ${chainLabel(
     alert.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID,
@@ -248,6 +331,11 @@ export function AlertCard({
       <div className="flex justify-between items-start mb-4 gap-4">
         <h3 className="text-xl font-semibold text-foreground leading-snug">{alert.title}</h3>
         <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+          <StatusBadge
+            label={kindBadge}
+            variant={desk ? "info" : "default"}
+            data-testid="alert-kind-badge"
+          />
           {alert.confidence ? (
             <StatusBadge
               label={`${alert.confidence} confidence`}
@@ -264,16 +352,28 @@ export function AlertCard({
       <p className="text-muted-foreground text-sm leading-relaxed mb-4">{alert.summary}</p>
 
       {(eventLabel ||
-        sourceLabel ||
+        sourceOrigin ||
+        sourceChainLabel ||
         publicationLabel ||
         alert.protocol ||
         alert.flowContext?.direction ||
         alert.flowContext?.fromLabel ||
         alert.flowContext?.toLabel) && (
         <div className="flex flex-wrap gap-2 mb-4" data-testid="alert-flow-chips">
+          {sourceOrigin ? (
+            <span className={chipClassName()} data-testid="alert-source-origin">
+              {sourceOrigin}
+            </span>
+          ) : null}
           {eventLabel ? <span className={chipClassName()}>{eventLabel}</span> : null}
-          {sourceLabel ? <span className={chipClassName()}>{sourceLabel}</span> : null}
-          <span className={chipClassName()}>{publicationLabel}</span>
+          {sourceChainLabel ? (
+            <span className={chipClassName()} data-testid="alert-source-chain">
+              {sourceChainLabel}
+            </span>
+          ) : null}
+          <span className={chipClassName()} data-testid="alert-publication-chain">
+            {publicationLabel}
+          </span>
           {alert.protocol ? <span className={chipClassName()}>{alert.protocol}</span> : null}
           {formatDirection(alert.flowContext?.direction) ? (
             <span className={chipClassName()} data-testid="alert-direction-chip">
@@ -301,7 +401,7 @@ export function AlertCard({
         gasUsedWei={alert.gasUsedWei}
         keeperHubRunId={alert.keeperHubRunId}
         explorerUrl={alert.explorerUrl}
-        chainId={alert.chainId}
+        chainId={alert.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID}
         compact={linkable}
         data-testid="alert-publication-proof"
       />
@@ -347,7 +447,7 @@ export function AlertCard({
   );
 
   const className =
-    "block bg-frame border border-border rounded-2xl p-6 hover:border-accent/40 transition-all duration-300 shadow-xs hover:shadow-md";
+    "block bg-frame border border-border rounded-2xl p-6 hover:border-accent/40 transition-all duration-300 shadow-xs hover:shadow-md motion-reduce:transition-none";
 
   if (linkable) {
     return (

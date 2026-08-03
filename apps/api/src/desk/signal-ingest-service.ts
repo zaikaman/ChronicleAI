@@ -70,6 +70,12 @@ export interface DeskSignalIngestDeps {
   config: DeskPolicyConfig;
   /** Optional RPC for gas_regime enrichment when gasGwei missing. */
   rpcUrl?: string | null | undefined;
+  /**
+   * Optional Desk-trigger Alert service. When set, non-ignore desk-native
+   * signals create/reuse a public desk_trigger Alert and link source_alert_id.
+   * Failures are best-effort and never reject the Signal.
+   */
+  deskTriggerAlerts?: import("../services/desk-trigger-alert-service.ts").DeskTriggerAlertService | null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -624,7 +630,44 @@ export function createDeskSignalIngestService(
         features,
         sources,
         dedupeKey,
+        signalOrigin: "desk_read",
+        sourceDedupeKey: dedupeKey,
+        sourceEvidence: {
+          pollKind: pollKind ?? null,
+          signalType,
+          chainId: DESK_CHAIN_ID,
+        },
       });
+
+      // Best-effort Desk-trigger Alert for non-ignore desk-native conditions.
+      // Never blocks Signal acceptance or the Desk decision path.
+      let linkedRow = result.row;
+      if (deps.deskTriggerAlerts) {
+        try {
+          const alertResult = await deps.deskTriggerAlerts.createFromSignal({
+            signal: result.row,
+            skipIfLinked: true,
+          });
+          if (alertResult?.alert?.id && !result.row.source_alert_id) {
+            // Re-read so callers see source_alert_id after linkage.
+            const refreshed = await signals.findById(result.row.id);
+            if (refreshed.ok && refreshed.value) {
+              linkedRow = refreshed.value;
+            } else {
+              linkedRow = {
+                ...result.row,
+                source_alert_id: alertResult.alert.id,
+                signal_origin: result.row.signal_origin ?? "desk_read",
+              };
+            }
+          }
+        } catch (alertError) {
+          console.warn(
+            "[desk-signal-ingest] desk-trigger alert failed (non-blocking):",
+            alertError instanceof Error ? alertError.message : alertError,
+          );
+        }
+      }
 
       // policy_verdict is always set by signal engine classify — quality bar complete
       return {
@@ -634,7 +677,7 @@ export function createDeskSignalIngestService(
           ? "Desk signal already ingested (deduped)"
           : "Desk signal accepted",
         signal: result.signal,
-        row: result.row,
+        row: linkedRow,
         deduped: result.deduped,
       };
     } catch (error) {

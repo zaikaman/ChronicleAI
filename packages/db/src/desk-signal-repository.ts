@@ -11,6 +11,15 @@ export interface DeskSignalRepository {
   findById(id: string): Promise<Result<DeskSignalRow | null>>;
   findByDedupeKey(dedupeKey: string): Promise<Result<DeskSignalRow | null>>;
   findBySourceAlertId?(alertId: string): Promise<Result<DeskSignalRow | null>>;
+  /**
+   * Link an existing Desk Signal to its public Alert after Alert creation.
+   * Sets source_alert_id and signal_origin when still manual/desk_read.
+   */
+  linkSourceAlertId?(
+    signalId: string,
+    alertId: string,
+    options?: { signalOrigin?: "alert" | "desk_read" | "manual" },
+  ): Promise<Result<DeskSignalRow>>;
   listRecent(limitParam?: number): Promise<Result<DeskSignalRow[]>>;
   listByType(signalType: DeskSignalType, limitParam?: number): Promise<Result<DeskSignalRow[]>>;
 }
@@ -61,6 +70,27 @@ export function createDeskSignalRepository(supabase: SupabaseClient): DeskSignal
 
       if (error) return failure(mapPostgrestError(error));
       return success(maybeRow((data ?? []) as DeskSignalRow[]));
+    },
+
+    async linkSourceAlertId(signalId, alertId, options) {
+      const update: Record<string, unknown> = {
+        source_alert_id: alertId,
+      };
+      if (options?.signalOrigin) {
+        update.signal_origin = options.signalOrigin;
+      } else {
+        // Desk-native polls that produce a Desk-trigger Alert stay desk_read.
+        update.signal_origin = "desk_read";
+      }
+
+      const { data, error } = await table()
+        .update(update)
+        .eq("id", signalId)
+        .select()
+        .single();
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(data as unknown as DeskSignalRow);
     },
 
     async listRecent(limitParam = 50) {

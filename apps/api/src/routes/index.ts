@@ -90,7 +90,9 @@ import {
 } from "../monitoring/on-chain-block-service.ts";
 import { createPriceOracle } from "../monitoring/price-oracle-service.ts";
 import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
+import { createAlertPublicationService } from "../services/alert-publication-service.ts";
 import { createAlertToSignalService } from "../services/alert-to-signal-service.ts";
+import { createDeskTriggerAlertService } from "../services/desk-trigger-alert-service.ts";
 import { warnIfPrivateRoutingMisconfigured } from "../services/keeperhub-private-capability.ts";
 import { type LLMProviderMap, createProviderConfigs } from "../services/llm-provider-client.ts";
 import { createNewsletterSubscriptionService } from "../services/newsletter-subscription-service.ts";
@@ -260,11 +262,28 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
       signalEngine: deskSignalEngine,
     }),
   );
+
+  // Shared publication path for Desk-trigger Alerts (best-effort; never blocks Desk).
+  const deskTriggerPublication = createAlertPublicationService(
+    deps.alertRepo,
+    registryService,
+    env.frontendOrigin,
+    notificationService,
+    treasuryGate,
+    deps.execLogRepo,
+  );
+  const deskTriggerAlerts = createDeskTriggerAlertService({
+    alertRepo: deps.alertRepo,
+    signalRepo: deskSignalRepo,
+    publicationService: deskTriggerPublication,
+  });
+
   const deskSignalIngest = createDeskSignalIngestService({
     signalEngine: deskSignalEngine,
     signals: deskSignalRepo,
     config: deskPolicyConfig,
     rpcUrl: env.rpcUrl,
+    deskTriggerAlerts,
   });
 
   const deskLlmConfigured = Boolean(
@@ -430,6 +449,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     strategyRunner: deskStrategyRunner,
     signals: deskSignalRepo,
     alertRepo: deps.alertRepo,
+    deskTriggerAlerts,
     executionBridge: deskExecutionBridge,
     controlState: deskControlStateRepo,
     agent: deskTradingAgent,

@@ -2,11 +2,22 @@
 
 import type { PaginationMeta, PublicAlertResponse } from "@chronicleai/schemas";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiGetJson, toErrorMessage } from "../../lib/api.ts";
 import { EMPTY_PAGINATION, normalizePaginationMeta } from "../../lib/pagination.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
 import { isAlertVisibleInPublicUi } from "./alert-visibility.ts";
+
+/** Product feed scope for the unified Alerts page. */
+export type AlertsFeedScope = "all" | "market" | "desk";
+
+export interface AlertsQueryFilters {
+  scope?: AlertsFeedScope;
+  eventType?: string;
+  alertKind?: string;
+  signalStatus?: string;
+  chainId?: string;
+}
 
 export interface AlertsState {
   alerts: PublicAlertResponse[];
@@ -18,7 +29,7 @@ export interface AlertsState {
   refetch: () => void;
 }
 
-function mapAlert(raw: Record<string, unknown>): PublicAlertResponse {
+export function mapAlert(raw: Record<string, unknown>): PublicAlertResponse {
   const alert: PublicAlertResponse = {
     id: String(raw.id),
     title: String(raw.title),
@@ -54,6 +65,9 @@ function mapAlert(raw: Record<string, unknown>): PublicAlertResponse {
     alert.publicationChainId = raw.publicationChainId;
   }
   if (typeof raw.sourceDedupeKey === "string") alert.sourceDedupeKey = raw.sourceDedupeKey;
+  if (typeof raw.sourceTriggerLabel === "string") {
+    alert.sourceTriggerLabel = raw.sourceTriggerLabel;
+  }
   if (typeof raw.signalType === "string")
     alert.signalType = raw.signalType as NonNullable<PublicAlertResponse["signalType"]>;
   if (["not_eligible", "pending", "created", "failed"].includes(String(raw.signalStatus))) {
@@ -83,6 +97,9 @@ function mapAlert(raw: Record<string, unknown>): PublicAlertResponse {
   if (raw.causalChain && typeof raw.causalChain === "object") {
     alert.causalChain = raw.causalChain as NonNullable<PublicAlertResponse["causalChain"]>;
   }
+  if (raw.flowContext && typeof raw.flowContext === "object") {
+    alert.flowContext = raw.flowContext as NonNullable<PublicAlertResponse["flowContext"]>;
+  }
 
   return alert;
 }
@@ -94,16 +111,30 @@ interface AlertsPageResult {
   pagination: PaginationMeta;
 }
 
+function buildAlertParams(
+  page: number,
+  limit: number,
+  filters?: AlertsQueryFilters,
+): Record<string, string | number> {
+  const params: Record<string, string | number> = { page, limit };
+  if (filters?.scope) params.scope = filters.scope;
+  if (filters?.eventType) params.eventType = filters.eventType;
+  if (filters?.alertKind) params.alertKind = filters.alertKind;
+  if (filters?.signalStatus) params.signalStatus = filters.signalStatus;
+  if (filters?.chainId) params.chainId = filters.chainId;
+  return params;
+}
+
 async function fetchAlertsPage(
   page: number,
   limit: number,
-  chainId?: string,
+  filters?: AlertsQueryFilters,
   signal?: AbortSignal,
 ): Promise<AlertsPageResult> {
   const data = await apiGetJson<{
     items: Array<Record<string, unknown>>;
     pagination?: unknown;
-  }>("/alerts", { signal, params: { page, limit, ...(chainId ? { chainId } : {}) } });
+  }>("/alerts", { signal, params: buildAlertParams(page, limit, filters) });
 
   const items = (data.items ?? []).map(mapAlert).filter(isAlertVisibleInPublicUi);
   return {
@@ -116,12 +147,37 @@ async function fetchAlertsPage(
   };
 }
 
-export function useAlerts(limit = DEFAULT_LIMIT, chainId?: string): AlertsState {
+/**
+ * @param limit Page size
+ * @param filtersOrChainId Either full query filters, or a legacy chainId string
+ *   for callers that only pass chain (home preview / publications).
+ */
+export function useAlerts(
+  limit = DEFAULT_LIMIT,
+  filtersOrChainId?: AlertsQueryFilters | string,
+): AlertsState {
+  const filters: AlertsQueryFilters | undefined =
+    typeof filtersOrChainId === "string"
+      ? { chainId: filtersOrChainId }
+      : filtersOrChainId;
+
   const [page, setPage] = useState(1);
 
+  // Reset to page 1 when server-side filters change.
+  const filterKey = JSON.stringify({
+    scope: filters?.scope ?? null,
+    eventType: filters?.eventType ?? null,
+    alertKind: filters?.alertKind ?? null,
+    signalStatus: filters?.signalStatus ?? null,
+    chainId: filters?.chainId ?? null,
+  });
+  useEffect(() => {
+    setPage(1);
+  }, [filterKey]);
+
   const query = useQuery({
-    queryKey: queryKeys.alerts.list(page, limit, chainId),
-    queryFn: ({ signal }) => fetchAlertsPage(page, limit, chainId, signal),
+    queryKey: queryKeys.alerts.list(page, limit, filterKey),
+    queryFn: ({ signal }) => fetchAlertsPage(page, limit, filters, signal),
     placeholderData: (previous) => previous,
   });
 
