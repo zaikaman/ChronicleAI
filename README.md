@@ -106,7 +106,7 @@ The core demo uses one Alert→Signal→Action path. The repository includes 33 
 | Surface / workflow | Action | Transaction |
 | --- | --- | --- |
 | Desk Oracle Arbitrage | Uniswap V3 swap via KeeperHub private route | [0xf7c52b28…0a3d0b6](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) |
-| Desk Yield Rotation | Aave V3 supply via KeeperHub | [0xa6ccb246…51279d2a](https://sepolia.etherscan.io/tx/0xa6ccb2467f04e4159a0219fba7a3de307a2e196487cc6242d80493b851279d2a) |
+| Desk Yield Rotation | Uniswap LINK→USDC swap via KeeperHub | [0xa6ccb246…51279d2a](https://sepolia.etherscan.io/tx/0xa6ccb2467f04e4159a0219fba7a3de307a2e196487cc6242d80493b851279d2a) |
 | Desk Treasury Sweep | Treasury transfer workflow | [0xe779d061…22daec](https://sepolia.etherscan.io/tx/0xe779d061163f8dc24b76e203fa478c38eeb6e7cc2ee75936cbba6ccc1922daec) |
 | Daily Digest | `ChronicleRegistry.publishDigest` | [0x763d66cc…b54402](https://sepolia.etherscan.io/tx/0x763d66cc087c6d1ed6258b1d4f7a0a3d77977db23618529172d79af3aeb54402) |
 | Intelligence Alert | `ChronicleRegistry.publishAlert` | [0xba4e9a2e…580107](https://sepolia.etherscan.io/tx/0xba4e9a2edb82ed3bc2c43ebb3db4ad3a089aa5c93552c49b89484d0d47580107) |
