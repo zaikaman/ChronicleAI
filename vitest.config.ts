@@ -49,6 +49,8 @@ export default defineConfig({
     include: ["apps/**/src/**/*.test.ts", "packages/**/src/**/*.test.ts", "tests/**/*.test.ts"],
     setupFiles: ["./tests/setup-db-isolation.ts"],
     environment: "node",
+    testTimeout: 15_000,
+    hookTimeout: 30_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

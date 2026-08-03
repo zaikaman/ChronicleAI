@@ -5,7 +5,7 @@
 > ChronicleAI publishes public Alerts from market events and Desk-native conditions, links eligible Alerts to Desk Signals when applicable, and converts policy-approved decisions into KeeperHub Actions with public proof.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
-[![Tests](https://img.shields.io/badge/Tests-1074%20passing-brightgreen?style=for-the-badge)](README.md#verification)
+[![Tests](https://img.shields.io/badge/Tests-1101%20passing-brightgreen?style=for-the-badge)](README.md#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
@@ -259,7 +259,7 @@ The local services run at:
 
 ## Verification
 
-The project reports **1,100 passing and 42 skipped tests** across 136 test files, plus 33 KeeperHub workflow definitions.
+The project reports **1,101 passing and 42 skipped tests** across 136 test files, plus 33 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check
