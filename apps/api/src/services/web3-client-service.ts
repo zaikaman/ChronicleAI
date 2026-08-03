@@ -234,7 +234,12 @@ async function verifyErc20Transfer(input: {
   try {
     const chain = chainFromId(mapNetworkToChainId(input.network, 11_155_111));
     const client = createPublicClient({ chain, transport: http(input.rpcUrl) });
-    const receipt = await client.getTransactionReceipt({ hash: input.txHash as Hash });
+    // Para/KeeperHub may return the transaction hash before the public RPC can
+    // see its receipt. Wait for mining here so a successful transfer is not
+    // incorrectly rejected and omitted from the desk capital-moves audit.
+    const receipt = await client.waitForTransactionReceipt({
+      hash: input.txHash as Hash,
+    });
     if (receipt.status !== "success") {
       return { valid: false, error: `Transfer transaction ${input.txHash} was not successful` };
     }
