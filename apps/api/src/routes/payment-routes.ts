@@ -77,6 +77,11 @@ export function createPaymentRoutes(params: {
   registryService?: ChronicleRegistryService | null;
   /** Optional pre-built premium receipt publisher. */
   premiumReceiptService?: PremiumReceiptPublicationService | null;
+  /** Queue premium receipt publication after the access response is sent. */
+  enqueuePremiumReceipt?: (params: {
+    payment: import("@chronicleai/db").PaymentRecordRow;
+    premiumItem: import("@chronicleai/db").PremiumIntelligenceItemRow | null;
+  }) => void;
   /** Default campaign length when premium item omits endsAt (days). */
   sponsoredWatchDefaultDurationDays?: number;
   /** Pricing + duration bounds for custom sponsored watch product creation. */
@@ -527,49 +532,9 @@ export function createPaymentRoutes(params: {
         }
       }
 
-      // Soft-fail premium receipt registry write (settlement already succeeded).
-      let premiumReceipt: {
-        attempted: boolean;
-        success: boolean;
-        registryTxHash?: string;
-        keeperHubRunId?: string;
-        explorerUrl?: string;
-        contentUri?: string;
-        errorMessage?: string;
-      } | undefined;
-      if (premiumReceiptService) {
-        try {
-          const pub = await premiumReceiptService.publishForSettlement({
-            payment: paymentRecord,
-            premiumItem,
-          });
-          if (pub.attempted || pub.errorMessage !== "skipped_sponsored_monitor") {
-            premiumReceipt = {
-              attempted: pub.attempted,
-              success: pub.success,
-              ...(pub.registryTxHash ? { registryTxHash: pub.registryTxHash } : {}),
-              ...(pub.keeperHubRunId ? { keeperHubRunId: pub.keeperHubRunId } : {}),
-              ...(pub.explorerUrl ? { explorerUrl: pub.explorerUrl } : {}),
-              ...(pub.contentUri ? { contentUri: pub.contentUri } : {}),
-              ...(pub.errorMessage ? { errorMessage: pub.errorMessage } : {}),
-            };
-          }
-        } catch (receiptError) {
-          console.error(
-            "Failed to publish premium receipt (settlement still valid):",
-            receiptError,
-          );
-          premiumReceipt = {
-            attempted: true,
-            success: false,
-            errorMessage:
-              receiptError instanceof Error
-                ? receiptError.message
-                : "premium_receipt_publish_failed",
-          };
-        }
-      }
-
+      // Settlement and access are complete. Registry publication is deliberately
+      // queued after the response so KeeperHub latency cannot trip the Heroku
+      // request timeout. The settled payment row is the durable retry cursor.
       res.json({
         settled: true,
         paymentRecordId: result.paymentRecordId,
@@ -581,8 +546,29 @@ export function createPaymentRoutes(params: {
         },
         accessReceipt: receipt.accessReceipt,
         accessReceiptExpiresAt: receipt.accessReceiptExpiresAt,
-        ...(premiumReceipt ? { premiumReceipt } : {}),
+        premiumReceipt: {
+          attempted: false,
+          success: false,
+          pending: Boolean(premiumReceiptService && !paymentRecord.registry_tx_hash),
+        },
       });
+
+      if (premiumReceiptService && !paymentRecord.registry_tx_hash) {
+        const enqueue =
+          params.enqueuePremiumReceipt ??
+          ((job: {
+            payment: typeof paymentRecord;
+            premiumItem: typeof premiumItem;
+          }) => {
+            void premiumReceiptService.publishForSettlement(job).catch((error) => {
+              console.error(
+                `[payments/settlements] Background premium receipt publication failed payment=${paymentRecord.id}:`,
+                error,
+              );
+            });
+          });
+        enqueue({ payment: paymentRecord, premiumItem });
+      }
     } catch (error: unknown) {
       res.status(400).json({
         settled: false,

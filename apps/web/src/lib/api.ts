@@ -150,31 +150,42 @@ export async function apiPostJson<T>(
       ? path
       : `${API_BASE.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 
-    const response = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: options?.signal,
-      credentials: options?.credentials,
-    });
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: options?.signal,
+        credentials: options?.credentials,
+      });
 
-    if (!response.ok) {
-      const errBody = await response.json().catch(() => ({ error: response.statusText }));
-      throw new ApiHttpError(
-        response.status,
-        messageFromBody(errBody, `Request failed (${response.status})`),
-        errBody,
-      );
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({ error: response.statusText }));
+        throw new ApiHttpError(
+          response.status,
+          messageFromBody(errBody, `Request failed (${response.status})`),
+          errBody,
+        );
+      }
+
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      return (await response.json()) as T;
+    } catch (error) {
+      if (error instanceof ApiHttpError) throw error;
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new ApiHttpError(
+          408,
+          "Payment request timed out; verify settlement before retrying.",
+        );
+      }
+      throw new ApiHttpError(0, error instanceof Error ? error.message : "Network error");
     }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    return (await response.json()) as T;
   }
 
   try {

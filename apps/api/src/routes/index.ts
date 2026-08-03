@@ -98,6 +98,12 @@ import { type LLMProviderMap, createProviderConfigs } from "../services/llm-prov
 import { createNewsletterSubscriptionService } from "../services/newsletter-subscription-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
 import {
+  createChronicleRegistryService,
+  type ChronicleRegistryService,
+} from "../services/chronicle-registry-service.ts";
+import { createPremiumReceiptPublicationService } from "../services/premium-receipt-publication-service.ts";
+import { createPremiumReceiptPublicationWorker } from "../services/premium-receipt-publication-worker.ts";
+import {
   ensureTelegramWebhook,
   resolvePublicApiBaseUrl,
 } from "../services/telegram-webhook-registration.ts";
@@ -739,7 +745,6 @@ import {
   DIGEST_SCHEDULE_GRACE_MINUTES,
 } from "@chronicleai/config";
 import { DigestRunHandler } from "../keeperhub/digest-run-handler.ts";
-import { createChronicleRegistryService } from "../services/chronicle-registry-service.ts";
 import { createDigestEventSelectionService } from "../services/digest-event-selection-service.ts";
 import { createDigestGenerationService } from "../services/digest-generation-service.ts";
 import { createDigestPublicationService } from "../services/digest-publication-service.ts";
@@ -1066,6 +1071,23 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
     }),
   });
 
+  const registryService: ChronicleRegistryService | null = createChronicleRegistryService(
+    web3Client,
+    { strictContentUri: env.nodeEnv === "production" },
+  );
+  const premiumReceiptService = createPremiumReceiptPublicationService({
+    paymentRecordRepo: deps.paymentRecordRepo,
+    execLogRepo: deps.execLogRepo,
+    registry: registryService,
+    frontendOrigin: env.frontendOrigin,
+  });
+  const premiumReceiptWorker = createPremiumReceiptPublicationWorker({
+    paymentRecordRepo: deps.paymentRecordRepo,
+    premiumRepo: deps.premiumRepo,
+    publisher: premiumReceiptService,
+  });
+  premiumReceiptWorker.start();
+
   // Shared Loop 4 service: create on payment, monitor window, auto-publish report
   const watchReportService = createSponsoredWatchReportService({
     providerConfigs: createProviderConfigs(env),
@@ -1115,7 +1137,8 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
     console.warn("Desk control plane not registered — /premium/desk/* routes disabled");
   }
 
-  // Payment routes (includes soft-fail publishPremiumReceipt on settle)
+  // Payment routes return access immediately; premium registry publication is
+  // queued and recovered by the durable payment-record worker.
   apiRouter.use(
     createPaymentRoutes({
       premiumRepo: deps.premiumRepo,
@@ -1125,6 +1148,8 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
       adapters,
       receiptService,
       web3Client,
+      premiumReceiptService,
+      enqueuePremiumReceipt: premiumReceiptWorker.enqueue,
       watchService,
       affiliateRepo: deps.affiliateRepo,
       attributionRepo: deps.attributionRepo,

@@ -93,6 +93,11 @@ export interface PaymentRecordRepository {
    * Settled payments that carry an affiliate referral_address for revenue routing.
    */
   listSettledWithReferral(limit?: number): Promise<Result<PaymentRecordRow[]>>;
+  /**
+   * Settled payments whose premium registry receipt has not been published yet.
+   * The payment row is the durable retry cursor for the asynchronous publisher.
+   */
+  listSettledWithoutRegistryProof?(limit?: number): Promise<Result<PaymentRecordRow[]>>;
   findSettledByPayer(
     premiumItemId: string,
     payerReference: string,
@@ -313,6 +318,19 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
         .eq("status", "settled")
         .not("referral_address", "is", null)
         .order("settled_at", { ascending: false })
+        .limit(safeLimit);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success((data ?? []) as PaymentRecordRow[]);
+    },
+
+    async listSettledWithoutRegistryProof(limit = 20) {
+      const safeLimit = Math.min(Math.max(limit, 1), 100);
+      const { data, error } = await table()
+        .select("*")
+        .eq("status", "settled")
+        .is("registry_tx_hash", null)
+        .order("settled_at", { ascending: true })
         .limit(safeLimit);
 
       if (error) return failure(mapPostgrestError(error));
