@@ -113,7 +113,7 @@ The core demo uses one Alert→Signal→Action path. The repository includes 33 
 | Desk Capital Top-up | `recordCapitalMove` workflow | [0x7aac47c6…f224bf](https://sepolia.etherscan.io/tx/0x7aac47c61d30b15a7cb381423731fbd61936e086c5e54402a7a3d54395f224bf) |
 | Trade Ticket | `ChronicleRegistry.recordTradeTicket` | [0xaf1c821f…a1952](https://sepolia.etherscan.io/tx/0xaf1c821f6edbd78af9f6f63d0a982d311d5db05dc217db3787a61179ca4a1952) |
 | Capital Move | `ChronicleRegistry.recordCapitalMove` | [0x254764d5…172c5](https://sepolia.etherscan.io/tx/0x254764d54457a753ad1e2ff6f3e9dec483bfcbdfa7f56a0630ddba0753b172c5) |
-| x402 Premium Receipt | `recordPremiumReceipt` | [0x9e109ac9…2d96](https://sepolia.etherscan.io/tx/0x9e109ac9caa345206c9fb863adcb5dfe9c966df8969b434af9c5f3f7f2c62d96) |
+| x402 Premium Receipt | `transferWithAuthorization` → `recordPremiumReceipt` | Paid on Base: [0x19d45cdb…4a82](https://sepolia.basescan.org/tx/0x19d45cdbef7ab0ba260b823163fd988921b98ca3630c2899af5a1ca27f1e4a82) → Receipt on Sepolia: [0x9e109ac9…2d96](https://sepolia.etherscan.io/tx/0x9e109ac9caa345206c9fb863adcb5dfe9c966df8969b434af9c5f3f7f2c62d96) |
 | MPP Premium Receipt | `recordPremiumReceipt` | [0xe5dd502b…529851](https://sepolia.etherscan.io/tx/0xe5dd502b509fbaecc5a6341130fdc104aa11a1b66b7af0d0386dcd436a529851) |
 | Sponsored Watch | `createSponsoredWatch` | [0xcc5eb3b6…85b2](https://sepolia.etherscan.io/tx/0xcc5eb3b64e1ceb743e99a98525707b3594c36dfec91f1bbb497b2a4e64d785b2) |
 | Sponsored Report | `publishSponsoredReport` | [0x92d63e8b…bdf7](https://sepolia.etherscan.io/tx/0x92d63e8b3912e6fc57b19637cbbb158d20fce8e801997bce6a0489c68846bdf7) |
