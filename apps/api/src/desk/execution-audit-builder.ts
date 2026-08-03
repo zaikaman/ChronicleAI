@@ -4,7 +4,6 @@
  * Strategy-runner owns the builder so policy preflight stays in one place;
  * the execution bridge returns submit/outcome fragments to merge.
  *
- * @see docs/execution-audit-narrative-implementation-plan.md §1.1
  */
 
 import {

@@ -19,7 +19,6 @@
  * - summaryLine is deterministic; LLM may paraphrase but must not add facts.
  * - Public redaction strips raw node inputs/outputs and secrets.
  *
- * @see docs/execution-audit-narrative-implementation-plan.md
  */
 
 // ── Status unions ───────────────────────────────────────────────────────────

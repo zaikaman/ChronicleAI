@@ -59,8 +59,6 @@ ChronicleAI desk and material on-chain writes target **Ethereum Sepolia only** (
 
 **Product honesty:** This is a **private submission path** and full use of KeeperHub’s routing surface on Sepolia. It is **not** a claim of mainnet-scale sandwich economics or “MEV-proof” markets. Prefer copy like “Private route” / “private submission path (Flashbots Protect · Sepolia)” over “MEV-protected.”
 
-Full implementation plan: [`docs/private-routing-implementation-plan.md`](../../docs/private-routing-implementation-plan.md).
-
 ### Workflow node flags
 
 On private desk and kill-switch write nodes (`web3/write-contract`, `web3/approve-token`, `uniswap/*`, `aave-v3/*`, …):
@@ -412,7 +410,7 @@ Empty body `{}` is equivalent to `previous_utc_day`. Explicit `periodStart` / `p
 |------|-------|----------------|
 | **Payment** (users) | Base Sepolia `84532` | x402 / CDP USDC settlement only — **not** KeeperHub write workflows |
 | **Ops / desk / registry** | Ethereum Sepolia `11155111` | All `chronicle-*` and `desk-*` write workflows, registry proofs, capital |
-| **Bridge** | CCTP V2 Base → ETH Sepolia | Batched treasury rebalance (see `docs/CCTP-TREASURY-REBALANCE-PLAN.md`) |
+| **Bridge** | CCTP V2 Base → ETH Sepolia | Batched treasury rebalance |
 | **Newspaper vanity** | Ethereum Mainnet `1` | Optional large-swap / CEX / mint monitors only |
 
 Monitoring source events may still reference Ethereum Mainnet for newspaper context. Desk execution policy only acts on Ethereum Sepolia signals (see `@chronicleai/config` `SEPOLIA_DESK` / `isExecutableDeskChain`).

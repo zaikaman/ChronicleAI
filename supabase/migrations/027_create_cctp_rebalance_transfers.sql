@@ -1,5 +1,4 @@
 -- Migration: CCTP rebalance transfers (Base Sepolia → Ethereum Sepolia)
--- Plan: docs/CCTP-TREASURY-REBALANCE-PLAN.md §6
 
 CREATE TABLE IF NOT EXISTS public.cctp_rebalance_transfers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

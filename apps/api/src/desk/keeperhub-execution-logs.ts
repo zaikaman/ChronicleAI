@@ -6,7 +6,6 @@
  *
  * Soft-fail only: never fail a desk trade because logs failed.
  *
- * @see docs/execution-audit-narrative-implementation-plan.md Phase 2
  * @see keeperhub/docs/api/executions.md (GET …/logs)
  */
 

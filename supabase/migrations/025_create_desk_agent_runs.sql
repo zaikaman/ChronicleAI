@@ -1,5 +1,4 @@
 -- Migration: desk_agent_runs — LLM trading agent audit trail
--- Plan: docs/DESK-LLM-AGENT-PLAN.md §7.4
 
 CREATE TABLE IF NOT EXISTS public.desk_agent_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

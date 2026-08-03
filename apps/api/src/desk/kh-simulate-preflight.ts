@@ -7,7 +7,6 @@
  * - Soft default: sim error/revert → record on audit, still execute if policy passed
  * - Optional strict: DESK_KH_SIMULATE_STRICT blocks on wouldRevert or transport failure
  *
- * @see docs/execution-audit-narrative-implementation-plan.md §Phase 3
  * @see keeperhub/docs/api/direct-execution.md (simulate flag)
  */
 

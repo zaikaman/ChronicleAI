@@ -43,7 +43,7 @@ ChronicleAI is an autonomous on-chain newspaper, paid intelligence feed, and pol
 | **Registry & Alerts** | Public Mempool | Preferred / Sponsored | "Public (Sponsorship requested)" / "Public (Sponsored)" |
 | Chain | Ethereum Sepolia (`11155111`) | Org Turnkey Gas Station | Honest badges on Activity and Desk feeds |
 
-Operator and workflow setup: `workflows/keeperhub/README.md` (Private routing section) and `docs/private-routing-implementation-plan.md`.
+Operator and workflow setup: `workflows/keeperhub/README.md` (Private routing section).
 
 ## Execution audit (product note)
 
@@ -59,7 +59,7 @@ Desk trade tickets may include a continuous **execution audit** story: **policy 
 | Gas used (when real) | Invented estimates presented as fact |
 | Outcome filled / failed | “Probably landed” |
 
-Tone stays calm, editorial, proof-first — same as the rest of the desk ticket. Spec: `docs/execution-audit-narrative-implementation-plan.md`.
+Tone stays calm, editorial, proof-first — same as the rest of the desk ticket.
 
 ## Accessibility & Inclusion
 

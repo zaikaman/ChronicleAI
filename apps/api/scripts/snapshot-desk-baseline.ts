@@ -231,10 +231,6 @@ async function main(): Promise<void> {
     console.log("(none)");
   }
 
-  console.log("");
-  console.log(
-    "Paste the table above into docs/DESK-KEEPERHUB-EXECUTION-PLAN.md §12 appendix after ship.",
-  );
 }
 
 main().catch((error) => {

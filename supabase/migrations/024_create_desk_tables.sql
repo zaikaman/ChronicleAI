@@ -1,5 +1,4 @@
 -- Migration: Chronicle Desk data model (signals, intents, positions, capital, tickets, heartbeats)
--- Plan: docs/CHRONICLE-DESK-PLAN.md §6
 
 -- ── Desk Signals ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.desk_signals (
