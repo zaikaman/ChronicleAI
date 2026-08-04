@@ -1,3 +1,4 @@
+import { EVENT_TYPES } from "@chronicleai/schemas";
 import { type ReactElement, useMemo, useState } from "react";
 import { Page, PageHeader } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
@@ -69,7 +70,7 @@ export function AlertsPage(): ReactElement {
   const { alerts, pagination, setPage, isLoading, error, refetch } = useAlerts(20, serverFilters);
 
   const eventTypeOptions = useMemo(() => {
-    const types = new Set<string>();
+    const types = new Set<string>(EVENT_TYPES);
     for (const alert of alerts) {
       if (alert.eventType) types.add(alert.eventType);
     }
