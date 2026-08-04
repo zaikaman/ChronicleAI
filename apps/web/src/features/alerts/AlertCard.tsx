@@ -127,8 +127,6 @@ function actionStatusVariant(
       return "warning";
     case "failed":
       return "error";
-    case "ignored":
-    case "not_created":
     default:
       return "default";
   }
@@ -180,9 +178,23 @@ function CausalChain({
   const proof = alert.causalChain?.proof;
   const proofHref = proof?.explorerUrl ?? alert.actionExplorerUrl ?? alert.explorerUrl;
   const reason = noActionReason(alert);
-  const isDeferred =
-    alert.policyVerdict === "defer" || alert.actionStatus === "deferred";
+  const isDeferred = alert.policyVerdict === "defer" || alert.actionStatus === "deferred";
   const actionLabel = alertActionStepLabel(alert);
+  const actionTxHash = alert.actionTransactionHash ?? alert.transactionHash;
+  const actionTxHref = actionTxHash
+    ? (alert.actionExplorerUrl ??
+      (/^0x[0-9a-fA-F]{64}$/.test(actionTxHash)
+        ? txExplorerUrl(alert.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID, actionTxHash)
+        : null))
+    : null;
+  const actionHref =
+    !isDeferred && !linkable
+      ? alert.ticketId
+        ? `/desk/tickets/${encodeURIComponent(alert.ticketId)}`
+        : alert.intentId
+          ? `/activity?entityId=${encodeURIComponent(alert.intentId)}&entityType=desk_intent`
+          : actionTxHref
+      : null;
 
   return (
     <div
@@ -204,9 +216,7 @@ function CausalChain({
         className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs"
         data-testid="alert-causal-steps"
         aria-label={
-          showSignal
-            ? "Alert, Signal, Decision, Action, Proof"
-            : "Alert, Decision, Action, Proof"
+          showSignal ? "Alert, Signal, Decision, Action, Proof" : "Alert, Decision, Action, Proof"
         }
       >
         <span className={`${chipClassName()} text-foreground`}>Alert</span>
@@ -240,19 +250,32 @@ function CausalChain({
           >
             {actionLabel}
           </span>
-        ) : linkable || !alert.ticketId ? (
+        ) : actionHref ? (
+          actionHref.startsWith("/") ? (
+            <Link
+              to={actionHref}
+              className={`${chipClassName()} hover:border-accent/60 hover:text-foreground transition-colors`}
+              data-testid="alert-action-link"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {actionLabel}
+            </Link>
+          ) : (
+            <a
+              href={actionHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${chipClassName()} hover:border-accent/60 hover:text-foreground transition-colors`}
+              data-testid="alert-action-link"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {actionLabel}
+            </a>
+          )
+        ) : (
           <span className={chipClassName()} data-testid="alert-causal-action-step">
             {actionLabel}
           </span>
-        ) : (
-          <Link
-            to={`/desk/tickets/${encodeURIComponent(alert.ticketId)}`}
-            className={`${chipClassName()} hover:border-accent/60 hover:text-foreground transition-colors`}
-            data-testid="alert-ticket-link"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {actionLabel}
-          </Link>
         )}
 
         <span className="text-muted-foreground" aria-hidden="true">
@@ -292,15 +315,28 @@ function CausalChain({
             />
           </span>
         ) : null}
-        {alert.actionTransactionHash || alert.transactionHash ? (
-          <code
-            className="font-mono text-[11px] text-foreground"
-            title={alert.actionTransactionHash ?? alert.transactionHash}
-            data-testid="alert-tx-hash"
-          >
-            tx {(alert.actionTransactionHash ?? alert.transactionHash)!.slice(0, 10)}…
-            {(alert.actionTransactionHash ?? alert.transactionHash)!.slice(-6)}
-          </code>
+        {actionTxHash ? (
+          actionTxHref && !linkable ? (
+            <a
+              href={actionTxHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[11px] text-foreground underline decoration-transparent underline-offset-2 hover:text-accent hover:decoration-current transition-colors"
+              title={`Open action transaction ${actionTxHash} on the block explorer`}
+              data-testid="alert-tx-link"
+              onClick={(event) => event.stopPropagation()}
+            >
+              tx {actionTxHash.slice(0, 10)}…{actionTxHash.slice(-6)}
+            </a>
+          ) : (
+            <code
+              className="font-mono text-[11px] text-foreground"
+              title={actionTxHash}
+              data-testid="alert-tx-hash"
+            >
+              tx {actionTxHash.slice(0, 10)}…{actionTxHash.slice(-6)}
+            </code>
+          )
         ) : null}
       </div>
 
