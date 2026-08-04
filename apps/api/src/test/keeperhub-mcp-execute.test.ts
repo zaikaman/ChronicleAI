@@ -283,6 +283,7 @@ describe("helpers", () => {
         'Token approval failed: timeout (operation="request.send", reason="timeout", code=TIMEOUT)',
       ),
     ).toBe(true);
+    expect(isRpcTimeoutError("Step did not record completion")).toBe(true);
     expect(isRpcTimeoutError("Timed out waiting for KeeperHub execution exec_1")).toBe(false);
     expect(isRpcTimeoutError("contract reverted: insufficient balance")).toBe(false);
   });

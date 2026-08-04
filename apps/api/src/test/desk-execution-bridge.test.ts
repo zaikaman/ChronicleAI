@@ -196,6 +196,74 @@ describe("execution-bridge", () => {
     ).toBe(true);
   });
 
+  it("switches to the public workflow when KeeperHub reports a missing step completion", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/workflows/wf-rotate-private/execute")) {
+        return new Response(JSON.stringify({ executionId: "exec-private" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/workflows/wf-rotate-public/execute")) {
+        return new Response(JSON.stringify({ executionId: "exec-public" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/executions/exec-private/wait")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-private",
+            status: "failed",
+            completed: true,
+            error: "Step did not record completion",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (u.includes("/executions/exec-public/wait")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-public",
+            status: "completed",
+            completed: true,
+            transactionHash: "0xpublic",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (u.includes("/logs")) {
+        return new Response(JSON.stringify({ execution: { id: "exec-public" }, logs: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: {
+        rotate: "wf-rotate-private",
+        publicFallbacks: { rotate: "wf-rotate-public" },
+      },
+    });
+
+    const receipt = await bridge.execute("rotate", { intentId: "intent-step-completion" });
+
+    expect(receipt.keeperHubRunId).toBe("exec-public");
+    expect(receipt.executionAudit?.submit.workflowId).toBe("wf-rotate-public");
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes("/workflows/wf-rotate-public/execute"),
+      ),
+    ).toBe(true);
+  });
+
   it("after poll success, fetches /logs once and attaches run nodes", async () => {
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       const u = String(url);

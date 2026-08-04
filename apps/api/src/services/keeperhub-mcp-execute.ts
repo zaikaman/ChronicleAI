@@ -505,6 +505,9 @@ export function isRpcTimeoutError(error: unknown): boolean {
   const message = messages.join(" ");
   if (/timed out waiting for keeperhub/i.test(message)) return false;
   return (
+    // KeeperHub reports a private-RPC completion timeout as a terminal workflow
+    // error instead of exposing the underlying RPC timeout string.
+    /step\s+did\s+not\s+record\s+completion/i.test(message) ||
     /\bTIMEOUT\b/i.test(message) ||
     /operation\s*=\s*["']?request\.send/i.test(message) ||
     /rpc failed[^\n]*\btimeout\b/i.test(message)
