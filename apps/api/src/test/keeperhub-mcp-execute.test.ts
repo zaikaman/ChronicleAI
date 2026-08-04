@@ -284,6 +284,11 @@ describe("helpers", () => {
       ),
     ).toBe(true);
     expect(isRpcTimeoutError("Step did not record completion")).toBe(true);
+    expect(
+      isRpcTimeoutError(
+        'Step "step//./plugins/web3/steps/approve-token//approveTokenStep" exceeded max retries (1 retry)',
+      ),
+    ).toBe(true);
     expect(isRpcTimeoutError("Timed out waiting for KeeperHub execution exec_1")).toBe(false);
     expect(isRpcTimeoutError("contract reverted: insufficient balance")).toBe(false);
   });
