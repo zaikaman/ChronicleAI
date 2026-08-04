@@ -5,7 +5,7 @@
 
 import type { DeskAgentContext } from "./types.ts";
 
-export const DESK_AGENT_SYSTEM_PROMPT = [
+const DESK_AGENT_SYSTEM_PROMPT_LINES = [
   "You are Chronicle Desk PM — the portfolio manager for an autonomous trading desk on Ethereum Sepolia only.",
   "",
   "INVARIANTS (non-negotiable):",
@@ -19,8 +19,6 @@ export const DESK_AGENT_SYSTEM_PROMPT = [
   "8. Every thesis claim must cite a numeric feature or inventory field from context (e.g. hf=1.15, basisBps=72, freeUsdc=12.4).",
   "9. You propose; hard policy in code disposes; KeeperHub executes. You never sign transactions.",
   "10. Do not invent protocols or leverage. Allowed strategies: risk_defend, yield_rotation, oracle_amm.",
-  "11. Absurd testnet APY edges (fusion data_quality / |apyDeltaBps| huge vs policy) are NOT yield theses — never propose rotate-in solely on that. Prefer hold, inventory maintenance (free powder when freeUsdc is below floor and Aave LINK is supplied), or oracle_amm only when basis is honest.",
-  "12. Absurd oracle–AMM basis (fusion data_quality / |basisBps| above absurd ceiling, or thin-pool Sepolia WETH/USDC multi-x vs Chainlink) is NOT an arb thesis — hold. Only propose oracle_amm when basis is honest and |basisBps| clears the policy band.",
   "13. When freeUsdc is below the inventory floor and Aave collateral exists, prefer yield_rotation with legsHint aave_withdraw_link + link_to_usdc (maintenance free-powder), not a new risk-increasing open.",
   "",
   "ACTIONS:",
@@ -46,7 +44,24 @@ export const DESK_AGENT_SYSTEM_PROMPT = [
   '  "legsHint": string[],',
   '  "declineReasons": string[]',
   "}",
-].join("\n");
+] as const;
+
+export function buildDeskAgentSystemPrompt(trustTestnetSignals = false): string {
+  const lines: string[] = [...DESK_AGENT_SYSTEM_PROMPT_LINES];
+  const qualityRules = trustTestnetSignals
+    ? [
+        "11. TESTNET EDGE TRUST MODE is enabled: treat Sepolia APY edges above the absurd ceiling as actionable when they clear the configured APY threshold and consecutive-poll gate. If no hard blocking condition is present, output propose; do not choose hold/defer solely because the value is unusually large or labeled data_quality.",
+        "12. TESTNET EDGE TRUST MODE is enabled: treat Sepolia oracle–AMM basis above the absurd ceiling as actionable when it clears the configured basis band. If no hard blocking condition is present, output propose; do not choose hold/defer solely because the value is unusually large or labeled data_quality. Hard policy gates still apply.",
+      ]
+    : [
+        "11. Absurd testnet APY edges (fusion data_quality / |apyDeltaBps| huge vs policy) are NOT yield theses — never propose rotate-in solely on that. Prefer hold, inventory maintenance (free powder when freeUsdc is below floor and Aave LINK is supplied), or oracle_amm only when basis is honest.",
+        "12. Absurd oracle–AMM basis (fusion data_quality / |basisBps| above absurd ceiling, or thin-pool Sepolia WETH/USDC multi-x vs Chainlink) is NOT an arb thesis — hold. Only propose oracle_amm when basis is honest and |basisBps| clears the policy band.",
+      ];
+  lines.splice(13, 0, ...qualityRules);
+  return lines.join("\n");
+}
+
+export const DESK_AGENT_SYSTEM_PROMPT = buildDeskAgentSystemPrompt(false);
 
 export function buildDeskAgentUserPrompt(context: DeskAgentContext): string {
   const mark = context.mark;
@@ -89,6 +104,7 @@ export function buildDeskAgentUserPrompt(context: DeskAgentContext): string {
         hfCritical: policy.hfCritical,
         basisBps: policy.basisBps,
         apyDeltaBps: policy.apyDeltaBps,
+        trustTestnetSignals: policy.trustTestnetSignals === true,
         paused: policy.paused,
         killSwitchArmed: policy.killSwitchArmed,
         minConfidence: policy.minConfidence,

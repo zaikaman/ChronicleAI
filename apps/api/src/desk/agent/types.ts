@@ -29,6 +29,8 @@ export interface DeskAgentPolicySnapshot {
   hfCritical: number;
   basisBps: number;
   apyDeltaBps: number;
+  apyConsecutivePolls?: number | undefined;
+  oracleMaxStalenessMs?: number | undefined;
   /** Floor of liquid free USDC (maintenance free-powder trigger). */
   minFreeUsdc?: number | undefined;
   /** Cap for maintenance free-powder notional. */
@@ -38,6 +40,8 @@ export interface DeskAgentPolicySnapshot {
   gasRegime: GasRegime;
   forceDefendOnCriticalHf: boolean;
   minConfidence: number;
+  /** Explicit opt-in to treat large Sepolia edges as executable candidates. */
+  trustTestnetSignals?: boolean | undefined;
 }
 
 /** Compact inventory / mark for agent context. */

@@ -258,6 +258,11 @@ export const DESK_APY_CONSECUTIVE_POLLS = 2;
  * Maintenance rebalance may still free inventory; never treat as a yield thesis.
  */
 export const DESK_APY_ABSURD_BPS = 5_000;
+/**
+ * When enabled, Sepolia APY/oracle values above the absurd-data ceilings may
+ * still qualify as executable edges. Hard policy gates remain in force.
+ */
+export const DESK_TRUST_TESTNET_SIGNALS = true;
 /** Min interval between maintenance rebalance fills (ms). Default 6h. */
 export const DESK_REBALANCE_INTERVAL_MS = 6 * 60 * 60_000;
 /**

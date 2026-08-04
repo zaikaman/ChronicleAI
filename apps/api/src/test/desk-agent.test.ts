@@ -10,6 +10,7 @@ import { holdProposal, parseProposal } from "../desk/agent/proposal-schema.ts";
 import {
   DESK_AGENT_PROMPT_INVARIANTS,
   DESK_AGENT_SYSTEM_PROMPT,
+  buildDeskAgentSystemPrompt,
 } from "../desk/agent/prompt.ts";
 import { createDeskTradingAgent } from "../desk/agent/desk-trading-agent.ts";
 import { createFailureClassifier } from "../desk/agent/failure-classifier.ts";
@@ -184,6 +185,12 @@ describe("prompt invariants", () => {
     for (const inv of DESK_AGENT_PROMPT_INVARIANTS) {
       expect(DESK_AGENT_SYSTEM_PROMPT.toLowerCase()).toContain(inv.toLowerCase());
     }
+  });
+
+  it("changes only the data-quality rule when Sepolia edge trust is enabled", () => {
+    const prompt = buildDeskAgentSystemPrompt(true);
+    expect(prompt).toContain("TESTNET EDGE TRUST MODE is enabled");
+    expect(prompt).not.toContain("Absurd testnet APY edges");
   });
 });
 
@@ -520,5 +527,20 @@ describe("signal-fusion", () => {
       apyAbsurdBpsThreshold: 5_000,
     });
     expect(r.label).toBe("data_quality");
+  });
+
+  it("treats an absurd APY as actionable in explicit Sepolia trust mode", () => {
+    const judge = createSignalFusionJudge(null);
+    const r = judge.judgeHeuristic({
+      signalType: "apy_delta",
+      features: { apyDeltaBps: 22_700, consecutiveEdgePolls: 21 },
+      severity: 50,
+      policyVerdict: "trade",
+      apyDeltaBpsThreshold: 50,
+      apyConsecutivePolls: 2,
+      apyAbsurdBpsThreshold: 5_000,
+      trustTestnetSignals: true,
+    });
+    expect(r.label).toBe("actionable");
   });
 });

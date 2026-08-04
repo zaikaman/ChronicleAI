@@ -44,6 +44,8 @@ export interface SignalFusionInput {
   apyConsecutivePolls?: number | undefined;
   /** APY |delta| above this is data-quality (testnet absurd rates). */
   apyAbsurdBpsThreshold?: number | undefined;
+  /** When true, trust Sepolia values above the normal data-quality ceiling. */
+  trustTestnetSignals?: boolean | undefined;
 }
 
 const SYSTEM = [
@@ -98,7 +100,7 @@ function heuristicFusion(input: SignalFusionInput): DeskSignalFusionResult {
         reason: "basisBps missing.",
       };
     }
-    if (Math.abs(basis) > DESK_BASIS_ABSURD_BPS) {
+    if (!input.trustTestnetSignals && Math.abs(basis) > DESK_BASIS_ABSURD_BPS) {
       return {
         version: 1,
         label: "data_quality",
@@ -157,7 +159,7 @@ function heuristicFusion(input: SignalFusionInput): DeskSignalFusionResult {
       };
     }
     // Testnet / mis-scaled rates are not yield theses.
-    if (Math.abs(delta) >= absurd) {
+    if (!input.trustTestnetSignals && Math.abs(delta) >= absurd) {
       return {
         version: 1,
         label: "data_quality",

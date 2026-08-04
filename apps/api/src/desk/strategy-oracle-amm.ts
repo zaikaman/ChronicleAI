@@ -74,7 +74,7 @@ export function createOracleAmmStrategy(config: DeskPolicyConfig): OracleAmmStra
 
       // Mis-scaled oracle/AMM (e.g. raw Chainlink answer treated as human) or
       // thin-testnet pools with multi-x marks produce absurd "edges". Never trade those.
-      if (Math.abs(basisBps) > DESK_BASIS_ABSURD_BPS) {
+      if (!config.trustTestnetSignals && Math.abs(basisBps) > DESK_BASIS_ABSURD_BPS) {
         return {
           action: "ignore",
           reasonCodes: [

@@ -25,7 +25,7 @@ import {
   applyMinConfidence,
 } from "./map-proposal.ts";
 import { holdProposal, parseProposal } from "./proposal-schema.ts";
-import { buildDeskAgentUserPrompt, DESK_AGENT_SYSTEM_PROMPT } from "./prompt.ts";
+import { buildDeskAgentSystemPrompt, buildDeskAgentUserPrompt } from "./prompt.ts";
 import type { DeskAgentContext, DeskAgentRunResult } from "./types.ts";
 import type { DeskAgentProposal } from "./types.ts";
 
@@ -214,7 +214,9 @@ export function createDeskTradingAgent(
         };
       }
 
-      const systemInstruction = DESK_AGENT_SYSTEM_PROMPT;
+      const systemInstruction = buildDeskAgentSystemPrompt(
+        context.policy.trustTestnetSignals === true,
+      );
       const userPrompt = buildDeskAgentUserPrompt(context);
       const errors: string[] = [];
 
@@ -365,4 +367,3 @@ export function createDeskTradingAgent(
     },
   };
 }
-

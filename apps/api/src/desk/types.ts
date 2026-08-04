@@ -313,6 +313,8 @@ export interface DeskPolicyConfig {
    * Edge-based rotation is suppressed; maintenance free-powder may still run.
    */
   apyAbsurdBps: number;
+  /** When true, trust configured Sepolia edges above the data-quality ceiling. */
+  trustTestnetSignals?: boolean;
   /** Min ms between maintenance rebalance fills. */
   rebalanceIntervalMs: number;
   /** Notional cap for maintenance free-powder legs (USDC). */
@@ -404,6 +406,7 @@ export function deskPolicyConfigFromEnv(env: {
   deskOracleMaxStalenessMs: number;
   deskApyConsecutivePolls: number;
   deskApyAbsurdBps: number;
+  deskTrustTestnetSignals?: boolean;
   deskRebalanceIntervalMs: number;
   deskMaintenanceNotionalUsdc: number;
   deskGasElevatedGwei: number;
@@ -434,6 +437,7 @@ export function deskPolicyConfigFromEnv(env: {
     oracleMaxStalenessMs: env.deskOracleMaxStalenessMs,
     apyConsecutivePolls: env.deskApyConsecutivePolls,
     apyAbsurdBps: env.deskApyAbsurdBps,
+    trustTestnetSignals: env.deskTrustTestnetSignals === true,
     rebalanceIntervalMs: env.deskRebalanceIntervalMs,
     maintenanceNotionalUsdc: env.deskMaintenanceNotionalUsdc,
     gasElevatedGwei: env.deskGasElevatedGwei,

@@ -186,7 +186,9 @@ export function createYieldRotationStrategy(
 
     const edgeIntoAave = apyDeltaBps(input.idleUsdcApyBps, input.aaveSupplyApyBps);
     const absurd =
-      Number.isFinite(edgeIntoAave) && Math.abs(edgeIntoAave) >= config.apyAbsurdBps;
+      !config.trustTestnetSignals &&
+      Number.isFinite(edgeIntoAave) &&
+      Math.abs(edgeIntoAave) >= config.apyAbsurdBps;
 
     const shortfall = freeUsdc + 1e-9 < minFree;
     const now = input.nowMs ?? Date.now();
@@ -273,7 +275,9 @@ export function createYieldRotationStrategy(
 
       const edgeIntoAave = apyDeltaBps(input.idleUsdcApyBps, input.aaveSupplyApyBps);
       const absurd =
-        Number.isFinite(edgeIntoAave) && Math.abs(edgeIntoAave) >= config.apyAbsurdBps;
+        !config.trustTestnetSignals &&
+        Number.isFinite(edgeIntoAave) &&
+        Math.abs(edgeIntoAave) >= config.apyAbsurdBps;
 
       // Free-USDC shortfall always wins over a yield thesis (cannot open without powder).
       if (

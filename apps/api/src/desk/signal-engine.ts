@@ -158,14 +158,24 @@ export function createSignalEngine(deps: {
         const oracle = features.oraclePrice;
         const amm = features.ammPrice;
         // Absolute ETH/USD band: refuse trade when either mid is nonsense.
-        if (oracle != null && Number.isFinite(oracle) && !isPlausibleEthUsdPrice(oracle)) {
+        if (
+          !config.trustTestnetSignals &&
+          oracle != null &&
+          Number.isFinite(oracle) &&
+          !isPlausibleEthUsdPrice(oracle)
+        ) {
           return {
             severity: 15,
             policyVerdict: "ignore",
             reasonCodes: ["basis_data_quality", "oracle_price_out_of_band", `oracle=${oracle}`],
           };
         }
-        if (amm != null && Number.isFinite(amm) && !isPlausibleEthUsdPrice(amm)) {
+        if (
+          !config.trustTestnetSignals &&
+          amm != null &&
+          Number.isFinite(amm) &&
+          !isPlausibleEthUsdPrice(amm)
+        ) {
           return {
             severity: 15,
             policyVerdict: "ignore",
@@ -175,7 +185,7 @@ export function createSignalEngine(deps: {
         // Guard mis-scaled oracle/AMM units (e.g. answer / 1e8 twice).
         // Real dislocations of > DESK_BASIS_ABSURD_BPS are data quality failures
         // (includes honest but unusable Sepolia WETH/USDC vs Chainlink gaps).
-        if (basis > DESK_BASIS_ABSURD_BPS) {
+        if (!config.trustTestnetSignals && basis > DESK_BASIS_ABSURD_BPS) {
           return {
             severity: 15,
             policyVerdict: "ignore",
@@ -398,6 +408,7 @@ export function createSignalEngine(deps: {
           apyDeltaBpsThreshold: config.apyDeltaBps,
           apyConsecutivePolls: config.apyConsecutivePolls,
           apyAbsurdBpsThreshold: config.apyAbsurdBps,
+          trustTestnetSignals: config.trustTestnetSignals,
         });
         signal.features = {
           ...signal.features,

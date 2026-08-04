@@ -97,6 +97,25 @@ describe("strategy-rotation", () => {
     expect(plan.action).toBe("ignore");
   });
 
+  it("executes an absurd APY edge only when Sepolia trust mode is enabled", () => {
+    const trusted = createYieldRotationStrategy({
+      ...config,
+      trustTestnetSignals: true,
+    });
+    const plan = trusted.plan({
+      idleUsdcApyBps: 0,
+      aaveSupplyApyBps: 22_700,
+      consecutiveEdgePolls: 10,
+      freeUsdc: 40,
+      maxTradeUsdc: 15,
+    });
+    expect(plan.action).toBe("propose");
+    if (plan.action === "propose") {
+      expect(plan.strategy).toBe("yield_rotation");
+      expect(plan.riskIncreasing).toBe(true);
+    }
+  });
+
   it("plans USDC→LINK→Aave when edge holds", () => {
     const plan = strategy.plan({
       idleUsdcApyBps: 0,

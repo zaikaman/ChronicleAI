@@ -24,6 +24,7 @@ import {
   DESK_APY_CONSECUTIVE_POLLS,
   DESK_APY_DELTA_BPS,
   DESK_BASIS_BPS,
+  DESK_TRUST_TESTNET_SIGNALS,
   DESK_EVENT_MICROTRADE_COOLDOWN_MS,
   DESK_EVENT_MICROTRADE_ENABLED,
   DESK_EVENT_MICROTRADE_LOOKBACK_MS,
@@ -446,6 +447,8 @@ export interface ServerEnv {
   deskApyConsecutivePolls: number;
   /** APY edge (bps) treated as data-quality / unreliable for yield thesis. */
   deskApyAbsurdBps: number;
+  /** Allow configured Sepolia data-quality edges to reach the normal policy gates. */
+  deskTrustTestnetSignals: boolean;
   /** Min interval between maintenance rebalance fills (ms). */
   deskRebalanceIntervalMs: number;
   /** Notional cap for maintenance free-powder legs (USDC). */
@@ -1063,6 +1066,13 @@ export function loadServerEnv(): ServerEnv {
     DESK_APY_CONSECUTIVE_POLLS,
   );
   const deskApyAbsurdBps = parsePositiveIntEnv("DESK_APY_ABSURD_BPS", DESK_APY_ABSURD_BPS);
+  const deskTrustTestnetSignals =
+    (
+      optionalEnv(
+        "DESK_TRUST_TESTNET_SIGNALS",
+        DESK_TRUST_TESTNET_SIGNALS ? "true" : "false",
+      ) ?? (DESK_TRUST_TESTNET_SIGNALS ? "true" : "false")
+    ).toLowerCase() === "true";
   const deskRebalanceIntervalMs = parsePositiveIntEnv(
     "DESK_REBALANCE_INTERVAL_MS",
     DESK_REBALANCE_INTERVAL_MS,
@@ -1380,6 +1390,7 @@ export function loadServerEnv(): ServerEnv {
     deskOracleMaxStalenessMs,
     deskApyConsecutivePolls,
     deskApyAbsurdBps,
+    deskTrustTestnetSignals,
     deskRebalanceIntervalMs,
     deskMaintenanceNotionalUsdc,
     deskGasElevatedGwei,
