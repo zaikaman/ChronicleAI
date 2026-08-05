@@ -360,6 +360,20 @@ describe("desk-trigger-alert pure helpers", () => {
     expect(copy.summary).toContain("reference feed priced ETH");
   });
 
+  it("includes specific yield protocols and rates in apy-delta copy", () => {
+    const copy = buildSignalAlertCopy(
+      signalRow({
+        signal_type: "apy_delta",
+        policy_verdict: "trade",
+        features: { apyDeltaBps: 23_032, aaveSupplyApyBps: 23_032, idleUsdcApyBps: 0 },
+      }),
+    );
+    expect(copy.title).toContain("Yield difference found");
+    expect(copy.summary).toContain("Aave supply yield of 230.32%");
+    expect(copy.summary).toContain("idle USDC yield of 0.00%");
+    expect(copy.summary).toContain("230.32 percentage points");
+  });
+
   it("builds capital topup copy without a Signal step implication", () => {
     const decision: CapitalDecision = {
       action: "topup",

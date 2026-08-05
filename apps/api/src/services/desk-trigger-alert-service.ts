@@ -310,13 +310,29 @@ export function buildSignalAlertCopy(signal: DeskSignalRow): {
     case "apy_delta": {
       const delta =
         typeof features.apyDeltaBps === "number" ? features.apyDeltaBps : null;
+      const aaveBps =
+        typeof features.aaveSupplyApyBps === "number" ? features.aaveSupplyApyBps : null;
+      const idleBps =
+        typeof features.idleUsdcApyBps === "number" ? features.idleUsdcApyBps : null;
+      const morphoBps =
+        typeof features.morphoApyBps === "number" ? features.morphoApyBps : null;
+
+      let yieldDetail = "";
+      if (aaveBps != null && idleBps != null) {
+        yieldDetail = ` (Aave supply yield of ${(aaveBps / 100).toFixed(2)}% vs idle USDC yield of ${(idleBps / 100).toFixed(2)}%)`;
+      } else if (morphoBps != null && idleBps != null) {
+        yieldDetail = ` (Morpho supply yield of ${(morphoBps / 100).toFixed(2)}% vs idle USDC yield of ${(idleBps / 100).toFixed(2)}%)`;
+      } else if (aaveBps != null) {
+        yieldDetail = ` (Aave supply yield of ${(aaveBps / 100).toFixed(2)}%)`;
+      }
+
       const rateDetail =
         delta != null
           ? ` The estimated difference was ${Math.abs(delta / 100).toFixed(2)} percentage points.`
           : "";
       return {
         title: `Yield difference found - ${decisionTitle(verdict)}`,
-        summary: `Chronicle Desk found a difference in the available yield on ${chain}.${rateDetail} ${decisionSentence(verdict)}.`,
+        summary: `Chronicle Desk found a difference in the available yield on ${chain}${yieldDetail}.${rateDetail} ${decisionSentence(verdict)}.`,
         sourceReferences: refs,
       };
     }
