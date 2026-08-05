@@ -74,154 +74,152 @@ export function Footer(): ReactNode {
   const displayCurrency = priceCurrency || "USDC";
 
   return (
-    <footer className="relative pt-38 mt-24 mx-2.5 max-[850px]:mx-0">
-      <div className="absolute left-1/2 -translate-x-1/2 top-0 w-full max-w-5xl">
-        <div className="relative w-full rounded-3xl overflow-hidden shadow-2xl/15">
-          <div
-            className="absolute inset-0 bg-center bg-no-repeat brightness-150 blur scale-125"
-            style={{
-              backgroundImage:
-                "image-set(url(/BG.avif) type('image/avif'), url(/BG.webp) type('image/webp'), url(/BG.jpg) type('image/jpeg'))",
-              backgroundSize: "150%",
-            }}
-            aria-hidden="true"
-          />
-
-          <div className="relative z-10 flex flex-col items-center text-center px-12 py-24 max-[850px]:px-6 max-[850px]:py-6 max-[850px]:pt-12">
-            <h2 className="text-5xl max-[850px]:text-3xl text-black font-medium tracking-tight max-w-2xl mb-4 max-[850px]:mb-3 leading-tight">
-              Funded by intelligence, driven by code.
-            </h2>
-            <p className="text-sm text-black/70 max-w-md mb-10 max-[850px]:mb-6 leading-relaxed">
-              Subscribe to ChronicleAI’s monthly intelligence brief —{" "}
-              <span className="font-semibold text-black">
-                {displayPrice} {displayCurrency}/month
-              </span>{" "}
-              via x402 on {wallet.targetChain.name}. Connect your wallet, authorize USDC, and
-              unlock paid delivery.
-            </p>
-
-            <form
-              onSubmit={handleSubmit}
-              className="flex flex-col w-full max-w-sm gap-3"
-              data-testid="newsletter-subscribe-form"
-              aria-busy={isBusy}
-            >
-              {/* Stacked controls: long paid-CTA labels no longer overflow a side-by-side pill. */}
-              <div className="flex flex-col gap-2 w-full min-w-0 bg-background rounded-xl p-2 shadow-lg">
-                <div className="flex items-center w-full min-w-0 rounded-lg border border-border/60 bg-background">
-                  <Mail
-                    className="w-5 h-5 text-muted-foreground ml-3 flex-none"
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    required
-                    disabled={isBusy}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@protocol.xyz"
-                    aria-label="Email for paid monthly digests"
-                    className="min-w-0 flex-1 px-3 py-2.5 text-sm bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  data-testid="newsletter-subscribe-submit"
-                  className="flex w-full min-w-0 items-center justify-center gap-2 px-4 py-2.5 bg-foreground hover:bg-foreground/90 text-background rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <span className="truncate">
-                    {ctaButtonLabel({
-                      isBusy,
-                      step,
-                      priceAmount: displayPrice,
-                      priceCurrency: displayCurrency,
-                      isConnected: wallet.isConnected,
-                    })}
-                  </span>
-                  {!isBusy ? (
-                    <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
-                  ) : null}
-                </button>
-              </div>
-
-              <div
-                className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-black/5 text-left text-xs text-black/70"
-                data-testid="newsletter-wallet-strip"
-              >
-                <span className="min-w-0 truncate">
-                  {wallet.isConnected && wallet.address ? (
-                    <>
-                      Paying as{" "}
-                      <span className="font-mono font-medium text-black">
-                        {shortenAddress(wallet.address)}
-                      </span>
-                      {!wallet.isCorrectChain ? (
-                        <span className="text-red-800">
-                          {" "}
-                          · switch to {wallet.targetChain.name}
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>Wallet required · USDC on {wallet.targetChain.name}</>
-                  )}
-                </span>
-                {!wallet.isConnected ? (
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => {
-                      void wallet.connect().catch(() => {
-                        // User dismissed modal — form submit will retry
-                      });
-                    }}
-                    className="shrink-0 font-medium text-black underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
-                  >
-                    Connect
-                  </button>
-                ) : !wallet.isCorrectChain ? (
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => {
-                      void wallet.ensureChain().catch(() => {
-                        // ensureChain surfaces rejection; next submit retries
-                      });
-                    }}
-                    className="shrink-0 font-medium text-black underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
-                  >
-                    Switch network
-                  </button>
-                ) : (
-                  <span className="shrink-0 font-medium text-black/50">Ready</span>
-                )}
-              </div>
-            </form>
-
-            {message ? (
-              <p
-                role="status"
-                data-testid="newsletter-subscribe-status"
-                className={`mt-4 text-sm max-w-md ${
-                  isSuccess
-                    ? "text-neutral-900/80"
-                    : isError
-                      ? "text-red-800"
-                      : "text-neutral-900/70"
-                }`}
-              >
-                {message}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-accent rounded-tr-[3rem] rounded-tl-[3rem] pt-96 pb-16 max-[850px]:pt-72">
+    <footer className="mt-28 mx-2.5 max-[850px]:mx-0">
+      <div className="bg-accent rounded-tr-[3rem] rounded-tl-[3rem] pt-0 pb-16">
         <div className="max-w-5xl mx-auto px-6">
+          <div className="-mt-20 mb-16 relative z-10 w-full rounded-3xl overflow-hidden shadow-2xl/15">
+            <div
+              className="absolute inset-0 bg-center bg-no-repeat brightness-150 blur scale-125"
+              style={{
+                backgroundImage:
+                  "image-set(url(/BG.avif) type('image/avif'), url(/BG.webp) type('image/webp'), url(/BG.jpg) type('image/jpeg'))",
+                backgroundSize: "150%",
+              }}
+              aria-hidden="true"
+            />
+
+            <div className="relative z-10 flex flex-col items-center text-center px-12 py-16 max-[850px]:px-6 max-[850px]:py-10">
+              <h2 className="text-5xl max-[850px]:text-3xl text-black font-medium tracking-tight max-w-2xl mb-4 max-[850px]:mb-3 leading-tight">
+                Funded by intelligence, driven by code.
+              </h2>
+              <p className="text-sm text-black/70 max-w-md mb-10 max-[850px]:mb-6 leading-relaxed">
+                Subscribe to ChronicleAI’s monthly intelligence brief —{" "}
+                <span className="font-semibold text-black">
+                  {displayPrice} {displayCurrency}/month
+                </span>{" "}
+                via x402 on {wallet.targetChain.name}. Connect your wallet, authorize USDC, and
+                unlock paid delivery.
+              </p>
+
+              <form
+                onSubmit={handleSubmit}
+                className="flex flex-col w-full max-w-sm gap-3"
+                data-testid="newsletter-subscribe-form"
+                aria-busy={isBusy}
+              >
+                {/* Stacked controls: long paid-CTA labels no longer overflow a side-by-side pill. */}
+                <div className="flex flex-col gap-2 w-full min-w-0 bg-background rounded-xl p-2 shadow-lg">
+                  <div className="flex items-center w-full min-w-0 rounded-lg border border-border/60 bg-background">
+                    <Mail
+                      className="w-5 h-5 text-muted-foreground ml-3 flex-none"
+                      aria-hidden="true"
+                    />
+                    <input
+                      type="email"
+                      name="email"
+                      autoComplete="email"
+                      required
+                      disabled={isBusy}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@protocol.xyz"
+                      aria-label="Email for paid monthly digests"
+                      className="min-w-0 flex-1 px-3 py-2.5 text-sm bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isBusy}
+                    data-testid="newsletter-subscribe-submit"
+                    className="flex w-full min-w-0 items-center justify-center gap-2 px-4 py-2.5 bg-foreground hover:bg-foreground/90 text-background rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <span className="truncate">
+                      {ctaButtonLabel({
+                        isBusy,
+                        step,
+                        priceAmount: displayPrice,
+                        priceCurrency: displayCurrency,
+                        isConnected: wallet.isConnected,
+                      })}
+                    </span>
+                    {!isBusy ? (
+                      <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+                    ) : null}
+                  </button>
+                </div>
+
+                <div
+                  className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-black/5 text-left text-xs text-black/70"
+                  data-testid="newsletter-wallet-strip"
+                >
+                  <span className="min-w-0 truncate">
+                    {wallet.isConnected && wallet.address ? (
+                      <>
+                        Paying as{" "}
+                        <span className="font-mono font-medium text-black">
+                          {shortenAddress(wallet.address)}
+                        </span>
+                        {!wallet.isCorrectChain ? (
+                          <span className="text-red-800">
+                            {" "}
+                            · switch to {wallet.targetChain.name}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>Wallet required · USDC on {wallet.targetChain.name}</>
+                    )}
+                  </span>
+                  {!wallet.isConnected ? (
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => {
+                        void wallet.connect().catch(() => {
+                          // User dismissed modal — form submit will retry
+                        });
+                      }}
+                      className="shrink-0 font-medium text-black underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
+                    >
+                      Connect
+                    </button>
+                  ) : !wallet.isCorrectChain ? (
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => {
+                        void wallet.ensureChain().catch(() => {
+                          // ensureChain surfaces rejection; next submit retries
+                        });
+                      }}
+                      className="shrink-0 font-medium text-black underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
+                    >
+                      Switch network
+                    </button>
+                  ) : (
+                    <span className="shrink-0 font-medium text-black/50">Ready</span>
+                  )}
+                </div>
+              </form>
+
+              {message ? (
+                <p
+                  role="status"
+                  data-testid="newsletter-subscribe-status"
+                  className={`mt-4 text-sm max-w-md ${
+                    isSuccess
+                      ? "text-neutral-900/80"
+                      : isError
+                        ? "text-red-800"
+                        : "text-neutral-900/70"
+                  }`}
+                >
+                  {message}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
           <div className="flex items-start justify-between gap-12 max-[850px]:flex-col max-[850px]:gap-10">
             <Link to="/" className="flex items-center gap-2" aria-label="ChronicleAI home">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-[11px] font-bold text-accent">
