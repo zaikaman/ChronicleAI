@@ -154,7 +154,7 @@
           "actionType": "aave-v3/withdraw",
           "network": "11155111",
           "asset": "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5",
-          "amount": "{{@trigger-manual:Manual / API Trigger.amountLink}}",
+          "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
           "to": "{{@trigger-manual:Manual / API Trigger.deskAddress}}",
           "usePrivateMempool": false,
           "strict": false
@@ -256,4 +256,3 @@
   ],
   "integrationBindings": []
 }
-
