@@ -38,7 +38,7 @@
           "amount": "{{@trigger-manual:Manual / API Trigger.amount}}",
           "recipientAddress": "{{@trigger-manual:Manual / API Trigger.recipientAddress}}",
           "usePrivateMempool": false,
-          "strict": true
+          "strict": false
         }
       }
     }
