@@ -62,6 +62,10 @@ function formatEventType(eventType?: string): string | null {
     .join(" ");
 }
 
+function alertAssetLabel(alert: PublicAlertResponse): string | null {
+  return alert.signalType === "oracle_basis" ? "Asset: ETH" : null;
+}
+
 function formatDirection(direction?: string): string | null {
   if (!direction || direction === "unknown") return null;
   return direction
@@ -77,7 +81,7 @@ function chipClassName(): string {
 function formatCausalLabel(value?: string | null): string {
   if (!value) return "Not recorded";
   const readableLabels: Record<string, string> = {
-    oracle_basis: "Price difference",
+    oracle_basis: "ETH price difference",
     apy_delta: "Yield difference",
     health_factor: "Position safety",
     gas_regime: "Network fees",
@@ -372,6 +376,7 @@ export function AlertCard({
 }: AlertCardProps): React.ReactElement {
   const desk = isDeskTriggerAlert(alert);
   const eventLabel = formatEventType(alert.eventType);
+  const assetLabel = alertAssetLabel(alert);
   const kindBadge = alertKindBadgeLabel(alert);
   const sourceOrigin = alertSourceOriginLabel(alert);
   const sourceChainLabel =
@@ -406,6 +411,7 @@ export function AlertCard({
       <p className="text-muted-foreground text-sm leading-relaxed mb-4">{alert.summary}</p>
 
       {(eventLabel ||
+        assetLabel ||
         sourceOrigin ||
         sourceChainLabel ||
         publicationLabel ||
@@ -420,6 +426,11 @@ export function AlertCard({
             </span>
           ) : null}
           {eventLabel ? <span className={chipClassName()}>{eventLabel}</span> : null}
+          {assetLabel ? (
+            <span className={`${chipClassName()} text-foreground`} data-testid="alert-asset-label">
+              {assetLabel}
+            </span>
+          ) : null}
           {sourceChainLabel ? (
             <span className={chipClassName()} data-testid="alert-source-chain">
               {sourceChainLabel}

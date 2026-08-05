@@ -347,6 +347,19 @@ describe("desk-trigger-alert pure helpers", () => {
     expect(copy.summary).toContain("safety score");
   });
 
+  it("names ETH in oracle-basis copy", () => {
+    const copy = buildSignalAlertCopy(
+      signalRow({
+        signal_type: "oracle_basis",
+        policy_verdict: "defer",
+        features: { basisBps: 229_935, oraclePrice: 1_862.15, ammPrice: 44_679.55 },
+      }),
+    );
+    expect(copy.title).toContain("ETH");
+    expect(copy.summary).toContain("price for ETH");
+    expect(copy.summary).toContain("reference feed priced ETH");
+  });
+
   it("builds capital topup copy without a Signal step implication", () => {
     const decision: CapitalDecision = {
       action: "topup",

@@ -326,11 +326,11 @@ export function buildSignalAlertCopy(signal: DeskSignalRow): {
       const amm = typeof features.ammPrice === "number" ? features.ammPrice : null;
       const priceDetail =
         oracle != null && amm != null
-          ? ` The reference price was ${formatUsdPrice(oracle)} and the exchange price was ${formatUsdPrice(amm)}, so the exchange price was ${amm >= oracle ? "much higher" : "much lower"}.`
+          ? ` The reference feed priced ETH at ${formatUsdPrice(oracle)} while the exchange priced ETH at ${formatUsdPrice(amm)}, so the exchange price was ${amm >= oracle ? "much higher" : "much lower"}.`
           : "";
       return {
-        title: `Large price difference - ${decisionTitle(verdict)}`,
-        summary: `Chronicle Desk found a large difference between its reference price and the exchange price on ${chain}.${priceDetail} ${decisionSentence(verdict)}.`,
+        title: `Large ETH price difference - ${decisionTitle(verdict)}`,
+        summary: `Chronicle Desk found a large difference between the reference price for ETH and the exchange price for ETH on ${chain}.${priceDetail} ${decisionSentence(verdict)}.`,
         sourceReferences: refs,
       };
     }

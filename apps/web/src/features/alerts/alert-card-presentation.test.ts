@@ -39,6 +39,14 @@ describe("alert-card-presentation", () => {
         }),
       ),
     ).toBe("Chronicle Desk · Position safety");
+    expect(
+      alertSourceOriginLabel(
+        baseAlert({
+          alertKind: "desk_trigger",
+          sourceTriggerLabel: "Oracle basis",
+        }),
+      ),
+    ).toBe("Chronicle Desk · ETH price difference");
     expect(alertSourceOriginLabel(baseAlert({ alertKind: "market_event" }))).toBeNull();
   });
 
