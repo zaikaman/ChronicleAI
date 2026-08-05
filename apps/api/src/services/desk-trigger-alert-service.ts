@@ -233,15 +233,53 @@ function formatHf(hf: number): string {
   return hf >= 100 ? hf.toFixed(0) : hf.toFixed(3);
 }
 
-function formatBps(bps: number): string {
-  const sign = bps > 0 ? "+" : "";
-  return `${sign}${Math.round(bps)} bps`;
-}
-
 function formatUsdc(amount: number): string {
   if (amount >= 1000) return `$${amount.toFixed(0)}`;
   if (amount >= 1) return `$${amount.toFixed(2)}`;
   return `$${amount.toFixed(4)}`;
+}
+
+function formatUsdPrice(price: number): string {
+  return `$${price.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function decisionTitle(verdict: DeskPolicyVerdict): string {
+  switch (verdict) {
+    case "trade":
+      return "the desk is acting";
+    case "defend":
+      return "the desk is protecting the position";
+    case "defer":
+      return "the desk is waiting";
+    default:
+      return "the desk is reviewing it";
+  }
+}
+
+function decisionSentence(verdict: DeskPolicyVerdict): string {
+  switch (verdict) {
+    case "trade":
+      return "The desk decided to act on this condition";
+    case "defend":
+      return "The desk decided to protect the position";
+    case "defer":
+      return "The desk decided to wait, so no trade was made";
+    default:
+      return "The desk recorded the condition without taking action";
+  }
+}
+
+function readableReason(reason: string): string {
+  const knownReasons: Record<string, string> = {
+    equity_below_target: "available desk capital was below its target",
+    free_usdc_shortfall_unwind: "the desk needed more ready-to-use cash",
+    free_usdc_shortfall: "the desk needed more ready-to-use cash",
+    desk_paused: "the desk was paused",
+  };
+  return knownReasons[reason] ?? reason.replace(/_/g, " ");
 }
 
 export function buildSignalAlertCopy(signal: DeskSignalRow): {
@@ -264,61 +302,50 @@ export function buildSignalAlertCopy(signal: DeskSignalRow): {
       const hf = typeof features.hf === "number" ? features.hf : null;
       const hfLabel = hf != null ? formatHf(hf) : "n/a";
       return {
-        title: `Desk health factor ${hfLabel} → ${verdict}`,
-        summary: `Chronicle Desk observed health factor ${hfLabel} on ${chain}. Policy verdict: ${verdict}. ${
-          verdict === "defend"
-            ? "Risk defense may be required."
-            : verdict === "defer"
-              ? "Action deferred pending conditions."
-              : "Trade path under evaluation."
-        }`,
+        title: `Position safety update - ${decisionTitle(verdict)}`,
+        summary: `Chronicle Desk measured a lending safety score of ${hfLabel} on ${chain}. ${decisionSentence(verdict)}.`,
         sourceReferences: refs,
       };
     }
     case "apy_delta": {
       const delta =
         typeof features.apyDeltaBps === "number" ? features.apyDeltaBps : null;
-      const aave =
-        typeof features.aaveSupplyApyBps === "number" ? features.aaveSupplyApyBps : null;
+      const rateDetail =
+        delta != null
+          ? ` The estimated difference was ${Math.abs(delta / 100).toFixed(2)} percentage points.`
+          : "";
       return {
-        title: `Desk APY differential ${delta != null ? formatBps(delta) : "detected"} → ${verdict}`,
-        summary: `Chronicle Desk measured a yield differential${
-          delta != null ? ` of ${formatBps(delta)}` : ""
-        }${aave != null ? ` (Aave supply ~${formatBps(aave)})` : ""} on ${chain}. Policy verdict: ${verdict}.`,
+        title: `Yield difference found - ${decisionTitle(verdict)}`,
+        summary: `Chronicle Desk found a difference in the available yield on ${chain}.${rateDetail} ${decisionSentence(verdict)}.`,
         sourceReferences: refs,
       };
     }
     case "oracle_basis": {
-      const basis = typeof features.basisBps === "number" ? features.basisBps : null;
       const oracle =
         typeof features.oraclePrice === "number" ? features.oraclePrice : null;
       const amm = typeof features.ammPrice === "number" ? features.ammPrice : null;
+      const priceDetail =
+        oracle != null && amm != null
+          ? ` The reference price was ${formatUsdPrice(oracle)} and the exchange price was ${formatUsdPrice(amm)}, so the exchange price was ${amm >= oracle ? "much higher" : "much lower"}.`
+          : "";
       return {
-        title: `Desk oracle basis ${basis != null ? formatBps(basis) : "dislocation"} → ${verdict}`,
-        summary: `Chronicle Desk observed oracle/AMM basis${
-          basis != null ? ` of ${formatBps(basis)}` : ""
-        }${oracle != null && amm != null ? ` (oracle ${oracle.toFixed(2)} vs AMM ${amm.toFixed(2)})` : ""} on ${chain}. Policy verdict: ${verdict}.`,
+        title: `Large price difference - ${decisionTitle(verdict)}`,
+        summary: `Chronicle Desk found a large difference between its reference price and the exchange price on ${chain}.${priceDetail} ${decisionSentence(verdict)}.`,
         sourceReferences: refs,
       };
     }
     case "gas_regime": {
       const gwei = typeof features.gasGwei === "number" ? features.gasGwei : null;
-      const regime =
-        typeof features.gasRegime === "string" ? features.gasRegime : "unknown";
       return {
-        title: `Desk gas regime ${regime}${gwei != null ? ` (${gwei.toFixed(1)} gwei)` : ""} → ${verdict}`,
-        summary: `Chronicle Desk classified gas as ${regime}${
-          gwei != null ? ` at ${gwei.toFixed(1)} gwei` : ""
-        } on ${chain}. Policy verdict: ${verdict}${
-          verdict === "defer" ? " — execution deferred until gas normalizes." : "."
-        }`,
+        title: `Network fee update - ${decisionTitle(verdict)}`,
+        summary: `Network transaction fees were${gwei != null ? ` about ${gwei.toFixed(1)} gwei` : " elevated"} on ${chain}. ${decisionSentence(verdict)}.`,
         sourceReferences: refs,
       };
     }
     default:
       return {
-        title: `Desk ${type.replace(/_/g, " ")} → ${verdict}`,
-        summary: `Chronicle Desk recorded a ${type.replace(/_/g, " ")} condition on ${chain} with policy verdict ${verdict}.`,
+        title: `Desk condition update - ${decisionTitle(verdict)}`,
+        summary: `Chronicle Desk recorded a condition on ${chain}. ${decisionSentence(verdict)}.`,
         sourceReferences: refs,
       };
   }
@@ -337,34 +364,32 @@ export function buildCapitalAlertCopy(decision: CapitalDecision): {
   switch (action) {
     case "topup":
       return {
-        title: `Desk capital top-up ${amount}`,
-        summary: `Chronicle Desk decided to top up the desk by ${amount} on ${chain}. Reason: ${decision.reason.replace(/_/g, " ")}.`,
+        title: `Adding ${amount} to desk funds`,
+        summary: `Chronicle Desk planned to add ${amount} to its ready-to-use funds on ${chain} because ${readableReason(decision.reason)}.`,
         sourceReferences: refs,
       };
     case "sweep":
       return {
-        title: `Desk capital sweep ${amount}`,
-        summary: `Chronicle Desk decided to sweep ${amount} from desk to treasury on ${chain}. Reason: ${decision.reason.replace(/_/g, " ")}.`,
+        title: `Returning ${amount} to the treasury`,
+        summary: `Chronicle Desk planned to return ${amount} from the desk to the treasury on ${chain} because ${readableReason(decision.reason)}.`,
         sourceReferences: refs,
       };
     case "emergency_return":
       return {
-        title: `Desk emergency return ${amount}`,
-        summary: `Chronicle Desk initiated an emergency return of ${amount} to treasury on ${chain}. Reason: ${decision.reason.replace(/_/g, " ")}.`,
+        title: `Emergency return of ${amount}`,
+        summary: `Chronicle Desk planned an emergency return of ${amount} to the treasury on ${chain} because ${readableReason(decision.reason)}.`,
         sourceReferences: refs,
       };
     case "free_inventory":
       return {
-        title: `Desk free-inventory unwind ${amount}`,
-        summary: `Chronicle Desk decided to free ${amount} of on-desk inventory on ${chain}${
-          decision.inventorySource ? ` (source: ${decision.inventorySource.replace(/_/g, " ")})` : ""
-        }. Reason: ${decision.reason.replace(/_/g, " ")}.`,
+        title: `Making ${amount} available for desk activity`,
+        summary: `Chronicle Desk planned to turn ${amount} of its holdings into ready-to-use funds on ${chain} because ${readableReason(decision.reason)}.`,
         sourceReferences: refs,
       };
     default:
       return {
-        title: `Desk capital ${action}`,
-        summary: `Chronicle Desk capital decision: ${action} ${amount} on ${chain}.`,
+        title: `Desk funds update: ${amount}`,
+        summary: `Chronicle Desk recorded a funds decision for ${amount} on ${chain}.`,
         sourceReferences: refs,
       };
   }
@@ -388,10 +413,8 @@ export function buildMicrotradeAlertCopy(input: DeskTriggerFromMicrotradeInput):
     ...(input.strategy ? [`strategy:${input.strategy}`] : []),
   ];
   return {
-    title: `Desk event microtrade${notional ? ` ${notional}` : ""} (${eventType.replace(/_/g, " ")})`,
-    summary: `Chronicle Desk authorized an event-linked microtrade from ${eventType.replace(/_/g, " ")}${
-      notional ? ` for up to ${notional}` : ""
-    } on ${chainLabel(chainId)}. Mode: ${input.mode ?? "maintenance"}.`,
+    title: `Desk action after ${eventType.replace(/_/g, " ")} was detected`,
+    summary: `Chronicle Desk planned a small trade${notional ? ` of up to ${notional}` : ""} on ${chainLabel(chainId)} after detecting ${eventType.replace(/_/g, " ")}.`,
     sourceReferences: refs,
   };
 }

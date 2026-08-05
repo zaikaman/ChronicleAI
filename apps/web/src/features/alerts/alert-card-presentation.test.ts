@@ -38,7 +38,7 @@ describe("alert-card-presentation", () => {
           sourceTriggerLabel: "Health factor",
         }),
       ),
-    ).toBe("Chronicle Desk · Health factor");
+    ).toBe("Chronicle Desk · Position safety");
     expect(alertSourceOriginLabel(baseAlert({ alertKind: "market_event" }))).toBeNull();
   });
 
@@ -77,14 +77,14 @@ describe("alert-card-presentation", () => {
           actionStatus: "deferred",
         }),
       ),
-    ).toBe("Action · Deferred");
+    ).toBe("Result · Waiting");
   });
 
   it("distinguishes filled, failed, and submitted action labels", () => {
-    expect(alertActionStepLabel(baseAlert({ actionStatus: "filled" }))).toBe("Action · Filled");
-    expect(alertActionStepLabel(baseAlert({ actionStatus: "failed" }))).toBe("Action · Failed");
+    expect(alertActionStepLabel(baseAlert({ actionStatus: "filled" }))).toBe("Result · Completed");
+    expect(alertActionStepLabel(baseAlert({ actionStatus: "failed" }))).toBe("Result · Failed");
     expect(alertActionStepLabel(baseAlert({ actionStatus: "submitted" }))).toBe(
-      "Action · Submitted",
+      "Result · In progress",
     );
   });
 });

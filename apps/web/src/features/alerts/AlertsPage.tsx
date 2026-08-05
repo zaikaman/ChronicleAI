@@ -32,7 +32,7 @@ function emptyCopy(scope: AlertFiltersState["scope"]): { title: string; descript
       return {
         title: "No alerts yet",
         description:
-          "Public Alerts appear here from market events and Desk-native conditions. Each card shows the causal chain with publication proof.",
+          "Public updates will appear here when the market changes or the Desk makes a decision. Each card explains what happened and what followed.",
       };
   }
 }
@@ -43,10 +43,10 @@ const STATIC_ALERT_KIND_OPTIONS = [
 ];
 
 const STATIC_SIGNAL_STATUS_OPTIONS = [
-  { value: "not_eligible", label: "Not eligible" },
-  { value: "pending", label: "Pending" },
-  { value: "created", label: "Created" },
-  { value: "failed", label: "Failed" },
+  { value: "not_eligible", label: "No separate check" },
+  { value: "pending", label: "Checking" },
+  { value: "created", label: "Recorded" },
+  { value: "failed", label: "Check failed" },
 ];
 
 export function AlertsPage(): ReactElement {
@@ -84,7 +84,7 @@ export function AlertsPage(): ReactElement {
     <Page data-testid="alerts-list">
       <PageHeader
         title="Alerts"
-        description="Public bulletins from market events and Chronicle Desk conditions. Market Alerts observe on-chain activity; Desk-trigger Alerts record material Desk-native decisions. Each card shows Alert → Signal (when applicable) → Decision → Action → Proof."
+        description="Clear updates about market events and Chronicle Desk decisions. Each alert explains what was noticed, what the desk decided, and whether anything happened next."
         meta={
           !isLoading && !error ? (
             <span className="tabular-nums" data-testid="alerts-count">

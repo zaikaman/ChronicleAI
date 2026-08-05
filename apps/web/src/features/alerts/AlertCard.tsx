@@ -76,6 +76,22 @@ function chipClassName(): string {
 
 function formatCausalLabel(value?: string | null): string {
   if (!value) return "Not recorded";
+  const readableLabels: Record<string, string> = {
+    oracle_basis: "Price difference",
+    apy_delta: "Yield difference",
+    health_factor: "Position safety",
+    gas_regime: "Network fees",
+    trade: "Act",
+    defend: "Protect position",
+    defer: "Wait",
+    filled: "Completed",
+    submitted: "Submitted",
+    pending: "In progress",
+    deferred: "Waiting",
+    ignored: "Not taken",
+    failed: "Failed",
+  };
+  if (readableLabels[value]) return readableLabels[value];
   return value
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -84,17 +100,17 @@ function formatCausalLabel(value?: string | null): string {
 
 function signalStatusCopy(alert: PublicAlertResponse): string {
   if (!alertHasSignalStep(alert)) {
-    return isDeskTriggerAlert(alert) ? "Direct decision" : "No signal created";
+    return isDeskTriggerAlert(alert) ? "Desk decision recorded" : "No separate check";
   }
   switch (alert.signalStatus) {
     case "created":
-      return "Signal created";
+      return "Condition recorded";
     case "failed":
-      return "Signal failed";
+      return "Condition check failed";
     case "pending":
-      return "Signal pending";
+      return "Checking condition";
     default:
-      return "No signal created";
+      return "No separate check";
   }
 }
 
@@ -134,22 +150,22 @@ function actionStatusVariant(
 
 function noActionReason(alert: PublicAlertResponse): string | null {
   if (alert.policyVerdict === "defer" || alert.actionStatus === "deferred") {
-    return "Decision deferred — no Action was executed. The Alert remains public with the recorded evidence.";
+    return "The desk decided to wait, so no trade was made. This alert keeps the recorded evidence.";
   }
   if (!alertHasSignalStep(alert) && alert.actionStatus === "pending") {
-    return "Direct Desk decision recorded; Action pending execution proof.";
+    return "The desk made this decision directly; proof of execution is still pending.";
   }
   if (alert.signalStatus === "not_eligible" && !isDeskTriggerAlert(alert)) {
-    return "The event was recorded, but no desk signal was created because this event type has no executable strategy.";
+    return "The event was recorded, but this kind of event does not trigger a desk action.";
   }
   if (alert.signalStatus === "failed") {
-    return "The Alert remains visible; signal projection failed and can be retried without changing the recorded evidence.";
+    return "The alert is visible, but its decision details could not be added yet. The original record is unchanged.";
   }
   if (alert.actionStatus === "ignored") {
-    return "The signal was recorded, but the desk action was ignored.";
+    return "The condition was recorded, but the desk chose not to act.";
   }
   if (alert.actionStatus === "failed") {
-    return "Action failed. The Alert and Decision remain public; retry does not rewrite the recorded evidence.";
+    return "The desk action did not complete. The alert and decision remain recorded.";
   }
   return null;
 }
@@ -203,7 +219,7 @@ function CausalChain({
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Causal chain
+          Decision details
         </p>
         <StatusBadge
           label={signalStatusCopy(alert)}
@@ -216,7 +232,9 @@ function CausalChain({
         className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs"
         data-testid="alert-causal-steps"
         aria-label={
-          showSignal ? "Alert, Signal, Decision, Action, Proof" : "Alert, Decision, Action, Proof"
+          showSignal
+            ? "Alert, Condition, Desk decision, Result, Evidence"
+            : "Alert, Desk decision, Result, Evidence"
         }
       >
         <span className={`${chipClassName()} text-foreground`}>Alert</span>
@@ -227,7 +245,7 @@ function CausalChain({
               →
             </span>
             <span className={chipClassName()} data-testid="alert-causal-signal-step">
-              Signal{alert.signalType ? ` · ${formatCausalLabel(alert.signalType)}` : ""}
+              Condition{alert.signalType ? ` · ${formatCausalLabel(alert.signalType)}` : ""}
             </span>
           </>
         ) : null}
@@ -236,7 +254,7 @@ function CausalChain({
           →
         </span>
         <span className={chipClassName()} data-testid="alert-causal-decision-step">
-          Decision{alert.policyVerdict ? ` · ${formatCausalLabel(alert.policyVerdict)}` : ""}
+          Desk decision{alert.policyVerdict ? ` · ${formatCausalLabel(alert.policyVerdict)}` : ""}
         </span>
 
         <span className="text-muted-foreground" aria-hidden="true">
@@ -246,7 +264,7 @@ function CausalChain({
           <span
             className={chipClassName()}
             data-testid="alert-causal-action-step"
-            title="Deferred decisions do not produce an Action"
+            title="A waiting decision does not produce a trade"
           >
             {actionLabel}
           </span>
@@ -302,13 +320,13 @@ function CausalChain({
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         {alert.policyVerdict ? (
           <span data-testid="alert-policy-verdict">
-            Policy:{" "}
+            Decision:{" "}
             <strong className="text-foreground">{formatCausalLabel(alert.policyVerdict)}</strong>
           </span>
         ) : null}
         {alert.actionStatus ? (
           <span data-testid="alert-action-status">
-            Action:{" "}
+            Result:{" "}
             <StatusBadge
               label={formatCausalLabel(alert.actionStatus)}
               variant={actionStatusVariant(alert.actionStatus)}
@@ -357,8 +375,8 @@ export function AlertCard({
   const kindBadge = alertKindBadgeLabel(alert);
   const sourceOrigin = alertSourceOriginLabel(alert);
   const sourceChainLabel =
-    typeof alert.chainId === "number" ? `Source: ${chainLabel(alert.chainId)}` : null;
-  const publicationLabel = `Published/Executed: ${chainLabel(
+    typeof alert.chainId === "number" ? `Detected on: ${chainLabel(alert.chainId)}` : null;
+  const publicationLabel = `Published on: ${chainLabel(
     alert.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID,
   )}`;
 

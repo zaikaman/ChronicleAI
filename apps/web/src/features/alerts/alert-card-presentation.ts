@@ -33,20 +33,42 @@ export function alertKindBadgeLabel(alert: PublicAlertResponse): "Desk trigger" 
 
 export function alertSourceOriginLabel(alert: PublicAlertResponse): string | null {
   if (!isDeskTriggerAlert(alert)) return null;
-  return alert.sourceTriggerLabel
-    ? `Chronicle Desk · ${alert.sourceTriggerLabel}`
-    : "Chronicle Desk";
+  const readableLabel =
+    alert.sourceTriggerLabel === "Health factor"
+      ? "Position safety"
+      : alert.sourceTriggerLabel === "APY differential"
+        ? "Yield difference"
+        : alert.sourceTriggerLabel === "Oracle basis"
+          ? "Price difference"
+          : alert.sourceTriggerLabel === "Gas regime"
+            ? "Network fees"
+            : alert.sourceTriggerLabel === "Capital top-up"
+              ? "Adding desk funds"
+              : alert.sourceTriggerLabel === "Capital sweep"
+                ? "Returning surplus funds"
+                : alert.sourceTriggerLabel === "Free inventory"
+                  ? "Making funds available"
+                  : alert.sourceTriggerLabel === "Event microtrade"
+                    ? "Event-driven trade"
+                    : "Desk condition";
+  return `Chronicle Desk · ${readableLabel}`;
 }
 
 export function alertActionStepLabel(alert: PublicAlertResponse): string {
   if (alert.policyVerdict === "defer" || alert.actionStatus === "deferred") {
-    return "Action · Deferred";
+    return "Result · Waiting";
   }
   const status = alert.causalChain?.action?.status ?? alert.actionStatus;
-  if (!status) return "Action · Not recorded";
-  const formatted = status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-  return `Action · ${formatted}`;
+  if (!status) return "Result · Not recorded";
+  const readableStatus =
+    status === "filled"
+      ? "Completed"
+      : status === "submitted" || status === "pending"
+        ? "In progress"
+        : status === "failed"
+          ? "Failed"
+          : status === "ignored"
+            ? "Not taken"
+            : status.replace(/_/g, " ");
+  return `Result · ${readableStatus}`;
 }

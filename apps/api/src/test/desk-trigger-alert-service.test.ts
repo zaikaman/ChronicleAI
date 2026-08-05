@@ -341,9 +341,10 @@ describe("desk-trigger-alert pure helpers", () => {
 
   it("builds deterministic health_factor copy", () => {
     const copy = buildSignalAlertCopy(signalRow());
-    expect(copy.title).toContain("1.150");
-    expect(copy.title).toContain("defend");
-    expect(copy.summary).toContain("health factor");
+    expect(copy.title).toContain("Position safety");
+    expect(copy.title).toContain("protecting the position");
+    expect(copy.summary).toContain("1.150");
+    expect(copy.summary).toContain("safety score");
   });
 
   it("builds capital topup copy without a Signal step implication", () => {
@@ -354,7 +355,8 @@ describe("desk-trigger-alert pure helpers", () => {
       direction: "topup",
     };
     const copy = buildCapitalAlertCopy(decision);
-    expect(copy.title).toContain("top-up");
+    expect(copy.title).toContain("Adding $10.00 to desk funds");
+    expect(copy.summary).toContain("ready-to-use funds");
     expect(copy.summary).toContain("Chronicle Desk");
   });
 
