@@ -260,6 +260,52 @@ export function capitalDirectionLabel(direction: string): string {
   }
 }
 
+export function humanizeCapitalMoveReason(
+  reason: string | null | undefined,
+  direction?: string,
+): string {
+  if (!reason) {
+    if (direction === "sweep") return "Automated profit sweep";
+    if (direction === "topup") return "Automated desk top-up";
+    if (direction === "emergency_return") return "Emergency return to treasury";
+    return "Capital movement";
+  }
+
+  const normalized = reason.trim().toLowerCase();
+
+  switch (normalized) {
+    case "desk_equity_above_max_aum":
+      return "Desk balance exceeded ceiling (Automated profit sweep)";
+    case "profit_sweep_threshold":
+      return "Profit threshold reached (Automated profit sweep)";
+    case "desk_below_target_aum":
+      return "Desk balance below target (Automated top-up)";
+    case "desk_below_min_aum":
+      return "Desk balance critically low (Emergency top-up)";
+    case "free_usdc_shortfall_no_unwind":
+      return "Free liquidity shortfall (Treasury top-up)";
+    case "free_usdc_shortfall_unwind":
+      return "Free liquidity shortfall (Inventory unwind)";
+    case "free_usdc_shortfall_prefer_treasury":
+      return "Free liquidity top-up from treasury";
+    case "emergency_return":
+    case "kill_switch_armed":
+      return "Emergency capital return to treasury";
+    case "manual_topup":
+      return "Manual desk top-up";
+    case "manual_sweep":
+      return "Manual desk profit sweep";
+    case "cctp_rebalance":
+      return "Cross-chain revenue rebalance";
+    case "policy_sweep":
+      return "Automated policy sweep";
+    case "policy_topup":
+      return "Automated policy top-up";
+    default:
+      return humanizeIdentifier(reason);
+  }
+}
+
 export function capitalDirectionVariant(
   direction: string,
 ): "default" | "success" | "warning" | "error" | "info" {
