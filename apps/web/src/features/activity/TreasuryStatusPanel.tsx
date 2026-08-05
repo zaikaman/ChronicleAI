@@ -178,11 +178,11 @@ export function TreasuryStatusPanel({
     >
       <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-foreground m-0">Agent treasury</h3>
+          <h3 className="text-base font-semibold text-foreground m-0">Treasury</h3>
           <p className="mt-1 text-xs text-muted-foreground leading-relaxed max-w-xl">
             {dualRail
-              ? "Dual-rail capital: Base USDC from x402 payments; Sepolia USDC for desk top-ups after Circle CCTP. Gas health is Sepolia ETH vs the safety buffer."
-              : "Gas (ETH) powers registry writes; revenue (USDC) funds payouts. Health is based on gas runway vs the safety buffer."}
+              ? "Payments arrive on one network; desk funding moves to the trading network after it is cleared. Gas health is measured against the safety buffer."
+              : "ETH powers publication records; settled USDC funds payouts. Health is based on gas runway versus the safety buffer."}
           </p>
           {treasury.walletAddress ? (
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
@@ -277,19 +277,19 @@ export function TreasuryStatusPanel({
           amount={
             sepoliaUsdc !== undefined ? formatAssetAmount(sepoliaUsdc, "USDC") : "Unavailable"
           }
-          hint="Ops / desk rail after CCTP mint"
+          hint="Trading-network balance available for desk funding"
           testId="treasury-sepolia-usdc"
           muted={sepoliaUsdc === undefined}
         />
         <AssetCard
-          label="CCTP in-flight"
+          label="Transfer in progress"
           amount={
             inFlight !== undefined ? formatAssetAmount(inFlight, "USDC") : "—"
           }
           hint={
             treasury.cctpEnabled === false
-              ? "CCTP rebalance disabled"
-              : "Burned on Base, not yet minted on Sepolia"
+              ? "Revenue transfer is disabled"
+              : "Revenue left the payment network and is awaiting the desk network"
           }
           testId="treasury-cctp-inflight"
           muted={inFlight === undefined || inFlight === 0}

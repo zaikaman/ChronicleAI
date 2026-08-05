@@ -1,4 +1,4 @@
-import { ACTIVE_INTELLIGENCE_CHAIN_ID, PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config/chains";
+import { PRIMARY_SIGNAL_CHAIN_ID } from "@chronicleai/config/chains";
 import type { ReactElement } from "react";
 import { Link, useParams } from "react-router-dom";
 import { StatusBadge } from "../../components/data-primitives.tsx";
@@ -87,7 +87,6 @@ export function DigestDetailPage(): ReactElement {
         ? "warning"
         : "error";
   const sourceChainId = digest.chainId ?? PRIMARY_SIGNAL_CHAIN_ID;
-  const publicationChainId = digest.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID;
 
   return (
     <Page data-testid="digest-detail">
@@ -100,8 +99,8 @@ export function DigestDetailPage(): ReactElement {
               label={digest.publicationStatus.replace(/_/g, " ")}
               variant={statusVariant}
             />
-            <StatusBadge
-              label={`${digest.digestKind ?? "market"} · Source: ${chainLabel(sourceChainId)} · Published/Executed: ${chainLabel(publicationChainId)}`}
+              <StatusBadge
+                label={`${digest.digestKind ?? "market"} brief · source ${chainLabel(sourceChainId)}`}
               variant="info"
             />
           </div>
@@ -130,7 +129,7 @@ export function DigestDetailPage(): ReactElement {
         className="mt-4 rounded-xl border border-border/60 bg-muted/15 p-4 text-xs text-muted-foreground"
         data-testid="digest-causal-sources"
       >
-        Evidence graph: {digest.sourceAlertIds.length} alert
+        Sources & proof: built from {digest.sourceAlertIds.length} alert
         {digest.sourceAlertIds.length === 1 ? "" : "s"}, {digest.sourceSignalIds.length} signal
         {digest.sourceSignalIds.length === 1 ? "" : "s"}, {digest.sourceIntentIds.length} intent
         {digest.sourceIntentIds.length === 1 ? "" : "s"}, {digest.sourceTicketIds.length} ticket

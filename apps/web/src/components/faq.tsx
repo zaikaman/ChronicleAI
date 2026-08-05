@@ -7,22 +7,22 @@ const faqs = [
   {
     question: "What is ChronicleAI?",
     answer:
-      "ChronicleAI is a proof-first onchain response desk. It publishes public Alerts from market events and Desk-native conditions, links eligible Alerts to Desk Signals when applicable, applies hard policy, and sends only approved Actions through KeeperHub. The causal chain (Alert → Signal when present → Decision → Action → Proof), registry receipts, and execution logs make every outcome independently verifiable.",
+      "ChronicleAI is a self-funding onchain intelligence desk. It watches markets, publishes public Alerts, sells deeper analysis to humans and AI agents, routes premium revenue into a risk-controlled treasury, and sends only approved Actions through KeeperHub with public proof.",
   },
   {
-    question: "What kinds of Alerts does ChronicleAI publish?",
+    question: "What does ChronicleAI sell?",
     answer:
-      "Two kinds. Market-event Alerts observe external onchain activity (swaps, liquidations, volume). Desk-trigger Alerts record material Desk-native conditions — health-factor breaches, oracle/AMM dislocations, APY differentials, gas regimes, and capital moves (top-up, sweep, free inventory, emergency return) — whenever policy produces a non-ignore decision. Direct capital decisions may skip the Signal step: Alert → Decision → Action → Proof.",
+      "The public layer provides sourced Alerts and digests. Premium access provides deeper analysis and machine-readable intelligence for humans and AI agents, paid through ChronicleAI’s x402 or MPP payment rails.",
   },
   {
     question: "What is Chronicle Desk?",
     answer:
-      "Chronicle Desk is the review and execution surface for Signals and capital decisions. It shows the originating Alert (when present), structured proposal, policy checks, preflight result, and KeeperHub Action state before a transaction can be sent.",
+      "Chronicle Desk is the treasury review and execution surface. It shows the market context, proposal, risk checks, preflight result, and KeeperHub Action state before a transaction can be sent.",
   },
   {
     question: "How is content and trade activity verified?",
     answer:
-      "An end-to-end path is only called verified when a real decision, intent or action, and transaction proof exist. Approved Actions run through KeeperHub and may anchor a receipt on ChronicleRegistry. The Alert, optional Signal, policy decision, transaction hash, and public execution trail stay linked on the causal chain.",
+      "A path is only called verified when a real decision, action, and transaction proof exist. Approved Actions run through KeeperHub and may anchor a receipt on ChronicleRegistry. The market context, policy decision, transaction hash, and public execution trail stay linked.",
   },
   {
     question: "Can the LLM trade freely?",
@@ -115,8 +115,8 @@ export function FAQ(): ReactNode {
             Common questions
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
-            Alerts, Desk Signals, policy checks, KeeperHub Actions, and the registry proof behind
-            every approved run.
+            Market intelligence, premium access, treasury controls, KeeperHub execution, and the
+            proof behind every approved run.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

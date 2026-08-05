@@ -198,13 +198,12 @@ export function AgentPaymentsPanel({
             id={titleId}
             className="text-base font-semibold text-foreground leading-snug text-balance"
           >
-            For agents: buy with MPP
+            Machine payments
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed max-w-2xl text-pretty">
-            Humans unlock reports with a wallet via{" "}
-            <span className="font-medium text-foreground">x402</span>. Automated clients use{" "}
-            <span className="font-medium text-foreground">MPP</span> (Tempo HMAC) on the same
-            premium items through the API — not MetaMask.
+            People unlock reports with a wallet. Automated agents can buy the same items through
+            the API using <span className="font-medium text-foreground">MPP</span>. The guide below
+            shows the exact machine-to-machine flow.
           </p>
         </div>
         <button

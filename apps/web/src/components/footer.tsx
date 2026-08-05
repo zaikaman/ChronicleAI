@@ -92,7 +92,7 @@ export function Footer(): ReactNode {
               Funded by intelligence, driven by code.
             </h2>
             <p className="text-sm text-black/70 max-w-md mb-10 max-[850px]:mb-6 leading-relaxed">
-              Monthly market digests by email —{" "}
+              Subscribe to ChronicleAI’s monthly intelligence brief —{" "}
               <span className="font-semibold text-black">
                 {displayPrice} {displayCurrency}/month
               </span>{" "}

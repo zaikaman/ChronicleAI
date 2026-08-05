@@ -44,13 +44,13 @@ function AlertCardPreview({ latestAlert }: { latestAlert: AlertPreview | null })
     >
       <div className="relative z-10 transition-transform duration-500 ease-out group-hover:scale-105">
         <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-black/10 px-3 py-1 text-xs font-semibold text-neutral-900">
-          <Activity className="h-3.5 w-3.5" /> 1 · Alert
+          <Activity className="h-3.5 w-3.5" /> 1 · What it sees
         </div>
         <h3 className="mb-2 text-2xl font-medium leading-tight text-neutral-900 md:text-3xl">
-          A public bulletin from chain
+          A public intelligence feed
         </h3>
         <p className="text-sm text-neutral-700">
-          Onchain activity becomes a sourced Alert — the first input in the desk response loop.
+          Onchain activity becomes a sourced, plain-language Alert that anyone can read and verify.
         </p>
       </div>
 
@@ -60,7 +60,7 @@ function AlertCardPreview({ latestAlert }: { latestAlert: AlertPreview | null })
             {latestAlert ? "Latest public alert" : "Live feed"}
           </p>
           <span className="rounded-full bg-accent/20 px-2 py-0.5 font-mono text-[10px] text-accent">
-            Desk input
+            Public intelligence
           </span>
         </div>
         <h4 className="mt-2 line-clamp-1 text-sm font-semibold text-white">{headline}</h4>
@@ -97,13 +97,13 @@ function DecisionCard({
     >
       <div className="relative z-10 transition-transform duration-500 ease-out group-hover:scale-105">
         <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-          <Landmark className="h-3.5 w-3.5" /> 2 · Signal
+          <Landmark className="h-3.5 w-3.5" /> 2 · What it does
         </div>
         <h3 className="mb-2 text-xl font-medium leading-tight text-card-foreground md:text-2xl">
-          Alert becomes desk input
+          Revenue enters a risk-controlled desk
         </h3>
         <p className="text-sm text-card-foreground-muted">
-          Eligible Alerts project into Desk Signals. The model proposes; hard policy checks size,
+          Premium revenue can enter the treasury desk. The model proposes; hard policy checks size,
           health, pause state, and route before any Action.
         </p>
       </div>
@@ -149,14 +149,14 @@ function ProofCard({
     >
       <div className="max-w-xl transition-transform duration-500 ease-out group-hover:translate-x-1">
         <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-          <ShieldCheck className="h-3.5 w-3.5" /> 3 · Action
+          <ShieldCheck className="h-3.5 w-3.5" /> 3 · What happened
         </div>
         <h3 className="mb-2 text-xl font-medium leading-tight text-card-foreground md:text-2xl">
-          Execute and prove
+          KeeperHub executes. ChronicleAI proves.
         </h3>
         <p className="text-sm text-card-foreground-muted">
-          Policy-approved Actions run through KeeperHub. Registry receipts and logs keep Alert,
-          Signal, Decision, and transaction linked on one causal chain.
+          Policy-approved Actions run through KeeperHub. Registry receipts, logs, and transaction
+          hashes show exactly what happened.
         </p>
       </div>
 
@@ -240,12 +240,13 @@ export function FeaturesBento(): ReactNode {
     <section className="mb-32 w-full bg-background px-6" data-testid="features-bento-live">
       <div className="mx-auto max-w-5xl">
         <div className="mb-8 max-w-2xl">
-          <p className="text-sm font-semibold text-accent">The core loop</p>
+          <p className="text-sm font-semibold text-accent">The business loop</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            Every step stays visible.
+            Intelligence that can pay for action.
           </h2>
           <p className="mt-3 text-base leading-relaxed text-foreground/60">
-            Follow the same path a judge follows: Alert → Signal → Action → Proof.
+            The same market intelligence can be published, paid for, routed into the desk, acted on,
+            and independently verified.
           </p>
         </div>
 

@@ -10,6 +10,7 @@ import {
 } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { chainLabel } from "../../lib/explorer.ts";
 import { isAlertVisibleInPublicUi } from "../alerts/alert-visibility.ts";
 import { useAlerts } from "../alerts/use-alerts.ts";
 import { useDigests } from "../digests/use-digests.ts";
@@ -152,7 +153,7 @@ export function PublicationsPage(): ReactElement {
     <Page data-testid="publications-page">
       <PageHeader
         title="Publications Archive"
-        description="The complete archive of ChronicleAI intelligence — public alerts, digests, and premium analysis."
+        description="Past alerts, daily briefs, and premium analysis from ChronicleAI."
         meta={
           !isLoading && !hasError ? (
             <span>
@@ -172,7 +173,7 @@ export function PublicationsPage(): ReactElement {
         <div className="flex flex-col gap-10">
           <PageSection
             title="Public alerts"
-            description="Real-time capital-flow and stress publications."
+            description="Public market updates as ChronicleAI spots important activity."
           >
             {alertsLoading && visibleAlerts.length === 0 ? (
               <LoadingState message="Loading alerts..." variant="cards" count={3} />
@@ -206,10 +207,10 @@ export function PublicationsPage(): ReactElement {
                           : {}),
                         ...(alert.confidence ? { Confidence: alert.confidence } : {}),
                         ...(alert.eventType
-                          ? { Event: alert.eventType.replace(/_/g, " ") }
+                          ? { Category: alert.eventType.replace(/_/g, " ") }
                           : {}),
                         ...(typeof alert.chainId === "number"
-                          ? { Chain: String(alert.chainId) }
+                          ? { "Source chain": chainLabel(alert.chainId) }
                           : {}),
                       }}
                     />
@@ -227,7 +228,7 @@ export function PublicationsPage(): ReactElement {
 
           <PageSection
             title="Daily digests"
-            description="Published market narratives with on-chain registry proofs."
+            description="Daily market briefs with linked publication proof."
           >
             {digestsLoading && digests.length === 0 ? (
               <LoadingState message="Loading digests..." variant="cards" count={3} />
@@ -257,10 +258,10 @@ export function PublicationsPage(): ReactElement {
                       href={`/digests/${digest.id}`}
                       meta={{
                         ...(digest.registryTxHash
-                          ? { "Registry Tx": digest.registryTxHash }
+                          ? { Proof: digest.registryTxHash }
                           : {}),
                         ...(digest.keeperHubRunId
-                          ? { "KeeperHub run": digest.keeperHubRunId }
+                          ? { Execution: digest.keeperHubRunId }
                           : {}),
                       }}
                     />

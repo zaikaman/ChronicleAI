@@ -91,9 +91,9 @@ export function PaymentRequiredModal({
         >
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <StatusBadge label="Payment required" variant="info" />
+              <StatusBadge label="Premium report" variant="info" />
               <h2 className="mt-3 text-xl font-semibold leading-snug tracking-tight text-foreground">
-                Unlock premium access
+                Unlock this report
               </h2>
             </div>
             <button
@@ -107,7 +107,7 @@ export function PaymentRequiredModal({
           </div>
 
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Payment is required to access this content.
+            Choose a payment path to read the full analysis.
           </p>
           {itemTitle ? (
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
@@ -132,7 +132,7 @@ export function PaymentRequiredModal({
               className="w-full cursor-pointer rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               data-testid="pay-x402-cta"
             >
-              Pay {priceAmount} {priceCurrency} with wallet (x402)
+              Pay {priceAmount} {priceCurrency} with wallet
             </button>
             <button
               type="button"
@@ -140,12 +140,12 @@ export function PaymentRequiredModal({
               className="w-full cursor-pointer rounded-xl border border-border bg-background px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:border-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               data-testid="pay-mpp-agent-cta"
             >
-              Agent / MPP purchase
+              Agent/API purchase guide
             </button>
           </div>
 
           <p className="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
-            Wallet checkout uses x402. Automated agents should use MPP through the API guide.
+            People can use the wallet checkout. Automated agents should use the API guide.
           </p>
         </div>
       )}

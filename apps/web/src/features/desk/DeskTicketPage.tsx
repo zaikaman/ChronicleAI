@@ -44,7 +44,7 @@ export function DeskTicketPage(): ReactElement {
   if (state.status === "not-found") {
     return (
       <Page data-testid="desk-ticket-page">
-        <PageBackLink to="/desk/intents">Desk intents</PageBackLink>
+        <PageBackLink to="/desk/intents">Desk proposals</PageBackLink>
         <EmptyState
           title="Ticket not found"
           description="This trade ticket is not published or the content URI is invalid."
@@ -57,7 +57,7 @@ export function DeskTicketPage(): ReactElement {
   if (state.status === "error") {
     return (
       <Page data-testid="desk-ticket-page">
-        <PageBackLink to="/desk/intents">Desk intents</PageBackLink>
+        <PageBackLink to="/desk/intents">Desk proposals</PageBackLink>
         <RetryState
           title="Failed to load ticket"
           message={state.error}
@@ -73,7 +73,7 @@ export function DeskTicketPage(): ReactElement {
 
   return (
     <Page data-testid="desk-ticket-page">
-      <PageBackLink to="/desk/intents">Desk intents</PageBackLink>
+      <PageBackLink to="/desk/intents">Desk proposals</PageBackLink>
       <PageHeader
         title={title}
         description="Follow the Alert → Signal → Action path: decision, execution, and proof for this trade."
@@ -152,7 +152,7 @@ export function DeskTicketPage(): ReactElement {
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Notional</p>
+              <p className="text-xs text-muted-foreground mb-1">Trade size</p>
               <p className="text-sm font-semibold tabular-nums text-foreground">
                 {formatUsdc(ticket.notionalUsdc)}
               </p>

@@ -38,7 +38,7 @@ export function DeskStatusPage(): ReactElement {
       <Page data-testid="desk-status-page">
         <PageHeader
           title="Chronicle Desk"
-          description="Autonomous capital book on Ethereum Sepolia — equity, risk, and kill-switch state."
+          description="The trading desk turns approved intelligence into controlled actions, with visible risk controls."
         />
         <RetryState
           title="Failed to load desk status"
@@ -74,7 +74,7 @@ export function DeskStatusPage(): ReactElement {
           ? "warning"
           : "success";
   const gateStatus = kill.armed
-    ? { label: "Blocked · kill switch", variant: "error" as const }
+    ? { label: "Blocked · emergency stop", variant: "error" as const }
     : data.paused
       ? { label: "Paused", variant: "warning" as const }
       : data.heartbeat.killEligible
@@ -94,7 +94,7 @@ export function DeskStatusPage(): ReactElement {
     <Page data-testid="desk-status-page">
       <PageHeader
         title="Chronicle Desk"
-        description="Closed-loop market desk on Ethereum Sepolia: treasury funds the book, KeeperHub executes under policy, trade tickets anchor proofs on-chain."
+        description="Treasury funds the book, safety rules approve each action, and KeeperHub submits the final transaction with public proof when available."
         meta={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge
@@ -102,7 +102,7 @@ export function DeskStatusPage(): ReactElement {
               variant={data.paused ? "warning" : "success"}
             />
             <StatusBadge
-              label={kill.armed ? "Kill armed" : "Kill clear"}
+              label={kill.armed ? "Emergency stop armed" : "Emergency stop clear"}
               variant={kill.armed ? "error" : "default"}
             />
           </div>
@@ -123,10 +123,10 @@ export function DeskStatusPage(): ReactElement {
 
       <PageSection
         title="Decision lane"
-        description="Latest proposal and safety gates before KeeperHub can execute."
+        description="Latest proposal and safety checks before anything can execute."
         action={
           <div className="flex gap-3">
-            <SectionLink to="/desk/intents">View intents →</SectionLink>
+            <SectionLink to="/desk/intents">View proposals →</SectionLink>
             <SectionLink to="/activity?tab=proofs">Proof trail →</SectionLink>
           </div>
         }
@@ -182,7 +182,7 @@ export function DeskStatusPage(): ReactElement {
 
       <PageSection
         title="Book size"
-        description="Desk equity versus target and hard ceiling. Top-ups and sweeps keep the book inside policy."
+        description="How much the desk holds, its target, and its hard ceiling."
       >
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <StatTile label="Desk equity" value={formatUsdc(data.equityUsdc)} />
@@ -211,7 +211,7 @@ export function DeskStatusPage(): ReactElement {
           </div>
           <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
             Min book {formatUsdc(data.minAumUsdc)} · target {formatUsdc(data.targetAumUsdc)} ·
-            ceiling {formatUsdc(data.maxAumUsdc)}. Max trade notional{" "}
+            ceiling {formatUsdc(data.maxAumUsdc)}. Max trade size{" "}
             {formatUsdc(data.policy.maxTradeUsdc)}.
           </p>
         </Surface>
@@ -219,7 +219,7 @@ export function DeskStatusPage(): ReactElement {
 
       <PageSection
         title="Treasury vs desk"
-        description="Treasury (Para) holds revenue and safety buffer. Desk (KeeperHub wallet) holds the trading book."
+        description="Treasury holds earned revenue and a safety buffer. The desk wallet holds the active trading book."
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <WalletCard
@@ -257,8 +257,8 @@ export function DeskStatusPage(): ReactElement {
 
       {data.privateRouting ? (
         <PageSection
-          title="Private routing"
-          description="Desk KeeperHub executions on Ethereum Sepolia may use a private submission path (Flashbots Protect). Private route skips gas sponsorship — desk wallet needs Sepolia ETH."
+          title="Private submission"
+          description="Some transactions use a private network path. This can require ETH in the desk wallet."
         >
           <Surface className="p-5" data-testid="desk-private-routing">
             <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -286,7 +286,7 @@ export function DeskStatusPage(): ReactElement {
         </PageSection>
       ) : null}
 
-      <PageSection title="Risk & kill switch">
+      <PageSection title="Risk controls">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
           <Surface className="p-4">
             <p className="text-xs text-muted-foreground mb-1">Health factor</p>
@@ -315,9 +315,9 @@ export function DeskStatusPage(): ReactElement {
           <Surface className="p-4 sm:col-span-2">
             <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Kill switch</p>
+                <p className="text-xs text-muted-foreground mb-1">Emergency stop</p>
                 <p className="text-sm font-semibold text-foreground">
-                  {kill.armed ? "Armed — new intents blocked" : "Clear — desk may act"}
+                  {kill.armed ? "Armed — new proposals blocked" : "Clear — desk may act"}
                 </p>
               </div>
               <StatusBadge
@@ -340,7 +340,7 @@ export function DeskStatusPage(): ReactElement {
               </div>
               {kill.lastTxHash ? (
                 <div className="sm:col-span-2">
-                  <dt className="text-muted-foreground">Last kill tx</dt>
+                  <dt className="text-muted-foreground">Last emergency-stop tx</dt>
                   <dd className="mt-0.5">
                     <ProofMonoLink value={kill.lastTxHash} asTx />
                   </dd>
@@ -348,7 +348,7 @@ export function DeskStatusPage(): ReactElement {
               ) : null}
               {kill.lastKeeperHubRunId ? (
                 <div className="sm:col-span-2">
-                  <dt className="text-muted-foreground">Last kill KH run</dt>
+                  <dt className="text-muted-foreground">Last emergency-stop run</dt>
                   <dd className="mt-0.5">
                     <ProofMonoLink value={kill.lastKeeperHubRunId} />
                   </dd>
@@ -389,8 +389,8 @@ export function DeskStatusPage(): ReactElement {
       </PageSection>
 
       <PageSection
-        title="Desk agent"
-        description="LLM portfolio manager proposes under hard policy. KeeperHub remains the only on-chain last mile."
+        title="Decision agent"
+        description="The model proposes; hard policy decides whether the action is allowed. KeeperHub remains the only on-chain last mile."
       >
         <Surface className="p-5" data-testid="desk-status-agent">
           <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -439,7 +439,7 @@ export function DeskStatusPage(): ReactElement {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Notional</dt>
+                  <dt className="text-muted-foreground">Trade size</dt>
                   <dd className="tabular-nums text-foreground mt-0.5">
                     {formatUsdc(data.lastAgent.notionalUsdc)}
                   </dd>
@@ -473,7 +473,7 @@ export function DeskStatusPage(): ReactElement {
 
       <PageSection
         title="Strategies"
-        description="v1 strategies are always-on under policy. No public operator toggles — state is read-only."
+        description="Available strategies run under the same hard safety rules. This page is read-only."
       >
         <div className="flex flex-col gap-2">
           {DESK_STRATEGY_META.map((s) => (
@@ -501,8 +501,8 @@ export function DeskStatusPage(): ReactElement {
       </PageSection>
 
       <PageSection
-        title="Recent capital moves"
-        description="Treasury ↔ desk top-ups, sweeps, and emergency returns."
+        title="Recent money moves"
+        description="Funding, profit sweeps, and emergency returns between treasury and desk."
         action={<SectionLink to="/activity">Activity trail →</SectionLink>}
       >
         {capital.isLoading ? (
@@ -522,21 +522,21 @@ export function DeskStatusPage(): ReactElement {
         title="Execution trail"
         action={
           <div className="flex gap-3">
-            <SectionLink to="/desk/intents">Intents →</SectionLink>
+            <SectionLink to="/desk/intents">Proposals →</SectionLink>
             <SectionLink to="/activity">Full activity →</SectionLink>
           </div>
         }
       >
         <Surface className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-            Intents, trade tickets, and KeeperHub run proofs live in the public trail. Every filled
-            intent should anchor a registry ticket.
+            Proposals, trade tickets, and KeeperHub run proofs live in the public trail. Every filled
+            proposal should anchor a registry ticket.
           </p>
           <Link
             to="/desk/intents"
             className="inline-flex items-center justify-center rounded-xl bg-foreground text-background px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity shrink-0"
           >
-            View intents
+            View proposals
           </Link>
         </Surface>
       </PageSection>

@@ -22,11 +22,11 @@ const fadeInScale = {
 };
 
 const logos: LogoItem[] = [
-  { node: <span className="text-[1em] font-semibold tracking-tight">Public alert</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Desk signal</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Policy gate</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub action</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Registry proof</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Market signal</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Premium brief</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Treasury desk</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub execution</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Public proof</span> },
 ];
 
 const PARALLAX_INTENSITY = 20;
@@ -93,10 +93,10 @@ function HeroDashboard(): ReactNode {
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
-            ChronicleAI · Alert → Signal → Action
+            ChronicleAI · Intelligence → Treasury → Action
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-4xl">
-            One visible response loop
+            A visible intelligence loop
           </h2>
         </div>
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-black">
@@ -108,10 +108,10 @@ function HeroDashboard(): ReactNode {
         <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="mb-4 flex items-center justify-between gap-2">
             <span className="text-sm text-white/60">
-              {isLoading ? "Loading alerts…" : "1 · Latest public alert"}
+              {isLoading ? "Loading signals…" : "1 · Latest market signal"}
             </span>
             <span className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-black">
-              Desk input
+              Public intelligence
             </span>
           </div>
           <div className="space-y-3">
@@ -147,7 +147,7 @@ function HeroDashboard(): ReactNode {
             data-testid="hero-desk-panel"
           >
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <Landmark className="h-4 w-4" />2 · Signal → Action
+              <Landmark className="h-4 w-4" />2 · Treasury desk
             </div>
             <p
               className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
@@ -156,21 +156,21 @@ function HeroDashboard(): ReactNode {
               {isLoading ? "—" : formatUsdc(desk?.equityUsdc ?? null)}
             </p>
             <p className="mt-1 text-sm text-black/60">
-              Book equity · HF {isLoading ? "—" : formatHealthFactor(desk?.healthFactor ?? null)} ·{" "}
+              Desk equity · HF {isLoading ? "—" : formatHealthFactor(desk?.healthFactor ?? null)} ·{" "}
               {deskStatusLabel}
             </p>
             {lastAgentLine ? (
               <p className="mt-2 text-xs font-medium text-black/70">{lastAgentLine}</p>
             ) : (
               <p className="mt-2 text-xs text-black/55">
-                Alert feeds signal · policy decides · KeeperHub acts
+                Intelligence funds the desk · policy decides · KeeperHub acts
               </p>
             )}
           </Link>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck className="h-4 w-4 text-accent" />3 · Action proof
+              <ShieldCheck className="h-4 w-4 text-accent" />3 · Public proof
             </div>
             {latestAnchoredDigest ? (
               <Link
@@ -194,8 +194,8 @@ function HeroDashboard(): ReactNode {
             ) : (
               <p className="text-sm leading-relaxed text-white/50">
                 {isLoading
-                  ? "Loading action proofs…"
-                  : "No action proof yet. Policy-approved KeeperHub runs appear here with a receipt."}
+                  ? "Loading proof…"
+                  : "No proof yet. Policy-approved KeeperHub runs appear here with a receipt."}
               </p>
             )}
           </div>
@@ -267,7 +267,7 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            Policy-gated onchain response desk
+            Self-funding onchain intelligence desk
           </motion.div>
 
           <h1 className="mb-6 text-7xl font-medium leading-[1.05] tracking-tight text-black max-[850px]:text-5xl">
@@ -280,7 +280,7 @@ export function Hero(): ReactNode {
               ChronicleAI
             </motion.span>
             <motion.span className="block" variants={fadeInUp} transition={{ duration: 0.8, ease }}>
-              Alert → Signal → <span className="font-serif italic text-accent">Action.</span>
+              Sell insight. Fund the desk. <span className="font-serif italic text-accent">Prove the action.</span>
             </motion.span>
           </h1>
 
@@ -289,9 +289,9 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            ChronicleAI publishes public Alerts from onchain events, projects eligible Alerts into
-            Desk Signals, and sends only policy-approved Actions through KeeperHub — with a
-            transaction and audit trail for every outcome.
+            ChronicleAI watches markets, publishes public alerts, sells deeper analysis to humans and
+            AI agents, and routes premium revenue into a risk-controlled treasury desk. When it acts,
+            KeeperHub executes the transaction and ChronicleAI shows the proof.
           </motion.p>
 
           <motion.div
@@ -305,7 +305,7 @@ export function Hero(): ReactNode {
             >
               <span className="absolute inset-y-0 right-0 w-[calc(100%-2rem)] rounded-xl bg-accent max-[850px]:w-full" />
               <span className="relative z-10 rounded-xl bg-black px-6 py-3 font-medium text-white max-[850px]:flex-1">
-                View live alerts
+                Read live intelligence
               </span>
               <span className="relative z-10 -left-px flex h-11 w-11 items-center justify-center rounded-xl text-black">
                 <ArrowDownRight className="h-5 w-5 transition-transform duration-300 group-hover:-rotate-45" />
@@ -315,7 +315,7 @@ export function Hero(): ReactNode {
               to="/activity"
               className="inline-flex items-center justify-center rounded-xl border border-black/15 bg-white/80 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-white max-[850px]:w-full"
             >
-              View execution proof
+              See execution proof
             </Link>
           </motion.div>
         </motion.div>

@@ -1,48 +1,52 @@
 # ChronicleAI
 
-> **The proof-first autonomous onchain response desk.**
+> **A self-funding onchain intelligence desk.**
 >
-> ChronicleAI publishes public Alerts from market events and Desk-native conditions, links eligible Alerts to Desk Signals when applicable, and converts policy-approved decisions into KeeperHub Actions with public proof.
+> ChronicleAI watches markets, publishes verifiable alerts, sells deeper intelligence to humans and AI agents, routes premium revenue into a risk-controlled treasury desk, and uses KeeperHub to execute approved actions with public proof.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
 [![Tests](https://img.shields.io/badge/Tests-1101%20passing-brightgreen?style=for-the-badge)](README.md#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
-## Demo first
+## The idea in one loop
 
-ChronicleAI makes the response path inspectable end to end:
+ChronicleAI turns market intelligence into a visible operating loop:
 
-**Alert → Signal (optional) → Decision → Action → Proof**
+**Observe → Explain → Monetize → Allocate → Execute → Prove**
 
 ```mermaid
 flowchart LR
-    E[Market event or Desk condition] --> A[Public Alert]
-    A --> S[Desk Signal]
-    S --> G[Policy and preflight]
-    G --> K[KeeperHub Action]
+    E[Market event or Desk condition] --> A[Public market alert]
+    A --> I[Premium intelligence]
+    I --> R[Revenue routed to treasury]
+    R --> G[Risk policy and preflight]
+    G --> K[KeeperHub execution]
     K --> T[Onchain transaction]
-    T --> P[Registry receipt and audit trail]
-    A -.->|direct capital decision| G
+    T --> P[Public proof and audit trail]
 ```
 
-- **Alert** is the public bulletin: market-event or desk-trigger, plain language, source, and publication proof.
-- **Signal** is the desk input when applicable — projected from an eligible market Alert, or created from a Desk-native poll and linked back to a desk-trigger Alert. Direct capital decisions may omit this step.
-- **Decision** is the policy verdict (`trade`, `defend`, `defer`) recorded on the Alert.
-- **Action** is the policy-approved KeeperHub execution (intent / ticket / workflow run) when the decision is not deferred.
-- **Proof** is the linked receipt, run ID, transaction hash, and activity trail.
+- **Observe:** ChronicleAI watches configured onchain events and desk conditions.
+- **Explain:** It publishes a sourced, plain-language Alert and can provide deeper paid analysis.
+- **Monetize:** Humans and AI agents can pay for premium intelligence through x402 or MPP.
+- **Allocate:** A policy-gated desk decides whether treasury capital can be used, defended, rotated, or held.
+- **Execute and prove:** KeeperHub handles the approved onchain action, while ChronicleAI links the receipt, run ID, transaction hash, and audit trail.
 
 Alerts originate from **market events** (external onchain observations) or **Desk state** (health-factor breaches, oracle/AMM dislocations, APY differentials, gas regimes, capital conditions). Not every Alert becomes a trade — some stay observation-only or deferred. An end-to-end path is only called verified when a real decision, intent/action, and transaction proof exist.
 
-Premium feeds, sponsored watches, treasury routing, and affiliate payouts extend this loop but are not required to understand the core demo.
+Premium feeds, sponsored watches, treasury routing, and affiliate payouts extend this loop. They are not required to understand the core demo, but they show how ChronicleAI can fund an operating desk from its own intelligence product.
+
+## Demo first
+
+The judge should be able to follow one sentence: **ChronicleAI spots something, explains it, earns from the explanation, makes a risk-controlled capital decision, executes through KeeperHub, and shows the proof.**
 
 ### The core demo
 
 | Step | Surface | Judge should see |
 | --- | --- | --- |
-| 1 | [Live alerts](https://chronicle-ai-web.vercel.app/alerts) | Market and Desk-trigger Alerts with the causal chain (Signal optional for direct capital decisions). |
-| 2 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | The desk consuming Alert-backed Signals: proposal, policy decision, and preflight status. |
-| 3 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, outcome, routing, and audit context for the Action. |
+| 1 | [Live alerts](https://chronicle-ai-web.vercel.app/alerts) | What ChronicleAI sees: market and desk alerts with sources and publication proof. |
+| 2 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | What it does with capital: proposal, risk policy, and preflight status. |
+| 3 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | What actually happened: KeeperHub execution logs, routing, outcome, and audit context. |
 | 4 | [Example onchain proof](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | The transaction that anyone can verify independently. |
 
 ### Source vs execution chains
@@ -51,13 +55,13 @@ The unified Alerts feed includes **Mainnet market Alerts** and **Sepolia Desk-tr
 
 ## Full system overview
 
-ChronicleAI is an autonomous onchain market desk with a public memory: it turns market activity into sourced Alerts and digests, offers premium machine-readable intelligence over x402/MPP, and can convert a policy-approved Alert-backed Signal into an auditable KeeperHub Action.
+ChronicleAI is an autonomous onchain intelligence business with a public memory: it turns market activity into sourced Alerts and digests, sells premium machine-readable intelligence over x402/MPP, and can route a configurable share of that revenue into a policy-gated market desk. When the desk acts, KeeperHub turns the decision into an auditable onchain Action.
 
 This is the distinction from a generic trading bot:
 
-- It **publishes what it sees** as Alerts — both market events and Desk-native conditions — instead of keeping reasoning private.
-- It **links Desk Signals to Alerts** — market Alerts project into Signals; Desk-native polls create desk-trigger Alerts and link back. Registry/publication failure never blocks a safe Desk action.
-- It **monetizes deeper intelligence** instead of treating research as an invisible prompt.
+- It **publishes what it sees** as Alerts instead of keeping its market view private.
+- It **monetizes deeper intelligence** so research becomes a product, not an invisible prompt.
+- It **routes revenue into a controlled treasury desk** rather than pretending every observation should become a trade.
 - It **acts only after policy and preflight checks** instead of letting an LLM broadcast arbitrary calldata.
 - It **proves what happened** with registry receipts, KeeperHub run IDs, transaction hashes, routing metadata, and an activity trail.
 

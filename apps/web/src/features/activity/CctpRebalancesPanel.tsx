@@ -121,7 +121,7 @@ export function CctpRebalancesPanel({
         data-testid={dataTestId}
       >
         <p className="text-sm text-muted-foreground">
-          No CCTP rebalances yet. Premium revenue on Base is batched into Sepolia USDC when
+          No revenue transfers yet. Premium revenue is moved to the desk network in batches when
           policy allows.
         </p>
       </div>

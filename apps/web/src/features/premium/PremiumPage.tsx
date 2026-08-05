@@ -190,8 +190,8 @@ export function PremiumPage(): ReactElement {
   return (
     <Page data-testid="premium-page">
       <PageHeader
-        title="Premium Intelligence"
-        description="Unlock deep analysis, historical feeds, and sponsor contract monitoring. Humans pay with USDC via wallet (x402 on Base Sepolia). Desk operations run on Ethereum Sepolia; treasury rebalances via Circle CCTP. Agents pay the same catalog with MPP (Tempo HMAC) through the API."
+        title="Premium intelligence"
+        description="Unlock deeper market analysis, historical feeds, or a sponsored contract watch. Wallet payments are available for people; API payments are available for agents."
         meta={
           !isLoading && !error ? (
             <span>
@@ -201,8 +201,8 @@ export function PremiumPage(): ReactElement {
         }
         below={
           <>
-            <StatusBadge label="x402 · wallet" variant="info" />
-            <StatusBadge label="MPP · agent" variant="default" />
+            <StatusBadge label="Wallet checkout" variant="info" />
+            <StatusBadge label="Agent payments" variant="default" />
           </>
         }
       />
@@ -269,7 +269,7 @@ export function PremiumPage(): ReactElement {
         ) : items.length === 0 ? (
           <EmptyState
             title="No premium items available"
-            description="Premium intelligence items will appear here when clusters and digests mint paid reports. Each item supports x402 (wallet) and MPP (agent) rails when productized."
+            description="Paid reports appear here as ChronicleAI finds important patterns worth a deeper look."
             data-testid="premium-empty"
           />
         ) : (
@@ -298,7 +298,7 @@ export function PremiumPage(): ReactElement {
 
       <PageSection
         title="Request a sponsored watch"
-        description="Submit any contract address and campaign window. Humans settle via x402; agents can use MPP on the same product endpoints. KeeperHub writes create and report receipts on-chain."
+        description="Pay to have ChronicleAI monitor a contract during a campaign window. The campaign records its creation and, when published, its report."
         className="pt-2 border-t border-border"
       >
         <SponsoredWatchRequestForm
@@ -310,7 +310,7 @@ export function PremiumPage(): ReactElement {
 
       <PageSection
         title="Sponsored campaigns"
-        description="Contract watches with dual on-chain audit trails — create and report transactions."
+        description="Paid monitoring campaigns with a public audit trail."
         className="pt-2 border-t border-border"
       >
         <SponsoredWatchList watches={sponsoredWatches} isLoading={watchesLoading} />

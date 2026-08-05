@@ -239,7 +239,7 @@ export function PaymentChallengePanel({
     >
       <div className="mb-5 flex items-start justify-between gap-4">
         <h3 className="text-base font-semibold text-foreground leading-snug">
-          Payment Required
+          Wallet checkout
         </h3>
         <button
           type="button"
@@ -257,8 +257,8 @@ export function PaymentChallengePanel({
           <span className="text-xs text-muted-foreground">{priceCurrency}</span>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Pay with USDC via wallet on {wallet.targetChain.name} (x402). Agents use MPP via the API
-          — not this wallet flow.
+          Pay with USDC through your wallet on {wallet.targetChain.name}. Automated agents should
+          use the API guide instead.
         </p>
         {onShowAgentGuide ? (
           <button

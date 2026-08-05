@@ -6,12 +6,12 @@ import { type ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 const navLinks = [
-  { label: "Alerts", href: "/alerts", description: "Public bulletins that feed the desk" },
-  { label: "Desk", href: "/desk", description: "Signal → policy → action review" },
-  { label: "Activity", href: "/activity", description: "Public execution and proof trail" },
-  { label: "Digest", href: "/digests/latest", description: "Latest intelligence brief" },
+  { label: "Alerts", href: "/alerts", description: "What ChronicleAI sees" },
+  { label: "Desk", href: "/desk", description: "Treasury decisions and execution" },
+  { label: "Activity", href: "/activity", description: "Public proof trail" },
+  { label: "Digest", href: "/digests/latest", description: "Latest market intelligence brief" },
   { label: "Archive", href: "/publications", description: "Past publications and proof records" },
-  { label: "Premium", href: "/premium", description: "Paid intelligence and sponsorships" },
+  { label: "Premium", href: "/premium", description: "Deeper intelligence for humans and agents" },
 ];
 
 const ease = [0.23, 1, 0.32, 1] as const;

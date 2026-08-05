@@ -48,8 +48,8 @@ export function DeskIntentsPage(): ReactElement {
     <Page data-testid="desk-intents-page">
       <PageBackLink to="/desk">Desk status</PageBackLink>
       <PageHeader
-        title="Desk intents"
-        description="Policy-gated execution intents: strategy, status, notional, KeeperHub runs, and linked trade tickets."
+        title="Desk proposals"
+        description="Review what the desk proposed, whether safety rules allowed it, and what proof was recorded."
         meta={
           !isLoading && !error ? (
             <span className="tabular-nums">
@@ -64,7 +64,7 @@ export function DeskIntentsPage(): ReactElement {
 
       {isLoading ? (
         <LoadingState
-          message="Loading intents..."
+          message="Loading proposals..."
           variant="cards"
           count={5}
           data-testid="desk-intents-loading"
@@ -78,8 +78,8 @@ export function DeskIntentsPage(): ReactElement {
         />
       ) : intents.length === 0 ? (
         <EmptyState
-          title="No intents yet"
-          description="When the desk evaluates a signal and policy allows, an intent appears here with KeeperHub execution proofs."
+          title="No proposals yet"
+          description="When the desk evaluates a signal, its next proposal will appear here with the decision and execution proof."
           data-testid="desk-intents-empty"
         />
       ) : (
@@ -91,7 +91,7 @@ export function DeskIntentsPage(): ReactElement {
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Strategy</th>
                   <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Notional</th>
+                  <th className="px-4 py-3 font-medium">Trade size</th>
                   <th className="px-4 py-3 font-medium">Legs</th>
                   <th className="px-4 py-3 font-medium">Proofs</th>
                   <th className="px-4 py-3 font-medium">When</th>

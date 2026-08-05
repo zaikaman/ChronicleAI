@@ -267,8 +267,8 @@ function CctpRebalancesSection({
   }
   return (
     <PageSection
-      title="CCTP rebalances"
-      description="Circle CCTP burns Base Sepolia USDC and mints native Ethereum Sepolia USDC into the same treasury. Burn and mint explorer links are chain-correct."
+      title="Revenue transfers"
+      description="When revenue moves between payment and desk networks, both sides of the transfer are linked to explorer records."
       className="!mb-10"
     >
       {page.isLoading ? (
@@ -693,11 +693,11 @@ const TABS: {
     payouts: number;
   }) => string | number | null;
 }[] = [
-  { id: "proofs", label: "Proofs & Logs", badge: (s) => `${s.succeededLogs + s.failedLogs}` },
-  { id: "overview", label: "Overview" },
-  { id: "trading", label: "Desk & Trading" },
-  { id: "all", label: "All Activity" },
-  { id: "financials", label: "Financials & Revenue", badge: (s) => `${s.settledPayments}` },
+  { id: "proofs", label: "Proofs", badge: (s) => `${s.succeededLogs + s.failedLogs}` },
+  { id: "overview", label: "Summary" },
+  { id: "trading", label: "Desk" },
+  { id: "all", label: "Everything" },
+  { id: "financials", label: "Money", badge: (s) => `${s.settledPayments}` },
 ];
 
 export function ActivityPage(): ReactElement {
@@ -768,14 +768,14 @@ export function ActivityPage(): ReactElement {
   return (
     <Page data-testid="activity-page">
       <PageHeader
-        title="Agent Activity"
-        description="Public execution and proof trail for KeeperHub actions, desk tickets, registry receipts, and supporting operations."
+        title="Activity & proof"
+        description="See what ChronicleAI published, what money settled, and what the desk recorded—with proof links when available."
         meta={<SectionLink to="/desk">Open desk →</SectionLink>}
       />
 
       {isLoading ? (
         <LoadingState
-          message="Loading agent activity..."
+          message="Loading activity..."
           variant="activity"
           data-testid="activity-loading"
         />
@@ -839,8 +839,8 @@ export function ActivityPage(): ReactElement {
             {(activeTab === "overview" || activeTab === "all") && (
               <>
                 <PageSection
-                  title="Agent treasury"
-                  description="Dual-rail capital plane: Base USDC from x402 payments, Sepolia USDC for desk top-ups after Circle CCTP. Gas health is Sepolia ETH vs the safety buffer."
+                  title="Treasury"
+                  description="Where settled revenue sits before it can support the trading desk."
                   action={<SectionLink to="/desk">Desk book →</SectionLink>}
                 >
                   <LowBalanceBanner treasury={data.treasury} />
@@ -867,8 +867,8 @@ export function ActivityPage(): ReactElement {
             {(activeTab === "trading" || activeTab === "all") && (
               <>
                 <PageSection
-                  title="Desk capital moves"
-                  description="Treasury ↔ desk top-ups, profit sweeps, and emergency returns with explorer proofs. Top-ups use Sepolia USDC only — never Base float."
+                  title="Money moved between treasury and desk"
+                  description="Funding, profit sweeps, and emergency returns, each linked to an explorer record."
                   action={<SectionLink to="/desk">Desk status →</SectionLink>}
                 >
                   <ProgressivePanel placeholder="Loading capital moves…">
@@ -877,16 +877,16 @@ export function ActivityPage(): ReactElement {
                 </PageSection>
 
                 <PageSection
-                  title="Trade tickets"
-                  description="Registry-anchored desk executions: signal → decision → legs → proofs."
-                  action={<SectionLink to="/desk/intents">All intents →</SectionLink>}
+                  title="Desk actions"
+                  description="What the desk decided, what it did, and the proof attached to it."
+                  action={<SectionLink to="/desk/intents">All proposals →</SectionLink>}
                 >
                   <ProgressivePanel placeholder="Loading trade tickets…">
                     {() => <DeskTicketsSection />}
                   </ProgressivePanel>
                 </PageSection>
 
-                <ProgressivePanel placeholder="Loading CCTP rebalances…">
+                <ProgressivePanel placeholder="Loading revenue transfers…">
                   {() => <CctpRebalancesSection cctpEnabled={data.treasury.cctpEnabled} />}
                 </ProgressivePanel>
               </>
@@ -896,8 +896,8 @@ export function ActivityPage(): ReactElement {
             {(activeTab === "proofs" || activeTab === "all") && (
               <>
                 <PageSection
-                  title="KeeperHub execution log"
-                  description="Full audit trail of monitoring, generation, publication, and treasury actions — including failures and retries."
+                  title="System proof log"
+                  description="The detailed record of monitoring, publishing, treasury, and execution events—including failures and retries."
                 >
                   {/* Deep-link filter loads immediately so scroll + data are ready. */}
                   {entityId ? (
@@ -914,7 +914,7 @@ export function ActivityPage(): ReactElement {
                 </PageSection>
 
                 <PageSection
-                  title="On-chain publication proofs"
+                  title="Published proof"
                   action={<SectionLink to="/digests/latest">Open digest →</SectionLink>}
                 >
                   <ProgressivePanel placeholder="Loading digests…">
@@ -992,8 +992,8 @@ export function ActivityPage(): ReactElement {
             {(activeTab === "financials" || activeTab === "all") && (
               <>
                 <PageSection
-                  title="Payment settlements"
-                  description="Settled charges include their on-chain proof. Incomplete attempts include the reason we could identify, so a wallet issue does not look like a platform outage."
+                  title="Payments"
+                  description="Settled charges include their on-chain proof. Incomplete attempts show the reason we could identify."
                   action={<SectionLink to="/premium">Unlock premium →</SectionLink>}
                 >
                   <ProgressivePanel placeholder="Loading payments…">
@@ -1001,7 +1001,7 @@ export function ActivityPage(): ReactElement {
                   </ProgressivePanel>
                 </PageSection>
 
-                <PageSection title="Revenue routing payouts">
+                <PageSection title="Revenue payouts">
                   <ProgressivePanel placeholder="Loading payouts…">
                     {() => <PayoutsSection />}
                   </ProgressivePanel>
@@ -1009,8 +1009,8 @@ export function ActivityPage(): ReactElement {
 
                 {data.subscriptionAnalytics ? (
                   <PageSection
-                    title="Subscription analytics"
-                    description="Public MRR from entitled newsletter agreements, paywall conversion, and settled volume by payment rail."
+                    title="Audience & revenue"
+                    description="Newsletter subscriptions, paywall conversion, and settled volume by payment route."
                   >
                     <SubscriptionAnalyticsPanel analytics={data.subscriptionAnalytics} />
                   </PageSection>
@@ -1018,16 +1018,16 @@ export function ActivityPage(): ReactElement {
 
                 {data.referralAttribution ? (
                   <PageSection
-                    title="Referral attribution"
-                    description="Settled volume and newsletter intents attributed to referral partner wallets from payment intent metadata."
+                    title="Partner referrals"
+                    description="Settled volume and newsletter signups attributed to referral partners."
                   >
                     <ReferralAttributionPanel attribution={data.referralAttribution} />
                   </PageSection>
                 ) : null}
 
                 <PageSection
-                  title="Sponsored watch campaigns"
-                  description="Paid monitoring jobs with dual on-chain audit trails (createSponsoredWatch + publishSponsoredReport)."
+                  title="Sponsored monitoring"
+                  description="Paid monitoring jobs with a public record when the campaign is created and when its report is published."
                   action={<SectionLink to="/premium">Open premium →</SectionLink>}
                 >
                   <ProgressivePanel placeholder="Loading sponsored watches…">

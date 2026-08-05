@@ -7,27 +7,27 @@ import { Link } from "react-router-dom";
 const steps = [
   {
     icon: Activity,
-    title: "Publish the Alert",
+    title: "Watch the market",
     description:
-      "ChronicleAI watches configured onchain events and turns meaningful activity into a sourced, plain-language public Alert with publication proof.",
+      "ChronicleAI watches configured onchain events and desk conditions, then turns meaningful activity into a sourced, plain-language public Alert.",
   },
   {
     icon: BrainCircuit,
-    title: "Project a Desk Signal",
+    title: "Sell the deeper answer",
     description:
-      "Eligible Alerts become desk inputs. The Alert→Signal service maps the event into a structured Signal the desk can reason over — not every Alert trades.",
+      "The public Alert is the headline. Humans and AI agents can pay for the deeper analysis and machine-readable intelligence through x402 or MPP.",
   },
   {
     icon: ShieldCheck,
-    title: "Apply policy and preflight",
+    title: "Route revenue through risk controls",
     description:
-      "Hard limits, health checks, pause state, routing, and preflight decide whether an Action can proceed. If a check fails, the safe default is hold.",
+      "Premium revenue can support the treasury desk, but the model never gets a free hand. Size limits, health checks, pause state, routing, and preflight decide whether an Action can proceed.",
   },
   {
     icon: Landmark,
-    title: "Execute the Action and prove it",
+    title: "Execute and prove it",
     description:
-      "Approved Actions run through KeeperHub. The transaction, registry receipt, and execution trail stay linked on the originating Alert’s causal chain.",
+      "Approved Actions run through KeeperHub. The transaction, registry receipt, and execution trail give anyone evidence of what the desk actually did.",
   },
 ];
 
@@ -77,8 +77,8 @@ export function HowItWorks(): ReactNode {
             How it works
           </h2>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-foreground/60">
-            Alert → Signal → Action: from a public bulletin to a policy-approved KeeperHub
-            transaction and public proof.
+            From a market observation to paid intelligence, treasury allocation, and a KeeperHub
+            transaction anyone can verify.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
@@ -94,7 +94,7 @@ export function HowItWorks(): ReactNode {
                 to="/desk"
                 className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-frame px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
               >
-                Open Desk
+                Open Treasury Desk
               </Link>
             </motion.div>
           </div>
