@@ -536,6 +536,7 @@ describe("RevenueRoutingService", () => {
 
     const result = await service.routeRevenue(`test-period-interval-${Date.now()}`);
     expect(result.routed).toBe(false);
+    expect(result.outcome).toBe("skipped");
     expect(result.errorMessage).toMatch(/Routing interval/i);
   });
 });

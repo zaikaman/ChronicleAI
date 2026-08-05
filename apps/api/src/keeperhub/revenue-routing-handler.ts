@@ -43,13 +43,35 @@ export class RevenueRoutingHandler {
       // Execute revenue routing
       const result = await this.routingService.routeRevenue(payload.periodHash);
 
+      if (result.outcome === "skipped") {
+        await this.execLogRepo.append({
+          action_type: "payout",
+          entity_type: "payout_record",
+          entity_id: null,
+          status: "skipped",
+          message: `Revenue routing skipped: ${result.errorMessage}`,
+          details: {
+            total_revenue: result.totalRevenue,
+            reason: result.errorMessage,
+            skipped: true,
+          },
+        });
+
+        return {
+          accepted: true,
+          statusCode: 202,
+          payoutCount: 0,
+          message: `Revenue routing skipped: ${result.errorMessage}`,
+        };
+      }
+
       if (!result.routed) {
         await this.execLogRepo.append({
           action_type: "payout",
           entity_type: "payout_record",
           entity_id: null,
           status: "failed",
-          message: `Revenue routing skipped: ${result.errorMessage}`,
+          message: `Revenue routing failed: ${result.errorMessage}`,
           details: {
             total_revenue: result.totalRevenue,
             reason: result.errorMessage,
@@ -57,10 +79,10 @@ export class RevenueRoutingHandler {
         });
 
         return {
-          accepted: true,
-          statusCode: 201,
+          accepted: false,
+          statusCode: 500,
           payoutCount: 0,
-          message: `Revenue routing skipped: ${result.errorMessage}`,
+          message: `Revenue routing failed: ${result.errorMessage}`,
         };
       }
 

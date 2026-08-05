@@ -74,6 +74,8 @@ function getStatusVariant(status: string): "default" | "success" | "warning" | "
       return "info";
     case "retrying":
       return "warning";
+    case "skipped":
+      return "warning";
     case "failed":
       return "error";
     default:
@@ -234,7 +236,10 @@ export function ExecutionLogTable({
                   </div>
                 </td>
                 <td style={tableCellStyle}>
-                  <StatusBadge label={log.status} variant={getStatusVariant(log.status)} />
+                  <StatusBadge
+                    label={log.status === "skipped" ? "Skipped" : log.status}
+                    variant={getStatusVariant(log.status)}
+                  />
                 </td>
                 <td style={tableCellStyle}>
                   {log.routing || log.routingLabel || log.routingRequested ? (

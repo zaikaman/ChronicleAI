@@ -228,12 +228,13 @@ export const EXECUTION_LOG_ACTION_TYPES: readonly ExecutionLogActionType[] = [
   "desk_event_microtrade",
 ] as const;
 
-export type ExecutionLogStatus = "started" | "succeeded" | "retrying" | "failed";
+export type ExecutionLogStatus = "started" | "succeeded" | "retrying" | "skipped" | "failed";
 
 export const EXECUTION_LOG_STATUSES: readonly ExecutionLogStatus[] = [
   "started",
   "succeeded",
   "retrying",
+  "skipped",
   "failed",
 ] as const;
 

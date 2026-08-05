@@ -1318,6 +1318,7 @@ export function setupUS4Routes(_app: Express, env: ServerEnv, deps: US4Dependenc
     : {
         async routeRevenue(periodHash?: string) {
           return {
+            outcome: "failed" as const,
             routed: false,
             totalRevenue: 0,
             creatorRecoveryAmount: 0,

@@ -59,6 +59,7 @@ export interface RevenueRoutingConfig {
 }
 
 export interface RevenueRoutingResult {
+  outcome: "routed" | "skipped" | "failed";
   routed: boolean;
   totalRevenue: number;
   creatorRecoveryAmount: number;
@@ -95,7 +96,9 @@ const ZERO_RESULT = (
   payoutPeriodHash: string,
   totalRevenue: number,
   errorMessage: string,
+  outcome: "skipped" | "failed" = "failed",
 ): RevenueRoutingResult => ({
+  outcome,
   routed: false,
   totalRevenue,
   creatorRecoveryAmount: 0,
@@ -287,6 +290,7 @@ export function createRevenueRoutingService(
               payoutPeriodHash,
               totalRevenue,
               `Routing interval not elapsed (${elapsed}ms < ${cfg.routingIntervalMs}ms ROUTING_INTERVAL_MS)`,
+              "skipped",
             );
           }
         }
@@ -303,6 +307,7 @@ export function createRevenueRoutingService(
           payoutPeriodHash,
           totalRevenue,
           routeCheck.reason ?? "Revenue routing conditions not met",
+          "skipped",
         );
       }
 
@@ -340,6 +345,7 @@ export function createRevenueRoutingService(
           payoutPeriodHash,
           totalRevenue,
           `No distributable revenue after costs/reserve/buffer (revenue=${totalRevenue}, costs=${estimatedOperatingCosts}, usdcReserve=${usdcOperatingReserve}, excessBalance=${excessBalance}, distributable=${distributable}, minDistributable=${minDistributable})`,
+          "skipped",
         );
       }
 
@@ -378,6 +384,7 @@ export function createRevenueRoutingService(
           creatorRecoveryAmount <= 0
             ? "Creator recovery amount is zero after share policy"
             : "Failed to create any payout records",
+          creatorRecoveryAmount <= 0 ? "skipped" : "failed",
         );
       }
 
@@ -550,6 +557,7 @@ export function createRevenueRoutingService(
       }
 
       return {
+        outcome: "routed",
         routed: true,
         totalRevenue,
         creatorRecoveryAmount,
