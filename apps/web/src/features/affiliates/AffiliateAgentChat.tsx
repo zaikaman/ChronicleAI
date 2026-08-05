@@ -109,7 +109,7 @@ export function AffiliateAgentChat({
 
       <div
         ref={listRef}
-        className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 max-h-[22rem] min-h-[16rem]"
+        className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3 min-h-[16rem]"
       >
         {messages.map((m, i) => (
           <div
