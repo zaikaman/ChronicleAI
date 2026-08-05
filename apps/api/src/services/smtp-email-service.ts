@@ -153,7 +153,6 @@ export function createSmtpEmailService(config: {
       // Use BCC so subscriber emails are not exposed to each other.
       const info = await transporter.sendMail({
         from: fromAddress,
-        to: fromAddress,
         bcc: uniqueRecipients,
         subject: params.subject,
         html: params.html,

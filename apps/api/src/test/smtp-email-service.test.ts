@@ -1,7 +1,15 @@
 // Unit tests for SMTP email service (DB-backed recipient resolution)
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createSmtpEmailService } from "../services/smtp-email-service.ts";
+
+const nodemailerMock = vi.hoisted(() => {
+  const sendMail = vi.fn();
+  const createTransport = vi.fn(() => ({ sendMail }));
+  return { createTransport, sendMail };
+});
+
+vi.mock("nodemailer", () => ({ default: nodemailerMock }));
 
 describe("SmtpEmailService", () => {
   it("handles unconfigured service gracefully", async () => {
@@ -128,6 +136,42 @@ describe("SmtpEmailService", () => {
     });
 
     expect(channels).toEqual(["alert"]);
+  });
+
+  it("sends only to resolved subscribers and never to the sender address", async () => {
+    nodemailerMock.createTransport.mockClear();
+    nodemailerMock.sendMail.mockReset();
+    nodemailerMock.sendMail.mockResolvedValue({ accepted: ["sub@example.com"] });
+
+    const service = createSmtpEmailService({
+      host: "smtp.example.com",
+      port: 587,
+      user: "user",
+      pass: "pass",
+      fromAddress: "noreply@chronicleai.com",
+      resolveRecipients: async () => ["sub@example.com"],
+    });
+
+    const result = await service.sendDigestBulletin({
+      title: "Test Digest",
+      summary: "Test summary",
+      highlights: [],
+      analysis: undefined,
+      reportDate: "2026-07-07",
+      registryTxHash: undefined,
+      contentUri: undefined,
+    });
+
+    expect(result).toMatchObject({ success: true, recipientsReached: 1 });
+    expect(nodemailerMock.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: "noreply@chronicleai.com",
+        bcc: ["sub@example.com"],
+      }),
+    );
+    expect(nodemailerMock.sendMail.mock.calls[0]?.[0]).not.toHaveProperty(
+      "to",
+    );
   });
 
   it("returns failure for alert without SMTP config", async () => {
