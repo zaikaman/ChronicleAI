@@ -9,6 +9,7 @@ import {
   buildSummaryLine,
   emptyAuditSkeleton,
   formatAuditGas,
+  isAwaitingExecutionSubmission,
   isDeskExecutionAuditV1,
   parseExecutionAuditFromPayload,
   publicExecutionAuditFields,
@@ -158,6 +159,28 @@ describe("buildSummaryLine", () => {
     const line = buildSummaryLine(sampleFilledAudit({ khSim: true }));
     expect(line).toContain("· KH sim passed");
     expect(line).toContain("Preflight passed · KH sim passed → Submit run");
+  });
+
+  it("labels an in-flight pre-submit snapshot as awaiting, not skipped", () => {
+    const audit = buildExecutionAudit({
+      preflight: buildPreflightStage({
+        at: "2026-07-28T12:00:00.000Z",
+        status: "passed",
+      }),
+      submit: buildSubmitStage({
+        at: "2026-07-28T12:00:00.000Z",
+        status: "skipped",
+      }),
+      outcome: buildOutcomeStage({
+        at: "2026-07-28T12:00:00.000Z",
+        status: "skipped",
+      }),
+    });
+
+    expect(isAwaitingExecutionSubmission(audit)).toBe(true);
+    expect(audit.summaryLine).toBe(
+      "Preflight passed → Submission pending → Outcome pending",
+    );
   });
 
   it("uses submit status when no run id", () => {

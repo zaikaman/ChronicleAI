@@ -41,9 +41,29 @@ function preflightVariant(
   }
 }
 
+/**
+ * Missing submit/outcome stages are storage defaults on the in-flight audit
+ * snapshot. Keep that transient state informative instead of calling it
+ * skipped in the user-facing timeline.
+ */
+function isAwaitingExecutionSubmission(audit: DeskExecutionAuditV1): boolean {
+  const { preflight, submit, outcome } = audit.stages;
+  return (
+    preflight.status === "passed" &&
+    submit.status === "skipped" &&
+    outcome.status === "skipped" &&
+    !submit.keeperHubRunId &&
+    !submit.errorMessage?.trim() &&
+    !outcome.errorMessage?.trim() &&
+    outcome.txHashes.length === 0
+  );
+}
+
 function submitVariant(
   status: DeskAuditSubmitStage["status"],
+  awaitingSubmit = false,
 ): "default" | "success" | "warning" | "error" | "info" {
+  if (awaitingSubmit) return "info";
   switch (status) {
     case "started":
       return "info";
@@ -56,7 +76,9 @@ function submitVariant(
 
 function outcomeVariant(
   status: DeskAuditOutcomeStage["status"],
+  awaitingSubmit = false,
 ): "default" | "success" | "warning" | "error" | "info" {
+  if (awaitingSubmit) return "info";
   switch (status) {
     case "filled":
       return "success";
@@ -251,10 +273,15 @@ function KhSimulateLegsList({
   );
 }
 
-function submitDetail(stage: DeskAuditSubmitStage): string {
+function submitDetail(
+  stage: DeskAuditSubmitStage,
+  awaitingSubmit = false,
+): string {
   const bits: string[] = [];
   if (stage.keeperHubRunId) {
     bits.push(`run ${truncateHash(stage.keeperHubRunId, 8, 4)}`);
+  } else if (awaitingSubmit) {
+    bits.push("Awaiting KeeperHub submission");
   } else {
     bits.push(stage.status);
   }
@@ -263,8 +290,12 @@ function submitDetail(stage: DeskAuditSubmitStage): string {
   return bits.join(" · ");
 }
 
-function outcomeDetail(stage: DeskAuditOutcomeStage): string {
+function outcomeDetail(
+  stage: DeskAuditOutcomeStage,
+  awaitingSubmit = false,
+): string {
   const bits: string[] = [];
+  if (awaitingSubmit) bits.push("Awaiting execution outcome");
   const primary = stage.txHashes[0];
   if (primary) bits.push(truncateHash(primary, 8, 4));
   const gas = formatGasUsed(stage.gasUsed);
@@ -535,6 +566,7 @@ export function ExecutionAuditTimeline({
 }: ExecutionAuditTimelineProps): ReactElement {
   const { preflight, submit, outcome } = audit.stages;
   const khDryRun = khDryRunLine(preflight);
+  const awaitingSubmit = isAwaitingExecutionSubmission(audit);
 
   return (
     <div data-testid="execution-audit-timeline">
@@ -586,9 +618,9 @@ export function ExecutionAuditTimeline({
         <StageRow
           step={2}
           title="Submit"
-          statusLabel={submit.status}
-          statusVariant={submitVariant(submit.status)}
-          detail={submitDetail(submit)}
+          statusLabel={awaitingSubmit ? "Pending" : submit.status}
+          statusVariant={submitVariant(submit.status, awaitingSubmit)}
+          detail={submitDetail(submit, awaitingSubmit)}
           at={submit.at}
           testId="execution-audit-submit"
           extra={
@@ -615,9 +647,9 @@ export function ExecutionAuditTimeline({
         <StageRow
           step={3}
           title="Outcome"
-          statusLabel={outcome.status}
-          statusVariant={outcomeVariant(outcome.status)}
-          detail={outcomeDetail(outcome)}
+          statusLabel={awaitingSubmit ? "Pending" : outcome.status}
+          statusVariant={outcomeVariant(outcome.status, awaitingSubmit)}
+          detail={outcomeDetail(outcome, awaitingSubmit)}
           at={outcome.at}
           testId="execution-audit-outcome"
           extra={

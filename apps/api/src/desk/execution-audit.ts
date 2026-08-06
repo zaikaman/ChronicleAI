@@ -452,9 +452,28 @@ function truncateError(message: string, max = EXECUTION_AUDIT_ERROR_TRUNCATE): s
  * - `Preflight passed · KH sim passed → Submit run → failed · insufficient allowance`
  * - `Preflight failed → Submit skipped → unknown · simulated_hf_below_warn`
  */
+/**
+ * True for the in-flight snapshot emitted after policy approval but before
+ * KeeperHub submission. Missing stages use `skipped` as a storage default;
+ * that value must not be presented as a terminal no-op to users.
+ */
+export function isAwaitingExecutionSubmission(audit: DeskExecutionAuditV1): boolean {
+  const { preflight, submit, outcome } = audit.stages;
+  return (
+    preflight.status === "passed" &&
+    submit.status === "skipped" &&
+    outcome.status === "skipped" &&
+    !submit.keeperHubRunId &&
+    !submit.errorMessage?.trim() &&
+    !outcome.errorMessage?.trim() &&
+    outcome.txHashes.length === 0
+  );
+}
+
 export function buildSummaryLine(audit: DeskExecutionAuditV1): string {
   const { preflight, submit, outcome } = audit.stages;
   const parts: string[] = [];
+  const awaitingSubmit = isAwaitingExecutionSubmission(audit);
 
   parts.push(`Preflight ${preflight.status}`);
 
@@ -474,13 +493,15 @@ export function buildSummaryLine(audit: DeskExecutionAuditV1): string {
   }
 
   const submitLabel = submit.keeperHubRunId ? "run" : submit.status;
-  parts.push(`→ Submit ${submitLabel}`);
+  parts.push(`→ ${awaitingSubmit ? "Submission pending" : `Submit ${submitLabel}`}`);
 
   if (submit.routing === "private_mempool") {
     parts.push("· private");
   }
 
-  parts.push(`→ ${capitalizeStatus(outcome.status)}`);
+  parts.push(
+    `→ ${awaitingSubmit ? "Outcome pending" : capitalizeStatus(outcome.status)}`,
+  );
 
   if (outcome.gasUsed) {
     parts.push(`· ${formatAuditGas(outcome.gasUsed)} gas`);
