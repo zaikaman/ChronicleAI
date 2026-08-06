@@ -1,4 +1,9 @@
+// Live revenue strip for the Premium storefront.
+// Headline settlement numbers + payment route mix, up top where they act as
+// proof-of-life; the full per-transaction trail lives on the activity Money feed.
+
 import type { ReactElement } from "react";
+import { Link } from "react-router-dom";
 
 export interface SubscriptionAnalyticsData {
   mrr: number;
@@ -54,20 +59,36 @@ export function SubscriptionAnalyticsPanel({
   return (
     <div
       data-testid={dataTestId}
-      className="rounded-2xl border border-border bg-frame p-5 sm:p-6 flex flex-col gap-5"
+      className="rounded-2xl border border-border bg-frame p-4 sm:p-5"
+      aria-label="Live revenue"
     >
+      {/* Header: live signal + trail link */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+          </span>
+          <h2 className="text-sm font-semibold text-foreground m-0">Live revenue</h2>
+          <span className="text-[11px] text-muted-foreground hidden sm:inline">
+            settled on-chain · updated with each payment
+          </span>
+        </div>
+        <Link
+          to="/activity?filter=money"
+          className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          data-testid="analytics-money-trail-link"
+        >
+          Money trail →
+        </Link>
+      </div>
+
+      {/* Headline metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Metric
           label="MRR"
           value={formatMoney(analytics.mrr, analytics.mrrCurrency)}
-          hint={`${analytics.activeNewsletterSubscriptions} active newsletter${analytics.activeNewsletterSubscriptions === 1 ? "" : "s"}`}
+          hint="Recurring paid access"
           testId="analytics-mrr"
-        />
-        <Metric
-          label="Conversion"
-          value={formatPercent(analytics.conversionRate)}
-          hint={`${analytics.settledPayments} settled / ${analytics.totalPaymentAttempts} attempts`}
-          testId="analytics-conversion"
         />
         <Metric
           label="Settled volume"
@@ -76,15 +97,22 @@ export function SubscriptionAnalyticsPanel({
           testId="analytics-volume"
         />
         <Metric
-          label="Referred volume"
-          value={formatMoney(analytics.referredSettledVolume, analytics.mrrCurrency)}
-          hint={`${analytics.referredSettledCount} referred payment${analytics.referredSettledCount === 1 ? "" : "s"}`}
-          testId="analytics-referred"
+          label="Conversion"
+          value={formatPercent(analytics.conversionRate)}
+          hint={`${analytics.settledPayments} settled / ${analytics.totalPaymentAttempts} attempts`}
+          testId="analytics-conversion"
+        />
+        <Metric
+          label="Subscribers"
+          value={String(analytics.activeNewsletterSubscriptions)}
+          hint="Active newsletter subscriptions"
+          testId="analytics-subscribers"
         />
       </div>
 
-      <div>
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">
+      {/* Payment route mix */}
+      <div className="mt-4 pt-4 border-t border-border/50">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2.5">
           Payment route mix
         </p>
         {analytics.routeMix.length === 0 ? (
@@ -103,7 +131,7 @@ export function SubscriptionAnalyticsPanel({
                   </span>
                 </div>
                 <div
-                  className="h-1.5 rounded-full bg-muted overflow-hidden"
+                  className="h-1 rounded-full bg-muted overflow-hidden"
                   role="presentation"
                   aria-hidden
                 >

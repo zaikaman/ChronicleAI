@@ -200,6 +200,12 @@ export function PremiumPage(): ReactElement {
         }
       />
 
+      {activityData?.subscriptionAnalytics ? (
+        <div className="mb-8">
+          <SubscriptionAnalyticsPanel analytics={activityData.subscriptionAnalytics} />
+        </div>
+      ) : null}
+
       <div className="mb-8" id="agent-payments">
         <AgentPaymentsPanel open={agentGuideOpen} onOpenChange={setAgentGuideOpen} />
       </div>
@@ -288,15 +294,6 @@ export function PremiumPage(): ReactElement {
           </>
         )}
       </PageSection>
-
-      {activityData?.subscriptionAnalytics ? (
-        <PageSection
-          title="Audience & revenue"
-          description="Newsletter subscriptions, paywall conversion, and settled volume by payment route."
-        >
-          <SubscriptionAnalyticsPanel analytics={activityData.subscriptionAnalytics} />
-        </PageSection>
-      ) : null}
     </Page>
   );
 }
