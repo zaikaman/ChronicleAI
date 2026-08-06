@@ -6,6 +6,8 @@ import { formatGasUsed, sepoliaTxUrl, truncateHash, txExplorerUrl } from "../lib
 
 export interface PublicationProofProps {
   registryTxHash?: string | null | undefined;
+  actionTransactionHash?: string | null | undefined;
+  actionExplorerUrl?: string | null | undefined;
   contentHash?: string | null | undefined;
   sourceEventHash?: string | null | undefined;
   sourceEventRoot?: string | null | undefined;
@@ -72,6 +74,8 @@ function ProofRow({
  */
 export function PublicationProof({
   registryTxHash,
+  actionTransactionHash,
+  actionExplorerUrl,
   contentHash,
   sourceEventHash,
   sourceEventRoot,
@@ -85,9 +89,10 @@ export function PublicationProof({
 }: PublicationProofProps): ReactElement | null {
   const sourceHash = sourceEventHash ?? sourceEventRoot;
   const gasLabel = formatGasUsed(gasUsed);
-  const hasKeeperHub = Boolean(keeperHubRunId || registryTxHash);
+  const hasKeeperHub = Boolean(keeperHubRunId || actionTransactionHash || registryTxHash);
   const hasAny =
     Boolean(registryTxHash) ||
+    Boolean(actionTransactionHash) ||
     Boolean(contentHash) ||
     Boolean(sourceHash) ||
     Boolean(gasLabel) ||
@@ -96,7 +101,9 @@ export function PublicationProof({
   if (!hasAny) return null;
 
   // Registry proofs land on Ethereum Sepolia (ops rail), not Base payment rail.
-  const txHref = explorerUrl ?? (registryTxHash ? sepoliaTxUrl(registryTxHash) : undefined);
+  const actionTxHref =
+    actionExplorerUrl ?? (actionTransactionHash ? sepoliaTxUrl(actionTransactionHash) : undefined);
+  const registryTxHref = explorerUrl ?? (registryTxHash ? sepoliaTxUrl(registryTxHash) : undefined);
 
   // Source event (monitored protocol transaction, e.g. Ethereum Mainnet / Sepolia / Base)
   const rawSourceTx = sourceHash && /^0x[0-9a-fA-F]{64}$/.test(sourceHash) ? sourceHash : null;
@@ -125,13 +132,23 @@ export function PublicationProof({
             Local publish
           </span>
         )}
+        {actionTransactionHash ? (
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <span>action tx</span>
+            <MonoValue
+              value={actionTransactionHash}
+              title={actionTransactionHash}
+              {...(actionTxHref ? { href: actionTxHref } : {})}
+            />
+          </span>
+        ) : null}
         {registryTxHash ? (
           <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <span>tx</span>
+            <span>publication tx</span>
             <MonoValue
               value={registryTxHash}
               title={registryTxHash}
-              {...(txHref ? { href: txHref } : {})}
+              {...(registryTxHref ? { href: registryTxHref } : {})}
             />
           </span>
         ) : null}
@@ -195,6 +212,16 @@ export function PublicationProof({
         )}
       </div>
 
+      {actionTransactionHash ? (
+        <ProofRow label="Action transaction">
+          <MonoValue
+            value={actionTransactionHash}
+            title={actionTransactionHash}
+            {...(actionTxHref ? { href: actionTxHref } : {})}
+          />
+        </ProofRow>
+      ) : null}
+
       {registryTxHash ? (
         <ProofRow label="Registry proof">
           <MonoValue
@@ -204,7 +231,7 @@ export function PublicationProof({
                 ? `${registryTxHash} (KeeperHub registry — may differ from the source event chain)`
                 : registryTxHash
             }
-            {...(txHref ? { href: txHref } : {})}
+            {...(registryTxHref ? { href: registryTxHref } : {})}
           />
         </ProofRow>
       ) : null}

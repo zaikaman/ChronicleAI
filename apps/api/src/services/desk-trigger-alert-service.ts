@@ -396,12 +396,21 @@ export function buildCapitalAlertCopy(decision: CapitalDecision): {
         summary: `Chronicle Desk planned an emergency return of ${amount} to the treasury on ${chain} because ${readableReason(decision.reason)}.`,
         sourceReferences: refs,
       };
-    case "free_inventory":
+    case "free_inventory": {
+      const sourceLabel =
+        decision.inventorySource === "aave_link"
+          ? "LINK supplied to Aave"
+          : decision.inventorySource === "mixed"
+            ? "LINK inventory"
+            : decision.inventorySource === "free_link"
+              ? "LINK"
+              : "inventory assets";
       return {
-        title: `Making ${amount} available for desk activity`,
-        summary: `Chronicle Desk planned to turn ${amount} of its holdings into ready-to-use funds on ${chain} because ${readableReason(decision.reason)}.`,
+        title: `Swapping ${amount} of ${sourceLabel} into USDC for desk activity`,
+        summary: `Chronicle Desk planned to swap up to ${amount} worth of ${sourceLabel} into USDC on ${chain} because ${readableReason(decision.reason)}.`,
         sourceReferences: refs,
       };
+    }
     default:
       return {
         title: `Desk funds update: ${amount}`,

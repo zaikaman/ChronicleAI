@@ -98,11 +98,12 @@ export interface DeskWorkflowAuditFragments {
 
 export interface DeskWorkflowReceipt extends OnChainWriteReceipt {
   keeperHubRunId: string;
-  /** May be empty when workflow is multi-step off-chain until final tx. */
+  /** May be empty when workflow is multi-step off-chain until a transaction is available. */
   txHash: string;
   /**
    * All on-chain hashes returned by KeeperHub for multi-leg workflows
-   * (e.g. withdraw + swap). `txHash` is the first/primary hash.
+   * (e.g. withdraw + swap). `txHash` is the material action hash, normally
+   * the last transaction in execution order.
    */
   txHashes?: string[] | undefined;
   /** Explorer links parallel to txHashes when available. */
@@ -247,12 +248,13 @@ function extractTx(status: ExecuteStatusResponse): {
     );
   }
 
-  const primary = hashes[0];
+  const primaryIndex = hashes.length - 1;
+  const primary = hashes[primaryIndex];
   if (!primary) return {};
 
   const primaryExplorer =
-    (explorers[0] && explorers[0].length > 0
-      ? explorers[0]
+    (explorers[primaryIndex] && explorers[primaryIndex].length > 0
+      ? explorers[primaryIndex]
       : typeof status.transactionLink === "string" && status.transactionLink.length > 0
         ? status.transactionLink
         : undefined) ?? undefined;
@@ -780,13 +782,15 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
                 } satisfies DeskWorkflowReceipt;
               }
 
-              const hash = mcpReceipt.txHash ?? "";
               const hashes =
                 mcpReceipt.txHashes && mcpReceipt.txHashes.length > 0
                   ? mcpReceipt.txHashes
-                  : hash
-                    ? [hash]
+                  : mcpReceipt.txHash
+                    ? [mcpReceipt.txHash]
                     : [];
+              const finalIndex = hashes.length - 1;
+              const hash =
+                (finalIndex >= 0 ? hashes[finalIndex] : undefined) ?? mcpReceipt.txHash ?? "";
               const explorers =
                 mcpReceipt.explorerUrls && mcpReceipt.explorerUrls.some((u) => u.length > 0)
                   ? mcpReceipt.explorerUrls
@@ -799,7 +803,10 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
                 txHash: hash,
                 ...(hashes.length > 0 ? { txHashes: hashes } : {}),
                 ...(explorers ? { explorerUrls: explorers } : {}),
-                explorerUrl: mcpReceipt.explorerUrl ?? "",
+                explorerUrl:
+                  explorers?.[finalIndex] ??
+                  mcpReceipt.explorerUrl ??
+                  "",
                 status: mcpReceipt.status ?? "completed",
                 result: mcpReceipt.result,
                 ...(mcpReceipt.gasUsed ? { gasUsed: mcpReceipt.gasUsed } : {}),

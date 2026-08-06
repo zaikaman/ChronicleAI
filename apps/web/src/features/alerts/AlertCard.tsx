@@ -460,6 +460,8 @@ export function AlertCard({
 
       <PublicationProof
         registryTxHash={alert.registryTxHash}
+        actionTransactionHash={alert.actionTransactionHash}
+        actionExplorerUrl={alert.actionExplorerUrl}
         contentHash={alert.contentHash}
         sourceEventHash={alert.sourceEventHash}
         gasUsed={alert.gasUsed}

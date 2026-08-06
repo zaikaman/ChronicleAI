@@ -518,7 +518,8 @@ describe("execution-bridge", () => {
     });
 
     const receipt = await bridge.execute("rotate", { intentId: "i1" });
-    expect(receipt.txHash).toBe("0xwithdraw");
+    expect(receipt.txHash).toBe("0xswap");
+    expect(receipt.explorerUrl).toContain("0xswap");
     expect(receipt.txHashes).toEqual(["0xwithdraw", "0xswap"]);
     expect(receipt.explorerUrls?.[1]).toContain("0xswap");
   });

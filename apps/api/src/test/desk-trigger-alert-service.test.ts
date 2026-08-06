@@ -387,6 +387,18 @@ describe("desk-trigger-alert pure helpers", () => {
     expect(copy.summary).toContain("Chronicle Desk");
   });
 
+  it("describes free inventory as an asset-to-asset swap", () => {
+    const copy = buildCapitalAlertCopy({
+      action: "free_inventory",
+      amountUsdc: 10,
+      reason: "free_usdc_shortfall_unwind",
+      inventorySource: "free_link",
+    });
+
+    expect(copy.title).toBe("Swapping $10.00 of LINK into USDC for desk activity");
+    expect(copy.summary).toContain("swap up to $10.00 worth of LINK into USDC");
+  });
+
   it("labels sources for UI without parsing evidence", () => {
     expect(deskTriggerSourceLabel({ signalType: "oracle_basis" })).toBe("Oracle basis");
     expect(deskTriggerSourceLabel({ capitalAction: "sweep" })).toBe("Capital sweep");
