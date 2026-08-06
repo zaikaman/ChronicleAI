@@ -16,6 +16,9 @@ import {
 import { ProofMonoLink } from "./ProofMonoLink.tsx";
 import type {
   DeskAuditGasNarrative,
+  DeskAuditKhSimulate,
+  DeskAuditKhSimulateLeg,
+  DeskAuditKhSimulateStatus,
   DeskAuditOutcomeStage,
   DeskAuditPreflightStage,
   DeskAuditRunNode,
@@ -88,6 +91,7 @@ function policyPreflightLine(stage: DeskAuditPreflightStage): string {
 /**
  * Layer A line — only when khSimulate was attempted or explicitly recorded.
  * Label: "KeeperHub dry-run" (never "KeeperHub simulation" for HF-only).
+ * Aggregate counts alone can hide waived raw reverts — per-leg list is required.
  */
 function khDryRunLine(stage: DeskAuditPreflightStage): string | null {
   const sim = stage.khSimulate;
@@ -98,6 +102,17 @@ function khDryRunLine(stage: DeskAuditPreflightStage): string | null {
       : "KeeperHub dry-run: skipped";
   }
   const bits: string[] = [`KeeperHub dry-run: ${sim.status}`];
+  if (
+    typeof sim.legCount === "number" &&
+    sim.legCount > 1 &&
+    typeof sim.passedLegs === "number"
+  ) {
+    bits.push(`${sim.passedLegs}/${sim.legCount} legs`);
+  }
+  const waivedCount = (sim.legs ?? []).filter((l) => l.waived === true).length;
+  if (waivedCount > 0) {
+    bits.push(`${waivedCount} waived`);
+  }
   if (sim.gasEstimate) {
     const gas = formatGasUsed(sim.gasEstimate);
     bits.push(gas ? `est. ${gas.replace(/ gas$/, "")} gas` : `est. ${sim.gasEstimate} gas`);
@@ -109,6 +124,131 @@ function khDryRunLine(stage: DeskAuditPreflightStage): string | null {
     bits.push(sim.errorMessage.trim().slice(0, 60));
   }
   return bits.join(" · ");
+}
+
+function khSimulateStatusVariant(
+  status: DeskAuditKhSimulateStatus,
+): "default" | "success" | "warning" | "error" | "info" {
+  switch (status) {
+    case "passed":
+      return "success";
+    case "failed":
+      return "error";
+    case "error":
+      return "error";
+    case "skipped":
+      return "default";
+    default:
+      return "default";
+  }
+}
+
+/** Humanize machine waiveReason codes for editorial audit copy. */
+function formatWaiveReason(reason: string | undefined): string | null {
+  if (!reason?.trim()) return null;
+  return reason
+    .trim()
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function khSimulateLegDetail(leg: DeskAuditKhSimulateLeg): string {
+  const bits: string[] = [];
+  if (leg.kind?.trim()) bits.push(leg.kind.trim());
+  if (leg.wouldRevert === true) bits.push("wouldRevert true");
+  else if (leg.wouldRevert === false) bits.push("wouldRevert false");
+  if (leg.gasEstimate) {
+    const gas = formatGasUsed(leg.gasEstimate);
+    bits.push(gas ? `est. ${gas.replace(/ gas$/, "")}` : `est. ${leg.gasEstimate}`);
+  }
+  if (leg.waived === true) {
+    const waive = formatWaiveReason(leg.waiveReason);
+    bits.push(waive ? `waived · ${waive}` : "waived");
+  }
+  if (leg.revertReason?.trim()) bits.push(leg.revertReason.trim().slice(0, 80));
+  else if (leg.errorMessage?.trim() && leg.status !== "passed") {
+    bits.push(leg.errorMessage.trim().slice(0, 80));
+  }
+  return bits.join(" · ");
+}
+
+/**
+ * Per-leg KeeperHub dry-run evidence.
+ * Always renders when legs[] is present — aggregate passedLegs can count
+ * waived reverts as pass, so raw wouldRevert must stay visible here.
+ */
+function KhSimulateLegsList({
+  sim,
+}: {
+  sim: DeskAuditKhSimulate;
+}): ReactElement | null {
+  const legs = sim.legs;
+  if (!legs || legs.length === 0) return null;
+
+  return (
+    <ul
+      className="mt-1.5 flex flex-col gap-1.5 list-none m-0 p-0 w-full min-w-0"
+      data-testid="execution-audit-kh-dry-run-legs"
+      aria-label="KeeperHub dry-run legs"
+    >
+      {legs.map((leg, i) => {
+        const detail = khSimulateLegDetail(leg);
+        // Waived raw-reverts are soft-pass for aggregate but still evidence —
+        // warn visually so they cannot hide behind a green aggregate badge.
+        const statusVariant =
+          leg.waived === true && leg.wouldRevert === true
+            ? "warning"
+            : khSimulateStatusVariant(leg.status);
+        const statusLabel =
+          leg.waived === true && leg.status === "failed"
+            ? "waived"
+            : leg.status;
+
+        return (
+          <li
+            key={`${leg.id}-${i}`}
+            className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-2 flex flex-col gap-1 min-w-0"
+            data-testid={`execution-audit-kh-dry-run-leg-${i}`}
+            data-leg-id={leg.id}
+            data-waived={leg.waived === true ? "true" : "false"}
+            data-would-revert={
+              leg.wouldRevert === true
+                ? "true"
+                : leg.wouldRevert === false
+                  ? "false"
+                  : undefined
+            }
+          >
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <span className="text-xs font-medium text-foreground truncate max-w-[14rem]">
+                {leg.label?.trim() || leg.id}
+              </span>
+              <StatusBadge
+                label={statusLabel}
+                variant={statusVariant}
+                data-testid={`execution-audit-kh-dry-run-leg-status-${i}`}
+              />
+              {leg.waived === true && leg.status !== "failed" ? (
+                <StatusBadge
+                  label="waived"
+                  variant="warning"
+                  data-testid={`execution-audit-kh-dry-run-leg-waived-${i}`}
+                />
+              ) : null}
+            </div>
+            {detail ? (
+              <p
+                className="text-[11px] text-muted-foreground leading-relaxed text-pretty font-mono"
+                data-testid={`execution-audit-kh-dry-run-leg-detail-${i}`}
+              >
+                {detail}
+              </p>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 function submitDetail(stage: DeskAuditSubmitStage): string {
@@ -417,20 +557,27 @@ export function ExecutionAuditTimeline({
           at={preflight.at}
           testId="execution-audit-preflight"
           extra={
-            khDryRun ? (
+            khDryRun || preflight.khSimulate?.legs?.length ? (
               <div className="flex flex-col gap-1 mt-0.5 w-full min-w-0">
-                <p
-                  className="text-xs text-muted-foreground leading-relaxed text-pretty"
-                  data-testid="execution-audit-kh-dry-run"
-                >
-                  {khDryRun}
-                </p>
-                <p
-                  className="text-[11px] text-muted-foreground/80 leading-relaxed text-pretty"
-                  data-testid="execution-audit-kh-dry-run-caveat"
-                >
-                  Dry-run uses org wallet from-path; Safe/msg.sender caveats may apply.
-                </p>
+                {khDryRun ? (
+                  <p
+                    className="text-xs text-muted-foreground leading-relaxed text-pretty"
+                    data-testid="execution-audit-kh-dry-run"
+                  >
+                    {khDryRun}
+                  </p>
+                ) : null}
+                {preflight.khSimulate ? (
+                  <KhSimulateLegsList sim={preflight.khSimulate} />
+                ) : null}
+                {khDryRun ? (
+                  <p
+                    className="text-[11px] text-muted-foreground/80 leading-relaxed text-pretty"
+                    data-testid="execution-audit-kh-dry-run-caveat"
+                  >
+                    Dry-run uses org wallet from-path; Safe/msg.sender caveats may apply.
+                  </p>
+                ) : null}
               </div>
             ) : null
           }

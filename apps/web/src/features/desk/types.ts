@@ -132,6 +132,23 @@ export interface DeskAuditPolicySnapshot {
   strategy?: string | null;
 }
 
+/** One write-leg dry-run inside multi-step workflow preflight (approve + swap, …). */
+export interface DeskAuditKhSimulateLeg {
+  id: string;
+  label: string;
+  kind?: string;
+  status: DeskAuditKhSimulateStatus;
+  wouldRevert?: boolean;
+  gasEstimate?: string;
+  revertReason?: string | null;
+  from?: string;
+  to?: string;
+  endpoint?: "contract-call" | "transfer";
+  errorMessage?: string | null;
+  waived?: boolean;
+  waiveReason?: string;
+}
+
 /** Layer A only — optional KH Direct Execution dry-run (simulate:true). */
 export interface DeskAuditKhSimulate {
   attempted: boolean;
@@ -143,6 +160,11 @@ export interface DeskAuditKhSimulate {
   to?: string;
   endpoint?: "contract-call" | "transfer";
   errorMessage?: string | null;
+  /** Per-leg detail when the workflow path has multiple material writes. */
+  legs?: DeskAuditKhSimulateLeg[];
+  legCount?: number;
+  passedLegs?: number;
+  failedLegs?: number;
 }
 
 export interface DeskAuditPreflightStage {

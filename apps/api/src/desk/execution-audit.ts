@@ -54,8 +54,35 @@ export interface DeskAuditPolicySnapshot {
 }
 
 /**
+ * One material write leg dry-run inside a multi-step workflow preflight
+ * (e.g. approve + swap). Waived legs still record raw wouldRevert for audit.
+ */
+export interface DeskAuditKhSimulateLeg {
+  id: string;
+  label: string;
+  /** approve | swap | aave_repay | aave_withdraw | aave_supply | transfer */
+  kind?: string;
+  status: DeskAuditKhSimulateStatus;
+  wouldRevert?: boolean;
+  gasEstimate?: string;
+  revertReason?: string | null;
+  from?: string;
+  to?: string;
+  endpoint?: DeskAuditKhSimulateEndpoint;
+  errorMessage?: string | null;
+  /**
+   * True when a would-revert is expected to clear in the real workflow
+   * (co-path approve covers allowance; prior withdraw/swap covers balance).
+   */
+  waived?: boolean;
+  waiveReason?: string;
+}
+
+/**
  * Optional KeeperHub Direct Execution dry-run (Layer A).
  * Only present when a simulate:true call was attempted — never for production writes.
+ * Multi-leg workflows populate `legs` with per-node dry-run detail; top-level
+ * fields are the aggregate after state-dependency waivers.
  */
 export interface DeskAuditKhSimulate {
   attempted: boolean;
@@ -67,6 +94,11 @@ export interface DeskAuditKhSimulate {
   to?: string;
   endpoint?: DeskAuditKhSimulateEndpoint;
   errorMessage?: string | null;
+  /** Per-leg dry-run detail when the workflow path has multiple writes. */
+  legs?: DeskAuditKhSimulateLeg[];
+  legCount?: number;
+  passedLegs?: number;
+  failedLegs?: number;
 }
 
 export interface DeskAuditPreflightStage {
@@ -428,7 +460,17 @@ export function buildSummaryLine(audit: DeskExecutionAuditV1): string {
 
   const khStatus = preflight.khSimulate?.status;
   if (khStatus) {
-    parts.push(`· KH sim ${khStatus}`);
+    const legCount = preflight.khSimulate?.legCount;
+    const passedLegs = preflight.khSimulate?.passedLegs;
+    if (
+      typeof legCount === "number" &&
+      legCount > 1 &&
+      typeof passedLegs === "number"
+    ) {
+      parts.push(`· KH sim ${khStatus} (${passedLegs}/${legCount} legs)`);
+    } else {
+      parts.push(`· KH sim ${khStatus}`);
+    }
   }
 
   const submitLabel = submit.keeperHubRunId ? "run" : submit.status;

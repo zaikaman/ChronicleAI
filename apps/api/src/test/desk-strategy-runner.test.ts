@@ -391,20 +391,25 @@ describe("strategy-runner", () => {
       requireWorkflowId: vi.fn(() => "wf"),
       isConfigured: vi.fn(() => true),
     };
+    const simResult = {
+      khSimulate: {
+        attempted: true,
+        status: "failed" as const,
+        wouldRevert: true,
+        revertReason: "Error(insufficient allowance)",
+        gasEstimate: "55000",
+        endpoint: "contract-call" as const,
+        legCount: 2,
+        passedLegs: 1,
+        failedLegs: 1,
+      },
+      shouldBlock: false,
+    };
     const khSimulatePreflight = {
       isEnabled: () => true,
       isStrict: () => false,
-      simulatePrimaryLeg: vi.fn(async () => ({
-        khSimulate: {
-          attempted: true,
-          status: "failed" as const,
-          wouldRevert: true,
-          revertReason: "Error(insufficient allowance)",
-          gasEstimate: "55000",
-          endpoint: "contract-call" as const,
-        },
-        shouldBlock: false,
-      })),
+      simulateWorkflow: vi.fn(async () => simResult),
+      simulatePrimaryLeg: vi.fn(async () => simResult),
     };
     const runner = createStrategyRunner({
       config,
@@ -461,20 +466,25 @@ describe("strategy-runner", () => {
       requireWorkflowId: vi.fn(() => "wf"),
       isConfigured: vi.fn(() => true),
     };
+    const simResult = {
+      khSimulate: {
+        attempted: true,
+        status: "failed" as const,
+        wouldRevert: true,
+        revertReason: "Error(execution reverted)",
+        endpoint: "contract-call" as const,
+        legCount: 2,
+        passedLegs: 1,
+        failedLegs: 1,
+      },
+      shouldBlock: true,
+      blockReason: "kh_simulate_would_revert",
+    };
     const khSimulatePreflight = {
       isEnabled: () => true,
       isStrict: () => true,
-      simulatePrimaryLeg: vi.fn(async () => ({
-        khSimulate: {
-          attempted: true,
-          status: "failed" as const,
-          wouldRevert: true,
-          revertReason: "Error(execution reverted)",
-          endpoint: "contract-call" as const,
-        },
-        shouldBlock: true,
-        blockReason: "kh_simulate_would_revert",
-      })),
+      simulateWorkflow: vi.fn(async () => simResult),
+      simulatePrimaryLeg: vi.fn(async () => simResult),
     };
     const runner = createStrategyRunner({
       config,
@@ -540,6 +550,7 @@ describe("strategy-runner", () => {
     const khSimulatePreflight = {
       isEnabled: () => false,
       isStrict: () => false,
+      simulateWorkflow: vi.fn(),
       simulatePrimaryLeg: vi.fn(),
     };
     const runner = createStrategyRunner({
@@ -555,6 +566,7 @@ describe("strategy-runner", () => {
       inventory: { freeUsdc: 20, deskEquityUsdc: 50 },
       publishTicket: false,
     });
+    expect(khSimulatePreflight.simulateWorkflow).not.toHaveBeenCalled();
     expect(khSimulatePreflight.simulatePrimaryLeg).not.toHaveBeenCalled();
     expect(result.executionAudit?.stages.preflight.khSimulate).toBeUndefined();
     expect(result.executionAudit?.stages.preflight.status).toBe("passed");

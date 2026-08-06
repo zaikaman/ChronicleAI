@@ -146,7 +146,8 @@ export function createStrategyRunner(deps: {
    */
   routingPolicyEnv?: RoutingPolicyEnv | null | undefined;
   /**
-   * Layer A: optional KeeperHub DE dry-run before workflow execute.
+   * Layer A: optional KeeperHub DE dry-run of the full active workflow path
+   * (all material writes: approve + swap + aave + …) before execute.
    * When null/disabled, C+B path is unchanged.
    */
   khSimulatePreflight?: KhSimulatePreflight | null | undefined;
@@ -495,7 +496,8 @@ export function createStrategyRunner(deps: {
       let khGasEstimate: string | null = null;
       const khSim = deps.khSimulatePreflight;
       if (khSim?.isEnabled()) {
-        const simResult = await khSim.simulatePrimaryLeg({
+        // Full active-path dry-run (approve + swap + aave + …), not primary-only.
+        const simResult = await khSim.simulateWorkflow({
           strategy,
           workflowAction: action,
           workflowInput,

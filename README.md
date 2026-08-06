@@ -151,7 +151,7 @@ Private routing and gas sponsorship are mutually exclusive on the same transacti
 ## Reliability and observability
 
 - **Policy gate:** the LLM proposes a strategy from a Desk Signal; hard limits, position caps, minimum AUM, pause state, and kill-switch state decide whether it can execute.
-- **Preflight:** a KeeperHub dry-run is captured before the live workflow when configured.
+- **Preflight:** every material leg in the active KeeperHub workflow path is dry-run simulated before execution, including multi-step paths such as `approve → swap`. In strict mode, non-waived reverts, transport failures, and build errors block execution.
 - **Fail-closed private path:** a strict private route does not silently become a public desk trade. An explicitly configured public fallback is recorded as a different route.
 - **Idempotency:** execution keys and content hashes prevent duplicate registry publications and repeated capital actions.
 - **Terminal-state correctness:** `completed: true` is not treated as success when KeeperHub returns an error or failed node.
@@ -181,7 +181,7 @@ flowchart TD
 #### Key Invariants & Safeguards
 1. **Authority Separation:** The LLM schema (`DeskAgentProposal`) cannot self-approve actions. Deterministic rules in [`apps/api/src/desk/policy-engine.ts`](apps/api/src/desk/policy-engine.ts) own Health Factor floors (`hfWarn`), position size caps (`maxTradeUsdc`), AUM equity floors, single-flight locks, and kill-switch states.
 2. **Tightening-Only Advisory:** Proposals below minimum confidence threshold are monotonically converted to `hold` via `applyMinConfidence` in [`apps/api/src/desk/agent/map-proposal.ts`](apps/api/src/desk/agent/map-proposal.ts). An LLM proposal can defer execution or reduce spend, but can **never** turn a deterministic policy denial into an onchain execution. Critical Health Factor breaches trigger `applyForceDefendOverride`, forcing risk defense regardless of LLM output.
-3. **Preflight Dry-Run:** Every state-changing KeeperHub workflow is dry-run simulated via [`apps/api/src/desk/kh-simulate-preflight.ts`](apps/api/src/desk/kh-simulate-preflight.ts) prior to broadcast. Reverting or unviable trades abort cleanly without burning gas.
+3. **Preflight Dry-Run:** Every material leg of a state-changing KeeperHub workflow is dry-run simulated via [`apps/api/src/desk/kh-simulate-preflight.ts`](apps/api/src/desk/kh-simulate-preflight.ts) prior to broadcast. Multi-step paths such as `approve → swap` are validated as a whole; reverting or unviable trades abort cleanly without burning gas, with strict mode failing closed on simulation errors.
 4. **Failure Classification & Idempotency:** Executions are classified (`FailureClassifier`) across gas, revert, nonce, RPC, and unknown errors. Confirmed onchain writes are never retried.
 5. **Canonical Receipts & Audit Ledger:** `ChronicleRegistry` anchors the canonical content hash, URI, tx hash, and KeeperHub run ID onchain, cross-referenced in public Activity logs.
 
@@ -320,6 +320,9 @@ KEEPERHUB_API_BASE_URL=https://app.keeperhub.com
 KEEPERHUB_MCP_ENABLED=true
 KEEPERHUB_MCP_URL=https://mcp.keeperhub.com/sse
 
+DESK_KH_SIMULATE_PREFLIGHT=true
+DESK_KH_SIMULATE_STRICT=true
+
 DESK_USE_PRIVATE_MEMPOOL=true
 DESK_PRIVATE_MEMPOOL_STRICT=true
 REGISTRY_USE_PRIVATE_MEMPOOL=false
@@ -349,14 +352,14 @@ The local services run at:
 
 ## Verification
 
-The project reports **1,101 passing and 42 skipped tests** across 136 test files, plus 33 KeeperHub workflow definitions.
+The project reports **1,146 passing and 42 skipped tests** across 140 test files, plus 33 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check
 pnpm test
 ```
 
-The smoke test checks environment configuration, MCP discovery, private-routing policy, audit visibility, and payment-surface configuration:
+The smoke test live-verifies KeeperHub health, Sepolia private-routing capability (`GET /api/chains`), configured workflow IDs, version/content drift against checked-in `workflows/keeperhub/*.workflow.json`, and MCP tool discovery. It exits non-zero on failed checks (no fake PASS):
 
 ```bash
 pnpm --filter @chronicleai/api exec tsx scripts/keeperhub-stack-smoke.ts

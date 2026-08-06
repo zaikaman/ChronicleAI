@@ -80,9 +80,16 @@ function deterministicSummary(input: NarrativeInput): string {
   if (audit?.stages) {
     const { preflight, submit, outcome } = audit.stages;
     const khSim = preflight.khSimulate;
+    const khLegNote =
+      khSim &&
+      typeof khSim.legCount === "number" &&
+      khSim.legCount > 1 &&
+      typeof khSim.passedLegs === "number"
+        ? ` ${khSim.passedLegs}/${khSim.legCount} legs`
+        : "";
     const khNote =
       khSim && khSim.status
-        ? ` · KH dry-run ${khSim.status}${
+        ? ` · KH dry-run ${khSim.status}${khLegNote}${
             khSim.gasEstimate ? ` est ${khSim.gasEstimate}` : ""
           }`
         : "";
