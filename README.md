@@ -5,7 +5,7 @@
 > ChronicleAI watches markets, publishes verifiable alerts, sells deeper intelligence to humans and AI agents, routes premium revenue into a risk-controlled treasury desk, and uses KeeperHub to execute approved actions with public proof.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
-[![Tests](https://img.shields.io/badge/Tests-1101%20passing-brightgreen?style=for-the-badge)](README.md#verification)
+[![Tests](https://img.shields.io/badge/Tests-1173%20passing-brightgreen?style=for-the-badge)](README.md#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
@@ -98,6 +98,8 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 - **Alert → Signal projection:** [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) maps eligible market event types into desk signal types and records causal metadata on the Alert.
 - **Desk-trigger Alerts:** [`apps/api/src/services/desk-trigger-alert-service.ts`](apps/api/src/services/desk-trigger-alert-service.ts) creates deterministic public Alerts from non-ignore Desk signals, capital decisions, and event-linked microtrades — no LLM copy, best-effort publication.
 - **Premium intelligence & Dual-Rail Auto Selection:** HTTP 402 routing with x402/MPP adapters. Auto-selects MPP (Tempo HMAC) for machine/agent traffic (`X-Chronicle-Client: agent`, `clientType: machine`, `mpp-*`) and x402 (Base USDC) for human browser wallets (`0x...`).
+- **Watch:** paid monitoring campaigns on any wallet, contract, or protocol. Wallet watches match ERC-20 transfers (decoded to token, amount, and direction); contract watches match any event the target emits, classified by the ingestion pipeline (swaps, liquidations, deposits/withdrawals, stablecoin mints/burns, exchange flows) with an on-chain log fallback. Alerts deliver to Telegram — private DMs or public registry + community (throttled) — and campaigns end with an OpenAI-generated report published onchain as a second receipt.
+- **Telegram binding:** `/start` to the bot issues a one-time code linking a chat to private watch alerts (`VITE_TELEGRAM_BOT_USERNAME` must match the webhook-registered bot).
 - **Desk reasoning:** LangChainJS with provider fallback; the model proposes from Signals, while hard policy gates the Action.
 - **KeeperHub execution:** configured workflows execute desk strategies, registry writes, transfers, and the kill switch. MCP is preferred; REST workflow execution remains a KeeperHub fallback.
 - **Reliability layer:** preflight simulation, idempotency keys, private routing for material desk actions, gas and routing metadata, kill-switch controls, and structured outcome handling.
@@ -296,6 +298,10 @@ sequenceDiagram
 | Alerts UI + causal chain | [`apps/web/src/features/alerts/AlertCard.tsx`](apps/web/src/features/alerts/AlertCard.tsx) |
 | Desk UI | [`apps/web/src/features/desk/DeskStatusPage.tsx`](apps/web/src/features/desk/DeskStatusPage.tsx) |
 | Premium UI | [`apps/web/src/features/premium/PremiumPage.tsx`](apps/web/src/features/premium/PremiumPage.tsx) |
+| Watch UI | [`apps/web/src/features/watch/WatchPage.tsx`](apps/web/src/features/watch/WatchPage.tsx) |
+| Watch campaign service | [`apps/api/src/services/sponsored-watch-service.ts`](apps/api/src/services/sponsored-watch-service.ts) |
+| Watch product factory | [`apps/api/src/services/sponsored-watch-product-service.ts`](apps/api/src/services/sponsored-watch-product-service.ts) |
+| Telegram binding | [`apps/api/src/services/telegram-binding-service.ts`](apps/api/src/services/telegram-binding-service.ts) |
 | KeeperHub workflows | [`workflows/keeperhub/`](workflows/keeperhub) |
 
 ## Prerequisites
@@ -352,7 +358,7 @@ The local services run at:
 
 ## Verification
 
-The project reports **1,146 passing and 42 skipped tests** across 140 test files, plus 33 KeeperHub workflow definitions.
+The project reports **1,173 passing and 42 skipped tests** across 141 test files, plus 33 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check

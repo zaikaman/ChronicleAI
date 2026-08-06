@@ -168,18 +168,18 @@ describe("sponsored-watch-report-service", () => {
     ).toBe(false);
   });
 
-  it("falls back to template when LLM returns ellipsis placeholders", async () => {
+  it("falls back to template when the openai narrative is ellipsis placeholders", async () => {
     const llmService = createSponsoredWatchReportService({
       providerConfigs: {
         gemini: { apiKey: "", model: "x" },
-        openai: { apiKey: "", model: "x" },
-        groq: { apiKey: "test-key", model: "llama" },
+        groq: { apiKey: "", model: "llama" },
+        openai: { apiKey: "test-key", model: "gpt-4o" },
       },
     });
 
     const { LLM_PROVIDER_CALLERS } = await import("../services/llm-provider-client.ts");
-    const original = LLM_PROVIDER_CALLERS.groq;
-    LLM_PROVIDER_CALLERS.groq = async () =>
+    const original = LLM_PROVIDER_CALLERS.openai;
+    LLM_PROVIDER_CALLERS.openai = async () =>
       JSON.stringify({
         title: "...",
         summary: "...",
@@ -206,6 +206,47 @@ describe("sponsored-watch-report-service", () => {
         reportAnalysis: report.analysis,
         reportHighlights: report.highlights,
       })).toBe(false);
+    } finally {
+      LLM_PROVIDER_CALLERS.openai = original;
+    }
+  });
+
+  it("ignores groq for the report narrative (openai only)", async () => {
+    const { LLM_PROVIDER_CALLERS } = await import("../services/llm-provider-client.ts");
+    const original = LLM_PROVIDER_CALLERS.groq;
+    let groqCalled = false;
+    LLM_PROVIDER_CALLERS.groq = async () => {
+      groqCalled = true;
+      return JSON.stringify({
+        title: "Groq narrative must never be used",
+        summary: "This narrative must not appear in a watch report because only OpenAI is allowed.",
+        highlights: ["Groq result"],
+        analysis: "Groq analysis should not be consumed by the sponsored watch report service.",
+        confidence: "high",
+      });
+    };
+
+    try {
+      // Only groq has a key — openai is unset, so the report must fall back to
+      // the template instead of ever calling groq.
+      const llmService = createSponsoredWatchReportService({
+        providerConfigs: {
+          gemini: { apiKey: "", model: "x" },
+          openai: { apiKey: "", model: "x" },
+          groq: { apiKey: "test-key", model: "llama" },
+        },
+      });
+      const report = await llmService.generateReport({
+        watchId: "watch-groq-only",
+        targetContract: TARGET,
+        watchSpecHash: "0x" + "g".repeat(64),
+        startsAt: "2026-07-01T00:00:00.000Z",
+        endsAt: "2026-07-08T00:00:00.000Z",
+        events: [event({ id: "evt-groq" })],
+      });
+      expect(report.generationSource).toBe("template");
+      expect(report.summary).not.toContain("Groq");
+      expect(groqCalled).toBe(false);
     } finally {
       LLM_PROVIDER_CALLERS.groq = original;
     }

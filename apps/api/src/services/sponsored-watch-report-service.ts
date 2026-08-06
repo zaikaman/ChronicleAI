@@ -6,7 +6,7 @@
 
 import { getAddress, isAddress, keccak256, stringToBytes } from "viem";
 import type { MonitoredEventRow } from "@chronicleai/db";
-import { ALERT_GENERATION_TIMEOUT_MS, LLM_FALLBACK_ORDER } from "@chronicleai/config";
+import { ALERT_GENERATION_TIMEOUT_MS } from "@chronicleai/config";
 import {
   estimateTokens,
   GROQ_EFFECTIVE_INPUT_BUDGET,
@@ -412,6 +412,15 @@ const MIN_TITLE_CHARS = 12;
 const MIN_SUMMARY_CHARS = 40;
 const MIN_ANALYSIS_CHARS = 60;
 
+/**
+ * Report narrative LLM provider: OpenAI only. Unlike the shared
+ * LLM_FALLBACK_ORDER (groq → openai) used by digest/alert pipelines, the
+ * paid watch report always uses OpenAI when an API key is configured, and
+ * falls back to the deterministic template otherwise. Scoped locally so the
+ * global fallback order stays untouched.
+ */
+const WATCH_REPORT_LLM_PROVIDERS = ["openai"] as const;
+
 function isPlaceholderText(value: string): boolean {
   const t = value.trim();
   if (!t) return true;
@@ -524,13 +533,12 @@ async function tryLlmNarrative(
   const system =
     "You write precise Web3 market intelligence for paid monitoring campaigns. Respond with JSON only. Never emit ellipsis-only placeholder fields.";
 
-  for (const provider of LLM_FALLBACK_ORDER) {
+  for (const provider of WATCH_REPORT_LLM_PROVIDERS) {
     const config = providerConfigs[provider];
     if (!config?.apiKey) continue;
 
-    // Groq input window is hard-capped at 8k; OpenAI path can take a larger prompt.
-    const maxInputTokens =
-      provider === "groq" ? GROQ_EFFECTIVE_INPUT_BUDGET : 24_000;
+    // OpenAI path can take the larger prompt budget (no Groq 8k cap).
+    const maxInputTokens = 24_000;
     const prompt = buildLlmPrompt(input, { maxInputTokens });
 
     const caller = LLM_PROVIDER_CALLERS[provider];

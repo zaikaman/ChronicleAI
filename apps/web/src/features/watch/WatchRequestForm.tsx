@@ -51,6 +51,67 @@ const DURATION_PRESETS: Array<{ label: string; durationHours: number }> = [
   { label: "30 days", durationHours: 720 },
 ];
 
+type WatchFocusKey =
+  | "none"
+  | "transfers"
+  | "swaps"
+  | "liquidations"
+  | "deposits"
+  | "stablecoin"
+  | "cex";
+
+interface WatchFocusOption {
+  key: WatchFocusKey;
+  label: string;
+  /** Preset instruction written into the watch spec + final report narrative. */
+  description: string;
+}
+
+/** Watch focus presets for wallet targets (ERC-20 transfer matching). */
+const WALLET_FOCUS_OPTIONS: WatchFocusOption[] = [
+  { key: "none", label: "Everything (no specific focus)", description: "" },
+  {
+    key: "transfers",
+    label: "Large transfers & whale moves",
+    description: "Watch for large transfers and whale-scale token moves involving this wallet.",
+  },
+  {
+    key: "cex",
+    label: "Exchange inflows / outflows",
+    description: "Watch for token movements between this wallet and centralized exchanges.",
+  },
+];
+
+/** Watch focus presets for contract / protocol targets. */
+const CONTRACT_FOCUS_OPTIONS: WatchFocusOption[] = [
+  { key: "none", label: "Everything (no specific focus)", description: "" },
+  {
+    key: "swaps",
+    label: "Swaps & trades",
+    description: "Watch for token swaps and trades on this contract.",
+  },
+  {
+    key: "liquidations",
+    label: "Liquidations",
+    description: "Watch for liquidation events on this contract.",
+  },
+  {
+    key: "deposits",
+    label: "Deposits & withdrawals",
+    description: "Watch for deposits into and withdrawals from this protocol.",
+  },
+  {
+    key: "stablecoin",
+    label: "Stablecoin mints & burns",
+    description: "Watch for stablecoin mint and burn events on this contract.",
+  },
+  {
+    key: "cex",
+    label: "Exchange inflows / outflows",
+    description: "Watch for token movements between this contract and centralized exchanges.",
+  },
+];
+
 interface SettledWatch {
   id: string;
   targetContract: string;
@@ -171,8 +232,7 @@ export function WatchRequestForm({
   const wallet = useWallet();
   const [targetKind, setTargetKind] = useState<TargetKind>("contract");
   const [targetContract, setTargetContract] = useState("");
-  const [eventSignature, setEventSignature] = useState("");
-  const [description, setDescription] = useState("");
+  const [focusKey, setFocusKey] = useState<WatchFocusKey>("none");
   const [visibility, setVisibility] = useState<Visibility>("public");
   const [telegramBindingCode, setTelegramBindingCode] = useState("");
   /** Default 1 hour short demo so create + report dual txs can complete in one session. */
@@ -191,6 +251,9 @@ export function WatchRequestForm({
     }
   }, []);
   const telegramDeepLink = `https://t.me/${telegramBotUsername}`;
+  const focusOptions =
+    targetKind === "wallet" ? WALLET_FOCUS_OPTIONS : CONTRACT_FOCUS_OPTIONS;
+  const currentFocus = focusOptions.find((opt) => opt.key === focusKey) ?? focusOptions[0]!;
 
   useEffect(() => {
     return () => prepareControllerRef.current?.abort();
@@ -240,11 +303,7 @@ export function WatchRequestForm({
           signal: controller.signal,
           body: JSON.stringify({
             targetContract: targetContract.trim(),
-            eventSignature:
-              targetKind === "contract" && eventSignature.trim()
-                ? eventSignature.trim()
-                : undefined,
-            description: description.trim() || undefined,
+            description: currentFocus.description || undefined,
             durationHours,
             targetKind,
             visibility,
@@ -275,8 +334,8 @@ export function WatchRequestForm({
   }, [
     targetContract,
     targetKind,
-    eventSignature,
-    description,
+    focusKey,
+    currentFocus,
     durationHours,
     visibility,
     telegramBindingCode,
@@ -346,7 +405,7 @@ export function WatchRequestForm({
           <span className="text-xs text-muted-foreground">
             {targetKind === "wallet"
               ? "Matches ERC-20 Transfer events on Ethereum Mainnet where this wallet is from or to."
-              : "Protocol = contract address + optional label in the description. Monitored on Ethereum Mainnet."}
+              : "Protocol = contract address + optional focus preset. Monitored on Ethereum Mainnet."}
           </span>
         </div>
 
@@ -366,34 +425,27 @@ export function WatchRequestForm({
           />
         </label>
 
-        {targetKind === "contract" ? (
-          <label className="flex flex-col gap-1.5 sm:col-span-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Event signature <span className="font-normal">(optional)</span>
-            </span>
-            <input
-              type="text"
-              value={eventSignature}
-              onChange={(e) => setEventSignature(e.target.value)}
-              placeholder="Transfer(address,address,uint256)"
-              className="rounded-xl border border-border bg-frame px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
-              data-testid="watch-event-input"
-            />
-          </label>
-        ) : null}
-
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="text-xs font-medium text-muted-foreground">
-            Description <span className="font-normal">(optional)</span>
+            Watch focus <span className="font-normal">(optional)</span>
           </span>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            placeholder="What should ChronicleAI watch for?"
-            className="rounded-xl border border-border bg-frame px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] resize-y min-h-[4.5rem]"
-            data-testid="watch-description-input"
-          />
+          <select
+            value={currentFocus.key}
+            onChange={(e) => setFocusKey(e.target.value as WatchFocusKey)}
+            className="rounded-xl border border-border bg-frame px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
+            data-testid="watch-focus-input"
+          >
+            {focusOptions.map((opt) => (
+              <option key={opt.key} value={opt.key}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">
+            {currentFocus.description
+              ? currentFocus.description
+              : "Alerts describe each matched event; the final report summarizes the window."}
+          </span>
         </label>
 
         <div className="flex flex-col gap-1.5 sm:col-span-2" data-testid="watch-visibility">
