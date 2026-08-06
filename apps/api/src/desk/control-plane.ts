@@ -474,6 +474,35 @@ function asNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+/**
+ * Normalize persisted Aave snapshots for the public desk status response.
+ *
+ * Older rows may use snake_case, and rows written before the no-debt sentinel
+ * was introduced contain `healthFactor: null` even though Aave reported the
+ * valid max/infinite health factor. Keep the distinction between no debt and
+ * unavailable data instead of exposing both as `n/a`.
+ */
+export function normalizePublicHealthFactor(
+  aave: Record<string, unknown> | null | undefined,
+): number | null {
+  if (!aave || typeof aave !== "object") return null;
+
+  const direct = asNumber(aave.healthFactor ?? aave.health_factor);
+  if (direct !== undefined) return direct;
+
+  const totalDebtUsd = asNumber(aave.totalDebtUsd ?? aave.total_debt_usd);
+  if (totalDebtUsd !== undefined && totalDebtUsd <= 0) return 999;
+
+  const raw =
+    aave.raw && typeof aave.raw === "object"
+      ? (aave.raw as Record<string, unknown>)
+      : null;
+  const totalDebtBase = asNumber(raw?.totalDebtBase ?? raw?.total_debt_base);
+  if (totalDebtBase !== undefined && totalDebtBase <= 0) return 999;
+
+  return null;
+}
+
 function asBoolean(value: unknown, defaultValue = false): boolean {
   if (typeof value === "boolean") return value;
   if (value === "true") return true;
@@ -1475,12 +1504,11 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         equityUsdc = latest.equity_usdc;
         freeUsdc = latest.usdc;
         lastPositionAsOf = latest.as_of;
-        const aave = latest.aave as { healthFactor?: number | null } | null;
-        if (aave && typeof aave.healthFactor === "number") {
-          healthFactor = aave.healthFactor;
-        } else if (aave && aave.healthFactor === null) {
-          healthFactor = null;
-        }
+        const aave =
+          latest.aave && typeof latest.aave === "object"
+            ? (latest.aave as Record<string, unknown>)
+            : null;
+        healthFactor = normalizePublicHealthFactor(aave);
       }
 
       const [lastTopupAt, lastSweepAt] = await Promise.all([

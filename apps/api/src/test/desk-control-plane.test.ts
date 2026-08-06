@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createDeskControlPlane,
+  normalizePublicHealthFactor,
   strategyForSignalType,
   toPremiumIntent,
   toPublicIntent,
@@ -230,6 +231,15 @@ describe("public vs premium serializers", () => {
 });
 
 describe("createDeskControlPlane", () => {
+  it("normalizes no-debt and legacy persisted health-factor snapshots", () => {
+    expect(
+      normalizePublicHealthFactor({ healthFactor: null, totalDebtUsd: 0 }),
+    ).toBe(999);
+    expect(normalizePublicHealthFactor({ health_factor: 1.35 })).toBe(1.35);
+    expect(normalizePublicHealthFactor({ healthFactor: 1.1 })).toBe(1.1);
+    expect(normalizePublicHealthFactor({})).toBeNull();
+  });
+
   function buildPlane(opts?: {
     intents?: DeskIntentRow[];
     capitalTick?: ReturnType<CapitalManager["tick"]>;

@@ -33,6 +33,8 @@ const AAVE_BASE_DECIMALS = 8;
 /** Health factor is a ray (1e18). Max uint256 means no debt. */
 const HF_RAY = 10n ** 18n;
 const HF_MAX_NO_DEBT = 2n ** 128n; // practical "infinite" cutover
+/** JSON-safe finite sentinel for Aave's infinite/no-debt health factor. */
+export const NO_DEBT_HEALTH_FACTOR = 999;
 
 export interface PositionService {
   /** Live mark for desk wallet; optionally persist snapshot. */
@@ -59,11 +61,11 @@ export interface PositionServiceConfig {
   linkUsdFallback?: number;
 }
 
-function parseHealthFactor(hfRay: bigint): number | null {
+export function parseHealthFactor(hfRay: bigint): number {
   if (hfRay === 0n) return 0;
-  if (hfRay > HF_MAX_NO_DEBT) return null; // no debt / max
+  if (hfRay > HF_MAX_NO_DEBT) return NO_DEBT_HEALTH_FACTOR;
   const asNumber = Number(hfRay) / Number(HF_RAY);
-  if (!Number.isFinite(asNumber)) return null;
+  if (!Number.isFinite(asNumber)) return NO_DEBT_HEALTH_FACTOR;
   return asNumber;
 }
 
@@ -144,7 +146,7 @@ export function createPositionService(deps: {
 
     const totalDebtUsd = baseToUsd(totalDebtBase);
     const hf =
-      totalDebtUsd <= 0 ? null : parseHealthFactor(healthFactorRay);
+      totalDebtUsd <= 0 ? NO_DEBT_HEALTH_FACTOR : parseHealthFactor(healthFactorRay);
 
     const aLinkSupplied =
       Number.isFinite(aLinkHuman) && aLinkHuman > 0 ? aLinkHuman : undefined;
