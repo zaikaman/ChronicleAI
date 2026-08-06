@@ -48,6 +48,9 @@ const DeskTicketPage = lazy(() =>
 const PremiumPage = lazy(() =>
   import("../features/premium/PremiumPage.tsx").then((m) => ({ default: m.PremiumPage })),
 );
+const WatchPage = lazy(() =>
+  import("../features/watch/WatchPage.tsx").then((m) => ({ default: m.WatchPage })),
+);
 const SponsoredWatchDetailPage = lazy(() =>
   import("../features/premium/SponsoredWatchDetailPage.tsx").then((m) => ({
     default: m.SponsoredWatchDetailPage,
@@ -75,6 +78,7 @@ function withSuspense(Page: ComponentType): ReactElement {
 // ── Route definitions ───────────────────────────────────
 export const routeDefinitions: RouteDefinition[] = [
   { id: "home", path: "/", label: "Home" },
+  { id: "watch", path: "/watch", label: "Watch" },
   { id: "publications", path: "/publications", label: "Archive" },
   { id: "alerts", path: "/alerts", label: "Alerts" },
   { id: "digests", path: "/digests/latest", label: "Digest" },
@@ -99,7 +103,10 @@ const routes: RouteObject[] = [
       { path: "desk", element: withSuspense(DeskStatusPage) },
       { path: "desk/intents", element: withSuspense(DeskIntentsPage) },
       { path: "desk/tickets/:ticketId", element: withSuspense(DeskTicketPage) },
+      { path: "watch", element: withSuspense(WatchPage) },
+      { path: "watch/:watchId", element: withSuspense(SponsoredWatchDetailPage) },
       { path: "premium", element: withSuspense(PremiumPage) },
+      // HTTPS content-URI target baked into onchain publishSponsoredReport proofs
       { path: "premium/watches/:watchId", element: withSuspense(SponsoredWatchDetailPage) },
       { path: "affiliates", element: withSuspense(AffiliatePage) },
       { path: "activity", element: withSuspense(ActivityPage) },

@@ -256,18 +256,116 @@ export type TelegramIngestProcessResult =
       statusCode: number;
       body: Record<string, unknown>;
     }
+  | {
+      handled: true;
+      kind: "binding";
+      statusCode: number;
+      body: Record<string, unknown>;
+    }
   | { handled: false; reason: "ignored" | "invalid"; detail: string };
+
+export type TelegramBindingHandler = {
+  /**
+   * Handle a private-chat DM that is not a CHRONICLE_INGEST envelope.
+   * Returns null when the message should be ignored.
+   */
+  handleDirectMessage(params: {
+    chatId: string;
+    text: string;
+    username?: string | undefined;
+    messageId?: number | undefined;
+  }): Promise<{
+    replyText: string;
+    code?: string;
+    linked?: boolean;
+  } | null>;
+};
+
+const BIND_CODE_RE = /\bCHRONICLE_BIND\s+([A-Za-z0-9]{4,16})\b/i;
+
+/**
+ * Detect private-chat DMs used for Watch Telegram binding (/start or CHRONICLE_BIND).
+ * Group/channel traffic is left to the ingest allowlist path.
+ */
+export function extractPrivateDirectMessage(
+  update: TelegramUpdateLike,
+): {
+  chatId: string;
+  text: string;
+  username?: string;
+  messageId?: number;
+} | null {
+  const message = extractTelegramMessage(update);
+  if (!message) return null;
+  const chatType = message.chat?.type;
+  // Only private chats — group messages stay on the KeeperHub ingest path.
+  if (chatType && chatType !== "private") return null;
+  const chatIdRaw = message.chat?.id;
+  if (chatIdRaw === undefined || chatIdRaw === null) return null;
+  const text = (message.text ?? message.caption ?? "").trim();
+  if (!text) return null;
+  // Never treat ingest envelopes as binding DMs.
+  if (text.includes(CHRONICLE_INGEST_MARKER)) return null;
+  return {
+    chatId: String(chatIdRaw),
+    text,
+    ...(typeof message.from?.username === "string"
+      ? { username: message.from.username }
+      : {}),
+    ...(typeof message.message_id === "number" ? { messageId: message.message_id } : {}),
+  };
+}
+
+export function isTelegramStartCommand(text: string): boolean {
+  const t = text.trim();
+  return /^\/start(?:@\w+)?(?:\s|$)/i.test(t) || t === "/start";
+}
+
+export function extractChronicleBindCode(text: string): string | null {
+  const match = text.match(BIND_CODE_RE);
+  return match?.[1] ? match[1].toUpperCase() : null;
+}
 
 /**
  * Parse update and dispatch to event/block handlers.
+ * When `bindingHandler` is set and the update is a private DM without an
+ * ingest envelope, the binding flow runs instead of returning ignored.
  */
 export async function processTelegramIngestUpdate(
   update: TelegramUpdateLike,
   handlers: TelegramIngestHandlers,
-  options?: { allowedChatId?: string | undefined },
+  options?: {
+    allowedChatId?: string | undefined;
+    bindingHandler?: TelegramBindingHandler | null | undefined;
+  },
 ): Promise<TelegramIngestProcessResult> {
   const parsed = parseTelegramUpdateForIngest(update, options);
   if (!parsed.ok) {
+    // Non-ingest private DMs → Watch Telegram connect flow.
+    if (options?.bindingHandler && parsed.reason === "ignored") {
+      const dm = extractPrivateDirectMessage(update);
+      if (dm) {
+        const result = await options.bindingHandler.handleDirectMessage(dm);
+        if (result) {
+          return {
+            handled: true,
+            kind: "binding",
+            statusCode: 200,
+            body: {
+              bridge: "telegram",
+              kind: "binding",
+              accepted: true,
+              message: result.replyText,
+              chatId: dm.chatId,
+              messageId: dm.messageId,
+              ...(result.code ? { bindingCode: result.code } : {}),
+              ...(result.linked !== undefined ? { linked: result.linked } : {}),
+              replyText: result.replyText,
+            },
+          };
+        }
+      }
+    }
     return { handled: false, reason: parsed.reason, detail: parsed.detail };
   }
 

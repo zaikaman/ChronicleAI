@@ -8,14 +8,11 @@ import { AgentPaymentsPanel } from "./AgentPaymentsPanel.tsx";
 import { PaymentRequiredModal } from "./PaymentRequiredModal.tsx";
 import { PremiumContentView } from "./PremiumContentView.tsx";
 import { PremiumTeaserCard } from "./PremiumTeaserCard.tsx";
-import { SponsoredWatchList } from "./SponsoredWatchList.tsx";
-import { SponsoredWatchRequestForm } from "./SponsoredWatchRequestForm.tsx";
 import {
   loadPremiumAccessReceipt,
   storePremiumAccessReceipt,
   usePremiumItemAccess,
   usePremiumTeasers,
-  useSponsoredWatches,
 } from "./use-premium.ts";
 
 export function PremiumPage(): ReactElement {
@@ -37,13 +34,6 @@ export function PremiumPage(): ReactElement {
     isPaymentRequired,
     paymentChallenge,
   } = usePremiumItemAccess();
-  const {
-    watches: sponsoredWatches,
-    pagination: watchesPagination,
-    setPage: setWatchesPage,
-    isLoading: watchesLoading,
-    refetch: refetchWatches,
-  } = useSponsoredWatches(10);
 
   const [showPaymentPanel, setShowPaymentPanel] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -191,7 +181,7 @@ export function PremiumPage(): ReactElement {
     <Page data-testid="premium-page">
       <PageHeader
         title="Premium intelligence"
-        description="Unlock deeper market analysis, historical feeds, or a sponsored contract watch. Wallet payments are available for people; API payments are available for agents."
+        description="Unlock deeper market analysis and historical feeds. Wallet payments are available for people; API payments are available for agents."
         meta={
           !isLoading && !error ? (
             <span>
@@ -294,32 +284,6 @@ export function PremiumPage(): ReactElement {
             />
           </>
         )}
-      </PageSection>
-
-      <PageSection
-        title="Request a sponsored watch"
-        description="Pay to have ChronicleAI monitor a contract during a campaign window. The campaign records its creation and, when published, its report."
-        className="pt-2 border-t border-border"
-      >
-        <SponsoredWatchRequestForm
-          onSettled={() => {
-            void refetchWatches();
-          }}
-        />
-      </PageSection>
-
-      <PageSection
-        title="Sponsored campaigns"
-        description="Paid monitoring campaigns with a public audit trail."
-        className="pt-2 border-t border-border"
-      >
-        <SponsoredWatchList watches={sponsoredWatches} isLoading={watchesLoading} />
-        <PaginationControls
-          pagination={watchesPagination}
-          onPageChange={setWatchesPage}
-          disabled={watchesLoading}
-          data-testid="sponsored-watches-pagination"
-        />
       </PageSection>
     </Page>
   );

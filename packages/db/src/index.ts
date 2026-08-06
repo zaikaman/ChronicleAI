@@ -11,6 +11,7 @@ export * from "./llm-generation-attempt-repository.ts";
 export * from "./daily-digest-repository.ts";
 export * from "./premium-intelligence-repository.ts";
 export * from "./sponsored-watch-repository.ts";
+export * from "./telegram-binding-repository.ts";
 export * from "./payment-record-repository.ts";
 export * from "./treasury-snapshot-repository.ts";
 export * from "./payout-record-repository.ts";

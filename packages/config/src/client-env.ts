@@ -23,6 +23,11 @@ export interface ClientEnv {
    * Public WalletConnect Cloud project id for RainbowKit mobile / WC wallets.
    */
   walletConnectProjectId: string | undefined;
+  /**
+   * Public Telegram bot username (no @) for Watch connect deep-links.
+   * From VITE_TELEGRAM_BOT_USERNAME. Safe to expose.
+   */
+  telegramBotUsername: string | undefined;
 }
 
 // Vite exposes env vars via import.meta.env at build time
@@ -34,6 +39,7 @@ declare global {
     VITE_X402_CHAIN_ID?: string;
     VITE_X402_RPC_URL?: string;
     VITE_WALLETCONNECT_PROJECT_ID?: string;
+    VITE_TELEGRAM_BOT_USERNAME?: string;
   }
 
   interface ImportMeta {
@@ -55,6 +61,7 @@ export function loadClientEnv(): ClientEnv {
   let x402ChainId = DEFAULT_X402_CHAIN_ID;
   let x402RpcUrl: string | undefined;
   let walletConnectProjectId: string | undefined;
+  let telegramBotUsername: string | undefined;
 
   try {
     apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? apiBaseUrl;
@@ -69,6 +76,10 @@ export function loadClientEnv(): ClientEnv {
     if (typeof wc === "string" && wc.trim()) {
       walletConnectProjectId = wc.trim();
     }
+    const bot = import.meta.env.VITE_TELEGRAM_BOT_USERNAME;
+    if (typeof bot === "string" && bot.trim()) {
+      telegramBotUsername = bot.trim().replace(/^@/, "");
+    }
   } catch {
     // import.meta.env is only available in Vite builds
   }
@@ -80,5 +91,6 @@ export function loadClientEnv(): ClientEnv {
     x402ChainId,
     x402RpcUrl,
     walletConnectProjectId,
+    telegramBotUsername,
   };
 }

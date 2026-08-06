@@ -96,8 +96,23 @@ export interface NotificationService {
    */
   sendDigestBroadcast(params: DigestBroadcastParams): Promise<ChannelDeliveryResult>;
 
+  /**
+   * Deliver a Telegram message to a specific chat (private watch alerts).
+   * Uses the send bot token; does not require community chat config.
+   */
+  sendTelegramToChat(params: {
+    chatId: string;
+    text: string;
+    parseMode?: "HTML";
+    entityType?: string;
+    entityId?: string | null;
+  }): Promise<ChannelDeliveryResult>;
+
   /** Whether Telegram community channel is configured and ready. */
   getConfiguredChannels(): { telegram: boolean };
+
+  /** Whether the send bot token is configured (needed for private DMs). */
+  isTelegramSendConfigured(): boolean;
 }
 
 export function buildNotificationDestinations(
@@ -118,11 +133,18 @@ export function createNotificationService(
   options: {
     destinations?: NotificationDestination[];
     community?: CommunityChannelConfig;
+    /**
+     * Bot token for private DMs (Watch alerts). Must be the bot the user
+     * actually messaged — i.e. the webhook-registered ingest bot. Falls back
+     * to the community/send bot when unset (single-bot setups).
+     */
+    dmBotToken?: string | null;
     /** Optional fetch implementation for tests. */
     fetchImpl?: typeof fetch;
   } = {},
 ): NotificationService {
   const community = options.community ?? {};
+  const dmBotToken = options.dmBotToken ?? undefined;
   const destinations =
     options.destinations ?? buildNotificationDestinations(community);
   const fetchFn = options.fetchImpl ?? fetch;
@@ -131,19 +153,22 @@ export function createNotificationService(
     return Boolean(community.telegramBotToken && community.telegramChatId);
   }
 
-  async function deliverTelegram(
+  async function deliverTelegramTo(
+    chatId: string,
     text: string,
     parseMode: "HTML" | undefined = "HTML",
   ): Promise<{ ok: true; messageId: number } | { ok: false; error: string }> {
-    const botToken = community.telegramBotToken;
-    const chatId = community.telegramChatId;
-    if (!botToken || !chatId) {
-      return { ok: false, error: "Telegram bot token or chat ID not configured" };
+    const botToken = dmBotToken ?? community.telegramBotToken;
+    if (!botToken) {
+      return { ok: false, error: "Telegram bot token not configured" };
+    }
+    if (!chatId?.trim()) {
+      return { ok: false, error: "Telegram chat ID is required" };
     }
 
     const apiUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
     const body = new URLSearchParams({
-      chat_id: chatId,
+      chat_id: chatId.trim(),
       text,
       disable_web_page_preview: "false",
     });
@@ -180,6 +205,17 @@ export function createNotificationService(
         error: error instanceof Error ? error.message : "Telegram request failed",
       };
     }
+  }
+
+  async function deliverTelegram(
+    text: string,
+    parseMode: "HTML" | undefined = "HTML",
+  ): Promise<{ ok: true; messageId: number } | { ok: false; error: string }> {
+    const chatId = community.telegramChatId;
+    if (!chatId) {
+      return { ok: false, error: "Telegram bot token or chat ID not configured" };
+    }
+    return deliverTelegramTo(chatId, text, parseMode);
   }
 
   async function deliverWebhook(
@@ -226,6 +262,48 @@ export function createNotificationService(
       return {
         telegram: isTelegramConfigured(),
       };
+    },
+
+    isTelegramSendConfigured() {
+      return Boolean(dmBotToken ?? community.telegramBotToken);
+    },
+
+    async sendTelegramToChat(params) {
+      const delivered: string[] = [];
+      const failures: string[] = [];
+      const result = await deliverTelegramTo(
+        params.chatId,
+        params.text,
+        params.parseMode ?? "HTML",
+      );
+      if (result.ok) {
+        delivered.push(`telegram:${params.chatId}`);
+        await logNotification({
+          entityType: params.entityType ?? "telegram_dm",
+          entityId: params.entityId ?? null,
+          status: "succeeded",
+          message: `Telegram DM delivered (message ${result.messageId})`,
+          details: {
+            notification_type: "telegram_dm",
+            chat_id: params.chatId,
+            message_id: result.messageId,
+          },
+        });
+      } else {
+        failures.push(`telegram:${result.error}`);
+        await logNotification({
+          entityType: params.entityType ?? "telegram_dm",
+          entityId: params.entityId ?? null,
+          status: "failed",
+          message: `Failed to deliver Telegram DM: ${result.error}`,
+          details: {
+            notification_type: "telegram_dm",
+            chat_id: params.chatId,
+            error: result.error,
+          },
+        });
+      }
+      return { delivered: delivered.length > 0, destinations: delivered, failures };
     },
 
     async sendLowBalanceWarning(params) {

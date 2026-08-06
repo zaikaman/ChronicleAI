@@ -10,6 +10,7 @@ import type {
   PremiumIntelligenceRepository,
   ReferralAttributionRepository,
   SponsoredWatchRepository,
+  TelegramBindingRepository,
 } from "@chronicleai/db";
 import type { ExecutionLogInsert } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
@@ -45,6 +46,9 @@ import {
   parseSponsoredMonitorContentPrivate,
   resolveCampaignWindowFromContent,
   resolveTargetContract,
+  resolveTargetKind,
+  resolveTelegramBindingCode,
+  resolveVisibility,
   resolveWatchSpecHash,
 } from "../services/watch-spec-hash.ts";
 import type { Web3Client } from "../services/web3-client-service.ts";
@@ -86,6 +90,8 @@ export function createPaymentRoutes(params: {
   sponsoredWatchDefaultDurationDays?: number;
   /** Pricing + duration bounds for custom sponsored watch product creation. */
   sponsoredWatchProductConfig?: SponsoredWatchProductConfig;
+  /** Resolves Telegram binding codes at prepare + settle. */
+  telegramBindingRepo?: TelegramBindingRepository | null;
 }): RouterType {
   const router: RouterType = Router();
 
@@ -101,6 +107,7 @@ export function createPaymentRoutes(params: {
         premiumRepo: params.premiumRepo,
         challengeService,
         config: params.sponsoredWatchProductConfig,
+        telegramBindingRepo: params.telegramBindingRepo ?? null,
       })
     : null;
 
@@ -227,6 +234,9 @@ export function createPaymentRoutes(params: {
         durationDays?: number;
         /** Short demo campaigns (e.g. 1 hour). */
         durationHours?: number;
+        targetKind?: string;
+        telegramBindingCode?: string;
+        visibility?: string;
         paymentRoute?: string;
         payerReference?: string;
         referralAddress?: string;
@@ -234,6 +244,24 @@ export function createPaymentRoutes(params: {
 
       if (!body.targetContract || typeof body.targetContract !== "string") {
         res.status(400).json({ error: "targetContract is required" });
+        return;
+      }
+
+      if (
+        body.targetKind !== undefined &&
+        body.targetKind !== "contract" &&
+        body.targetKind !== "wallet"
+      ) {
+        res.status(400).json({ error: 'targetKind must be "contract" or "wallet"' });
+        return;
+      }
+
+      if (
+        body.visibility !== undefined &&
+        body.visibility !== "public" &&
+        body.visibility !== "private"
+      ) {
+        res.status(400).json({ error: 'visibility must be "public" or "private"' });
         return;
       }
 
@@ -259,6 +287,15 @@ export function createPaymentRoutes(params: {
         ...(body.endsAt !== undefined ? { endsAt: body.endsAt } : {}),
         ...(body.durationDays !== undefined ? { durationDays: body.durationDays } : {}),
         ...(body.durationHours !== undefined ? { durationHours: body.durationHours } : {}),
+        ...(body.targetKind === "contract" || body.targetKind === "wallet"
+          ? { targetKind: body.targetKind }
+          : {}),
+        ...(typeof body.telegramBindingCode === "string"
+          ? { telegramBindingCode: body.telegramBindingCode }
+          : {}),
+        ...(body.visibility === "public" || body.visibility === "private"
+          ? { visibility: body.visibility }
+          : {}),
         paymentRoute: routeInput as PaymentRoute,
         ...(body.payerReference !== undefined
           ? { payerReference: body.payerReference }
@@ -473,6 +510,9 @@ export function createPaymentRoutes(params: {
           let watchSpecHash: string;
           let startsAt: string;
           let endsAt: string;
+          let targetKind: "contract" | "wallet" = "contract";
+          let visibility: "public" | "private" = "public";
+          let telegramChatId: string | null = null;
           try {
             const contentPrivate = parseSponsoredMonitorContentPrivate(
               premiumItem.content_private,
@@ -484,6 +524,70 @@ export function createPaymentRoutes(params: {
             });
             startsAt = window.startsAt;
             endsAt = window.endsAt;
+            targetKind = resolveTargetKind(contentPrivate);
+            visibility = resolveVisibility(contentPrivate);
+
+            const bindingCode = resolveTelegramBindingCode(contentPrivate);
+            if (visibility === "private" && !bindingCode) {
+              res.status(400).json({
+                settled: false,
+                error: "Private sponsored watch is missing a Telegram binding code",
+              });
+              return;
+            }
+            if (bindingCode) {
+              if (!params.telegramBindingRepo) {
+                res.status(400).json({
+                  settled: false,
+                  error: "Telegram binding is not configured on this server",
+                });
+                return;
+              }
+              // Prefer unused codes; fall back to valid (e.g. CHRONICLE_BIND already marked used).
+              let bindingResult = await params.telegramBindingRepo.findByCode(bindingCode);
+              if (!bindingResult.ok) {
+                res.status(500).json({
+                  settled: false,
+                  error: bindingResult.error.message,
+                });
+                return;
+              }
+              if (!bindingResult.value) {
+                bindingResult = await params.telegramBindingRepo.findValidByCode(bindingCode);
+                if (!bindingResult.ok) {
+                  res.status(500).json({
+                    settled: false,
+                    error: bindingResult.error.message,
+                  });
+                  return;
+                }
+              }
+              const binding = bindingResult.value;
+              if (!binding) {
+                res.status(400).json({
+                  settled: false,
+                  error:
+                    "Telegram binding code is invalid, expired, or already used. Send /start to the bot for a new code.",
+                });
+                return;
+              }
+              telegramChatId = binding.chat_id;
+              if (!binding.used_at) {
+                const marked = await params.telegramBindingRepo.markUsed(binding.id, {
+                  walletAddress: result.verification.payerReference ?? null,
+                });
+                if (!marked.ok) {
+                  console.warn(
+                    "[payments/settlements] Failed to mark Telegram binding used:",
+                    marked.error.message,
+                  );
+                }
+              } else if (!binding.wallet_address && result.verification.payerReference) {
+                await params.telegramBindingRepo.update(binding.id, {
+                  wallet_address: result.verification.payerReference,
+                });
+              }
+            }
           } catch (specError) {
             res.status(400).json({
               settled: false,
@@ -502,6 +606,9 @@ export function createPaymentRoutes(params: {
               watchSpecHash,
               startsAt,
               endsAt,
+              targetKind,
+              visibility,
+              telegramChatId,
             })
             .catch((watchError) => {
               console.error("[payments/settlements] Background createSponsoredWatch failed:", watchError);
@@ -524,6 +631,8 @@ export function createPaymentRoutes(params: {
               startsAt,
               endsAt,
               status: "accepted",
+              targetKind,
+              visibility,
             },
           });
           return;

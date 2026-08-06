@@ -104,6 +104,10 @@ import {
 import { createPremiumReceiptPublicationService } from "../services/premium-receipt-publication-service.ts";
 import { createPremiumReceiptPublicationWorker } from "../services/premium-receipt-publication-worker.ts";
 import {
+  createTelegramBindingHandler,
+  sendTelegramBotMessage,
+} from "../services/telegram-binding-service.ts";
+import {
   ensureTelegramWebhook,
   resolvePublicApiBaseUrl,
 } from "../services/telegram-webhook-registration.ts";
@@ -128,6 +132,8 @@ export interface US1Dependencies {
   premiumProductizer?:
     | import("../services/premium-productizer-service.ts").PremiumProductizerService
     | null;
+  /** One-time Telegram codes for private Watch alerts. */
+  telegramBindingRepo?: import("@chronicleai/db").TelegramBindingRepository | null;
 }
 
 export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependencies): void {
@@ -677,8 +683,36 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
   apiRouter.use(createDeskRoutes(deskControlPlane));
 
   // Telegram free-plan bridge: KeeperHub Event/Block/desk_read → Telegram → Chronicle ingest
+  // + private-chat /start + CHRONICLE_BIND for Watch Telegram connect (Phase 2).
   if (env.telegramWebhookSecret) {
     const ingestChatId = env.telegramIngestChatId ?? env.telegramChatId;
+    // Binding replies MUST come from the bot that owns the webhook (the ingest
+    // bot): Telegram only delivers private DMs to that bot, and a bot can only
+    // reply to chats that have messaged it. Replying from the send bot would
+    // 400 "chat not found" whenever the two bots differ (documented setup).
+    const replyBotToken = env.telegramIngestBotToken ?? env.telegramBotToken;
+    let bindingHandler: import("../services/telegram-ingest-service.ts").TelegramBindingHandler | null =
+      null;
+    if (deps.telegramBindingRepo && replyBotToken) {
+      const token = replyBotToken;
+      bindingHandler = createTelegramBindingHandler({
+        bindingRepo: deps.telegramBindingRepo,
+        reply: async ({ chatId, text }) => {
+          const sent = await sendTelegramBotMessage({
+            botToken: token,
+            chatId,
+            text,
+          });
+          return sent.ok ? { ok: true as const } : { ok: false as const, error: sent.error };
+        },
+      });
+      console.info("[telegram] Watch binding handler enabled (/start + CHRONICLE_BIND)");
+    } else if (!deps.telegramBindingRepo) {
+      console.warn(
+        "[telegram] telegramBindingRepo missing — private Watch Telegram connect disabled",
+      );
+    }
+
     apiRouter.use(
       createTelegramWebhookRoutes({
         eventHandler: handler,
@@ -687,6 +721,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
         webhookSecret: env.telegramWebhookSecret,
         allowedChatId: ingestChatId,
         deskSignalIngest,
+        bindingHandler,
       }),
     );
     if (!ingestChatId) {
@@ -1002,6 +1037,8 @@ export interface US3Dependencies {
   watchRepo: SponsoredWatchRepository;
   /** Required for Loop 4 campaign-window event correlation. */
   eventRepo: MonitoredEventRepository;
+  /** Public alerts for public watch alert delivery (registry + Telegram). */
+  alertRepo: PublicAlertRepository;
   /** Validates referralAddress on premium payment challenges. */
   affiliateRepo: AffiliateRepository;
   /** First-touch referral attribution (wallet connect). */
@@ -1012,6 +1049,8 @@ export interface US3Dependencies {
   fundingService?:
     | import("../services/affiliate-funding-service.ts").AffiliateFundingService
     | null;
+  /** Resolves Telegram binding codes at prepare + settle. */
+  telegramBindingRepo?: import("@chronicleai/db").TelegramBindingRepository | null;
 }
 
 /** Interval for automated sponsored-watch activate / monitor / complete (Loop 4). */
@@ -1088,10 +1127,34 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
   });
   premiumReceiptWorker.start();
 
-  // Shared Loop 4 service: create on payment, monitor window, auto-publish report
+  // Shared Loop 4 service: create on payment, monitor window, auto-publish report + alerts
   const watchReportService = createSponsoredWatchReportService({
     providerConfigs: createProviderConfigs(env),
   });
+  const telegramBroadcastToken =
+    env.telegramSendBotToken ?? env.telegramIngestBotToken ?? env.telegramBotToken;
+  const watchNotificationService = createNotificationService(deps.execLogRepo, {
+    community: {
+      telegramBotToken: telegramBroadcastToken,
+      telegramChatId: env.telegramChatId,
+    },
+    // Private Watch DMs go out from the bot the user messaged (/start issued
+    // the binding code) — the webhook-registered ingest bot. Community
+    // broadcasts stay on the send bot.
+    dmBotToken: env.telegramIngestBotToken ?? env.telegramBotToken ?? null,
+  });
+  const watchRegistryService = createChronicleRegistryService(web3Client, {
+    strictContentUri: env.nodeEnv === "production",
+  });
+  // No treasury gate here (US3 lacks treasuryRepo); registry still writes when KeeperHub is up.
+  const watchAlertPublication = createAlertPublicationService(
+    deps.alertRepo,
+    watchRegistryService,
+    env.frontendOrigin,
+    watchNotificationService,
+    null,
+    deps.execLogRepo,
+  );
   const watchService = createSponsoredWatchService({
     watchRepo: deps.watchRepo,
     execLogRepo: deps.execLogRepo,
@@ -1099,6 +1162,9 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
     eventRepo: deps.eventRepo,
     frontendOrigin: env.frontendOrigin,
     reportService: watchReportService,
+    notificationService: watchNotificationService,
+    alertRepo: deps.alertRepo,
+    alertPublicationService: watchAlertPublication,
   });
 
   // Premium routes
@@ -1165,6 +1231,7 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
         maxDurationDays: env.sponsoredWatchMaxDurationDays,
         minDurationHours: env.sponsoredWatchMinDurationHours,
       },
+      telegramBindingRepo: deps.telegramBindingRepo ?? null,
     }),
   );
 

@@ -70,6 +70,9 @@ function formatWatchListItem(watch: {
   report_content_hash?: string | null;
   monitored_event_count?: number | null;
   last_monitored_at?: string | null;
+  target_kind?: string | null;
+  visibility?: string | null;
+  last_alert_sent_at?: string | null;
 }) {
   return {
     id: watch.id,
@@ -87,6 +90,9 @@ function formatWatchListItem(watch: {
     reportContentHash: watch.report_content_hash ?? undefined,
     monitoredEventCount: watch.monitored_event_count ?? 0,
     lastMonitoredAt: watch.last_monitored_at ?? undefined,
+    targetKind: watch.target_kind === "wallet" ? "wallet" : "contract",
+    visibility: watch.visibility === "private" ? "private" : "public",
+    lastAlertSentAt: watch.last_alert_sent_at ?? undefined,
     auditTrail: {
       createTxHash: watch.create_tx_hash ?? null,
       createExplorerUrl: watch.create_explorer_url ?? null,
@@ -211,6 +217,9 @@ export function createPremiumRoutes(params: {
         reportAnalysis: watch.report_analysis ?? undefined,
         monitoredEventCount: watch.monitored_event_count ?? 0,
         lastMonitoredAt: watch.last_monitored_at ?? undefined,
+        targetKind: watch.target_kind === "wallet" ? "wallet" : "contract",
+        visibility: watch.visibility === "private" ? "private" : "public",
+        lastAlertSentAt: watch.last_alert_sent_at ?? undefined,
         // Dual on-chain audit trail for the paid campaign
         auditTrail: {
           createTxHash: watch.create_tx_hash ?? null,

@@ -9,11 +9,15 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@chronicleai/schemas": path.resolve(__dirname, "../../packages/schemas/src"),
-      "@chronicleai/config": path.resolve(__dirname, "../../packages/config/src"),
       "@chronicleai/config/chains": path.resolve(
         __dirname,
         "../../packages/config/src/chains.ts",
       ),
+      "@chronicleai/config/client": path.resolve(
+        __dirname,
+        "../../packages/config/src/client-env.ts",
+      ),
+      "@chronicleai/config": path.resolve(__dirname, "../../packages/config/src"),
     },
   },
   build: {

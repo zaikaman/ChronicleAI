@@ -5,6 +5,7 @@
 
 export type PrefetchablePath =
   | "/"
+  | "/watch"
   | "/publications"
   | "/alerts"
   | "/digests/latest"
@@ -15,6 +16,7 @@ export type PrefetchablePath =
 
 const PREFETCHERS: Record<string, () => Promise<unknown>> = {
   "/": () => import("../features/home/HomePage.tsx"),
+  "/watch": () => import("../features/watch/WatchPage.tsx"),
   "/publications": () => import("../features/publications/PublicationsPage.tsx"),
   "/alerts": () => import("../features/alerts/AlertsPage.tsx"),
   "/digests/latest": () => import("../features/digests/DigestDetailPage.tsx"),
@@ -37,6 +39,7 @@ const inFlight = new Map<string, Promise<unknown>>();
 export function resolvePrefetchKey(href: string): string | null {
   const path = href.split("?")[0]?.split("#")[0] ?? href;
   if (PREFETCHERS[path]) return path;
+  if (path.startsWith("/watch/")) return "/watch";
   if (path.startsWith("/alerts/")) return "/alerts";
   if (path.startsWith("/digests/")) return "/digests/latest";
   if (path.startsWith("/desk/")) return "/desk";

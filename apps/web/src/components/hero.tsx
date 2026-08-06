@@ -300,22 +300,23 @@ export function Hero(): ReactNode {
             className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center max-[850px]:w-full"
           >
             <Link
-              to="/alerts"
+              to="/watch"
               className="group relative inline-flex cursor-pointer items-center max-[850px]:w-full"
+              data-testid="hero-watch-cta"
             >
               <span className="absolute inset-y-0 right-0 w-[calc(100%-2rem)] rounded-xl bg-accent max-[850px]:w-full" />
               <span className="relative z-10 rounded-xl bg-black px-6 py-3 font-medium text-white max-[850px]:flex-1">
-                Read live intelligence
+                Watch an address — free to try
               </span>
               <span className="relative z-10 -left-px flex h-11 w-11 items-center justify-center rounded-xl text-black">
                 <ArrowDownRight className="h-5 w-5 transition-transform duration-300 group-hover:-rotate-45" />
               </span>
             </Link>
             <Link
-              to="/activity"
+              to="/alerts"
               className="inline-flex items-center justify-center rounded-xl border border-black/15 bg-white/80 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-white max-[850px]:w-full"
             >
-              See execution proof
+              Read live intelligence
             </Link>
           </motion.div>
         </motion.div>

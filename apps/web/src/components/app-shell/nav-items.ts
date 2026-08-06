@@ -2,6 +2,7 @@ import {
   Activity,
   Archive,
   Bell,
+  Eye,
   FileText,
   Landmark,
   type LucideIcon,
@@ -20,6 +21,14 @@ export interface AppNavItem {
 
 /** Primary product navigation — mirrors routeDefinitions used in the app shell. */
 export const APP_NAV_ITEMS: AppNavItem[] = [
+  {
+    id: "watch",
+    label: "Watch",
+    href: "/watch",
+    description: "Monitor wallets, contracts, and protocols",
+    group: "Core flow",
+    icon: Eye,
+  },
   {
     id: "alerts",
     label: "Alerts",
@@ -64,7 +73,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     id: "premium",
     label: "Premium",
     href: "/premium",
-    description: "Buy intelligence and sponsor monitoring",
+    description: "Buy deeper market intelligence",
     group: "Business",
     icon: Sparkles,
   },
@@ -80,11 +89,15 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
 
 export function isActiveNavPath(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
+  // Watch list + friendly detail alias (/watch/:watchId)
+  if (href === "/watch") {
+    return pathname === "/watch" || pathname.startsWith("/watch/");
+  }
   // Digest routes share the digests prefix
   if (href === "/digests/latest") {
     return pathname === "/digests/latest" || pathname.startsWith("/digests/");
   }
-  // Premium detail watches
+  // Premium list + onchain content-URI detail (/premium/watches/:id)
   if (href === "/premium") {
     return pathname === "/premium" || pathname.startsWith("/premium/");
   }
@@ -101,5 +114,5 @@ export function isActiveNavPath(pathname: string, href: string): boolean {
 
 export function resolveActiveNavLabel(pathname: string): string {
   const match = APP_NAV_ITEMS.find((item) => isActiveNavPath(pathname, item.href));
-  return match?.label ?? "Desk";
+  return match?.label ?? "Watch";
 }

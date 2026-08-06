@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import type {
   PremiumIntelligenceItemRow,
   PremiumIntelligenceRepository,
+  TelegramBindingRepository,
 } from "@chronicleai/db";
 import { getAddress, isAddress } from "viem";
 import type { PaymentRoute } from "@chronicleai/schemas";
@@ -13,6 +14,9 @@ import {
   deriveWatchSpecHash,
   type SponsoredMonitorContentPrivate,
 } from "./watch-spec-hash.ts";
+
+export type WatchTargetKind = "contract" | "wallet";
+export type WatchVisibility = "public" | "private";
 
 export interface SponsoredWatchCampaignRequest {
   targetContract: string;
@@ -30,6 +34,12 @@ export interface SponsoredWatchCampaignRequest {
    * Takes precedence over durationDays when both are set.
    */
   durationHours?: number;
+  /** contract (default) or wallet — wallet watches match ERC-20 Transfer from/to. */
+  targetKind?: WatchTargetKind;
+  /** One-time Telegram binding code from /start (required when visibility=private). */
+  telegramBindingCode?: string;
+  /** public (default) = registry alert; private = owner Telegram only. */
+  visibility?: WatchVisibility;
   paymentRoute: PaymentRoute;
   payerReference?: string;
   referralAddress?: string;
@@ -62,6 +72,10 @@ export interface PreparedSponsoredWatch {
     durationDays: number;
     /** Exact hour span when a short demo campaign was requested. */
     durationHours?: number;
+    targetKind: WatchTargetKind;
+    visibility: WatchVisibility;
+    /** Present when a binding code was validated at prepare. */
+    telegramBindingCode?: string;
   };
 }
 
@@ -156,6 +170,8 @@ export function createSponsoredWatchProductService(deps: {
   premiumRepo: PremiumIntelligenceRepository;
   challengeService: PaymentChallengeService;
   config: SponsoredWatchProductConfig;
+  /** Required to validate private-visibility Telegram binding codes. */
+  telegramBindingRepo?: TelegramBindingRepository | null;
 }): SponsoredWatchProductService {
   return {
     async prepareCampaign(request) {
@@ -165,6 +181,48 @@ export function createSponsoredWatchProductService(deps: {
         );
       }
       const targetContract = getAddress(request.targetContract);
+
+      const targetKind: WatchTargetKind =
+        request.targetKind === "wallet" ? "wallet" : "contract";
+      const visibility: WatchVisibility =
+        request.visibility === "private" ? "private" : "public";
+
+      let telegramBindingCode: string | undefined;
+      if (visibility === "private") {
+        const rawCode = request.telegramBindingCode?.trim();
+        if (!rawCode) {
+          throw new Error(
+            "Private watches require a Telegram binding code. Send /start to the bot, then paste the code it replies with.",
+          );
+        }
+        if (!deps.telegramBindingRepo) {
+          throw new Error("Telegram binding is not configured on this server");
+        }
+        const bindingResult = await deps.telegramBindingRepo.findValidByCode(rawCode);
+        if (!bindingResult.ok) {
+          throw new Error(`Failed to validate Telegram binding: ${bindingResult.error.message}`);
+        }
+        if (!bindingResult.value) {
+          throw new Error(
+            "Telegram binding code is invalid, expired, or already used. Send /start to the bot for a new code.",
+          );
+        }
+        if (!bindingResult.value.chat_id?.trim()) {
+          throw new Error("Telegram binding is missing a chat id — send /start to the bot again");
+        }
+        telegramBindingCode = rawCode.toUpperCase();
+      } else if (request.telegramBindingCode?.trim()) {
+        // Optional public-mode bind: still fold the code into the committed spec
+        // so settle can attach chat_id for dual delivery when provided.
+        if (deps.telegramBindingRepo) {
+          const bindingResult = await deps.telegramBindingRepo.findValidByCode(
+            request.telegramBindingCode.trim(),
+          );
+          if (bindingResult.ok && bindingResult.value) {
+            telegramBindingCode = request.telegramBindingCode.trim().toUpperCase();
+          }
+        }
+      }
 
       const window = resolveCampaignWindow({
         ...(request.startsAt ? { startsAt: request.startsAt } : {}),
@@ -184,12 +242,19 @@ export function createSponsoredWatchProductService(deps: {
         endsAt: window.endsAt,
         durationDays: window.durationDays,
         durationHours: window.durationHours,
+        targetKind,
+        visibility,
       };
       if (request.eventSignature?.trim()) {
         watchSpec.eventSignature = request.eventSignature.trim();
       }
       if (request.description?.trim()) {
         watchSpec.description = request.description.trim();
+      }
+      if (telegramBindingCode) {
+        // Commit the binding code (not the chat_id) so the registry proves the
+        // exact private-delivery intent without publishing the Telegram chat id.
+        watchSpec.telegramBindingCode = telegramBindingCode;
       }
 
       const watchSpecHash = deriveWatchSpecHash(watchSpec);
@@ -198,6 +263,9 @@ export function createSponsoredWatchProductService(deps: {
         endsAt: string;
         durationDays: number;
         durationHours: number;
+        targetKind: WatchTargetKind;
+        visibility: WatchVisibility;
+        telegramBindingCode?: string;
       } = {
         targetContract,
         watchSpecHash,
@@ -206,17 +274,21 @@ export function createSponsoredWatchProductService(deps: {
         endsAt: window.endsAt,
         durationDays: window.durationDays,
         durationHours: window.durationHours,
+        targetKind,
+        visibility,
+        ...(telegramBindingCode ? { telegramBindingCode } : {}),
       };
 
       const slug = `sponsored-watch-${targetContract.slice(2, 10).toLowerCase()}-${randomUUID().slice(0, 8)}`;
       const short = `${targetContract.slice(0, 8)}…${targetContract.slice(-6)}`;
-      const title = `Sponsored Watch — ${short}`;
+      const kindLabel = targetKind === "wallet" ? "Wallet" : "Contract";
+      const title = `Sponsored Watch — ${kindLabel} ${short}`;
       const isShortDemo = window.durationHours < 24;
       const summaryPublic = request.description?.trim()
         ? request.description.trim()
         : isShortDemo
-          ? `Pay to monitor ${targetContract} for ${window.durationHours}h (short demo). On-chain create + report receipts form the dual audit trail.`
-          : `Pay to monitor ${targetContract} from ${window.startsAt.slice(0, 10)} to ${window.endsAt.slice(0, 10)}. On-chain create + report receipts form the dual audit trail.`;
+          ? `Pay to monitor ${targetKind} ${targetContract} for ${window.durationHours}h (short demo). On-chain create + report receipts form the dual audit trail.`
+          : `Pay to monitor ${targetKind} ${targetContract} from ${window.startsAt.slice(0, 10)} to ${window.endsAt.slice(0, 10)}. On-chain create + report receipts form the dual audit trail.`;
 
       const createResult = await deps.premiumRepo.create({
         slug,
@@ -261,6 +333,9 @@ export function createSponsoredWatchProductService(deps: {
           endsAt: window.endsAt,
           durationDays: window.durationDays,
           durationHours: window.durationHours,
+          targetKind,
+          visibility,
+          ...(telegramBindingCode ? { telegramBindingCode } : {}),
         },
       };
     },

@@ -158,7 +158,7 @@ export function SponsoredWatchDetailPage(): ReactElement {
   if (state.status === "not-found") {
     return (
       <Page data-testid="watch-detail">
-        <PageBackLink to="/premium">Premium</PageBackLink>
+        <PageBackLink to="/watch">Watch</PageBackLink>
         <EmptyState
           title="Sponsored watch not found"
           description="This monitoring campaign is not available or the content URI is invalid."
@@ -166,10 +166,10 @@ export function SponsoredWatchDetailPage(): ReactElement {
         />
         <div className="mt-4 text-center">
           <Link
-            to="/premium"
+            to="/watch"
             className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            Back to premium
+            Back to Watch
           </Link>
         </div>
       </Page>
@@ -179,7 +179,7 @@ export function SponsoredWatchDetailPage(): ReactElement {
   if (state.status === "error") {
     return (
       <Page data-testid="watch-detail">
-        <PageBackLink to="/premium">Premium</PageBackLink>
+        <PageBackLink to="/watch">Watch</PageBackLink>
         <RetryState
           title="Failed to load sponsored watch"
           message={state.error}
@@ -201,7 +201,7 @@ export function SponsoredWatchDetailPage(): ReactElement {
 
   return (
     <Page data-testid="watch-detail">
-      <PageBackLink to="/premium">Premium</PageBackLink>
+      <PageBackLink to="/watch">Watch</PageBackLink>
       <PageHeader
         title={watch.reportTitle ?? "Sponsored Watch Report"}
         below={

@@ -16,6 +16,7 @@ import { getDigestRunHandler } from "../services/digest-run-bridge.ts";
 import { resolveDigestRunWindow } from "../services/digest-schedule-service.ts";
 import {
   processTelegramIngestUpdate,
+  type TelegramBindingHandler,
   type TelegramIngestProcessResult,
   type TelegramUpdateLike,
 } from "../services/telegram-ingest-service.ts";
@@ -47,6 +48,8 @@ export type TelegramWebhookRouteDeps = {
   allowedChatId: string | undefined;
   /** Optional: Phase 9 desk_read poll bridge → signal engine quality bar. */
   deskSignalIngest?: DeskSignalIngestService | null | undefined;
+  /** Optional: private-chat /start + CHRONICLE_BIND for Watch Telegram connect. */
+  bindingHandler?: TelegramBindingHandler | null | undefined;
 };
 
 function secretsEqual(provided: string, expected: string): boolean {
@@ -235,6 +238,7 @@ export function createTelegramWebhookRoutes(deps: TelegramWebhookRouteDeps): Rou
 
       const work = processTelegramIngestUpdate(update, handlers, {
         allowedChatId: deps.allowedChatId,
+        bindingHandler: deps.bindingHandler ?? null,
       });
 
       const raced = await Promise.race([

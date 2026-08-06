@@ -248,6 +248,9 @@ export interface DailyDigestInsert {
 export type DailyDigestUpdate = Partial<DailyDigestInsert>;
 
 // ── SponsoredWatch ───────────────────────────────────────
+export type SponsoredWatchTargetKind = "contract" | "wallet";
+export type SponsoredWatchVisibility = "public" | "private";
+
 export interface SponsoredWatchRow {
   id: string;
   target_contract: string;
@@ -273,6 +276,13 @@ export interface SponsoredWatchRow {
   last_monitored_at: string | null;
   monitored_event_count: number;
   watch_spec?: Record<string, unknown> | null;
+  /** contract (default) or wallet — wallet watches match ERC-20 Transfer from/to. */
+  target_kind: SponsoredWatchTargetKind;
+  /** Owner Telegram chat id for private alert delivery. */
+  telegram_chat_id: string | null;
+  /** public = registry alert + community Telegram; private = owner Telegram only. */
+  visibility: SponsoredWatchVisibility;
+  last_alert_sent_at: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -300,10 +310,41 @@ export interface SponsoredWatchInsert {
   report_analysis?: string | null;
   last_monitored_at?: string | null;
   monitored_event_count?: number;
+  target_kind?: SponsoredWatchTargetKind;
+  telegram_chat_id?: string | null;
+  visibility?: SponsoredWatchVisibility;
+  last_alert_sent_at?: string | null;
   status?: string;
 }
 
 export type SponsoredWatchUpdate = Partial<SponsoredWatchInsert>;
+
+// ── TelegramBinding ──────────────────────────────────────
+export interface TelegramBindingRow {
+  id: string;
+  code: string;
+  chat_id: string;
+  username: string | null;
+  wallet_address: string | null;
+  source: string;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
+}
+
+export interface TelegramBindingInsert {
+  code: string;
+  chat_id: string;
+  username?: string | null;
+  wallet_address?: string | null;
+  source?: string;
+  expires_at?: string;
+  used_at?: string | null;
+}
+
+export type TelegramBindingUpdate = Partial<
+  Pick<TelegramBindingInsert, "wallet_address" | "used_at" | "username">
+>;
 
 // ── RevenuePayout ────────────────────────────────────────
 export interface RevenuePayoutRow {

@@ -5,7 +5,8 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./chains": "./src/chains.ts"
+    "./chains": "./src/chains.ts",
+    "./client": "./src/client-env.ts"
   },
   "scripts": {
     "type-check": "tsc -b --pretty false",

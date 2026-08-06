@@ -512,9 +512,25 @@ export function createSponsoredWatchReportService(options?: {
   };
 }
 
+/** ERC-20 / ERC-721 Transfer(address,address,uint256) topic0. */
+export const TRANSFER_EVENT_TOPIC0 =
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
 /**
- * Extract contract addresses from a monitored event's raw payload for
- * campaign matching (Event Tracker address / contractAddress fields).
+ * Decode a 32-byte indexed topic into a checksummed EVM address (last 20 bytes).
+ */
+export function addressFromTopic(topic: string | null | undefined): string | null {
+  if (!topic || typeof topic !== "string") return null;
+  const hex = topic.toLowerCase().replace(/^0x/, "");
+  if (hex.length !== 64) return null;
+  const addr = `0x${hex.slice(24)}`;
+  if (!isAddress(addr, { strict: false })) return null;
+  return getAddress(addr).toLowerCase();
+}
+
+/**
+ * Extract contract / wallet addresses from a monitored event's raw payload for
+ * campaign matching (Event Tracker address / contractAddress / Transfer topics).
  */
 export function extractEventContractAddresses(event: MonitoredEventRow): string[] {
   const found = new Set<string>();
@@ -540,6 +556,17 @@ export function extractEventContractAddresses(event: MonitoredEventRow): string[
           found.add(getAddress(obj[key] as string).toLowerCase());
         }
       }
+      // Decode Transfer topics when present (wallet-mode matching).
+      if (Array.isArray(obj.topics)) {
+        const topics = obj.topics as unknown[];
+        const t0 = typeof topics[0] === "string" ? topics[0].toLowerCase() : "";
+        if (t0 === TRANSFER_EVENT_TOPIC0 || t0 === TRANSFER_EVENT_TOPIC0.slice(2)) {
+          const from = addressFromTopic(typeof topics[1] === "string" ? topics[1] : null);
+          const to = addressFromTopic(typeof topics[2] === "string" ? topics[2] : null);
+          if (from) found.add(from);
+          if (to) found.add(to);
+        }
+      }
       // Nested rawPayload from Event Tracker expansion
       if (obj.rawPayload && typeof obj.rawPayload === "object") {
         visit(obj.rawPayload, depth + 1);
@@ -561,4 +588,29 @@ export function eventMatchesTargetContract(
   if (!isAddress(targetContract, { strict: false })) return false;
   const target = getAddress(targetContract).toLowerCase();
   return extractEventContractAddresses(event).includes(target);
+}
+
+/**
+ * Match Transfer rows whose decoded from/to equals the watched wallet.
+ * Wallets never emit events, so matching reuses the same address extraction
+ * as contract matching: raw_payload carries the decoded Transfer from/to
+ * (and the emitting contract), and the wallet appearing in any of them
+ * qualifies the row as a watch event.
+ */
+export function eventMatchesWallet(
+  event: MonitoredEventRow,
+  walletAddress: string,
+): boolean {
+  return eventMatchesTargetContract(event, walletAddress);
+}
+
+/** Route event matching by watch target kind. */
+export function eventMatchesWatchTarget(
+  event: MonitoredEventRow,
+  targetAddress: string,
+  targetKind: "contract" | "wallet" = "contract",
+): boolean {
+  return targetKind === "wallet"
+    ? eventMatchesWallet(event, targetAddress)
+    : eventMatchesTargetContract(event, targetAddress);
 }

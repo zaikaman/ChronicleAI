@@ -4,6 +4,7 @@ import type { Confidence, EventType } from "./domain.ts";
 // ── Navigation Route IDs ────────────────────────────────
 export type RouteId =
   | "home"
+  | "watch"
   | "publications"
   | "alerts"
   | "digests"
@@ -21,6 +22,7 @@ export interface RouteDefinition {
 
 export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { id: "home", path: "/", label: "Home" },
+  { id: "watch", path: "/watch", label: "Watch" },
   { id: "publications", path: "/publications", label: "Archive" },
   { id: "alerts", path: "/alerts", label: "Alerts" },
   { id: "digests", path: "/digests/latest", label: "Latest Digest" },

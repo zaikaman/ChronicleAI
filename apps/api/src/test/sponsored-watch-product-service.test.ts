@@ -109,8 +109,109 @@ describe("sponsored-watch-product-service", () => {
     expect(prepared.campaign.watchSpecHash.startsWith("0x")).toBe(true);
     expect(prepared.campaign.watchSpecHash.length).toBe(66);
     expect(prepared.campaign.durationDays).toBe(5);
+    expect(prepared.campaign.targetKind).toBe("contract");
+    expect(prepared.campaign.visibility).toBe("public");
     expect(prepared.challenge.challengeReference).toBe("ch-1");
     expect(premiumRepo.create).toHaveBeenCalled();
     expect(challengeService.createChallenge).toHaveBeenCalled();
+  });
+
+  it("folds wallet + visibility fields into watchSpec hash", async () => {
+    const premiumRepo = {
+      create: vi.fn().mockImplementation(async (item) => ({
+        ok: true as const,
+        value: {
+          id: "item-2",
+          ...item,
+          status: "available",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      })),
+    } as unknown as PremiumIntelligenceRepository;
+
+    const challengeService = {
+      createChallenge: vi.fn().mockResolvedValue({
+        paymentRecordId: "pay-2",
+        challenge: {
+          challengeReference: "ch-2",
+          paymentRoute: "x402",
+          amountRequested: 1,
+          currency: "USDC",
+          expiresAt: new Date(Date.now() + 600_000).toISOString(),
+          challengeData: {},
+        },
+      }),
+    } as unknown as PaymentChallengeService;
+
+    const telegramBindingRepo = {
+      findValidByCode: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: {
+          id: "bind-1",
+          code: "ABCD12",
+          chat_id: "12345",
+          username: "demo",
+          wallet_address: null,
+          source: "watch",
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 600_000).toISOString(),
+          used_at: null,
+        },
+      }),
+    };
+
+    const service = createSponsoredWatchProductService({
+      premiumRepo,
+      challengeService,
+      config: { priceUsdc: 1, defaultDurationDays: 7, maxDurationDays: 90 },
+      telegramBindingRepo: telegramBindingRepo as never,
+    });
+
+    const prepared = await service.prepareCampaign({
+      targetContract: TARGET,
+      durationHours: 1,
+      paymentRoute: "x402",
+      targetKind: "wallet",
+      visibility: "private",
+      telegramBindingCode: "abcd12",
+    });
+
+    expect(prepared.campaign.targetKind).toBe("wallet");
+    expect(prepared.campaign.visibility).toBe("private");
+    expect(prepared.campaign.telegramBindingCode).toBe("ABCD12");
+    const content = prepared.premiumItem.content_private as Record<string, unknown>;
+    const watchSpec = content.watchSpec as Record<string, unknown>;
+    expect(watchSpec.targetKind).toBe("wallet");
+    expect(watchSpec.visibility).toBe("private");
+    expect(watchSpec.telegramBindingCode).toBe("ABCD12");
+  });
+
+  it("rejects private visibility without a binding code", async () => {
+    const premiumRepo = {
+      create: vi.fn(),
+    } as unknown as PremiumIntelligenceRepository;
+    const challengeService = {
+      createChallenge: vi.fn(),
+    } as unknown as PaymentChallengeService;
+
+    const service = createSponsoredWatchProductService({
+      premiumRepo,
+      challengeService,
+      config: { priceUsdc: 1, defaultDurationDays: 7, maxDurationDays: 90 },
+      telegramBindingRepo: {
+        findValidByCode: vi.fn(),
+      } as never,
+    });
+
+    await expect(
+      service.prepareCampaign({
+        targetContract: TARGET,
+        durationHours: 1,
+        paymentRoute: "x402",
+        visibility: "private",
+      }),
+    ).rejects.toThrow(/Telegram binding code/);
+    expect(premiumRepo.create).not.toHaveBeenCalled();
   });
 });

@@ -1430,6 +1430,7 @@ export type Database = {
           created_at: string
           ends_at: string
           id: string
+          last_alert_sent_at: string | null
           last_monitored_at: string | null
           monitored_event_count: number
           on_chain_watch_id: number | null
@@ -1446,7 +1447,10 @@ export type Database = {
           starts_at: string
           status: string
           target_contract: string
+          target_kind: string
+          telegram_chat_id: string | null
           updated_at: string
+          visibility: string
           watch_spec_hash: string
         }
         Insert: {
@@ -1457,6 +1461,7 @@ export type Database = {
           created_at?: string
           ends_at: string
           id?: string
+          last_alert_sent_at?: string | null
           last_monitored_at?: string | null
           monitored_event_count?: number
           on_chain_watch_id?: number | null
@@ -1473,7 +1478,10 @@ export type Database = {
           starts_at: string
           status?: string
           target_contract: string
+          target_kind?: string
+          telegram_chat_id?: string | null
           updated_at?: string
+          visibility?: string
           watch_spec_hash: string
         }
         Update: {
@@ -1484,6 +1492,7 @@ export type Database = {
           created_at?: string
           ends_at?: string
           id?: string
+          last_alert_sent_at?: string | null
           last_monitored_at?: string | null
           monitored_event_count?: number
           on_chain_watch_id?: number | null
@@ -1500,7 +1509,10 @@ export type Database = {
           starts_at?: string
           status?: string
           target_contract?: string
+          target_kind?: string
+          telegram_chat_id?: string | null
           updated_at?: string
+          visibility?: string
           watch_spec_hash?: string
         }
         Relationships: []
@@ -1520,6 +1532,42 @@ export type Database = {
           groq_key_index?: number
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      telegram_bindings: {
+        Row: {
+          chat_id: string
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          source: string
+          used_at: string | null
+          username: string | null
+          wallet_address: string | null
+        }
+        Insert: {
+          chat_id: string
+          code: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          source?: string
+          used_at?: string | null
+          username?: string | null
+          wallet_address?: string | null
+        }
+        Update: {
+          chat_id?: string
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          source?: string
+          used_at?: string | null
+          username?: string | null
+          wallet_address?: string | null
         }
         Relationships: []
       }

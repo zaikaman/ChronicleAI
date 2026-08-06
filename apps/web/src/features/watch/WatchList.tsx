@@ -1,5 +1,4 @@
-// Sponsored watch list component
-// Displays active sponsored campaigns and their transaction hashes
+// Watch list — active monitoring campaigns and their transaction hashes.
 
 import type React from "react";
 import { Link } from "react-router-dom";
@@ -8,7 +7,7 @@ import { EmptyState } from "../../components/state-views.tsx";
 import { Surface } from "../../components/page-chrome.tsx";
 import { SkeletonPanel } from "../../components/ui/skeleton.tsx";
 
-export interface SponsoredWatchModel {
+export interface WatchModel {
   id: string;
   targetContract: string;
   status: string;
@@ -19,10 +18,12 @@ export interface SponsoredWatchModel {
   sourceEventRoot?: string;
   startsAt: string;
   endsAt: string;
+  targetKind?: "contract" | "wallet";
+  visibility?: "public" | "private";
 }
 
-interface SponsoredWatchListProps {
-  watches: SponsoredWatchModel[];
+interface WatchListProps {
+  watches: WatchModel[];
   isLoading?: boolean;
   "data-testid"?: string;
 }
@@ -44,11 +45,11 @@ function getWatchStatusVariant(
   }
 }
 
-export function SponsoredWatchList({
+export function WatchList({
   watches,
   isLoading = false,
   "data-testid": dataTestId = "sponsored-watch-list",
-}: SponsoredWatchListProps): React.ReactElement {
+}: WatchListProps): React.ReactElement {
   if (isLoading) {
     return (
       <SkeletonPanel rows={3} data-testid={`${dataTestId}-loading`} />
@@ -59,7 +60,7 @@ export function SponsoredWatchList({
     return (
       <EmptyState
         title="No active campaigns"
-        description="No active sponsored monitoring campaigns."
+        description="No active monitoring campaigns yet. Request a watch above to open one."
         data-testid={`${dataTestId}-empty`}
       />
     );
@@ -72,11 +73,23 @@ export function SponsoredWatchList({
           <div className="flex justify-between items-start mb-3 gap-3">
             <div className="min-w-0">
               <Link
-                to={`/premium/watches/${watch.id}`}
+                to={`/watch/${watch.id}`}
                 className="font-mono text-xs text-foreground hover:text-muted-foreground transition-colors break-all"
               >
                 {watch.targetContract.slice(0, 10)}…{watch.targetContract.slice(-6)}
               </Link>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {watch.targetKind === "wallet" ? (
+                  <StatusBadge label="Wallet" variant="info" />
+                ) : (
+                  <StatusBadge label="Contract" variant="default" />
+                )}
+                {watch.visibility === "private" ? (
+                  <StatusBadge label="Private" variant="warning" />
+                ) : (
+                  <StatusBadge label="Public" variant="success" />
+                )}
+              </div>
             </div>
             <StatusBadge label={watch.status} variant={getWatchStatusVariant(watch.status)} />
           </div>

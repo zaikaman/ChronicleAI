@@ -18,6 +18,7 @@ import {
   createReferralAttributionRepository,
   createServerSupabaseClient,
   createSponsoredWatchRepository,
+  createTelegramBindingRepository,
   createTreasurySnapshotRepository,
 } from "@chronicleai/db";
 import compression from "compression";
@@ -106,6 +107,7 @@ try {
   const premiumRepo = createPremiumIntelligenceRepository(supabase);
   const paymentRecordRepo = createPaymentRecordRepository(supabase);
   const watchRepo = createSponsoredWatchRepository(supabase);
+  const telegramBindingRepo = createTelegramBindingRepository(supabase);
 
   // US4 repositories
   const treasuryRepo = createTreasurySnapshotRepository(supabase);
@@ -179,7 +181,7 @@ try {
     }
   });
 
-  // US1: Public Alerts (treasury-gated registry writes)
+  // US1: Public Alerts (treasury-gated registry writes) + Telegram webhook/bindings
   setupUS1Routes(app, env, {
     eventRepo,
     alertRepo,
@@ -187,6 +189,7 @@ try {
     llmAttemptRepo,
     treasuryRepo,
     premiumProductizer,
+    telegramBindingRepo,
   });
 
   // US2: Daily Digests + free email + recurring x402 newsletter (treasury-gated registry writes)
@@ -214,10 +217,12 @@ try {
     execLogRepo,
     watchRepo,
     eventRepo,
+    alertRepo,
     affiliateRepo,
     attributionRepo,
     earningsService,
     fundingService: affiliateFundingService,
+    telegramBindingRepo,
   });
 
   // US4: Public agent activity, treasury & revenue payouts + affiliate registry

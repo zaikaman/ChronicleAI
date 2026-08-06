@@ -10,17 +10,55 @@ import type {
   ExecutionLogRepository,
   MonitoredEventRepository,
   MonitoredEventRow,
+  PublicAlertRepository,
   SponsoredWatchRepository,
   SponsoredWatchRow,
+  SponsoredWatchTargetKind,
+  SponsoredWatchVisibility,
 } from "@chronicleai/db";
+import { getAddress, isAddress, pad } from "viem";
+import type { AlertPublicationService } from "./alert-publication-service.ts";
 import { buildSponsoredReportContentUri } from "./content-uri.ts";
+import type { NotificationService } from "./notification-service.ts";
 import {
   createSponsoredWatchReportService,
-  eventMatchesTargetContract,
+  eventMatchesWatchTarget,
   isPlaceholderSponsoredReport,
+  TRANSFER_EVENT_TOPIC0,
   type SponsoredWatchReportService,
 } from "./sponsored-watch-report-service.ts";
 import type { Web3Client } from "./web3-client-service.ts";
+
+function walletTopic(address: string): `0x${string}` {
+  return pad(getAddress(address) as `0x${string}`, { size: 32 });
+}
+
+function decodeTransferParties(topics: unknown[]): {
+  from: string | null;
+  to: string | null;
+} {
+  const t1 = typeof topics[1] === "string" ? topics[1] : null;
+  const t2 = typeof topics[2] === "string" ? topics[2] : null;
+  const fromHex = t1?.toLowerCase().replace(/^0x/, "") ?? "";
+  const toHex = t2?.toLowerCase().replace(/^0x/, "") ?? "";
+  const from =
+    fromHex.length === 64 && isAddress(`0x${fromHex.slice(24)}`, { strict: false })
+      ? getAddress(`0x${fromHex.slice(24)}`)
+      : null;
+  const to =
+    toHex.length === 64 && isAddress(`0x${toHex.slice(24)}`, { strict: false })
+      ? getAddress(`0x${toHex.slice(24)}`)
+      : null;
+  return { from, to };
+}
+
+function watchTargetKind(watch: SponsoredWatchRow): SponsoredWatchTargetKind {
+  return watch.target_kind === "wallet" ? "wallet" : "contract";
+}
+
+function watchVisibility(watch: SponsoredWatchRow): SponsoredWatchVisibility {
+  return watch.visibility === "private" ? "private" : "public";
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -31,6 +69,9 @@ const MAX_RPC_LOG_CALLS_PER_WATCH = MAX_RPC_CALLS_PER_WATCH - 1; // reserve one 
 const MAX_RPC_BLOCK_SPAN = RPC_LOG_CHUNK_SIZE * BigInt(MAX_RPC_LOG_CALLS_PER_WATCH) - 1n;
 const RPC_RESCAN_INTERVAL_MS = 5 * 60_000;
 const MAX_RPC_EVENTS_PER_WATCH = 500;
+
+/** Minimum gap between alert deliveries per watch (registry gas + DM calm). */
+const WATCH_ALERT_THROTTLE_MS = 15 * 60_000;
 
 /** In-process single-flight so concurrent 60s ticks cannot double-publish one watch. */
 const completionInFlight = new Set<string>();
@@ -62,6 +103,9 @@ export interface SponsoredWatchService {
     watchSpecHash: string;
     startsAt: string;
     endsAt: string;
+    targetKind?: SponsoredWatchTargetKind;
+    visibility?: SponsoredWatchVisibility;
+    telegramChatId?: string | null;
   }): Promise<SponsoredWatchRow>;
 
   completeWatch(watchId: string, params: CompleteWatchParams): Promise<SponsoredWatchRow>;
@@ -88,6 +132,12 @@ export function createSponsoredWatchService(params: {
   reportService?: SponsoredWatchReportService;
   /** Public SPA origin (FRONTEND_ORIGIN) for HTTPS report content URIs. */
   frontendOrigin?: string;
+  /** Private watch Telegram DMs + public alert community fan-out. */
+  notificationService?: NotificationService | null;
+  /** Create public_alert rows for public watch alerts. */
+  alertRepo?: PublicAlertRepository | null;
+  /** Publish public watch alerts onchain + Telegram community. */
+  alertPublicationService?: AlertPublicationService | null;
 }): SponsoredWatchService {
   const {
     watchRepo,
@@ -95,6 +145,9 @@ export function createSponsoredWatchService(params: {
     web3Client,
     eventRepo = null,
     frontendOrigin,
+    notificationService = null,
+    alertRepo = null,
+    alertPublicationService = null,
   } = params;
   const reportService = params.reportService ?? createSponsoredWatchReportService();
   /** Coalesces timer/webhook callers so the full campaign scan stays single-flight. */
@@ -138,6 +191,103 @@ export function createSponsoredWatchService(params: {
     }
   }
 
+  function mapLogItemToEvent(
+    item: {
+      transactionHash?: string;
+      logIndex?: string | number;
+      blockNumber?: string | number;
+      timeStamp?: string | number;
+      topic0?: string;
+      topic1?: string;
+      topic2?: string;
+      topic3?: string;
+      topics?: unknown[];
+      data?: string;
+      address?: string;
+    },
+    watch: SponsoredWatchRow,
+    source: "etherscan_v2" | "rpc_direct",
+    nowIso: string,
+    startsMs: number,
+    endsMs: number,
+  ): { event: MonitoredEventRow; inWindow: boolean } | null {
+    const txHash = item.transactionHash;
+    if (!txHash || typeof txHash !== "string") return null;
+
+    const logIndexRaw = item.logIndex;
+    const logIndex =
+      typeof logIndexRaw === "number"
+        ? logIndexRaw
+        : typeof logIndexRaw === "string"
+          ? parseInt(logIndexRaw, 16) || parseInt(logIndexRaw, 10) || 0
+          : 0;
+
+    const timeStampSec =
+      typeof item.timeStamp === "number"
+        ? item.timeStamp
+        : typeof item.timeStamp === "string"
+          ? parseInt(item.timeStamp, 16) || parseInt(item.timeStamp, 10)
+          : Number.NaN;
+    const itemMs = Number.isFinite(timeStampSec) ? timeStampSec * 1000 : Number.NaN;
+    const inWindow =
+      Number.isFinite(itemMs) &&
+      itemMs >= startsMs - 3600_000 &&
+      itemMs <= endsMs + 3600_000;
+    const observedAt = Number.isFinite(itemMs) ? new Date(itemMs).toISOString() : watch.starts_at;
+
+    const topics: string[] = Array.isArray(item.topics)
+      ? (item.topics.filter((t): t is string => typeof t === "string") as string[])
+      : ([item.topic0, item.topic1, item.topic2, item.topic3].filter(
+          (t): t is string => typeof t === "string" && Boolean(t),
+        ) as string[]);
+
+    const { from, to } = decodeTransferParties(topics);
+    const contractAddress =
+      typeof item.address === "string" && isAddress(item.address, { strict: false })
+        ? getAddress(item.address)
+        : watch.target_contract;
+    const blockNumber =
+      item.blockNumber != null
+        ? String(
+            typeof item.blockNumber === "string"
+              ? parseInt(item.blockNumber, 16) || item.blockNumber
+              : item.blockNumber,
+          )
+        : null;
+    const id = deterministicRpcEventId(txHash, logIndex);
+    const kind = watchTargetKind(watch);
+
+    const event: MonitoredEventRow = {
+      id,
+      source,
+      source_event_id: `${source === "etherscan_v2" ? "eth" : "rpc"}-${txHash}-${logIndex}`,
+      event_type: kind === "wallet" ? "wallet_transfer" : "large_swap",
+      chain_id: 11155111,
+      protocol: "Ethereum Sepolia",
+      asset_symbols: null,
+      magnitude: null,
+      transaction_hash: txHash,
+      observed_at: observedAt,
+      captured_at: nowIso,
+      significance_score: 0.75,
+      raw_payload: {
+        address: kind === "wallet" ? contractAddress : watch.target_contract,
+        logIndex,
+        topics,
+        data: item.data,
+        blockNumber,
+        source,
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        targetKind: kind,
+      },
+      status: "qualified",
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+    return { event, inWindow };
+  }
+
   async function collectRpcLogsForWindow(watch: SponsoredWatchRow): Promise<MonitoredEventRow[]> {
     const startsMs = new Date(watch.starts_at).getTime();
     const endsMs = new Date(watch.ends_at).getTime();
@@ -147,66 +297,59 @@ export function createSponsoredWatchService(params: {
 
     const nowIso = new Date().toISOString();
     const apiKey = process.env.ETHERSCAN_API_KEY?.trim();
+    const kind = watchTargetKind(watch);
+    const isWallet = kind === "wallet";
 
-    // 1. Try Etherscan V2 API first (Sepolia chainId 11155111) for fast & complete log retrieval
+    // 1. Try Etherscan V2 API first (Sepolia chainId 11155111)
     if (apiKey) {
       try {
-        const urlV2 = `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&address=${watch.target_contract}&page=1&offset=500&sort=desc&apikey=${apiKey}`;
-        const res = await fetch(urlV2, { signal: AbortSignal.timeout(10_000) });
-        const data: any = await res.json();
-        if (data && (data.status === "1" || data.message === "OK") && Array.isArray(data.result) && data.result.length > 0) {
-          const allEvents: MonitoredEventRow[] = [];
-          const windowEvents: MonitoredEventRow[] = [];
+        const urls: string[] = isWallet
+          ? [
+              // Transfer where wallet is `from` (topic1)
+              `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&topic0=${TRANSFER_EVENT_TOPIC0}&topic0_1_opr=and&topic1=${walletTopic(watch.target_contract)}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
+              // Transfer where wallet is `to` (topic2)
+              `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&topic0=${TRANSFER_EVENT_TOPIC0}&topic0_2_opr=and&topic2=${walletTopic(watch.target_contract)}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
+            ]
+          : [
+              `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&address=${watch.target_contract}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
+            ];
 
+        const allEvents: MonitoredEventRow[] = [];
+        const windowEvents: MonitoredEventRow[] = [];
+        const seen = new Set<string>();
+
+        for (const urlV2 of urls) {
+          const res = await fetch(urlV2, { signal: AbortSignal.timeout(10_000) });
+          const data = (await res.json()) as {
+            status?: string;
+            message?: string;
+            result?: Array<Record<string, unknown>>;
+          };
+          if (
+            !(data && (data.status === "1" || data.message === "OK") && Array.isArray(data.result))
+          ) {
+            continue;
+          }
           for (const item of data.result) {
-            const timeStampSec = parseInt(item.timeStamp, 16) || parseInt(item.timeStamp, 10);
-            const itemMs = timeStampSec * 1000;
-            const inWindow = Number.isFinite(itemMs) && itemMs >= startsMs - 3600_000 && itemMs <= endsMs + 3600_000;
-            const txHash = item.transactionHash;
-            const logIndex = parseInt(item.logIndex, 16) || parseInt(item.logIndex, 10) || 0;
-            const blockNumber = item.blockNumber ? String(parseInt(item.blockNumber, 16) || item.blockNumber) : null;
-            const observedAt = Number.isFinite(itemMs) ? new Date(itemMs).toISOString() : watch.starts_at;
-            const id = deterministicRpcEventId(txHash, logIndex);
-
-            const ev: MonitoredEventRow = {
-              id,
-              source: "etherscan_v2",
-              source_event_id: `eth-${txHash}-${logIndex}`,
-              event_type: "large_swap",
-              chain_id: 11155111,
-              protocol: "Ethereum Sepolia",
-              asset_symbols: null,
-              magnitude: null,
-              transaction_hash: txHash,
-              observed_at: observedAt,
-              captured_at: nowIso,
-              significance_score: 0.75,
-              raw_payload: {
-                address: watch.target_contract,
-                logIndex,
-                topics: [item.topic0, item.topic1, item.topic2, item.topic3].filter(Boolean),
-                data: item.data,
-                blockNumber,
-                source: "etherscan_v2",
-              },
-              status: "qualified",
-              created_at: nowIso,
-              updated_at: nowIso,
-            };
-
-            allEvents.push(ev);
-            if (inWindow) {
-              windowEvents.push(ev);
-            }
-          }
-
-          if (windowEvents.length > 0) {
-            return windowEvents;
-          }
-          if (allEvents.length > 0) {
-            return allEvents.slice(0, 500);
+            const mapped = mapLogItemToEvent(
+              item as Parameters<typeof mapLogItemToEvent>[0],
+              watch,
+              "etherscan_v2",
+              nowIso,
+              startsMs,
+              endsMs,
+            );
+            if (!mapped) continue;
+            const key = `${mapped.event.transaction_hash}:${(mapped.event.raw_payload as { logIndex?: number }).logIndex ?? 0}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            allEvents.push(mapped.event);
+            if (mapped.inWindow) windowEvents.push(mapped.event);
           }
         }
+
+        if (windowEvents.length > 0) return windowEvents;
+        if (allEvents.length > 0) return allEvents.slice(0, MAX_RPC_EVENTS_PER_WATCH);
       } catch (etherscanErr) {
         console.warn(
           `[sponsored-watch] Etherscan V2 log fetch failed for ${watch.id}, falling back to chunked RPC:`,
@@ -224,7 +367,35 @@ export function createSponsoredWatchService(params: {
       "https://sepolia.drpc.org",
     ].filter((u): u is string => Boolean(u));
 
-    let rawLogs: any[] = [];
+    type NormalizedRpcLog = {
+      transactionHash: string;
+      logIndex: number;
+      blockNumber?: bigint | number;
+      topics: readonly string[] | string[];
+      data?: string;
+      address?: string;
+    };
+
+    function normalizeRpcLog(log: {
+      transactionHash?: string | null;
+      logIndex?: number | null;
+      blockNumber?: bigint | number | null;
+      topics?: readonly string[] | string[] | null;
+      data?: string | null;
+      address?: string | null;
+    }): NormalizedRpcLog | null {
+      if (!log.transactionHash || log.logIndex == null) return null;
+      return {
+        transactionHash: log.transactionHash,
+        logIndex: log.logIndex,
+        ...(log.blockNumber != null ? { blockNumber: log.blockNumber } : {}),
+        topics: log.topics ?? [],
+        ...(log.data ? { data: log.data } : {}),
+        ...(log.address ? { address: log.address } : {}),
+      };
+    }
+
+    let rawLogs: NormalizedRpcLog[] = [];
     let rpcCalls = 0;
 
     for (const rpcUrl of rpcUrls) {
@@ -256,7 +427,17 @@ export function createSponsoredWatchService(params: {
           fromBlock = toBlock - MAX_RPC_BLOCK_SPAN;
         }
 
-        const chunkLogs: any[] = [];
+        const chunkLogs: NormalizedRpcLog[] = [];
+        const seenLog = new Set<string>();
+        const pushLog = (log: Parameters<typeof normalizeRpcLog>[0]): void => {
+          const normalized = normalizeRpcLog(log);
+          if (!normalized) return;
+          const key = `${normalized.transactionHash}:${normalized.logIndex}`;
+          if (seenLog.has(key)) return;
+          seenLog.add(key);
+          chunkLogs.push(normalized);
+        };
+
         for (
           let chunkFrom = fromBlock;
           chunkFrom <= toBlock && rpcCalls < MAX_RPC_CALLS_PER_WATCH;
@@ -267,13 +448,36 @@ export function createSponsoredWatchService(params: {
               ? toBlock
               : chunkFrom + RPC_LOG_CHUNK_SIZE - 1n;
           try {
-            rpcCalls += 1;
-            const fetched = await client.getLogs({
-              address: watch.target_contract as `0x${string}`,
-              fromBlock: chunkFrom,
-              toBlock: chunkTo,
-            });
-            chunkLogs.push(...fetched);
+            if (isWallet) {
+              // Two queries: Transfer from wallet + Transfer to wallet.
+              // Cast filter: viem's getLogs overload for raw topic filters is narrow.
+              const topicWallet = walletTopic(watch.target_contract);
+              const transferTopic = TRANSFER_EVENT_TOPIC0 as `0x${string}`;
+              rpcCalls += 1;
+              const fromLogs = await client.getLogs({
+                fromBlock: chunkFrom,
+                toBlock: chunkTo,
+                topics: [transferTopic, topicWallet],
+              } as Parameters<typeof client.getLogs>[0]);
+              for (const log of fromLogs) pushLog(log);
+              if (rpcCalls < MAX_RPC_CALLS_PER_WATCH) {
+                rpcCalls += 1;
+                const toLogs = await client.getLogs({
+                  fromBlock: chunkFrom,
+                  toBlock: chunkTo,
+                  topics: [transferTopic, null, topicWallet],
+                } as Parameters<typeof client.getLogs>[0]);
+                for (const log of toLogs) pushLog(log);
+              }
+            } else {
+              rpcCalls += 1;
+              const fetched = await client.getLogs({
+                address: watch.target_contract as `0x${string}`,
+                fromBlock: chunkFrom,
+                toBlock: chunkTo,
+              });
+              for (const log of fetched) pushLog(log);
+            }
           } catch {
             // Ignore single chunk failure and continue
           }
@@ -287,33 +491,27 @@ export function createSponsoredWatchService(params: {
       }
     }
 
-    return rawLogs.slice(0, MAX_RPC_EVENTS_PER_WATCH).map((log) => {
-      const id = deterministicRpcEventId(log.transactionHash, log.logIndex);
-      return {
-        id,
-        source: "rpc_direct" as const,
-        source_event_id: `rpc-${log.transactionHash}-${log.logIndex}`,
-        event_type: "large_swap" as const,
-        chain_id: 11155111,
-        protocol: "Ethereum Sepolia",
-        asset_symbols: null,
-        magnitude: null,
-        transaction_hash: log.transactionHash,
-        observed_at: watch.starts_at,
-        captured_at: nowIso,
-        significance_score: 0.75,
-        raw_payload: {
-          address: watch.target_contract,
-          logIndex: log.logIndex,
-          topics: log.topics,
-          blockNumber: log.blockNumber?.toString?.() ?? String(log.blockNumber),
-          source: "rpc_direct",
-        },
-        status: "qualified" as const,
-        created_at: nowIso,
-        updated_at: nowIso,
-      };
-    });
+    return rawLogs
+      .slice(0, MAX_RPC_EVENTS_PER_WATCH)
+      .map((log) => {
+        const mapped = mapLogItemToEvent(
+          {
+            transactionHash: log.transactionHash,
+            logIndex: log.logIndex,
+            blockNumber: log.blockNumber != null ? String(log.blockNumber) : undefined,
+            topics: [...log.topics],
+            data: log.data,
+            address: log.address,
+          },
+          watch,
+          "rpc_direct",
+          nowIso,
+          startsMs,
+          endsMs,
+        );
+        return mapped?.event ?? null;
+      })
+      .filter((e): e is MonitoredEventRow => e != null);
   }
 
   async function collectMatchingEvents(
@@ -345,8 +543,9 @@ export function createSponsoredWatchService(params: {
             if (row.ok) loaded.push(row.value);
           }
         }
+        const kind = watchTargetKind(watch);
         const matchedPrior = loaded.filter((event) =>
-          eventMatchesTargetContract(event, watch.target_contract),
+          eventMatchesWatchTarget(event, watch.target_contract, kind),
         );
         if (matchedPrior.length > 0) {
           return matchedPrior;
@@ -363,8 +562,9 @@ export function createSponsoredWatchService(params: {
     if (!result.ok) {
       throw new Error(`Failed to load campaign events: ${result.error.message}`);
     }
+    const kind = watchTargetKind(watch);
     const dbMatched = result.value.filter((event) =>
-      eventMatchesTargetContract(event, watch.target_contract),
+      eventMatchesWatchTarget(event, watch.target_contract, kind),
     );
     if (dbMatched.length > 0) {
       return dbMatched;
@@ -457,16 +657,289 @@ export function createSponsoredWatchService(params: {
     return result.value;
   }
 
+  /**
+   * Near-realtime alert delivery (~60s cycle). Fires when a monitor tick finds
+   * new matched events vs prior source_event_ids.
+   * - public: create public_alert → publishAlert (registry + community Telegram)
+   * - private: Telegram DM to watch.telegram_chat_id only (no registry write)
+   *
+   * Returns true when the alert is considered delivered (or legitimately
+   * throttled) — the caller then commits the new source_event_ids cursor.
+   * Returns false on delivery failure so the caller keeps the old cursor and
+   * the next tick retries the same events.
+   */
+  async function deliverWatchAlert(
+    watch: SponsoredWatchRow,
+    newEvents: MonitoredEventRow[],
+  ): Promise<boolean> {
+    if (newEvents.length === 0) return true;
+
+    const visibility = watchVisibility(watch);
+    const kind = watchTargetKind(watch);
+    const primary = newEvents[0]!;
+    const now = new Date().toISOString();
+
+    const shortTarget = `${watch.target_contract.slice(0, 8)}…${watch.target_contract.slice(-6)}`;
+    const title =
+      kind === "wallet"
+        ? `Wallet watch alert — ${shortTarget}`
+        : `Contract watch alert — ${shortTarget}`;
+    const summary =
+      newEvents.length === 1
+        ? `Matched 1 on-chain event on ${kind} ${watch.target_contract} during the campaign window.`
+        : `Matched ${newEvents.length} on-chain events on ${kind} ${watch.target_contract} during the campaign window.`;
+    const sourceTx = primary.transaction_hash ?? null;
+    const sourceExplorer = sourceTx
+      ? `https://sepolia.etherscan.io/tx/${sourceTx}`
+      : null;
+
+    if (visibility === "private") {
+      const chatId = watch.telegram_chat_id?.trim();
+      if (!chatId || !notificationService) {
+        await execLogRepo.append({
+          action_type: "generate_alert",
+          entity_type: "sponsored_watch",
+          entity_id: watch.id,
+          status: "failed",
+          message: chatId
+            ? "Private watch alert skipped: Telegram send bot not configured"
+            : "Private watch alert skipped: no telegram_chat_id on watch",
+          details: {
+            visibility,
+            matchedEventCount: newEvents.length,
+            sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
+          },
+          started_at: now,
+          completed_at: now,
+        });
+        return false;
+      }
+
+      const text = [
+        `🔔 <b>ChronicleAI Private Watch</b>`,
+        `<b>${title.replace(/</g, "&lt;")}</b>`,
+        "",
+        summary.replace(/</g, "&lt;"),
+        sourceExplorer ? `Source: ${sourceExplorer}` : "",
+        frontendOrigin ? `Audit trail: ${frontendOrigin.replace(/\/$/, "")}/watch/${watch.id}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const delivery = await notificationService.sendTelegramToChat({
+        chatId,
+        text,
+        entityType: "sponsored_watch",
+        entityId: watch.id,
+      });
+
+      await execLogRepo.append({
+        action_type: "generate_alert",
+        entity_type: "sponsored_watch",
+        entity_id: watch.id,
+        status: delivery.delivered ? "succeeded" : "failed",
+        message: delivery.delivered
+          ? `Private watch alert delivered to Telegram (${newEvents.length} new event(s))`
+          : `Private watch alert failed: ${delivery.failures.join("; ") || "unknown"}`,
+        details: {
+          visibility: "private",
+          deliveryMode: "telegram_dm",
+          chatId,
+          matchedEventCount: newEvents.length,
+          sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
+          destinations: delivery.destinations,
+          failures: delivery.failures,
+          // Create/report txs stay onchain; private alerts intentionally skip registry.
+          registryWrite: false,
+        },
+        started_at: now,
+        completed_at: now,
+      });
+      return delivery.delivered;
+    }
+
+    // Public: publish through the existing alert pipeline (registry + community Telegram).
+    // Throttle: one delivery per watch per window — protects registry gas on
+    // busy wallets and keeps the community channel calm. Only the public path
+    // is throttled (private DMs have no gas cost and users opt in per-event).
+    // A failed delivery leaves last_alert_sent_at stale, so the throttle never
+    // blocks a retry.
+    const lastSentMs = watch.last_alert_sent_at
+      ? Date.parse(watch.last_alert_sent_at)
+      : Number.NaN;
+    if (Number.isFinite(lastSentMs) && Date.now() - lastSentMs < WATCH_ALERT_THROTTLE_MS) {
+      await execLogRepo.append({
+        action_type: "generate_alert",
+        entity_type: "sponsored_watch",
+        entity_id: watch.id,
+        status: "succeeded",
+        message: `Public watch alert throttled (last alert < ${WATCH_ALERT_THROTTLE_MS / 60_000} min ago); ${newEvents.length} new event(s) folded into the next delivery`,
+        details: {
+          visibility,
+          throttled: true,
+          matchedEventCount: newEvents.length,
+          sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
+        },
+        started_at: now,
+        completed_at: now,
+      });
+      return true;
+    }
+
+    if (!alertRepo || !alertPublicationService) {
+      // Soft fallback: community broadcast only when full pipeline is unavailable.
+      if (notificationService) {
+        await notificationService.sendAlertBroadcast({
+          alertId: watch.id,
+          title,
+          summary,
+          eventType: kind === "wallet" ? "wallet_transfer" : "contract_event",
+          sourceChainLabel: "Ethereum Sepolia",
+          sourceExplorerUrl: sourceExplorer,
+          contentUri: frontendOrigin
+            ? `${frontendOrigin.replace(/\/$/, "")}/watch/${watch.id}`
+            : undefined,
+        });
+      }
+      await execLogRepo.append({
+        action_type: "publish_alert",
+        entity_type: "sponsored_watch",
+        entity_id: watch.id,
+        status: "succeeded",
+        message: `Public watch alert broadcast (no alertRepo pipeline; ${newEvents.length} new event(s))`,
+        details: {
+          visibility: "public",
+          deliveryMode: "broadcast_only",
+          matchedEventCount: newEvents.length,
+          sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
+        },
+        started_at: now,
+        completed_at: now,
+      });
+      return true;
+    }
+
+    const dedupeKey = `sponsored-watch-alert:${watch.id}:${primary.id}`;
+    // Idempotent retry: a previous attempt may have created the alert row
+    // before publication failed. Reuse it (dedupe_key has a unique index)
+    // instead of re-inserting and hitting a unique violation forever.
+    const existingByKey =
+      typeof alertRepo.findByDedupeKey === "function"
+        ? await alertRepo.findByDedupeKey(dedupeKey)
+        : null;
+    const alertResult = existingByKey
+      ? { ok: true as const, value: existingByKey }
+      : await alertRepo.create({
+          monitored_event_id: UUID_RE.test(primary.id) ? primary.id : null,
+          title,
+          summary,
+          source_references: [
+            ...(sourceTx ? [sourceTx] : []),
+            `sponsored_watch:${watch.id}`,
+            ...newEvents
+              .slice(0, 5)
+              .map((e) => e.transaction_hash)
+              .filter((h): h is string => Boolean(h)),
+          ],
+          audience: "public",
+          delivery_status: "queued",
+          alert_kind: "market_event",
+          event_type: primary.event_type,
+          chain_id: primary.chain_id ?? 11155111,
+          publication_chain_id: 11155111,
+          transaction_hash: sourceTx,
+          confidence: "medium",
+          dedupe_key: dedupeKey,
+        });
+
+    if (!alertResult.ok) {
+      await execLogRepo.append({
+        action_type: "generate_alert",
+        entity_type: "sponsored_watch",
+        entity_id: watch.id,
+        status: "failed",
+        message: `Public watch alert create failed: ${alertResult.error.message}`,
+        details: { visibility: "public", error: alertResult.error.message },
+        started_at: now,
+        completed_at: now,
+      });
+      return false;
+    }
+
+    const publication = await alertPublicationService.publishAlert(
+      alertResult.value.id,
+      primary.id,
+    );
+
+    await execLogRepo.append({
+      action_type: "publish_alert",
+      entity_type: "sponsored_watch",
+      entity_id: watch.id,
+      status: publication.success ? "succeeded" : "failed",
+      message: publication.success
+        ? `Public watch alert published (${newEvents.length} new event(s))`
+        : `Public watch alert publish failed: ${publication.message}`,
+      details: {
+        visibility: "public",
+        deliveryMode: "registry_and_broadcast",
+        alertId: alertResult.value.id,
+        registryTxHash: publication.registryTxHash ?? null,
+        explorerUrl: publication.explorerUrl ?? null,
+        matchedEventCount: newEvents.length,
+        sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
+        registrySuspended: publication.registrySuspended ?? false,
+      },
+      started_at: now,
+      completed_at: now,
+    });
+    return publication.success;
+  }
+
   async function refreshMonitoring(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
     const matching = await collectMatchingEvents(watch);
     const sourceEventIds = matching.map((e) => e.id).filter((id) => UUID_RE.test(id));
+    const priorIds = new Set((watch.source_event_ids ?? []).filter((id) => UUID_RE.test(id)));
+    const newEvents = matching.filter((e) => UUID_RE.test(e.id) && !priorIds.has(e.id));
     const now = new Date().toISOString();
 
+    // Deliver-then-commit: only advance the alert cursor (source_event_ids +
+    // last_alert_sent_at) once delivery succeeds. On a transient Telegram or
+    // registry failure the old cursor is kept, so the next tick recomputes the
+    // same newEvents and retries instead of permanently dropping the alert.
+    let deliveryOk = true;
+    if (newEvents.length > 0) {
+      try {
+        deliveryOk = await deliverWatchAlert(watch, newEvents);
+      } catch (alertError) {
+        deliveryOk = false;
+        console.warn(
+          `[sponsored-watch] Alert delivery failed for ${watch.id}:`,
+          alertError instanceof Error ? alertError.message : alertError,
+        );
+        await execLogRepo.append({
+          action_type: "generate_alert",
+          entity_type: "sponsored_watch",
+          entity_id: watch.id,
+          status: "failed",
+          message: `Watch alert delivery error: ${
+            alertError instanceof Error ? alertError.message : String(alertError)
+          }`,
+          details: {
+            matchedEventCount: newEvents.length,
+            sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
+          },
+          started_at: now,
+          completed_at: new Date().toISOString(),
+        });
+      }
+    }
+
     const result = await watchRepo.update(watch.id, {
-      source_event_ids: sourceEventIds,
+      source_event_ids: deliveryOk ? sourceEventIds : [...priorIds],
       monitored_event_count: matching.length,
       last_monitored_at: now,
       status: "monitoring",
+      ...(newEvents.length > 0 && deliveryOk ? { last_alert_sent_at: now } : {}),
     });
     if (!result.ok) {
       throw new Error(`Failed to update monitoring state: ${result.error.message}`);
@@ -480,7 +953,11 @@ export function createSponsoredWatchService(params: {
       message: `Campaign monitor tick: ${matching.length} event(s) matched ${watch.target_contract}`,
       details: {
         targetContract: watch.target_contract,
+        targetKind: watchTargetKind(watch),
+        visibility: watchVisibility(watch),
         matchedEventCount: matching.length,
+        newEventCount: newEvents.length,
+        alertDelivered: newEvents.length > 0 ? deliveryOk : null,
         sourceEventIds: sourceEventIds.slice(0, 50),
         window: { startsAt: watch.starts_at, endsAt: watch.ends_at },
       },
@@ -488,7 +965,9 @@ export function createSponsoredWatchService(params: {
       completed_at: now,
     });
 
-    return result.value;
+    // Re-read so last_alert_sent_at (if set) is returned.
+    const refreshed = await watchRepo.findById(watch.id);
+    return refreshed.ok && refreshed.value ? refreshed.value : result.value;
   }
 
   function watchSpecFields(watch: SponsoredWatchRow): {
@@ -818,8 +1297,24 @@ export function createSponsoredWatchService(params: {
   }
 
   return {
-    async createSponsoredWatch({ targetContract, watchSpecHash, startsAt, endsAt }) {
+    async createSponsoredWatch({
+      targetContract,
+      watchSpecHash,
+      startsAt,
+      endsAt,
+      targetKind = "contract",
+      visibility = "public",
+      telegramChatId = null,
+    }) {
       const client = requireWeb3();
+      const resolvedKind: SponsoredWatchTargetKind =
+        targetKind === "wallet" ? "wallet" : "contract";
+      const resolvedVisibility: SponsoredWatchVisibility =
+        visibility === "private" ? "private" : "public";
+
+      if (resolvedVisibility === "private" && !telegramChatId?.trim()) {
+        throw new Error("Private sponsored watches require a resolved telegram_chat_id");
+      }
 
       const startsAtUnix = Math.floor(new Date(startsAt).getTime() / 1000);
       const endsAtUnix = Math.floor(new Date(endsAt).getTime() / 1000);
@@ -856,6 +1351,8 @@ export function createSponsoredWatchService(params: {
             watchSpecHash,
             startsAt,
             endsAt,
+            targetKind: resolvedKind,
+            visibility: resolvedVisibility,
             error_message: message,
           },
           started_at: new Date().toISOString(),
@@ -887,6 +1384,9 @@ export function createSponsoredWatchService(params: {
         monitored_event_count: 0,
         // Creation/activation is not a scan; the first cycle owns the initial lookup.
         last_monitored_at: null,
+        target_kind: resolvedKind,
+        visibility: resolvedVisibility,
+        telegram_chat_id: telegramChatId?.trim() || null,
       });
 
       if (!result.ok) {
@@ -899,11 +1399,14 @@ export function createSponsoredWatchService(params: {
         entity_id: result.value.id,
         status: "succeeded",
         message: createKeeperHubRunId
-          ? `Executed via KeeperHub (run ${createKeeperHubRunId}): sponsored watch created for ${targetContract}`
-          : `Sponsored watch created for contract ${targetContract}`,
+          ? `Executed via KeeperHub (run ${createKeeperHubRunId}): sponsored watch created for ${resolvedKind} ${targetContract}`
+          : `Sponsored watch created for ${resolvedKind} ${targetContract}`,
         details: {
           method: "createSponsoredWatch",
           targetContract,
+          targetKind: resolvedKind,
+          visibility: resolvedVisibility,
+          hasTelegramChatId: Boolean(telegramChatId?.trim()),
           watchSpecHash,
           startsAt,
           endsAt,

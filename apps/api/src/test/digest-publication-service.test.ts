@@ -87,6 +87,8 @@ describe("DigestPublicationService treasury gate", () => {
       sendDigestBroadcast,
       sendLowBalanceWarning,
       sendRevenueRoutingNotification: vi.fn(),
+      sendTelegramToChat: vi.fn(),
+      isTelegramSendConfigured: () => true,
       getConfiguredChannels: () => ({ telegram: true }),
     } satisfies NotificationService;
 

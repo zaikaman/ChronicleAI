@@ -92,6 +92,10 @@ describe("SponsoredWatchService", () => {
     report_analysis: null,
     last_monitored_at: null,
     monitored_event_count: 0,
+    target_kind: "contract" as const,
+    telegram_chat_id: null as string | null,
+    visibility: "public" as const,
+    last_alert_sent_at: null as string | null,
     status: "accepted",
     created_at: "2026-07-06T00:00:00.000Z",
     updated_at: "2026-07-06T00:00:00.000Z",
@@ -153,9 +157,58 @@ describe("SponsoredWatchService", () => {
           status: "monitoring",
           starts_at: startsAt,
           ends_at: endsAt,
+          target_kind: "contract",
+          visibility: "public",
         }),
       );
       expect(mockExecLogRepo.append).toHaveBeenCalled();
+    });
+
+    it("persists wallet + private fields when provided", async () => {
+      const startsAt = new Date(Date.now() - 60_000).toISOString();
+      const endsAt = new Date(Date.now() + 3_600_000).toISOString();
+      mockWatchRepo.create.mockResolvedValue({
+        ok: true,
+        value: {
+          ...mockWatchRow,
+          target_kind: "wallet",
+          visibility: "private",
+          telegram_chat_id: "777",
+          status: "monitoring",
+          starts_at: startsAt,
+          ends_at: endsAt,
+        },
+      });
+
+      await service.createSponsoredWatch({
+        targetContract: "0x1234567890abcdef1234567890abcdef12345678",
+        watchSpecHash: "0x" + "c".repeat(64),
+        startsAt,
+        endsAt,
+        targetKind: "wallet",
+        visibility: "private",
+        telegramChatId: "777",
+      });
+
+      expect(mockWatchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target_kind: "wallet",
+          visibility: "private",
+          telegram_chat_id: "777",
+        }),
+      );
+    });
+
+    it("rejects private watches without telegram chat id", async () => {
+      await expect(
+        service.createSponsoredWatch({
+          targetContract: "0x1234567890abcdef1234567890abcdef12345678",
+          watchSpecHash: "0x" + "c".repeat(64),
+          startsAt: "2026-07-06T00:00:00.000Z",
+          endsAt: "2026-07-28T00:00:00.000Z",
+          visibility: "private",
+        }),
+      ).rejects.toThrow(/telegram_chat_id/);
     });
 
     it("should throw when web3 client is not configured", async () => {
@@ -547,6 +600,517 @@ describe("SponsoredWatchService", () => {
       expect(updateArg.report_summary).not.toBe("...");
       // Must not re-publish on-chain when only repairing narrative
       expect(mockWeb3Client.publishSponsoredReport).not.toHaveBeenCalled();
+    });
+
+    it("private watch alerts Telegram only (no public_alert create)", async () => {
+      const privateWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "private" as const,
+        telegram_chat_id: "999001",
+        source_event_ids: [] as string[],
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+      const sendTelegramToChat = vi.fn().mockResolvedValue({
+        delivered: true,
+        destinations: ["telegram:999001"],
+        failures: [],
+      });
+      const alertCreate = vi.fn();
+      const publishAlert = vi.fn();
+
+      const privateService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat,
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: { create: alertCreate, findByDedupeKey: vi.fn().mockResolvedValue(null) } as never,
+        alertPublicationService: { publishAlert } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [privateWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      mockWatchRepo.update.mockImplementation(async (id: string, update: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...privateWatch, id, ...update },
+      }));
+      mockWatchRepo.findById.mockResolvedValue({
+        ok: true,
+        value: privateWatch,
+      });
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-priv",
+            event_type: "large_swap",
+            chain_id: 11155111,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "22".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: privateWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await privateService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+
+      expect(cycle.monitored).toBe(1);
+      expect(sendTelegramToChat).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "999001" }),
+      );
+      expect(alertCreate).not.toHaveBeenCalled();
+      expect(publishAlert).not.toHaveBeenCalled();
+      expect(mockExecLogRepo.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action_type: "generate_alert",
+          entity_id: privateWatch.id,
+          status: "succeeded",
+        }),
+      );
+    });
+
+    it("public watch creates alert and calls publishAlert (registry path)", async () => {
+      const publicWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "public" as const,
+        source_event_ids: [] as string[],
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+      const alertCreate = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { id: "alert-pub-1" },
+      });
+      const publishAlert = vi.fn().mockResolvedValue({
+        success: true,
+        deliveryStatus: "published",
+        message: "ok",
+        registryTxHash: "0x" + "ee".repeat(32),
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xee",
+      });
+
+      const publicService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat: vi.fn(),
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: { create: alertCreate, findByDedupeKey: vi.fn().mockResolvedValue(null) } as never,
+        alertPublicationService: { publishAlert } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [publicWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      mockWatchRepo.update.mockImplementation(async (id: string, update: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...publicWatch, id, ...update },
+      }));
+      mockWatchRepo.findById.mockResolvedValue({
+        ok: true,
+        value: publicWatch,
+      });
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-pub",
+            event_type: "large_swap",
+            chain_id: 11155111,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "33".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: publicWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await publicService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+
+      expect(cycle.monitored).toBe(1);
+      expect(alertCreate).toHaveBeenCalled();
+      expect(publishAlert).toHaveBeenCalledWith("alert-pub-1", newEventId);
+      expect(mockExecLogRepo.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action_type: "publish_alert",
+          status: "succeeded",
+        }),
+      );
+    });
+
+    it("throttles alert delivery when a watch alerted recently", async () => {
+      const recentlyAlertedWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "public" as const,
+        source_event_ids: [] as string[],
+        last_alert_sent_at: new Date().toISOString(), // within throttle window
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const alertCreate = vi.fn();
+      const publishAlert = vi.fn();
+
+      const throttledService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat: vi.fn(),
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: { create: alertCreate, findByDedupeKey: vi.fn().mockResolvedValue(null) } as never,
+        alertPublicationService: { publishAlert } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [recentlyAlertedWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      mockWatchRepo.update.mockImplementation(
+        async (id: string, update: Record<string, unknown>) => ({
+          ok: true,
+          value: { ...recentlyAlertedWatch, id, ...update },
+        }),
+      );
+      mockWatchRepo.findById.mockResolvedValue({
+        ok: true,
+        value: recentlyAlertedWatch,
+      });
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-throttle",
+            event_type: "large_swap",
+            chain_id: 11155111,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "44".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: recentlyAlertedWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await throttledService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+
+      expect(cycle.monitored).toBe(1);
+      // No registry write / publication while throttled.
+      expect(alertCreate).not.toHaveBeenCalled();
+      expect(publishAlert).not.toHaveBeenCalled();
+      // Events still fold into the cursor so they are not re-alerted later.
+      const updateArg = mockWatchRepo.update.mock.calls[0]?.[1] as {
+        source_event_ids?: string[];
+        last_alert_sent_at?: string;
+      };
+      expect(updateArg.source_event_ids).toContain(newEventId);
+      expect(updateArg.last_alert_sent_at).toBeTruthy();
+      expect(mockExecLogRepo.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action_type: "generate_alert",
+          status: "succeeded",
+          details: expect.objectContaining({ throttled: true }),
+        }),
+      );
+    });
+
+    it("reuses an existing alert row by dedupe key instead of re-inserting on retry", async () => {
+      const publicWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "public" as const,
+        source_event_ids: [] as string[],
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+      const existingAlert = { id: "alert-already-created" };
+      const alertCreate = vi.fn(); // must NOT be called — row already exists
+      const publishAlert = vi.fn().mockResolvedValue({
+        success: true,
+        deliveryStatus: "published",
+        message: "ok",
+        registryTxHash: "0x" + "ff".repeat(32),
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xff",
+      });
+
+      const reuseService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat: vi.fn(),
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: {
+          create: alertCreate,
+          findByDedupeKey: vi.fn().mockResolvedValue(existingAlert),
+        } as never,
+        alertPublicationService: { publishAlert } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [publicWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      mockWatchRepo.update.mockImplementation(
+        async (id: string, update: Record<string, unknown>) => ({
+          ok: true,
+          value: { ...publicWatch, id, ...update },
+        }),
+      );
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: publicWatch });
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-reuse",
+            event_type: "large_swap",
+            chain_id: 11155111,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "66".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: publicWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await reuseService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+
+      expect(cycle.monitored).toBe(1);
+      expect(alertCreate).not.toHaveBeenCalled();
+      // Publication is retried on the existing row and the cursor advances.
+      expect(publishAlert).toHaveBeenCalledWith("alert-already-created", newEventId);
+      const updateArg = mockWatchRepo.update.mock.calls[0]?.[1] as {
+        source_event_ids?: string[];
+      };
+      expect(updateArg.source_event_ids).toContain(newEventId);
+    });
+
+    it("retries failed alert delivery without committing the cursor", async () => {
+      const privateWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "private" as const,
+        telegram_chat_id: "999002",
+        source_event_ids: [] as string[],
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+      // First delivery fails (transient Telegram error), second succeeds.
+      const sendTelegramToChat = vi
+        .fn()
+        .mockResolvedValueOnce({
+          delivered: false,
+          destinations: [],
+          failures: ["telegram:chat not found"],
+        })
+        .mockResolvedValueOnce({
+          delivered: true,
+          destinations: ["telegram:999002"],
+          failures: [],
+        });
+
+      const retryService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat,
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: {
+          create: vi.fn(),
+          findByDedupeKey: vi.fn().mockResolvedValue(null),
+        } as never,
+        alertPublicationService: { publishAlert: vi.fn() } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [privateWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      // findById keeps returning the *original* row (cursor never advances).
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: privateWatch });
+      mockWatchRepo.update.mockImplementation(
+        async (id: string, update: Record<string, unknown>) => ({
+          ok: true,
+          value: { ...privateWatch, id, ...update },
+        }),
+      );
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-retry",
+            event_type: "large_swap",
+            chain_id: 11155111,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "55".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: privateWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const first = await retryService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+      const second = await retryService.processCampaignCycle(
+        new Date("2026-07-10T12:01:00.000Z"),
+      );
+
+      expect(first.monitored).toBe(1);
+      expect(second.monitored).toBe(1);
+      // Failed delivery did not advance the cursor → same events re-delivered.
+      expect(sendTelegramToChat).toHaveBeenCalledTimes(2);
+      // The failed tick kept prior source_event_ids and did not set the alert cursor.
+      const failedUpdate = mockWatchRepo.update.mock.calls[0]?.[1] as {
+        source_event_ids?: string[];
+        last_alert_sent_at?: string;
+      };
+      expect(failedUpdate.source_event_ids).toEqual([]);
+      expect(failedUpdate.last_alert_sent_at).toBeUndefined();
+      // The successful tick finally committed the cursor.
+      const okUpdate = mockWatchRepo.update.mock.calls[1]?.[1] as {
+        source_event_ids?: string[];
+        last_alert_sent_at?: string;
+      };
+      expect(okUpdate.source_event_ids).toContain(newEventId);
+      expect(okUpdate.last_alert_sent_at).toBeTruthy();
     });
   });
 });

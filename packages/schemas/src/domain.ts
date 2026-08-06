@@ -13,7 +13,8 @@ export type EventType =
   | "protocol_deposit"
   | "protocol_withdraw"
   | "stablecoin_mint"
-  | "stablecoin_burn";
+  | "stablecoin_burn"
+  | "wallet_transfer"; // wallet watch Transfer events (ChronicleAI Watch)
 
 export const EVENT_TYPES: readonly EventType[] = [
   "large_swap",
@@ -28,6 +29,7 @@ export const EVENT_TYPES: readonly EventType[] = [
   "protocol_withdraw",
   "stablecoin_mint",
   "stablecoin_burn",
+  "wallet_transfer",
 ] as const;
 
 // ── Flow enrichment (capital-direction context) ─────────

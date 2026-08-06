@@ -86,6 +86,8 @@ describe("AlertPublicationService community broadcast", () => {
       sendDigestBroadcast: vi.fn(),
       sendLowBalanceWarning: vi.fn(),
       sendRevenueRoutingNotification: vi.fn(),
+      sendTelegramToChat: vi.fn(),
+      isTelegramSendConfigured: () => true,
       getConfiguredChannels: () => ({ telegram: true }),
     } satisfies NotificationService;
 
@@ -135,6 +137,8 @@ describe("AlertPublicationService community broadcast", () => {
       sendDigestBroadcast: vi.fn(),
       sendLowBalanceWarning: vi.fn(),
       sendRevenueRoutingNotification: vi.fn(),
+      sendTelegramToChat: vi.fn(),
+      isTelegramSendConfigured: () => true,
       getConfiguredChannels: () => ({ telegram: true }),
     } satisfies NotificationService;
 
@@ -262,6 +266,8 @@ describe("AlertPublicationService community broadcast", () => {
       sendDigestBroadcast: vi.fn(),
       sendLowBalanceWarning,
       sendRevenueRoutingNotification: vi.fn(),
+      sendTelegramToChat: vi.fn(),
+      isTelegramSendConfigured: () => false,
       getConfiguredChannels: () => ({ telegram: false }),
     } satisfies NotificationService;
 

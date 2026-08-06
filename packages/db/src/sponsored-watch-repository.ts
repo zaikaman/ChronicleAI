@@ -27,8 +27,13 @@ export interface SponsoredWatchRepository {
   create(watch: SponsoredWatchInsert): Promise<Result<SponsoredWatchRow>>;
   findById(id: string): Promise<Result<SponsoredWatchRow | null>>;
   list(): Promise<Result<SponsoredWatchRow[]>>;
-  /** Page-based public campaign list (newest first). */
-  listPage(params?: PaginationParams): Promise<Result<PaginatedResult<SponsoredWatchRow>>>;
+  /**
+   * Page-based campaign list (newest first).
+   * Defaults to public watches only — private watches stay out of public trails.
+   */
+  listPage(
+    params?: PaginationParams & { visibility?: "public" | "private" | "all" },
+  ): Promise<Result<PaginatedResult<SponsoredWatchRow>>>;
   listActive(limit?: number): Promise<Result<SponsoredWatchRow[]>>;
   /** Watches past ends_at that still need report generation / publish. */
   listDueForCompletion(nowIso?: string, limit?: number): Promise<Result<SponsoredWatchRow[]>>;
@@ -83,8 +88,12 @@ export function createSponsoredWatchRepository(supabase: SupabaseClient): Sponso
         defaultLimit: 20,
         maxLimit: 100,
       });
-      const { data, error, count } = await table()
-        .select("*", { count: "exact" })
+      const visibility = params?.visibility ?? "public";
+      let query = table().select("*", { count: "exact" });
+      if (visibility !== "all") {
+        query = query.eq("visibility", visibility);
+      }
+      const { data, error, count } = await query
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
 

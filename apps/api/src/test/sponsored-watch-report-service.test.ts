@@ -6,7 +6,9 @@ import {
   buildSourceEventRoot,
   createSponsoredWatchReportService,
   eventMatchesTargetContract,
+  eventMatchesWallet,
   isPlaceholderSponsoredReport,
+  TRANSFER_EVENT_TOPIC0,
 } from "../services/sponsored-watch-report-service.ts";
 
 const TARGET = "0x1234567890abcdef1234567890abcdef12345678";
@@ -57,6 +59,38 @@ describe("sponsored-watch-report-service", () => {
     });
     expect(eventMatchesTargetContract(match, TARGET)).toBe(true);
     expect(eventMatchesTargetContract(miss, TARGET)).toBe(false);
+  });
+
+  it("matches wallet Transfer topics from/to", () => {
+    const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+    const padded = `0x${"0".repeat(24)}${wallet.slice(2).toLowerCase()}`;
+    const fromMatch = event({
+      id: "w1",
+      raw_payload: {
+        topics: [TRANSFER_EVENT_TOPIC0, padded, `0x${"0".repeat(64)}`],
+      },
+    });
+    const toMatch = event({
+      id: "w2",
+      raw_payload: {
+        topics: [TRANSFER_EVENT_TOPIC0, `0x${"0".repeat(64)}`, padded],
+        from: "0x0000000000000000000000000000000000000001",
+        to: wallet,
+      },
+    });
+    const miss = event({
+      id: "w3",
+      raw_payload: {
+        topics: [
+          TRANSFER_EVENT_TOPIC0,
+          `0x${"0".repeat(64)}`,
+          `0x${"0".repeat(24)}${"11".repeat(20)}`,
+        ],
+      },
+    });
+    expect(eventMatchesWallet(fromMatch, wallet)).toBe(true);
+    expect(eventMatchesWallet(toMatch, wallet)).toBe(true);
+    expect(eventMatchesWallet(miss, wallet)).toBe(false);
   });
 
   it("generates a report with sourceEventRoot and reportContentHash", async () => {

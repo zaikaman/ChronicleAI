@@ -22,6 +22,50 @@ export interface SponsoredMonitorContentPrivate {
   durationDays?: number;
   /** Optional short-demo duration in hours (takes precedence over durationDays). */
   durationHours?: number;
+  /** contract (default) or wallet — wallet watches match Transfer from/to. */
+  targetKind?: "contract" | "wallet";
+  /** public (default) or private alert delivery. */
+  visibility?: "public" | "private";
+  /** One-time Telegram binding code (committed in watchSpec, resolved at settle). */
+  telegramBindingCode?: string;
+}
+
+/** Resolve target kind from content_private (top-level or nested watchSpec). */
+export function resolveTargetKind(
+  content: SponsoredMonitorContentPrivate,
+): "contract" | "wallet" {
+  const fromSpec =
+    content.watchSpec && typeof content.watchSpec.targetKind === "string"
+      ? content.watchSpec.targetKind
+      : undefined;
+  const raw = content.targetKind ?? fromSpec;
+  return raw === "wallet" ? "wallet" : "contract";
+}
+
+/** Resolve visibility from content_private (top-level or nested watchSpec). */
+export function resolveVisibility(
+  content: SponsoredMonitorContentPrivate,
+): "public" | "private" {
+  const fromSpec =
+    content.watchSpec && typeof content.watchSpec.visibility === "string"
+      ? content.watchSpec.visibility
+      : undefined;
+  const raw = content.visibility ?? fromSpec;
+  return raw === "private" ? "private" : "public";
+}
+
+/** Resolve optional Telegram binding code from content_private. */
+export function resolveTelegramBindingCode(
+  content: SponsoredMonitorContentPrivate,
+): string | undefined {
+  const fromSpec =
+    content.watchSpec && typeof content.watchSpec.telegramBindingCode === "string"
+      ? content.watchSpec.telegramBindingCode
+      : undefined;
+  const raw = content.telegramBindingCode ?? fromSpec;
+  if (!raw || typeof raw !== "string") return undefined;
+  const trimmed = raw.trim().toUpperCase();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 /**

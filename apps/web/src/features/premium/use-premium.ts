@@ -307,6 +307,9 @@ export interface SponsoredWatchSummary {
   sourceEventRoot?: string;
   startsAt: string;
   endsAt: string;
+  targetKind?: "contract" | "wallet";
+  visibility?: "public" | "private";
+  lastAlertSentAt?: string;
   [key: string]: unknown;
 }
 
