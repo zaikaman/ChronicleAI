@@ -22,9 +22,14 @@ import { buildSponsoredReportContentUri } from "./content-uri.ts";
 import type { NotificationService } from "./notification-service.ts";
 import {
   createSponsoredWatchReportService,
+  decodeTransferAmount,
+  describeWatchEvent,
   eventMatchesWatchTarget,
+  humanizeTokenAmount,
   isPlaceholderSponsoredReport,
   TRANSFER_EVENT_TOPIC0,
+  WATCH_MONITOR_CHAIN_ID,
+  WATCH_TOKEN_META,
   type SponsoredWatchReportService,
 } from "./sponsored-watch-report-service.ts";
 import type { Web3Client } from "./web3-client-service.ts";
@@ -257,15 +262,34 @@ export function createSponsoredWatchService(params: {
     const id = deterministicRpcEventId(txHash, logIndex);
     const kind = watchTargetKind(watch);
 
+    const amount = decodeTransferAmount(item.data);
+    const tokenMeta = contractAddress
+      ? WATCH_TOKEN_META[contractAddress.toLowerCase()]
+      : undefined;
+    let assetSymbols: string[] | null = null;
+    let magnitude: Record<string, unknown> | null = null;
+    if (amount !== null && tokenMeta) {
+      assetSymbols = [tokenMeta.symbol];
+      // Derive the human amount from the exact humanized string so WETH-scale
+      // values (10^18+) never lose precision through Number(bigint).
+      const human = parseFloat(
+        humanizeTokenAmount(amount, tokenMeta.decimals).replace(/,/g, ""),
+      );
+      magnitude = {
+        value: Number.isFinite(human) ? Math.round(human * 100) / 100 : 0,
+        unit: tokenMeta.isStableUsd ? "USD" : tokenMeta.symbol,
+      };
+    }
+
     const event: MonitoredEventRow = {
       id,
       source,
       source_event_id: `${source === "etherscan_v2" ? "eth" : "rpc"}-${txHash}-${logIndex}`,
       event_type: kind === "wallet" ? "wallet_transfer" : "large_swap",
-      chain_id: 11155111,
-      protocol: "Ethereum Sepolia",
-      asset_symbols: null,
-      magnitude: null,
+      chain_id: WATCH_MONITOR_CHAIN_ID,
+      protocol: "Ethereum Mainnet",
+      asset_symbols: assetSymbols,
+      magnitude: magnitude,
       transaction_hash: txHash,
       observed_at: observedAt,
       captured_at: nowIso,
@@ -280,6 +304,7 @@ export function createSponsoredWatchService(params: {
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
         targetKind: kind,
+        ...(amount !== null ? { amountRaw: amount.toString() } : {}),
       },
       status: "qualified",
       created_at: nowIso,
@@ -300,18 +325,18 @@ export function createSponsoredWatchService(params: {
     const kind = watchTargetKind(watch);
     const isWallet = kind === "wallet";
 
-    // 1. Try Etherscan V2 API first (Sepolia chainId 11155111)
+    // 1. Try Etherscan V2 API first (Mainnet chainId 1)
     if (apiKey) {
       try {
         const urls: string[] = isWallet
           ? [
               // Transfer where wallet is `from` (topic1)
-              `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&topic0=${TRANSFER_EVENT_TOPIC0}&topic0_1_opr=and&topic1=${walletTopic(watch.target_contract)}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
+              `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs&topic0=${TRANSFER_EVENT_TOPIC0}&topic0_1_opr=and&topic1=${walletTopic(watch.target_contract)}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
               // Transfer where wallet is `to` (topic2)
-              `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&topic0=${TRANSFER_EVENT_TOPIC0}&topic0_2_opr=and&topic2=${walletTopic(watch.target_contract)}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
+              `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs&topic0=${TRANSFER_EVENT_TOPIC0}&topic0_2_opr=and&topic2=${walletTopic(watch.target_contract)}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
             ]
           : [
-              `https://api.etherscan.io/v2/api?chainid=11155111&module=logs&action=getLogs&address=${watch.target_contract}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
+              `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs&address=${watch.target_contract}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
             ];
 
         const allEvents: MonitoredEventRow[] = [];
@@ -359,12 +384,13 @@ export function createSponsoredWatchService(params: {
     }
 
     // 2. Fallback to Viem RPC with <=45 block chunking across multi-RPC providers
+    // Mainnet only: MAINNET_RPC_URL must never fall back to the Sepolia RPC_URL.
     const { createPublicClient, http } = await import("viem");
-    const { sepolia } = await import("viem/chains");
+    const { mainnet } = await import("viem/chains");
     const rpcUrls = [
-      process.env.RPC_URL,
-      "https://1rpc.io/sepolia",
-      "https://sepolia.drpc.org",
+      process.env.MAINNET_RPC_URL,
+      "https://1rpc.io/eth",
+      "https://eth.drpc.org",
     ].filter((u): u is string => Boolean(u));
 
     type NormalizedRpcLog = {
@@ -402,19 +428,19 @@ export function createSponsoredWatchService(params: {
       if (rpcCalls >= MAX_RPC_CALLS_PER_WATCH) break;
       try {
         const client = createPublicClient({
-          chain: sepolia,
+          chain: mainnet,
           transport: http(rpcUrl, { timeout: 10_000 }),
         });
         rpcCalls += 1;
         const latest = await client.getBlock();
         const latestTs = Number(latest.timestamp);
         const latestBlock = latest.number;
-        const SEPOLIA_BLOCK_SECONDS = 12;
+        const MAINNET_BLOCK_SECONDS = 12;
         const blocksFromEnd = BigInt(
-          Math.max(0, Math.ceil((latestTs - endsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
+          Math.max(0, Math.ceil((latestTs - endsMs / 1000) / MAINNET_BLOCK_SECONDS)),
         );
         const blocksFromStart = BigInt(
-          Math.max(0, Math.ceil((latestTs - startsMs / 1000) / SEPOLIA_BLOCK_SECONDS)),
+          Math.max(0, Math.ceil((latestTs - startsMs / 1000) / MAINNET_BLOCK_SECONDS)),
         );
         let toBlock = latestBlock > blocksFromEnd ? latestBlock - blocksFromEnd : 0n;
         let fromBlock = latestBlock > blocksFromStart ? latestBlock - blocksFromStart : 0n;
@@ -684,13 +710,20 @@ export function createSponsoredWatchService(params: {
       kind === "wallet"
         ? `Wallet watch alert — ${shortTarget}`
         : `Contract watch alert — ${shortTarget}`;
+    const detailLines = newEvents
+      .slice(0, 5)
+      .map((e) => describeWatchEvent(e, kind, watch.target_contract));
+    const summaryDetail =
+      detailLines.length === 1 ? detailLines[0] : detailLines.join(" · ");
     const summary =
       newEvents.length === 1
-        ? `Matched 1 on-chain event on ${kind} ${watch.target_contract} during the campaign window.`
-        : `Matched ${newEvents.length} on-chain events on ${kind} ${watch.target_contract} during the campaign window.`;
+        ? `Matched 1 on-chain event on ${kind} ${watch.target_contract}: ${summaryDetail}`
+        : `Matched ${newEvents.length} on-chain events on ${kind} ${watch.target_contract}: ${summaryDetail}${
+            newEvents.length > 5 ? ` (+${newEvents.length - 5} more)` : ""
+          }`;
     const sourceTx = primary.transaction_hash ?? null;
     const sourceExplorer = sourceTx
-      ? `https://sepolia.etherscan.io/tx/${sourceTx}`
+      ? `https://etherscan.io/tx/${sourceTx}`
       : null;
 
     if (visibility === "private") {
@@ -720,6 +753,9 @@ export function createSponsoredWatchService(params: {
         `<b>${title.replace(/</g, "&lt;")}</b>`,
         "",
         summary.replace(/</g, "&lt;"),
+        "",
+        "Details:",
+        ...detailLines.map((line) => `• ${line.replace(/</g, "&lt;")}`),
         sourceExplorer ? `Source: ${sourceExplorer}` : "",
         frontendOrigin ? `Audit trail: ${frontendOrigin.replace(/\/$/, "")}/watch/${watch.id}` : "",
       ]
@@ -794,7 +830,7 @@ export function createSponsoredWatchService(params: {
           title,
           summary,
           eventType: kind === "wallet" ? "wallet_transfer" : "contract_event",
-          sourceChainLabel: "Ethereum Sepolia",
+          sourceChainLabel: "Ethereum Mainnet",
           sourceExplorerUrl: sourceExplorer,
           contentUri: frontendOrigin
             ? `${frontendOrigin.replace(/\/$/, "")}/watch/${watch.id}`
@@ -845,8 +881,8 @@ export function createSponsoredWatchService(params: {
           delivery_status: "queued",
           alert_kind: "market_event",
           event_type: primary.event_type,
-          chain_id: primary.chain_id ?? 11155111,
-          publication_chain_id: 11155111,
+          chain_id: primary.chain_id ?? WATCH_MONITOR_CHAIN_ID,
+          publication_chain_id: WATCH_MONITOR_CHAIN_ID,
           transaction_hash: sourceTx,
           confidence: "medium",
           dedupe_key: dedupeKey,

@@ -316,6 +316,10 @@ export function WatchRequestForm({
           writes an on-chain acceptance receipt, monitors the window, alerts you on Telegram, then
           publishes a final report with a second registry transaction.
         </p>
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-frame px-3 py-1 text-xs font-medium text-muted-foreground">
+          <span aria-hidden="true">🌐</span> Monitors Ethereum Mainnet · paid in USDC
+          (x402)
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -341,8 +345,8 @@ export function WatchRequestForm({
           </div>
           <span className="text-xs text-muted-foreground">
             {targetKind === "wallet"
-              ? "Matches ERC-20 Transfer events where this wallet is from or to."
-              : "Protocol = contract address + optional label in the description."}
+              ? "Matches ERC-20 Transfer events on Ethereum Mainnet where this wallet is from or to."
+              : "Protocol = contract address + optional label in the description. Monitored on Ethereum Mainnet."}
           </span>
         </div>
 

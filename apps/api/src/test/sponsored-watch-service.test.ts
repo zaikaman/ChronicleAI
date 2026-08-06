@@ -504,7 +504,7 @@ describe("SponsoredWatchService", () => {
             source: "keeperhub",
             source_event_id: "src-1",
             event_type: "large_swap",
-            chain_id: 11155111,
+            chain_id: 1,
             protocol: "uniswap",
             asset_symbols: ["USDC", "WETH"],
             magnitude: { value: 250000, unit: "USD" },
@@ -571,7 +571,7 @@ describe("SponsoredWatchService", () => {
             source: "keeperhub",
             source_event_id: "src-1",
             event_type: "large_swap",
-            chain_id: 11155111,
+            chain_id: 1,
             protocol: "uniswap",
             asset_symbols: ["USDC"],
             magnitude: { value: 100000, unit: "USD" },
@@ -666,7 +666,7 @@ describe("SponsoredWatchService", () => {
             source: "keeperhub",
             source_event_id: "src-priv",
             event_type: "large_swap",
-            chain_id: 11155111,
+            chain_id: 1,
             protocol: "uniswap",
             asset_symbols: ["USDC"],
             magnitude: null,
@@ -699,6 +699,95 @@ describe("SponsoredWatchService", () => {
           status: "succeeded",
         }),
       );
+    });
+
+    it("private wallet watch DM includes decoded token amount and direction", async () => {
+      const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+      const privateWatch = {
+        ...mockWatchRow,
+        target_kind: "wallet" as const,
+        target_contract: wallet,
+        status: "monitoring",
+        visibility: "private" as const,
+        telegram_chat_id: "999002",
+        source_event_ids: [] as string[],
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const sendTelegramToChat = vi.fn().mockResolvedValue({
+        delivered: true,
+        destinations: ["telegram:999002"],
+        failures: [],
+      });
+      const walletService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat,
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [privateWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.update.mockImplementation(async (id: string, update: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...privateWatch, id, ...update },
+      }));
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: privateWatch });
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-wallet-usdc",
+            event_type: "wallet_transfer",
+            chain_id: 1,
+            protocol: "Ethereum Mainnet",
+            asset_symbols: ["USDC"],
+            magnitude: { value: 12500, unit: "USD" },
+            transaction_hash: "0x" + "33".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: {
+              address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              from: "0x1111111111111111111111111111111111111111",
+              to: wallet,
+              amountRaw: "12500000000",
+              tokenSymbol: "USDC",
+            },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await walletService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+
+      expect(cycle.monitored).toBe(1);
+      expect(sendTelegramToChat).toHaveBeenCalledTimes(1);
+      const callArg = sendTelegramToChat.mock.calls[0]?.[0] as { text?: string };
+      expect(callArg.text).toContain("12,500 USDC received from");
+      expect(callArg.text).toContain("Details:");
     });
 
     it("public watch creates alert and calls publishAlert (registry path)", async () => {
@@ -768,7 +857,7 @@ describe("SponsoredWatchService", () => {
             source: "keeperhub",
             source_event_id: "src-pub",
             event_type: "large_swap",
-            chain_id: 11155111,
+            chain_id: 1,
             protocol: "uniswap",
             asset_symbols: ["USDC"],
             magnitude: null,
@@ -860,7 +949,7 @@ describe("SponsoredWatchService", () => {
             source: "keeperhub",
             source_event_id: "src-throttle",
             event_type: "large_swap",
-            chain_id: 11155111,
+            chain_id: 1,
             protocol: "uniswap",
             asset_symbols: ["USDC"],
             magnitude: null,
@@ -967,7 +1056,7 @@ describe("SponsoredWatchService", () => {
             source: "keeperhub",
             source_event_id: "src-reuse",
             event_type: "large_swap",
-            chain_id: 11155111,
+            chain_id: 1,
             protocol: "uniswap",
             asset_symbols: ["USDC"],
             magnitude: null,
@@ -1070,7 +1159,7 @@ describe("SponsoredWatchService", () => {
             source: "keeperhub",
             source_event_id: "src-retry",
             event_type: "large_swap",
-            chain_id: 11155111,
+            chain_id: 1,
             protocol: "uniswap",
             asset_symbols: ["USDC"],
             magnitude: null,

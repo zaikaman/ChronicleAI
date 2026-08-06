@@ -56,7 +56,7 @@ export interface SponsoredWatchReportService {
   generateReport(input: SponsoredWatchReportInput): Promise<SponsoredWatchReportContent>;
 }
 
-function formatEventLine(event: MonitoredEventRow): string {
+export function formatEventLine(event: MonitoredEventRow): string {
   const parts: string[] = [event.event_type.replace(/_/g, " ")];
   if (event.protocol) parts.push(`on ${event.protocol}`);
   if (event.asset_symbols?.length) parts.push(`(${event.asset_symbols.join("/")})`);
@@ -70,6 +70,114 @@ function formatEventLine(event: MonitoredEventRow): string {
     parts.push(`tx ${event.transaction_hash.slice(0, 10)}…`);
   }
   return parts.join(" ");
+}
+
+/**
+ * ERC-20 token metadata used to pretty-print sponsored-watch amounts.
+ * Monitoring is Ethereum Mainnet (chainId 1) — see WATCH_MONITOR_CHAIN_ID.
+ * Only tokens verified in this repo (event-normalizer.ts) are listed; unknown
+ * tokens fall back to a short-address label so the alert never fabricates a
+ * symbol.
+ */
+export const WATCH_TOKEN_META: Record<
+  string,
+  { symbol: string; decimals: number; isStableUsd?: boolean }
+> = {
+  "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": { symbol: "USDC", decimals: 6, isStableUsd: true },
+  "0xdac17f958d2ee523a2206206994597c13d831ec7": { symbol: "USDT", decimals: 6, isStableUsd: true },
+  "0x6b175474e89094c44da98b954eedeac495271d0f": { symbol: "DAI", decimals: 18, isStableUsd: true },
+  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": { symbol: "WETH", decimals: 18 },
+};
+
+/** Chain the sponsored-watch on-chain log scanner targets (Ethereum Mainnet). */
+export const WATCH_MONITOR_CHAIN_ID = 1;
+
+/**
+ * Decode the 32-byte `data` field of an ERC-20 Transfer log into a bigint.
+ * Returns null when the payload is not a clean 32-byte hex amount.
+ */
+export function decodeTransferAmount(data: unknown): bigint | null {
+  if (typeof data !== "string") return null;
+  const hex = data.startsWith("0x") ? data.slice(2) : data;
+  if (hex.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(hex)) return null;
+  try {
+    return BigInt(`0x${hex}`);
+  } catch {
+    return null;
+  }
+}
+
+/** Format a raw token amount (smallest unit) as a human string with commas. */
+export function humanizeTokenAmount(amount: bigint, decimals: number): string {
+  const negative = amount < 0n;
+  const abs = negative ? -amount : amount;
+  const scale = 10n ** BigInt(Math.max(0, decimals));
+  const whole = abs / scale;
+  const frac = abs % scale;
+  if (frac === 0n) {
+    return `${negative ? "-" : ""}${whole.toLocaleString("en-US")}`;
+  }
+  const fracStr = frac.toString().padStart(decimals, "0").replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole.toLocaleString("en-US")}.${fracStr.slice(0, 6)}`;
+}
+
+function shortAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+/**
+ * Human-readable one-line description of a watch event.
+ *
+ * Wallet/transfer-shaped events (decoded from raw Transfer logs) render as
+ * "Transfer 12,500 USDC sent from 0x1a2b…c3d4 → 0x5e6f…7a8b". Contract events
+ * that arrived through the enriched ingestion pipeline fall back to
+ * formatEventLine (event type + protocol + assets + USD magnitude).
+ */
+export function describeWatchEvent(
+  event: MonitoredEventRow,
+  targetKind: "contract" | "wallet" = "contract",
+  targetAddress?: string,
+): string {
+  const payload = (event.raw_payload ?? {}) as Record<string, unknown>;
+  const from = typeof payload.from === "string" ? payload.from : null;
+  const to = typeof payload.to === "string" ? payload.to : null;
+  const amountRaw = typeof payload.amountRaw === "string" ? payload.amountRaw : null;
+  const tokenAddress =
+    typeof payload.address === "string" && /^0x[0-9a-fA-F]{40}$/.test(payload.address)
+      ? payload.address
+      : null;
+
+  if (from && to && amountRaw && tokenAddress) {
+    const meta = WATCH_TOKEN_META[tokenAddress.toLowerCase()];
+    const target = targetAddress?.toLowerCase();
+    const isWallet = targetKind === "wallet" && target !== undefined;
+    const parties = `${shortAddress(from)} → ${shortAddress(to)}`;
+    if (!meta) {
+      // Unknown token: never fabricate a symbol or decimals — show direction only.
+      return `Transfer · ${parties}`;
+    }
+    let amountText: string;
+    try {
+      amountText = humanizeTokenAmount(BigInt(amountRaw), meta.decimals);
+    } catch {
+      amountText = amountRaw;
+    }
+    let flow: string;
+    if (isWallet) {
+      if (from.toLowerCase() === target) {
+        flow = `${amountText} ${meta.symbol} sent to ${shortAddress(to)}`;
+      } else if (to.toLowerCase() === target) {
+        flow = `${amountText} ${meta.symbol} received from ${shortAddress(from)}`;
+      } else {
+        flow = `${amountText} ${meta.symbol} · ${parties}`;
+      }
+    } else {
+      flow = `${amountText} ${meta.symbol} · ${parties}`;
+    }
+    return `Transfer ${flow}`;
+  }
+
+  return formatEventLine(event);
 }
 
 /**

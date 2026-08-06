@@ -42,10 +42,13 @@ export function WatchPage(): ReactElement {
     <Page data-testid="watch-page">
       <PageHeader
         title="Watch any wallet, contract, or protocol. Get alerts on Telegram — provably real, onchain."
-        description="Tell ChronicleAI what to monitor. It watches the window, alerts you with proof, and publishes the final report onchain."
+        description="Tell ChronicleAI what to monitor. It watches the window, alerts you with proof, and publishes the final report onchain. Monitoring runs on Ethereum Mainnet, paid in USDC."
         meta={
           !isLoading ? (
-            <span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-frame px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              <span aria-hidden="true">🌐</span>
+              Ethereum Mainnet
+              <span aria-hidden="true">·</span>
               {watches.length} campaign{watches.length !== 1 ? "s" : ""}
             </span>
           ) : undefined

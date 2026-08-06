@@ -5,8 +5,11 @@ import type { MonitoredEventRow } from "@chronicleai/db";
 import {
   buildSourceEventRoot,
   createSponsoredWatchReportService,
+  decodeTransferAmount,
+  describeWatchEvent,
   eventMatchesTargetContract,
   eventMatchesWallet,
+  humanizeTokenAmount,
   isPlaceholderSponsoredReport,
   TRANSFER_EVENT_TOPIC0,
 } from "../services/sponsored-watch-report-service.ts";
@@ -18,7 +21,7 @@ function event(partial: Partial<MonitoredEventRow> & { id: string }): MonitoredE
     source: "keeperhub",
     source_event_id: partial.id,
     event_type: "large_swap",
-    chain_id: 11155111,
+    chain_id: 1,
     protocol: "uniswap",
     asset_symbols: ["USDC"],
     magnitude: { value: 100000, unit: "USD" },
@@ -206,5 +209,88 @@ describe("sponsored-watch-report-service", () => {
     } finally {
       LLM_PROVIDER_CALLERS.groq = original;
     }
+  });
+});
+
+describe("watch event description helpers", () => {
+  const WALLET = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+  const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+
+  it("decodes a 32-byte ERC-20 transfer amount", () => {
+    expect(decodeTransferAmount(`0x${'0'.repeat(63)}1`)).toBe(1n);
+    expect(decodeTransferAmount(`0x${'0'.repeat(64)}`)).toBe(0n);
+    expect(decodeTransferAmount(`0x${'0'.repeat(62)}0a`)).toBe(10n);
+    expect(decodeTransferAmount("0x1234")).toBeNull();
+    expect(decodeTransferAmount("")).toBeNull();
+    expect(decodeTransferAmount(null)).toBeNull();
+  });
+
+  it("humanizes token amounts with decimals", () => {
+    expect(humanizeTokenAmount(12_500_000_000n, 6)).toBe("12,500");
+    expect(humanizeTokenAmount(1_000_000_000_000_000_000n, 18)).toBe("1");
+    expect(humanizeTokenAmount(1_234_567n, 6)).toBe("1.234567");
+    expect(humanizeTokenAmount(0n, 6)).toBe("0");
+  });
+
+  it("describes a received wallet transfer with token and amount", () => {
+    const ev = event({
+      id: "w-recv",
+      event_type: "wallet_transfer",
+      asset_symbols: ["USDC"],
+      magnitude: { value: 12500, unit: "USD" },
+      raw_payload: {
+        address: USDC,
+        from: "0x1111111111111111111111111111111111111111",
+        to: WALLET,
+        amountRaw: "12500000000",
+        tokenSymbol: "USDC",
+        tokenDecimals: 6,
+      },
+    });
+    const line = describeWatchEvent(ev, "wallet", WALLET);
+    expect(line).toContain("Transfer");
+    expect(line).toContain("12,500 USDC");
+    expect(line).toContain("received from");
+  });
+
+  it("describes a sent wallet transfer", () => {
+    const ev = event({
+      id: "w-sent",
+      event_type: "wallet_transfer",
+      raw_payload: {
+        address: USDC,
+        from: WALLET,
+        to: "0x2222222222222222222222222222222222222222",
+        amountRaw: "5000000",
+      },
+    });
+    const line = describeWatchEvent(ev, "wallet", WALLET);
+    expect(line).toContain("5 USDC");
+    expect(line).toContain("sent to");
+  });
+
+  it("shows direction only for unknown tokens (no fabricated symbol or decimals)", () => {
+    const ev = event({
+      id: "w-unknown",
+      event_type: "wallet_transfer",
+      raw_payload: {
+        address: "0x3333333333333333333333333333333333333333",
+        from: "0x1111111111111111111111111111111111111111",
+        to: WALLET,
+        amountRaw: "1000000000000000000",
+      },
+    });
+    const line = describeWatchEvent(ev, "wallet", WALLET);
+    expect(line).toContain("Transfer ·");
+    expect(line).toContain("→");
+    expect(line).not.toContain("token");
+    expect(line).not.toContain("USDC");
+  });
+
+  it("falls back to formatEventLine for enriched contract events", () => {
+    const ev = event({ id: "c-swap", raw_payload: { address: TARGET } });
+    const line = describeWatchEvent(ev, "contract");
+    expect(line).toContain("large swap");
+    expect(line).toContain("100,000 USD");
   });
 });
