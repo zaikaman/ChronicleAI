@@ -150,6 +150,33 @@ export function isDeskWorkflowExecutionError(error: unknown): error is DeskWorkf
   return error instanceof DeskWorkflowExecutionError;
 }
 
+/**
+ * Public fallback is safe only for failures from the private attempt.
+ *
+ * `isRpcTimeoutError` covers KeeperHub's private-RPC error shapes, while the
+ * bridge's own poll deadline is represented by `DeskWorkflowExecutionError`
+ * with `timedOut=true`. Both cases mean the private route did not produce a
+ * usable receipt within the configured deadline, so the configured public
+ * workflow should get a fresh idempotency key and attempt the action.
+ */
+function isKeeperHubPollTimeout(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  return /timed out waiting for keeperhub\s+(?:desk|mcp)\s+execution/i.test(message);
+}
+
+function isPublicFallbackEligibleError(error: unknown): boolean {
+  return (
+    isRpcTimeoutError(error) ||
+    isKeeperHubPollTimeout(error) ||
+    (isDeskWorkflowExecutionError(error) && error.timedOut)
+  );
+}
+
 export interface ExecutionBridge {
   /** Start workflow; optionally wait for terminal status. */
   execute(
@@ -840,7 +867,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
               const message =
                 mcpError instanceof Error ? mcpError.message : "KeeperHub desk MCP execute failed";
 
-              if (isRpcTimeoutError(mcpError) && selectPublicFallback()) {
+              if (isPublicFallbackEligibleError(mcpError) && selectPublicFallback()) {
                 console.warn(
                   `[keeperhub-mcp] desk ${action} private workflow timed out; ` +
                     `using public fallback workflow ${selectedWorkflowId}`,
@@ -883,7 +910,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
               error instanceof Error ? error.message : "KeeperHub desk workflow execute failed";
             if (
               selectedWorkflowId === workflowId &&
-              isRpcTimeoutError(error) &&
+              isPublicFallbackEligibleError(error) &&
               selectPublicFallback()
             ) {
               console.warn(
@@ -973,7 +1000,7 @@ export function createExecutionBridge(config: ExecutionBridgeConfig): ExecutionB
           } catch (error) {
             if (
               selectedWorkflowId === workflowId &&
-              isRpcTimeoutError(error) &&
+              isPublicFallbackEligibleError(error) &&
               selectPublicFallback()
             ) {
               console.warn(

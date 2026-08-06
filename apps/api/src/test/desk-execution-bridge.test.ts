@@ -196,6 +196,87 @@ describe("execution-bridge", () => {
     ).toBe(true);
   });
 
+  it("switches to the public workflow after the private poll deadline", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/workflows/wf-defend-private/execute")) {
+        return new Response(JSON.stringify({ executionId: "exec-private" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/workflows/wf-defend-public/execute")) {
+        return new Response(JSON.stringify({ executionId: "exec-public" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (
+        u.includes("/executions/exec-private/wait") ||
+        u.includes("/executions/exec-private/status")
+      ) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-private",
+            status: "running",
+            completed: false,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (
+        u.includes("/executions/exec-public/wait") ||
+        u.includes("/executions/exec-public/status")
+      ) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec-public",
+            status: "completed",
+            completed: true,
+            transactionHash: "0xpublic",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (u.includes("/logs")) {
+        return new Response(JSON.stringify({ logs: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (init?.method === "POST") {
+        return new Response("unexpected execute request", { status: 500 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bridge = createExecutionBridge({
+      apiBaseUrl: "https://app.keeperhub.example",
+      apiKey: "kh_test",
+      network: "sepolia",
+      workflowIds: {
+        defend: "wf-defend-private",
+        publicFallbacks: { defend: "wf-defend-public" },
+      },
+      pollTimeoutMs: 5,
+      pollIntervalMs: 0,
+    });
+
+    const receipt = await bridge.execute("defend", {
+      intentId: "intent-poll-timeout",
+      legs: [],
+    });
+
+    expect(receipt.keeperHubRunId).toBe("exec-public");
+    expect(receipt.executionAudit?.submit.workflowId).toBe("wf-defend-public");
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes("/workflows/wf-defend-public/execute"),
+      ),
+    ).toBe(true);
+  });
+
   it("switches to the public workflow when KeeperHub reports a missing step completion", async () => {
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       const u = String(url);
