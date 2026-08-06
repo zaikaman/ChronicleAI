@@ -470,7 +470,7 @@ export function WatchRequestForm({
           </div>
           <span className="text-xs text-muted-foreground">
             {visibility === "public"
-              ? "Alerts publish to the registry (provably real) and the community Telegram channel."
+              ? "Alerts publish to the registry (provably real) and the community Telegram channel. Add a binding code to also get them DM'd to you."
               : "Alerts go to your Telegram only. Create + report txs still stay onchain."}
           </span>
         </div>
@@ -483,7 +483,9 @@ export function WatchRequestForm({
             <p className="text-xs font-medium text-foreground m-0 mb-1">Connect Telegram</p>
             <p className="text-xs text-muted-foreground m-0 leading-relaxed">
               Send /start to the bot, then paste the code it replies with.
-              {visibility === "private" ? " Required for private watches." : " Optional for public."}
+              {visibility === "private"
+                ? " Required for private watches."
+                : " Optional for public — enter it to also receive alerts by DM."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

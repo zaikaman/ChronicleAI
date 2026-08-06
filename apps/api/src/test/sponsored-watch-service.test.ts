@@ -888,6 +888,433 @@ describe("SponsoredWatchService", () => {
       );
     });
 
+    it("public watch with a bound chat DMs the owner AND publishes to the registry", async () => {
+      const boundPublicWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "public" as const,
+        telegram_chat_id: "999003",
+        source_event_ids: [] as string[],
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+      const sendTelegramToChat = vi.fn().mockResolvedValue({
+        delivered: true,
+        destinations: ["telegram:999003"],
+        failures: [],
+      });
+      const alertCreate = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { id: "alert-bound-1" },
+      });
+      const publishAlert = vi.fn().mockResolvedValue({
+        success: true,
+        deliveryStatus: "published",
+        message: "ok",
+        registryTxHash: "0x" + "aa".repeat(32),
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xaa",
+      });
+
+      const boundService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat,
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: {
+          create: alertCreate,
+          findByDedupeKey: vi.fn().mockResolvedValue(null),
+        } as never,
+        alertPublicationService: { publishAlert } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [boundPublicWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      mockWatchRepo.update.mockImplementation(
+        async (id: string, update: Record<string, unknown>) => ({
+          ok: true,
+          value: { ...boundPublicWatch, id, ...update },
+        }),
+      );
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: boundPublicWatch });
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-bound-pub",
+            event_type: "large_swap",
+            chain_id: 1,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "77".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: boundPublicWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await boundService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+
+      expect(cycle.monitored).toBe(1);
+      // Binding code on a public watch still DMs the owner…
+      expect(sendTelegramToChat).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "999003" }),
+      );
+      // …and the public registry/community path still runs.
+      expect(alertCreate).toHaveBeenCalled();
+      expect(publishAlert).toHaveBeenCalledWith("alert-bound-1", newEventId);
+    });
+
+    it("public watch with a bound chat still DMs while the registry broadcast is throttled", async () => {
+      const boundPublicWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "public" as const,
+        telegram_chat_id: "999004",
+        source_event_ids: [] as string[],
+        last_alert_sent_at: new Date().toISOString(), // within throttle window
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "12121212-1212-1212-1212-121212121212";
+      const sendTelegramToChat = vi.fn().mockResolvedValue({
+        delivered: true,
+        destinations: ["telegram:999004"],
+        failures: [],
+      });
+      const alertCreate = vi.fn();
+      const publishAlert = vi.fn();
+
+      const throttledService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat,
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: {
+          create: alertCreate,
+          findByDedupeKey: vi.fn().mockResolvedValue(null),
+        } as never,
+        alertPublicationService: { publishAlert } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [boundPublicWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      mockWatchRepo.update.mockImplementation(
+        async (id: string, update: Record<string, unknown>) => ({
+          ok: true,
+          value: { ...boundPublicWatch, id, ...update },
+        }),
+      );
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: boundPublicWatch });
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-bound-throttle",
+            event_type: "large_swap",
+            chain_id: 1,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "88".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: boundPublicWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await throttledService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+
+      expect(cycle.monitored).toBe(1);
+      // DM still goes out even though the public broadcast is throttled…
+      expect(sendTelegramToChat).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "999004" }),
+      );
+      // …while no registry write / publication happens.
+      expect(alertCreate).not.toHaveBeenCalled();
+      expect(publishAlert).not.toHaveBeenCalled();
+      const updateArg = mockWatchRepo.update.mock.calls[0]?.[1] as {
+        source_event_ids?: string[];
+      };
+      expect(updateArg.source_event_ids).toContain(newEventId);
+    });
+
+    it("keeps the cursor when a throttled public watch DM fails, then retries it", async () => {
+      const boundPublicWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "public" as const,
+        telegram_chat_id: "999006",
+        source_event_ids: [] as string[],
+        last_alert_sent_at: new Date().toISOString(), // within throttle window
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "56565656-5656-5656-5656-565656565656";
+      // First DM attempt fails (transient), second succeeds.
+      const sendTelegramToChat = vi
+        .fn()
+        .mockResolvedValueOnce({
+          delivered: false,
+          destinations: [],
+          failures: ["telegram:chat not found"],
+        })
+        .mockResolvedValueOnce({
+          delivered: true,
+          destinations: ["telegram:999006"],
+          failures: [],
+        });
+      const alertCreate = vi.fn();
+      const publishAlert = vi.fn();
+
+      const retryService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat,
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: {
+          create: alertCreate,
+          findByDedupeKey: vi.fn().mockResolvedValue(null),
+        } as never,
+        alertPublicationService: { publishAlert } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [boundPublicWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: boundPublicWatch });
+      mockWatchRepo.update.mockImplementation(
+        async (id: string, update: Record<string, unknown>) => ({
+          ok: true,
+          value: { ...boundPublicWatch, id, ...update },
+        }),
+      );
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-bound-retry-dm",
+            event_type: "large_swap",
+            chain_id: 1,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "ab".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: boundPublicWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const first = await retryService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+      const second = await retryService.processCampaignCycle(
+        new Date("2026-07-10T12:01:00.000Z"),
+      );
+
+      expect(first.monitored).toBe(1);
+      expect(second.monitored).toBe(1);
+      // Failed DM while throttled did not advance the cursor → retried.
+      expect(sendTelegramToChat).toHaveBeenCalledTimes(2);
+      const failedUpdate = mockWatchRepo.update.mock.calls[0]?.[1] as {
+        source_event_ids?: string[];
+      };
+      expect(failedUpdate.source_event_ids).toEqual([]);
+      const okUpdate = mockWatchRepo.update.mock.calls[1]?.[1] as {
+        source_event_ids?: string[];
+      };
+      expect(okUpdate.source_event_ids).toContain(newEventId);
+      // Registry broadcast stayed throttled the whole time.
+      expect(alertCreate).not.toHaveBeenCalled();
+      expect(publishAlert).not.toHaveBeenCalled();
+    });
+
+    it("public watch DM failure does not block registry publication (best-effort)", async () => {
+      const boundPublicWatch = {
+        ...mockWatchRow,
+        status: "monitoring",
+        visibility: "public" as const,
+        telegram_chat_id: "999005",
+        source_event_ids: [] as string[],
+        starts_at: "2026-07-01T00:00:00.000Z",
+        ends_at: "2026-07-28T00:00:00.000Z",
+      };
+      const newEventId = "34343434-3434-3434-3434-343434343434";
+      const sendTelegramToChat = vi.fn().mockResolvedValue({
+        delivered: false,
+        destinations: [],
+        failures: ["telegram:chat not found"],
+      });
+      const alertCreate = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { id: "alert-bf-1" },
+      });
+      const publishAlert = vi.fn().mockResolvedValue({
+        success: true,
+        deliveryStatus: "published",
+        message: "ok",
+        registryTxHash: "0x" + "bb".repeat(32),
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xbb",
+      });
+
+      const bestEffortService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat,
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+        alertRepo: {
+          create: alertCreate,
+          findByDedupeKey: vi.fn().mockResolvedValue(null),
+        } as never,
+        alertPublicationService: { publishAlert } as never,
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [boundPublicWatch],
+      });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({
+        ok: true,
+        value: [],
+      });
+      mockWatchRepo.update.mockImplementation(
+        async (id: string, update: Record<string, unknown>) => ({
+          ok: true,
+          value: { ...boundPublicWatch, id, ...update },
+        }),
+      );
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: boundPublicWatch });
+      mockEventRepo.listInWindow.mockResolvedValue({
+        ok: true,
+        value: [
+          {
+            id: newEventId,
+            source: "keeperhub",
+            source_event_id: "src-bound-bf",
+            event_type: "large_swap",
+            chain_id: 1,
+            protocol: "uniswap",
+            asset_symbols: ["USDC"],
+            magnitude: null,
+            transaction_hash: "0x" + "99".repeat(32),
+            observed_at: null,
+            captured_at: "2026-07-10T00:00:00.000Z",
+            significance_score: 0.8,
+            raw_payload: { address: boundPublicWatch.target_contract },
+            status: "qualified",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:00.000Z",
+          },
+        ],
+      });
+
+      const cycle = await bestEffortService.processCampaignCycle(
+        new Date("2026-07-10T12:00:00.000Z"),
+      );
+
+      expect(cycle.monitored).toBe(1);
+      expect(sendTelegramToChat).toHaveBeenCalledTimes(1);
+      // A failed DM does not block the registry publication…
+      expect(publishAlert).toHaveBeenCalledWith("alert-bf-1", newEventId);
+      // …and the cursor still advances (no duplicate registry rewrite on retry).
+      const updateArg = mockWatchRepo.update.mock.calls[0]?.[1] as {
+        source_event_ids?: string[];
+      };
+      expect(updateArg.source_event_ids).toContain(newEventId);
+    });
+
     it("throttles alert delivery when a watch alerted recently", async () => {
       const recentlyAlertedWatch = {
         ...mockWatchRow,

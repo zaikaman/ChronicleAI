@@ -65,6 +65,38 @@ function watchVisibility(watch: SponsoredWatchRow): SponsoredWatchVisibility {
   return watch.visibility === "private" ? "private" : "public";
 }
 
+/**
+ * Build the Telegram DM body for a watch alert. Private watches use the
+ * "Private Watch" heading; public watches that carry a binding code use a
+ * neutral heading (the alert is also broadcast to the community channel).
+ */
+function buildWatchDmText(params: {
+  visibility: SponsoredWatchVisibility;
+  title: string;
+  summary: string;
+  detailLines: string[];
+  sourceExplorer: string | null;
+  auditTrailUrl: string | null;
+}): string {
+  const heading =
+    params.visibility === "private"
+      ? "🔔 <b>ChronicleAI Private Watch</b>"
+      : "🔔 <b>ChronicleAI Watch Alert</b>";
+  return [
+    heading,
+    `<b>${params.title.replace(/</g, "&lt;")}</b>`,
+    "",
+    params.summary.replace(/</g, "&lt;"),
+    "",
+    "Details:",
+    ...params.detailLines.map((line) => `• ${line.replace(/</g, "&lt;")}`),
+    params.sourceExplorer ? `Source: ${params.sourceExplorer}` : "",
+    params.auditTrailUrl ? `Audit trail: ${params.auditTrailUrl}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Keep a fallback scan bounded even when a provider returns no logs. */
@@ -684,10 +716,79 @@ export function createSponsoredWatchService(params: {
   }
 
   /**
+   * Send a watch alert as a Telegram DM to the bound chat (private watches
+   * and public watches that carry a binding code). Appends the audit log.
+   * For private watches this is the primary delivery and gates the alert
+   * cursor; for public watches it is best-effort — the registry/community
+   * path decides cursor advancement so a failed DM never re-writes the
+   * registry for the same alert.
+   */
+  async function deliverWatchDm(params: {
+    watch: SponsoredWatchRow;
+    newEvents: MonitoredEventRow[];
+    title: string;
+    summary: string;
+    detailLines: string[];
+    sourceExplorer: string | null;
+    now: string;
+  }): Promise<{ delivered: boolean }> {
+    const { watch, newEvents, title, summary, detailLines, sourceExplorer, now } = params;
+    if (!notificationService) {
+      return { delivered: false };
+    }
+    const visibility = watchVisibility(watch);
+    const chatId = watch.telegram_chat_id?.trim() ?? "";
+    const auditTrailUrl = frontendOrigin
+      ? `${frontendOrigin.replace(/\/$/, "")}/watch/${watch.id}`
+      : null;
+    const text = buildWatchDmText({
+      visibility,
+      title,
+      summary,
+      detailLines,
+      sourceExplorer,
+      auditTrailUrl,
+    });
+    const delivery = await notificationService.sendTelegramToChat({
+      chatId,
+      text,
+      entityType: "sponsored_watch",
+      entityId: watch.id,
+    });
+    const label = visibility === "private" ? "Private watch alert" : "Watch alert DM";
+    await execLogRepo.append({
+      action_type: "generate_alert",
+      entity_type: "sponsored_watch",
+      entity_id: watch.id,
+      status: delivery.delivered ? "succeeded" : "failed",
+      message: delivery.delivered
+        ? `${label} delivered to Telegram (${newEvents.length} new event(s))`
+        : `${label} failed: ${delivery.failures.join("; ") || "unknown"}`,
+      details: {
+        visibility,
+        deliveryMode: "telegram_dm",
+        chatId,
+        matchedEventCount: newEvents.length,
+        sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
+        destinations: delivery.destinations,
+        failures: delivery.failures,
+        // The DM itself never performs a registry write; public watches get
+        // their registry tx via the separate publish_alert path.
+        registryWrite: false,
+      },
+      started_at: now,
+      completed_at: now,
+    });
+    return { delivered: delivery.delivered };
+  }
+
+  /**
    * Near-realtime alert delivery (~60s cycle). Fires when a monitor tick finds
    * new matched events vs prior source_event_ids.
-   * - public: create public_alert → publishAlert (registry + community Telegram)
    * - private: Telegram DM to watch.telegram_chat_id only (no registry write)
+   * - public: create public_alert → publishAlert (registry + community
+   *   Telegram); when a binding code is stored on the watch it ALSO DMs the
+   *   owner (best-effort, before the throttle check)
    *
    * Returns true when the alert is considered delivered (or legitimately
    * throttled) — the caller then commits the new source_event_ids cursor.
@@ -747,54 +848,60 @@ export function createSponsoredWatchService(params: {
         });
         return false;
       }
-
-      const text = [
-        `🔔 <b>ChronicleAI Private Watch</b>`,
-        `<b>${title.replace(/</g, "&lt;")}</b>`,
-        "",
-        summary.replace(/</g, "&lt;"),
-        "",
-        "Details:",
-        ...detailLines.map((line) => `• ${line.replace(/</g, "&lt;")}`),
-        sourceExplorer ? `Source: ${sourceExplorer}` : "",
-        frontendOrigin ? `Audit trail: ${frontendOrigin.replace(/\/$/, "")}/watch/${watch.id}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      const delivery = await notificationService.sendTelegramToChat({
-        chatId,
-        text,
-        entityType: "sponsored_watch",
-        entityId: watch.id,
+      const dm = await deliverWatchDm({
+        watch,
+        newEvents,
+        title,
+        summary,
+        detailLines,
+        sourceExplorer,
+        now,
       });
+      return dm.delivered;
+    }
 
+    // Public path. When the buyer entered a Telegram binding code, the watch
+    // carries telegram_chat_id and we ALSO DM them — sent before the throttle
+    // check so DMs keep flowing while the registry broadcast is throttled
+    // (DMs have no gas cost; users opted in per-event). The DM result gates
+    // the cursor only inside a throttle window (below); otherwise the registry
+    // path decides, so a failed DM never re-writes the registry for the same
+    // alert. Note the deliberate trade-off: if the DM succeeds but the
+    // registry path fails, the cursor stays and the same events are DM'd again
+    // on the next tick — registry correctness is prioritized over DM dedup,
+    // because retrying is what eventually commits the on-chain write.
+    const publicChatId = watch.telegram_chat_id?.trim();
+    let publicDmDelivered = true;
+    if (publicChatId && notificationService) {
+      const dm = await deliverWatchDm({
+        watch,
+        newEvents,
+        title,
+        summary,
+        detailLines,
+        sourceExplorer,
+        now,
+      });
+      publicDmDelivered = dm.delivered;
+    } else if (publicChatId && !notificationService) {
+      publicDmDelivered = false;
       await execLogRepo.append({
         action_type: "generate_alert",
         entity_type: "sponsored_watch",
         entity_id: watch.id,
-        status: delivery.delivered ? "succeeded" : "failed",
-        message: delivery.delivered
-          ? `Private watch alert delivered to Telegram (${newEvents.length} new event(s))`
-          : `Private watch alert failed: ${delivery.failures.join("; ") || "unknown"}`,
+        status: "failed",
+        message: "Public watch alert DM skipped: Telegram send bot not configured",
         details: {
-          visibility: "private",
+          visibility: "public",
           deliveryMode: "telegram_dm",
-          chatId,
           matchedEventCount: newEvents.length,
           sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
-          destinations: delivery.destinations,
-          failures: delivery.failures,
-          // Create/report txs stay onchain; private alerts intentionally skip registry.
-          registryWrite: false,
         },
         started_at: now,
         completed_at: now,
       });
-      return delivery.delivered;
     }
 
-    // Public: publish through the existing alert pipeline (registry + community Telegram).
     // Throttle: one delivery per watch per window — protects registry gas on
     // busy wallets and keeps the community channel calm. Only the public path
     // is throttled (private DMs have no gas cost and users opt in per-event).
@@ -819,6 +926,14 @@ export function createSponsoredWatchService(params: {
         started_at: now,
         completed_at: now,
       });
+      // Inside a throttle window the DM is the delivery the buyer opted into:
+      // only fold events into the cursor when it went out. A failed DM keeps
+      // the cursor so the next tick retries it — the broadcast is throttled
+      // anyway, so this never re-writes the registry. When no chat is bound
+      // the throttle still counts as delivered (legacy behavior).
+      if (publicChatId) {
+        return publicDmDelivered;
+      }
       return true;
     }
 
