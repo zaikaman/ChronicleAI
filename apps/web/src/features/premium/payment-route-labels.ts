@@ -33,6 +33,15 @@ export function formatPaymentRoute(route: PaymentRouteId): PaymentRouteDisplay {
       badgeVariant: "default",
     };
   }
+  if (id === "auto") {
+    return {
+      id: "auto",
+      badge: "AUTO",
+      label: "Auto Dual-Route (auto)",
+      audience: "Dual — Auto-negotiated rail selection",
+      badgeVariant: "success",
+    };
+  }
   return {
     id: String(route),
     badge: String(route).toUpperCase(),
@@ -43,7 +52,7 @@ export function formatPaymentRoute(route: PaymentRouteId): PaymentRouteDisplay {
 }
 
 export function sortPaymentRoutes(routes: readonly string[]): string[] {
-  const order = ["x402", "mpp"];
+  const order = ["x402", "mpp", "auto"];
   const unique = [...new Set(routes.map((r) => String(r).toLowerCase()))];
   return unique.sort((a, b) => {
     const ia = order.indexOf(a);
