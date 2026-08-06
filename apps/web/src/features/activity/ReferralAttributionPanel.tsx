@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
-import { baseSepoliaAddressUrl, truncateHash } from "../../lib/explorer.ts";
 import { StatusBadge } from "../../components/data-primitives.tsx";
+import { baseSepoliaAddressUrl, truncateHash } from "../../lib/explorer.ts";
 
 export interface ReferralPartner {
   referralAddress: string;

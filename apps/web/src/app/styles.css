@@ -16,12 +16,22 @@ div[data-rk] {
   --ring: #0066ff;
   --frame: #ffffff;
   --accent: #a8d946;
+
+  /* Type scale tokens (referenced across product surfaces). */
+  --font-size-2xs: 0.625rem;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
   --card-primary: #a8d946;
   --card-secondary: #e8f5c8;
   --card-foreground: #171717;
   --card-foreground-muted: #525252;
   --phone-screen: #f5f5f5;
-  --font-sans: 'Outfit', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: "Outfit", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
   --font-space-grotesk: "Space Grotesk", sans-serif;
 

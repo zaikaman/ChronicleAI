@@ -1,45 +1,47 @@
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
-import {
-  Page,
-  PageHeader,
-  PageSection,
-  StatTile,
-  Surface,
-} from "../../components/page-chrome.tsx";
+import { Page, PageHeader, PageSection, StatTile, Surface } from "../../components/page-chrome.tsx";
 import { PageSkeleton } from "../../components/ui/skeleton.tsx";
 import { ButtonSpinner } from "../../components/ui/spinner.tsx";
-import {
-  baseSepoliaAddressUrl,
-  sepoliaTxUrl,
-  truncateHash,
-} from "../../lib/explorer.ts";
+import { baseSepoliaAddressUrl, sepoliaTxUrl, truncateHash } from "../../lib/explorer.ts";
+import { ReferralAttributionPanel } from "../activity/ReferralAttributionPanel.tsx";
+import { useAgentActivity } from "../activity/use-agent-activity.ts";
 import { useWallet } from "../wallet";
 import { AffiliateAgentChat } from "./AffiliateAgentChat.tsx";
 import { useAffiliateAgent, useAffiliateDashboard } from "./use-affiliate.ts";
 
 function formatUsdc(n: number): string {
-  return (
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 6,
-    })
-      .format(n)
-      .replace("$", "")
-      .trim() + " USDC"
-  );
+  return `${new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  })
+    .format(n)
+    .replace("$", "")
+    .trim()} USDC`;
 }
 
 export function AffiliatePage(): ReactElement {
   const wallet = useWallet();
   const address = wallet.isConnected && wallet.address ? wallet.address : null;
+  const { data: activityData } = useAgentActivity();
 
-  const { stats, isLoading, isRefreshing, error: dashError, refresh, setStats } =
-    useAffiliateDashboard(address);
-  const { messages, send, isSending, error: chatError, resetChat } =
-    useAffiliateAgent(address, stats?.availableUsdc ?? 0);
+  const {
+    stats,
+    isLoading,
+    isRefreshing,
+    error: dashError,
+    refresh,
+    setStats,
+  } = useAffiliateDashboard(address);
+  const {
+    messages,
+    send,
+    isSending,
+    error: chatError,
+    resetChat,
+  } = useAffiliateAgent(address, stats?.availableUsdc ?? 0);
 
   const [copied, setCopied] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -141,7 +143,9 @@ export function AffiliatePage(): ReactElement {
               type="button"
               onClick={() => void refresh()}
               disabled={isRefreshing}
-              aria-label={isRefreshing ? "Refreshing affiliate dashboard" : "Refresh affiliate dashboard"}
+              aria-label={
+                isRefreshing ? "Refreshing affiliate dashboard" : "Refresh affiliate dashboard"
+              }
               data-testid="affiliate-refresh"
               className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-wait disabled:opacity-60 transition-colors"
             >
@@ -328,6 +332,15 @@ export function AffiliatePage(): ReactElement {
                   </Surface>
                 </div>
               </div>
+
+              {activityData?.referralAttribution ? (
+                <PageSection
+                  title="Partner referral attribution"
+                  description="Settled volume and newsletter signups attributed to referral partners."
+                >
+                  <ReferralAttributionPanel attribution={activityData.referralAttribution} />
+                </PageSection>
+              ) : null}
             </>
           ) : null}
         </div>

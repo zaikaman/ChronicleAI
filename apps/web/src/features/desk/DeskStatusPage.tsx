@@ -127,7 +127,7 @@ export function DeskStatusPage(): ReactElement {
         action={
           <div className="flex gap-3">
             <SectionLink to="/desk/intents">View proposals →</SectionLink>
-            <SectionLink to="/activity?tab=proofs">Proof trail →</SectionLink>
+            <SectionLink to="/activity?filter=publications">Proof trail →</SectionLink>
           </div>
         }
       >
@@ -529,8 +529,8 @@ export function DeskStatusPage(): ReactElement {
       >
         <Surface className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-            Proposals, trade tickets, and KeeperHub run proofs live in the public trail. Every filled
-            proposal should anchor a registry ticket.
+            Proposals, trade tickets, and KeeperHub run proofs live in the public trail. Every
+            filled proposal should anchor a registry ticket.
           </p>
           <Link
             to="/desk/intents"

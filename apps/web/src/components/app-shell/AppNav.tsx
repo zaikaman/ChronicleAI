@@ -1,7 +1,7 @@
+import { ConnectWalletButton } from "@/features/wallet";
 import { ArrowLeft, Menu } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { Link } from "react-router-dom";
-import { ConnectWalletButton } from "@/features/wallet";
 import { Badge } from "../ui/badge.tsx";
 
 interface AppNavProps {
@@ -60,6 +60,18 @@ export function AppNav({
         <Badge variant="accent" className="shrink-0">
           {sectionLabel}
         </Badge>
+
+        {["Alerts", "Desk", "Activity"].includes(sectionLabel) ? (
+          <span
+            className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground shrink-0"
+            title="Live feed — updates in real time"
+          >
+            <span className="relative flex h-2 w-2" aria-hidden="true">
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+            </span>
+            Live
+          </span>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-2 shrink-0">

@@ -3,6 +3,8 @@ import { StatusBadge } from "../../components/data-primitives.tsx";
 import { Page, PageHeader, PageSection } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
+import { SubscriptionAnalyticsPanel } from "../activity/SubscriptionAnalyticsPanel.tsx";
+import { useAgentActivity } from "../activity/use-agent-activity.ts";
 import { useWallet } from "../wallet";
 import { AgentPaymentsPanel } from "./AgentPaymentsPanel.tsx";
 import { PaymentRequiredModal } from "./PaymentRequiredModal.tsx";
@@ -17,6 +19,7 @@ import {
 
 export function PremiumPage(): ReactElement {
   const wallet = useWallet();
+  const { data: activityData } = useAgentActivity();
   const {
     items,
     unlockedItemIds,
@@ -285,6 +288,15 @@ export function PremiumPage(): ReactElement {
           </>
         )}
       </PageSection>
+
+      {activityData?.subscriptionAnalytics ? (
+        <PageSection
+          title="Audience & revenue"
+          description="Newsletter subscriptions, paywall conversion, and settled volume by payment route."
+        >
+          <SubscriptionAnalyticsPanel analytics={activityData.subscriptionAnalytics} />
+        </PageSection>
+      ) : null}
     </Page>
   );
 }

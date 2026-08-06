@@ -1,20 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AppNav } from "./AppNav.tsx";
 import { AppSidebar } from "./AppSidebar.tsx";
-import { AppStatusBar } from "./AppStatusBar.tsx";
-import { APP_NAV_ITEMS, resolveActiveNavLabel } from "./nav-items.ts";
+import { resolveActiveNavLabel } from "./nav-items.ts";
 
 interface AppShellProps {
   children: ReactNode;
 }
 
 const FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
@@ -39,15 +38,15 @@ export function AppShell({ children }: AppShellProps): ReactNode {
   const wasSidebarOpenRef = useRef(false);
 
   const sectionLabel = resolveActiveNavLabel(location.pathname);
-  const sectionDescription =
-    APP_NAV_ITEMS.find((item) => item.label === sectionLabel)?.description;
+  const { pathname } = location;
 
   // Close mobile drawer + reset scroll on route change
   useEffect(() => {
     setSidebarOpen(false);
+    if (!pathname) return;
     const main = document.getElementById("main-content");
     if (main) main.scrollTop = 0;
-  }, [location.pathname]);
+  }, [pathname]);
 
   const handleToggleSidebar = useCallback(() => {
     if (sidebarOpen) {
@@ -130,12 +129,6 @@ export function AppShell({ children }: AppShellProps): ReactNode {
         menuButtonRef={sidebarTriggerRef}
         sectionLabel={sectionLabel}
       />
-      <AppStatusBar
-        sectionLabel={sectionLabel}
-        {...(sectionDescription !== undefined
-          ? { sectionDescription }
-          : {})}
-      />
 
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         <AppSidebar open={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
@@ -145,9 +138,7 @@ export function AppShell({ children }: AppShellProps): ReactNode {
           tabIndex={-1}
           className="flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain bg-background outline-none"
         >
-          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 py-6 sm:py-8 pb-24">
-            {children}
-          </div>
+          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 py-6 sm:py-8 pb-24">{children}</div>
         </main>
       </div>
     </div>
