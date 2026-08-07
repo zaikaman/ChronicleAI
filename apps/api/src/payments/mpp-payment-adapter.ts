@@ -144,6 +144,38 @@ export class MppPaymentAdapter implements PaymentAdapter {
     };
   }
 
+  /**
+   * Reconstruct the MPP HMAC challenge payload for an existing payment record
+   * so idempotent challenge reuse returns the same machine-signing material
+   * the client already had (HMAC material is derived from challengeReference).
+   */
+  rebuildChallengeData(params: {
+    premiumItemId: string;
+    amountRequested: number;
+    currency: string;
+    challengeReference: string;
+    expiresAt: string;
+    payerReference?: string | null;
+    referralAddress?: string | null;
+  }): Record<string, unknown> {
+    const challengeNonce = params.challengeReference.replace(/^mpp_/, "");
+    const hmacPayload = `${params.challengeReference}|${params.amountRequested}|${params.currency}|${params.expiresAt}`;
+    const resolvedPayer = resolveMppPayerReference(params.payerReference);
+
+    return {
+      route: "mpp",
+      premiumItemId: params.premiumItemId,
+      expectedAmount: params.amountRequested,
+      expectedCurrency: params.currency,
+      challengeNonce,
+      hmacPayloadTemplate: hmacPayload,
+      expiresAt: params.expiresAt,
+      verificationType: "hmac_sha256",
+      ...(resolvedPayer ? { payerReference: resolvedPayer } : {}),
+      referralAddress: params.referralAddress ?? null,
+    };
+  }
+
   async verifySettlement(params: {
     challengeReference: string;
     settlementReference: string;

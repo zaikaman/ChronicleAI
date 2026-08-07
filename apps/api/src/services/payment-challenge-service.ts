@@ -4,6 +4,7 @@
 import type {
   AffiliateRepository,
   PaymentRecordRepository,
+  PaymentRecordRow,
   PremiumIntelligenceItemRow,
   ReferralAttributionRepository,
 } from "@chronicleai/db";
@@ -201,6 +202,63 @@ export class PaymentChallengeService {
       challenge,
       paymentRecordId: result.value.id,
       autoSelectReason: resolved.reason,
+    };
+  }
+
+  /**
+   * Rebuild the challenge payload for an existing payment record without
+   * creating a second record. Powers idempotent sponsored-watch challenge
+   * reuse: a duplicate prepare for the same campaign intent returns the
+   * already-open challenge instead of minting a second billable one.
+   */
+  async rebuildChallengeForRecord(params: {
+    premiumItem: PremiumIntelligenceItemRow;
+    paymentRecord: PaymentRecordRow;
+  }): Promise<ChallengeServiceResult> {
+    const adapter = this.adapters.get(params.paymentRecord.payment_route);
+    if (!adapter?.rebuildChallengeData) {
+      throw new Error(
+        `Challenge reuse is not supported for payment route: ${params.paymentRecord.payment_route}`,
+      );
+    }
+
+    const amountRequested =
+      params.paymentRecord.amount_requested ?? params.premiumItem.price_amount;
+    const currency =
+      params.paymentRecord.currency ?? params.premiumItem.price_currency;
+    const expiresAt =
+      params.paymentRecord.expires_at ??
+      new Date(Date.now() + 600_000).toISOString();
+    const challengeReference = params.paymentRecord.challenge_reference ?? "";
+
+    if (!challengeReference) {
+      throw new Error("Existing payment record is missing its challenge reference");
+    }
+
+    const challengeData = adapter.rebuildChallengeData({
+      premiumItemId: params.premiumItem.id,
+      amountRequested,
+      currency,
+      challengeReference,
+      expiresAt,
+      payerReference: params.paymentRecord.payer_reference,
+      referralAddress: params.paymentRecord.referral_address,
+    });
+
+    return {
+      challenge: {
+        challengeReference,
+        paymentRoute: params.paymentRecord.payment_route,
+        amountRequested,
+        currency,
+        expiresAt,
+        challengeData,
+      },
+      paymentRecordId: params.paymentRecord.id,
+      autoSelectReason:
+        params.paymentRecord.payment_route === "mpp"
+          ? "auto_selected_mpp"
+          : "explicit_x402",
     };
   }
 }

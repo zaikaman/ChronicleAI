@@ -108,6 +108,7 @@ export function createPaymentRoutes(params: {
         challengeService,
         config: params.sponsoredWatchProductConfig,
         telegramBindingRepo: params.telegramBindingRepo ?? null,
+        paymentRecordRepo: params.paymentRecordRepo,
       })
     : null;
 
@@ -316,6 +317,8 @@ export function createPaymentRoutes(params: {
         expiresAt: prepared.challenge.expiresAt,
         challengeData: prepared.challenge.challengeData,
         campaign: prepared.campaign,
+        ...(prepared.reused ? { reused: true } : {}),
+        ...(prepared.alreadySettled ? { alreadySettled: true } : {}),
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to prepare sponsored watch";

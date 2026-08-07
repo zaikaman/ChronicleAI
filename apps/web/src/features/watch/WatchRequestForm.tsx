@@ -41,6 +41,10 @@ interface PreparedChallenge {
     targetKind?: TargetKind;
     visibility?: Visibility;
   };
+  /** True when an already-open challenge was reused (no new charge minted). */
+  reused?: boolean;
+  /** True when the reused challenge was already paid recently. */
+  alreadySettled?: boolean;
 }
 
 /** Preset campaign lengths — includes 1h short demo for dual-tx proof. */
@@ -239,9 +243,12 @@ export function WatchRequestForm({
   const [durationHours, setDurationHours] = useState(1);
   const [step, setStep] = useState<FormStep>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<PreparedChallenge | null>(null);
   const [settledWatch, setSettledWatch] = useState<SettledWatch | null>(null);
   const prepareControllerRef = useRef<AbortController | null>(null);
+  /** Guard against concurrent prepare submissions (double-click / re-click). */
+  const prepareInFlightRef = useRef(false);
 
   const telegramBotUsername = useMemo(() => {
     try {
@@ -261,7 +268,9 @@ export function WatchRequestForm({
 
   const handlePrepare = useCallback(async () => {
     setError(null);
+    setNotice(null);
     setSettledWatch(null);
+    if (prepareInFlightRef.current) return;
 
     if (!isEvmAddress(targetContract.trim())) {
       setError(
@@ -286,6 +295,7 @@ export function WatchRequestForm({
     }
 
     setStep("preparing");
+    prepareInFlightRef.current = true;
     prepareControllerRef.current?.abort();
     const controller = new AbortController();
     prepareControllerRef.current = controller;
@@ -321,12 +331,20 @@ export function WatchRequestForm({
 
       const data = (await response.json()) as PreparedChallenge;
       setPrepared(data);
+      if (data.alreadySettled) {
+        setNotice(
+          "This campaign was already paid for and created on-chain. No additional charge was made.",
+        );
+        setStep("settled");
+        return;
+      }
       setStep("challenge_ready");
     } catch (err) {
       if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : "Failed to prepare sponsored watch");
       setStep("error");
     } finally {
+      prepareInFlightRef.current = false;
       if (prepareControllerRef.current === controller) {
         prepareControllerRef.current = null;
       }
@@ -345,6 +363,7 @@ export function WatchRequestForm({
   const handlePay = useCallback(async () => {
     if (!prepared) return;
     setError(null);
+    setNotice(null);
     setStep("settling");
     try {
       const settlementReference = await signX402Settlement(prepared.challengeData, wallet);
@@ -361,8 +380,11 @@ export function WatchRequestForm({
       }
       setStep("settled");
     } catch (err) {
+      // A failed settle may still have succeeded on-chain (ambiguous receipt).
+      // Stay on the SAME challenge so retrying Pay does not mint a new charge;
+      // re-preparing is only needed if the user edits their details.
       setError(err instanceof Error ? err.message : "Settlement failed");
-      setStep("error");
+      setStep("challenge_ready");
     }
   }, [prepared, wallet, onSettled]);
 
@@ -568,21 +590,54 @@ export function WatchRequestForm({
         )}
 
         {step === "challenge_ready" && prepared ? (
+          <button
+            type="button"
+            onClick={() => {
+              setPrepared(null);
+              setSettledWatch(null);
+              setError(null);
+              setNotice(null);
+              setStep("idle");
+            }}
+            className="inline-flex items-center justify-center rounded-full border border-border bg-background px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="watch-edit-details-button"
+          >
+            Edit details
+          </button>
+        ) : null}
+
+        {step === "challenge_ready" && prepared ? (
           <StatusBadge
-            label={`${
-              prepared.campaign.durationHours != null && prepared.campaign.durationHours < 24
-                ? `${prepared.campaign.durationHours}h`
-                : `${prepared.campaign.durationDays}d`
-            } · ${prepared.amountRequested} ${prepared.currency}`}
+            label={
+              prepared.reused
+                ? "Challenge reused · nothing new billed"
+                : `${
+                    prepared.campaign.durationHours != null &&
+                    prepared.campaign.durationHours < 24
+                      ? `${prepared.campaign.durationHours}h`
+                      : `${prepared.campaign.durationDays}d`
+                  } · ${prepared.amountRequested} ${prepared.currency}`
+            }
             variant="info"
           />
         ) : null}
-        {step === "settled" ? <StatusBadge label="Campaign accepted" variant="success" /> : null}
+        {step === "settled" ? (
+          <StatusBadge
+            label={notice ? "Campaign already created" : "Campaign accepted"}
+            variant="success"
+          />
+        ) : null}
       </div>
 
       {error ? (
         <p className="mt-3 text-sm text-[var(--accent-error)]" data-testid="watch-form-error" role="alert">
           {error}
+        </p>
+      ) : null}
+
+      {notice ? (
+        <p className="mt-3 text-sm text-muted-foreground" data-testid="watch-form-notice" role="status">
+          {notice}
         </p>
       ) : null}
 

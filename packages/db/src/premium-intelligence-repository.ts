@@ -43,6 +43,15 @@ export interface PremiumIntelligenceRepository {
   findBySlug(slug: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
   findById(id: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
   findPrivateContent(id: string): Promise<Result<unknown | null>>;
+  /**
+   * Sponsored-monitor products that share the same deterministic intent key
+   * (target contract + kind + visibility + binding + duration, window-agnostic).
+   * Used to reuse an open challenge instead of minting a duplicate billable one.
+   */
+  findSponsoredMonitorsByIntentKey(
+    intentKey: string,
+    limitParam?: number,
+  ): Promise<Result<PremiumIntelligenceItemRow[]>>;
   create(item: PremiumIntelligenceItemInsert): Promise<Result<PremiumIntelligenceItemRow>>;
   update(
     id: string,
@@ -130,6 +139,19 @@ export function createPremiumIntelligenceRepository(
       if (error) return failure(mapPostgrestError(error));
       const row = maybeRow(data ?? []);
       return success(row?.content_private ?? null);
+    },
+
+    async findSponsoredMonitorsByIntentKey(intentKey, limitParam = 10) {
+      const limit = Math.min(25, Math.max(1, limitParam));
+      const { data, error } = await table()
+        .select("*")
+        .eq("content_type", "sponsored_monitor")
+        .eq("content_private->>intentKey", intentKey)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success((data ?? []) as unknown as PremiumIntelligenceItemRow[]);
     },
 
     async create(item) {

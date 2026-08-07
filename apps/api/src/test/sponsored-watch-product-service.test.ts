@@ -214,4 +214,304 @@ describe("sponsored-watch-product-service", () => {
     ).rejects.toThrow(/Telegram binding code/);
     expect(premiumRepo.create).not.toHaveBeenCalled();
   });
+
+  it("reuses an open challenge for the same campaign intent (no second charge)", async () => {
+    const itemId = "item-1";
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 600_000).toISOString();
+    const existingItem = {
+      id: itemId,
+      slug: "sponsored-watch-12345678-aaaa0000",
+      title: "Sponsored Watch",
+      content_type: "sponsored_monitor",
+      summary_public: "Pay to monitor",
+      content_private: {
+        targetContract: TARGET,
+        watchSpecHash: "0x" + "ab".repeat(32),
+        startsAt: now.toISOString(),
+        endsAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+        durationDays: 1,
+        durationHours: 1,
+        targetKind: "contract",
+        visibility: "public",
+        intentKey: `${TARGET.toLowerCase()}|contract|public|||Watch large swaps|1`,
+      },
+      source_event_ids: [],
+      price_amount: 1,
+      price_currency: "USDC",
+      payment_routes: ["x402", "mpp"],
+      status: "available",
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    };
+
+    const premiumRepo = {
+      create: vi.fn(),
+      findSponsoredMonitorsByIntentKey: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: [existingItem],
+      }),
+    } as unknown as PremiumIntelligenceRepository;
+
+    const paymentRecordRepo = {
+      listByPremiumItem: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: [
+          {
+            id: "pay-1",
+            premium_item_id: itemId,
+            payment_route: "x402",
+            payer_reference: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
+            referral_address: null,
+            amount_requested: 1,
+            amount_settled: null,
+            currency: "USDC",
+            status: "challenge_issued",
+            challenge_reference: "ch-1",
+            settlement_reference: null,
+            requested_at: now.toISOString(),
+            expires_at: expiresAt,
+            settled_at: null,
+            registry_tx_hash: null,
+            keeper_hub_run_id: null,
+            explorer_url: null,
+            content_uri: null,
+            created_at: now.toISOString(),
+            updated_at: now.toISOString(),
+          },
+        ],
+      }),
+    };
+
+    const challengeService = {
+      createChallenge: vi.fn(),
+      rebuildChallengeForRecord: vi.fn().mockResolvedValue({
+        paymentRecordId: "pay-1",
+        challenge: {
+          challengeReference: "ch-1",
+          paymentRoute: "x402",
+          amountRequested: 1,
+          currency: "USDC",
+          expiresAt,
+          challengeData: { domain: {}, types: {}, message: {} },
+        },
+      }),
+    } as unknown as PaymentChallengeService;
+
+    const service = createSponsoredWatchProductService({
+      premiumRepo,
+      challengeService,
+      paymentRecordRepo: paymentRecordRepo as never,
+      config: { priceUsdc: 1, defaultDurationDays: 7, maxDurationDays: 90 },
+    });
+
+    const prepared = await service.prepareCampaign({
+      targetContract: TARGET,
+      durationHours: 1,
+      paymentRoute: "x402",
+      description: "Watch large swaps",
+      payerReference: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
+    });
+
+    expect(prepared.reused).toBe(true);
+    expect(prepared.alreadySettled).toBeUndefined();
+    expect(prepared.paymentRecordId).toBe("pay-1");
+    expect(prepared.challenge.challengeReference).toBe("ch-1");
+    expect(premiumRepo.create).not.toHaveBeenCalled();
+    expect(challengeService.createChallenge).not.toHaveBeenCalled();
+    expect(challengeService.rebuildChallengeForRecord).toHaveBeenCalledTimes(1);
+  });
+
+  it("flags alreadySettled when the same intent was settled recently", async () => {
+    const itemId = "item-1";
+    const now = new Date();
+    const existingItem = {
+      id: itemId,
+      slug: "sponsored-watch-12345678-aaaa0000",
+      title: "Sponsored Watch",
+      content_type: "sponsored_monitor",
+      summary_public: "Pay to monitor",
+      content_private: {
+        targetContract: TARGET,
+        watchSpecHash: "0x" + "ab".repeat(32),
+        startsAt: now.toISOString(),
+        endsAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+        durationDays: 1,
+        durationHours: 1,
+        targetKind: "contract",
+        visibility: "public",
+        intentKey: `${TARGET.toLowerCase()}|contract|public|||Watch large swaps|1`,
+      },
+      source_event_ids: [],
+      price_amount: 1,
+      price_currency: "USDC",
+      payment_routes: ["x402", "mpp"],
+      status: "available",
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    };
+
+    const premiumRepo = {
+      create: vi.fn(),
+      findSponsoredMonitorsByIntentKey: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: [existingItem],
+      }),
+    } as unknown as PremiumIntelligenceRepository;
+
+    const paymentRecordRepo = {
+      listByPremiumItem: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: [
+          {
+            id: "pay-1",
+            premium_item_id: itemId,
+            payment_route: "x402",
+            payer_reference: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
+            referral_address: null,
+            amount_requested: 1,
+            amount_settled: 1,
+            currency: "USDC",
+            status: "settled",
+            challenge_reference: "ch-1",
+            settlement_reference: "settle-1",
+            requested_at: now.toISOString(),
+            expires_at: now.toISOString(),
+            settled_at: new Date(now.getTime() - 60_000).toISOString(),
+            registry_tx_hash: null,
+            keeper_hub_run_id: null,
+            explorer_url: null,
+            content_uri: null,
+            created_at: now.toISOString(),
+            updated_at: now.toISOString(),
+          },
+        ],
+      }),
+    };
+
+    const challengeService = {
+      createChallenge: vi.fn(),
+      rebuildChallengeForRecord: vi.fn().mockResolvedValue({
+        paymentRecordId: "pay-1",
+        challenge: {
+          challengeReference: "ch-1",
+          paymentRoute: "x402",
+          amountRequested: 1,
+          currency: "USDC",
+          expiresAt: now.toISOString(),
+          challengeData: {},
+        },
+      }),
+    } as unknown as PaymentChallengeService;
+
+    const service = createSponsoredWatchProductService({
+      premiumRepo,
+      challengeService,
+      paymentRecordRepo: paymentRecordRepo as never,
+      config: { priceUsdc: 1, defaultDurationDays: 7, maxDurationDays: 90 },
+    });
+
+    const prepared = await service.prepareCampaign({
+      targetContract: TARGET,
+      durationHours: 1,
+      paymentRoute: "x402",
+      description: "Watch large swaps",
+      payerReference: "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01",
+    });
+
+    expect(prepared.reused).toBe(true);
+    expect(prepared.alreadySettled).toBe(true);
+    expect(premiumRepo.create).not.toHaveBeenCalled();
+    expect(challengeService.createChallenge).not.toHaveBeenCalled();
+  });
+
+  it("creates a fresh challenge when the campaign intent differs", async () => {
+    const itemId = "item-1";
+    const now = new Date();
+    const otherContract = "0xffffffffffffffffffffffffffffffffffffffff";
+    const existingItem = {
+      id: itemId,
+      slug: "sponsored-watch-ffffffff-aaaa0000",
+      title: "Sponsored Watch",
+      content_type: "sponsored_monitor",
+      summary_public: "Pay to monitor",
+      content_private: {
+        targetContract: otherContract,
+        watchSpecHash: "0x" + "cd".repeat(32),
+        startsAt: now.toISOString(),
+        endsAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+        durationDays: 1,
+        durationHours: 1,
+        targetKind: "contract",
+        visibility: "public",
+        intentKey: `${otherContract}|contract|public|||Watch large swaps|1`,
+      },
+      source_event_ids: [],
+      price_amount: 1,
+      price_currency: "USDC",
+      payment_routes: ["x402", "mpp"],
+      status: "available",
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    };
+
+    const premiumRepo = {
+      create: vi.fn().mockImplementation(async (item) => ({
+        ok: true as const,
+        value: {
+          id: "item-new",
+          ...item,
+          status: "available",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      })),
+      findSponsoredMonitorsByIntentKey: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: [existingItem],
+      }),
+    } as unknown as PremiumIntelligenceRepository;
+
+    const paymentRecordRepo = {
+      listByPremiumItem: vi.fn().mockResolvedValue({
+        ok: true as const,
+        value: [],
+      }),
+    };
+
+    const challengeService = {
+      createChallenge: vi.fn().mockResolvedValue({
+        paymentRecordId: "pay-new",
+        challenge: {
+          challengeReference: "ch-new",
+          paymentRoute: "x402",
+          amountRequested: 1,
+          currency: "USDC",
+          expiresAt: new Date(Date.now() + 600_000).toISOString(),
+          challengeData: {},
+        },
+      }),
+      rebuildChallengeForRecord: vi.fn(),
+    } as unknown as PaymentChallengeService;
+
+    const service = createSponsoredWatchProductService({
+      premiumRepo,
+      challengeService,
+      paymentRecordRepo: paymentRecordRepo as never,
+      config: { priceUsdc: 1, defaultDurationDays: 7, maxDurationDays: 90 },
+    });
+
+    const prepared = await service.prepareCampaign({
+      targetContract: TARGET,
+      durationHours: 1,
+      paymentRoute: "x402",
+      description: "Watch large swaps",
+    });
+
+    expect(prepared.reused).toBeUndefined();
+    expect(prepared.paymentRecordId).toBe("pay-new");
+    expect(premiumRepo.create).toHaveBeenCalledTimes(1);
+    expect(challengeService.createChallenge).toHaveBeenCalledTimes(1);
+    expect(challengeService.rebuildChallengeForRecord).not.toHaveBeenCalled();
+  });
 });

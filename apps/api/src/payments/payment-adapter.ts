@@ -80,4 +80,22 @@ export interface PaymentAdapter {
      */
     challengeExpiresAt?: string | null | undefined;
   }): Promise<SettlementVerificationResult>;
+
+  /**
+   * Reconstruct the route-specific challenge data for an existing payment
+   * record. Used by idempotent sponsored-watch challenge reuse: when a buyer
+   * re-submits the same campaign intent, the server returns the already-open
+   * challenge instead of minting a second billable one.
+   *
+   * Optional — adapters that do not support challenge reuse omit it.
+   */
+  rebuildChallengeData?(params: {
+    premiumItemId: string;
+    amountRequested: number;
+    currency: string;
+    challengeReference: string;
+    expiresAt: string;
+    payerReference?: string | null;
+    referralAddress?: string | null;
+  }): Record<string, unknown>;
 }

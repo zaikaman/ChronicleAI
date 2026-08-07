@@ -404,6 +404,72 @@ export class X402PaymentAdapter implements PaymentAdapter {
     };
   }
 
+  /**
+   * Reconstruct the x402 EIP-712 challenge payload for an existing payment
+   * record so idempotent challenge reuse can return the same signing material
+   * the buyer already saw (nonce = keccak256(challengeReference)).
+   */
+  rebuildChallengeData(params: {
+    premiumItemId: string;
+    amountRequested: number;
+    currency: string;
+    challengeReference: string;
+    expiresAt: string;
+    payerReference?: string | null;
+    referralAddress?: string | null;
+  }): Record<string, unknown> {
+    if (
+      !this.treasuryWalletAddress ||
+      !ADDRESS_RE.test(this.treasuryWalletAddress)
+    ) {
+      throw new Error(
+        "Treasury wallet address is not configured for x402 payments (TREASURY_WALLET_ADDRESS)",
+      );
+    }
+
+    const treasuryTo = this.treasuryWalletAddress;
+    const expiresMs = Date.parse(params.expiresAt);
+    if (Number.isNaN(expiresMs)) {
+      throw new Error("Cannot rebuild challenge data for a payment record without a valid expiresAt");
+    }
+
+    const boundFrom =
+      params.payerReference && ADDRESS_RE.test(params.payerReference)
+        ? params.payerReference
+        : ZERO_ADDRESS;
+
+    const message = {
+      from: boundFrom,
+      to: treasuryTo,
+      value: Math.round(params.amountRequested * 1_000_000),
+      validAfter: 0,
+      validBefore: Math.floor(expiresMs / 1000),
+      nonce: keccak256(stringToBytes(params.challengeReference)),
+    };
+
+    return {
+      route: "x402",
+      premiumItemId: params.premiumItemId,
+      expectedAmount: params.amountRequested,
+      expectedCurrency: params.currency,
+      facilitatorUrl: this.facilitatorUrl ?? null,
+      referralAddress: params.referralAddress ?? null,
+      challengeType: "permit",
+      network: this.networkCaip2,
+      asset: this.usdcAddress,
+      domain: this.eip712Domain(),
+      types: TRANSFER_WITH_AUTH_TYPES,
+      message: {
+        from: message.from,
+        to: message.to,
+        value: String(message.value),
+        validAfter: String(message.validAfter),
+        validBefore: String(message.validBefore),
+        nonce: message.nonce,
+      },
+    };
+  }
+
   async verifySettlement(params: {
     challengeReference: string;
     settlementReference: string;

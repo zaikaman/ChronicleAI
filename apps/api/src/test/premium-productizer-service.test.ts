@@ -100,6 +100,9 @@ function makePremiumRepo(seed: PremiumIntelligenceItemRow[] = []) {
     async archiveNonLlmAutoProducts() {
       return { ok: true, value: 0 };
     },
+    async findSponsoredMonitorsByIntentKey() {
+      return { ok: true, value: [] };
+    },
   };
   return { repo, items };
 }

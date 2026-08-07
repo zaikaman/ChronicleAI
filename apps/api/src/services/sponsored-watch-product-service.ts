@@ -3,15 +3,25 @@
 
 import { randomUUID } from "node:crypto";
 import type {
+  PaymentRecordRepository,
+  PaymentRecordRow,
   PremiumIntelligenceItemRow,
   PremiumIntelligenceRepository,
   TelegramBindingRepository,
 } from "@chronicleai/db";
+import { normalizePayerReference } from "@chronicleai/db";
 import { getAddress, isAddress } from "viem";
 import type { PaymentRoute } from "@chronicleai/schemas";
 import type { PaymentChallengeService } from "./payment-challenge-service.ts";
 import {
   deriveWatchSpecHash,
+  parseSponsoredMonitorContentPrivate,
+  resolveCampaignWindowFromContent,
+  resolveTargetContract,
+  resolveTargetKind,
+  resolveTelegramBindingCode,
+  resolveVisibility,
+  resolveWatchSpecHash,
   type SponsoredMonitorContentPrivate,
 } from "./watch-spec-hash.ts";
 
@@ -77,6 +87,16 @@ export interface PreparedSponsoredWatch {
     /** Present when a binding code was validated at prepare. */
     telegramBindingCode?: string;
   };
+  /**
+   * True when an already-open challenge for the same campaign intent was
+   * reused instead of creating a new premium item + payment record.
+   */
+  reused?: boolean;
+  /**
+   * True when the reused challenge for the same campaign intent was already
+   * paid within the recent window — the buyer is not charged again.
+   */
+  alreadySettled?: boolean;
 }
 
 export interface SponsoredWatchProductService {
@@ -166,13 +186,172 @@ function resolveCampaignWindow(params: {
   };
 }
 
+/**
+ * Deterministic key for a sponsored-watch campaign intent, excluding the
+ * auto-generated window timestamps so two prepares seconds apart collide.
+ * Two requests with the same key describe the same thing the buyer asked for.
+ */
+function buildSponsoredWatchIntentKey(params: {
+  targetContract: string;
+  targetKind: WatchTargetKind;
+  visibility: WatchVisibility;
+  telegramBindingCode?: string;
+  eventSignature?: string;
+  description?: string;
+  durationHours: number;
+}): string {
+  const parts = [
+    params.targetContract.toLowerCase(),
+    params.targetKind,
+    params.visibility,
+    (params.telegramBindingCode ?? "").trim().toUpperCase(),
+    (params.eventSignature ?? "").trim(),
+    (params.description ?? "").trim(),
+    String(Math.floor(params.durationHours)),
+  ];
+  return parts.join("|");
+}
+
+/**
+ * A settled challenge stops being reusable for dedup after this window, so a
+ * buyer can later legitimately open a second identical campaign. Kept close to
+ * the x402 challenge TTL (10 min) so only accidental re-submits collide.
+ */
+const RECENT_SETTLE_DEDUP_MS = 15 * 60 * 1000;
+
+function isOpenPaymentRecord(record: PaymentRecordRow, now = Date.now()): boolean {
+  if (record.status !== "challenge_issued" && record.status !== "pending") {
+    return false;
+  }
+  if (record.expires_at) {
+    const expiresMs = Date.parse(record.expires_at);
+    if (Number.isFinite(expiresMs) && expiresMs <= now) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isRecentlySettledPaymentRecord(
+  record: PaymentRecordRow,
+  now = Date.now(),
+): boolean {
+  if (record.status !== "settled") return false;
+  if (!record.settled_at) return false;
+  const settledMs = Date.parse(record.settled_at);
+  if (!Number.isFinite(settledMs)) return false;
+  return now - settledMs <= RECENT_SETTLE_DEDUP_MS;
+}
+
+function payerMatches(
+  record: PaymentRecordRow,
+  incomingPayer: string | null,
+): boolean {
+  const recordPayer = (record.payer_reference ?? "").trim().toLowerCase();
+  if (incomingPayer) {
+    return !recordPayer || recordPayer === incomingPayer.toLowerCase();
+  }
+  // Unbound request only reuses challenges that were never bound to another payer.
+  return !recordPayer;
+}
+
 export function createSponsoredWatchProductService(deps: {
   premiumRepo: PremiumIntelligenceRepository;
   challengeService: PaymentChallengeService;
   config: SponsoredWatchProductConfig;
-  /** Required to validate private-visibility Telegram binding codes. */
+  /** Required for Telegram binding validation. */
   telegramBindingRepo?: TelegramBindingRepository | null;
+  /**
+   * When set, `prepareCampaign` is idempotent: an identical, not-yet-settled
+   * campaign intent reuses the open challenge instead of minting a duplicate
+   * premium item + payment record (prevents double-charging on retries).
+   */
+  paymentRecordRepo?: PaymentRecordRepository | null;
 }): SponsoredWatchProductService {
+  async function findReusableChallenge(params: {
+    intentKey: string;
+    payerReference?: string;
+    defaultDurationDays: number;
+    paymentRoute?: PaymentRoute | "auto";
+  }): Promise<PreparedSponsoredWatch | null> {
+    const repo = deps.paymentRecordRepo;
+    if (!repo) return null;
+
+    const itemsResult = await deps.premiumRepo.findSponsoredMonitorsByIntentKey(
+      params.intentKey,
+    );
+    if (!itemsResult.ok) {
+      throw new Error(
+        `Failed to check for an existing campaign: ${itemsResult.error.message}`,
+      );
+    }
+
+    const incomingPayer = normalizePayerReference(params.payerReference);
+    const now = Date.now();
+    const requestedRoute =
+      params.paymentRoute === "x402" || params.paymentRoute === "mpp"
+        ? params.paymentRoute
+        : null;
+
+    for (const item of itemsResult.value ?? []) {
+      const recordsResult = await repo.listByPremiumItem(item.id);
+      if (!recordsResult.ok) continue;
+
+      const records = (recordsResult.value ?? []).filter(
+        (r) => requestedRoute === null || r.payment_route === requestedRoute,
+      );
+      const openRecord = records.find(
+        (r) => isOpenPaymentRecord(r, now) && payerMatches(r, incomingPayer),
+      );
+      const recentSettledRecord = records.find(
+        (r) =>
+          isRecentlySettledPaymentRecord(r, now) &&
+          payerMatches(r, incomingPayer),
+      );
+      const reuseRecord = openRecord ?? recentSettledRecord;
+      if (!reuseRecord) continue;
+
+      const challengeResult =
+        await deps.challengeService.rebuildChallengeForRecord({
+          premiumItem: item,
+          paymentRecord: reuseRecord,
+        });
+      const contentPrivate = parseSponsoredMonitorContentPrivate(
+        item.content_private,
+      );
+      const window = resolveCampaignWindowFromContent(contentPrivate, {
+        defaultDurationDays: params.defaultDurationDays,
+      });
+      const bindingCode = resolveTelegramBindingCode(contentPrivate);
+
+      return {
+        premiumItem: item,
+        challenge: challengeResult.challenge,
+        paymentRecordId: challengeResult.paymentRecordId,
+        campaign: {
+          targetContract: resolveTargetContract(contentPrivate),
+          watchSpecHash: resolveWatchSpecHash(contentPrivate),
+          startsAt: window.startsAt,
+          endsAt: window.endsAt,
+          durationDays:
+            typeof contentPrivate.durationDays === "number"
+              ? Math.floor(contentPrivate.durationDays)
+              : 1,
+          ...(typeof contentPrivate.durationHours === "number"
+            ? { durationHours: contentPrivate.durationHours }
+            : {}),
+          targetKind: resolveTargetKind(contentPrivate),
+          visibility: resolveVisibility(contentPrivate),
+          ...(bindingCode ? { telegramBindingCode: bindingCode } : {}),
+        },
+        reused: true,
+        ...(openRecord ? {} : { alreadySettled: true }),
+      };
+    }
+
+    return null;
+  }
+
   return {
     async prepareCampaign(request) {
       if (!isAddress(request.targetContract, { strict: false })) {
@@ -236,6 +415,30 @@ export function createSponsoredWatchProductService(deps: {
         minDurationHours: deps.config.minDurationHours ?? 1,
       });
 
+      // Idempotency: an identical, not-yet-settled campaign intent reuses the
+      // open challenge instead of minting a second premium item + payment
+      // record. A duplicate request (retry, double-submit, or a re-click after
+      // an ambiguous settle) must never double-charge the buyer.
+      const intentKey = buildSponsoredWatchIntentKey({
+        targetContract,
+        targetKind,
+        visibility,
+        telegramBindingCode,
+        eventSignature: request.eventSignature,
+        description: request.description,
+        durationHours: window.durationHours,
+      });
+
+      if (deps.paymentRecordRepo) {
+        const existing = await findReusableChallenge({
+          intentKey,
+          payerReference: request.payerReference,
+          defaultDurationDays: deps.config.defaultDurationDays,
+          paymentRoute: request.paymentRoute,
+        });
+        if (existing) return existing;
+      }
+
       const watchSpec: Record<string, unknown> = {
         targetContract,
         startsAt: window.startsAt,
@@ -266,6 +469,8 @@ export function createSponsoredWatchProductService(deps: {
         targetKind: WatchTargetKind;
         visibility: WatchVisibility;
         telegramBindingCode?: string;
+        /** Deterministic dedup key (window-agnostic). */
+        intentKey: string;
       } = {
         targetContract,
         watchSpecHash,
@@ -276,6 +481,7 @@ export function createSponsoredWatchProductService(deps: {
         durationHours: window.durationHours,
         targetKind,
         visibility,
+        intentKey,
         ...(telegramBindingCode ? { telegramBindingCode } : {}),
       };
 
