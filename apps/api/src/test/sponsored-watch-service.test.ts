@@ -641,7 +641,7 @@ describe("SponsoredWatchService", () => {
       }
     });
 
-    it("keeps delivering newly observed events on later 60s ticks (not just the first scan)", async () => {
+    it("keeps delivering newly observed events on later 30s ticks (faster than the old 45s rescan throttle)", async () => {
       const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
       const firstTx = "0x" + "aa".repeat(32);
       const secondTx = "0x" + "bb".repeat(32);
@@ -690,7 +690,10 @@ describe("SponsoredWatchService", () => {
         txreceipt_status: "1",
       });
       // Tick 1 exposes one on-chain tx; tick 2 exposes a second one — the exact
-      // "wallet moved again between polls" scenario from the 60s cycle.
+      // "wallet moved again between polls" scenario. Ticks are 30s apart, i.e.
+      // *shorter* than the 45s rescan throttle that previously suppressed the
+      // scan on every tick after the first and silently dropped all events
+      // (observed in production: ~30s cycle + 45s throttle => 0 matches).
       const txlistPages = [[nativeRow(firstTx)], [nativeRow(firstTx), nativeRow(secondTx)]];
       let tick = 0;
       const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
@@ -749,14 +752,14 @@ describe("SponsoredWatchService", () => {
         expect(firstCycle.monitored).toBe(1);
         expect(sendTelegramToChat).toHaveBeenCalledTimes(1);
 
-        // Second 60s tick: a new on-chain tx appeared in the window.
+        // Second tick, 30s later: a new on-chain tx appeared in the window.
         tick = 1;
         mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
           ok: true,
           value: [storedWatch as never],
         });
         const secondCycle = await walletService.processCampaignCycle(
-          new Date("2026-08-06T17:11:00.000Z"),
+          new Date("2026-08-06T17:10:30.000Z"),
         );
         expect(secondCycle.monitored).toBe(1);
         expect(secondCycle.failed).toBe(0);

@@ -111,7 +111,6 @@ const MAX_RPC_BLOCK_SPAN = RPC_LOG_CHUNK_SIZE * BigInt(MAX_RPC_LOG_CALLS_PER_WAT
 // Re-scan on-chain at most once per ~45s so the 60s campaign cycle effectively
 // rescans every tick — new wallet txs / contract logs are only visible via a
 // fresh scan, so this drives the near-realtime alert cadence.
-const RPC_RESCAN_INTERVAL_MS = 45_000;
 const MAX_RPC_EVENTS_PER_WATCH = 500;
 
 /** Max Etherscan pages walked backward per endpoint until the window is covered. */
@@ -868,7 +867,6 @@ export function createSponsoredWatchService(params: {
   async function collectMatchingEvents(
     watch: SponsoredWatchRow,
     options: { forceRpcScan?: boolean } = {},
-    now = new Date(),
   ) {
     if (!eventRepo) {
       return [];
@@ -932,24 +930,20 @@ export function createSponsoredWatchService(params: {
     );
     const allSoFar = dedupeSponsoredWatchEvents([...known, ...dbMatched]);
 
-    // Rescan throttle: bound Etherscan/RPC calls to roughly one per cycle. New
-    // on-chain events (wallet txs, contract logs without tracker coverage) only
-    // surface via a fresh scan, so this must not stay skipped while the
-    // campaign is inside its window.
-    const lastMonitoredMs = watch.last_monitored_at
-      ? Date.parse(watch.last_monitored_at)
-      : Number.NaN;
-    const rpcScanRecentlyAttempted =
-      Number.isFinite(lastMonitoredMs) && now.getTime() - lastMonitoredMs < RPC_RESCAN_INTERVAL_MS;
-    if (!options.forceRpcScan && rpcScanRecentlyAttempted) {
-      return allSoFar;
-    }
-
-    // Tracker-owned contract watches: every event arrives via the ingestion
-    // pipeline into monitored_events (step 2 picks new ones up next tick), so
-    // a live re-scan adds nothing. Everything else — wallets, contracts without
-    // tracker coverage, and any forced (completion/repair) scan — falls through
-    // to the on-chain scan and merges its results.
+    // No time-based rescan throttle here. Every tick re-scans on-chain for
+    // watches that need it (wallets and contracts without tracker coverage):
+    // those events only surface via a fresh scan, and last_monitored_at is
+    // stamped every tick, so a wall/campaign-clock interval would skip the
+    // scan on every tick of a sub-interval cycle and silently drop events
+    // (observed in production: a ~30s cycle + 45s throttle => zero matches
+    // forever after the first scan).
+    //
+    // The only skip is a purely *coverage* check, which never drops events:
+    // tracker-owned contract watches receive every event through the
+    // ingestion pipeline into monitored_events (step 2 picks new ones up next
+    // tick), so a live re-scan adds nothing. Everything else — wallets,
+    // contracts without tracker coverage, and any forced (completion/repair)
+    // scan — falls through to the on-chain scan and merges its results.
     const scanSourcedRows = allSoFar.filter(
       (event) => event.source === "etherscan_v2" || event.source === "rpc_direct",
     );
@@ -1377,7 +1371,7 @@ export function createSponsoredWatchService(params: {
     watch: SponsoredWatchRow,
     now = new Date(),
   ): Promise<SponsoredWatchRow> {
-    const matching = dedupeSponsoredWatchEvents(await collectMatchingEvents(watch, {}, now));
+    const matching = dedupeSponsoredWatchEvents(await collectMatchingEvents(watch));
     const sourceEventIds = matching.map((e) => e.id).filter((id) => UUID_RE.test(id));
     const priorIds = new Set((watch.source_event_ids ?? []).filter((id) => UUID_RE.test(id)));
     const newEvents = matching.filter((e) => UUID_RE.test(e.id) && !priorIds.has(e.id));
