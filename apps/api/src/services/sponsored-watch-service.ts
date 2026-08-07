@@ -434,9 +434,11 @@ export function createSponsoredWatchService(params: {
           )
         : null;
 
-    // Native ETH transfer (txlist row). Skip failed / zero-value txs — zero
-    // value means a token or contract call, which the tokentx side covers.
-    if (item.contractAddress == null) {
+    // Native ETH transfer (txlist row, or a tokentx row Etherscan returns
+    // with an EMPTY contractAddress for native sends — both are native and
+    // must not be misclassified as a token transfer). Skip failed / zero-value
+    // txs — zero value means a token or contract call, which tokentx covers.
+    if (item.contractAddress == null || String(item.contractAddress).trim() === "") {
       const isError = String(item.isError ?? "0");
       const receiptStatus = String(item.txreceipt_status ?? "1");
       if (isError !== "0" || receiptStatus !== "1") return null;
@@ -521,6 +523,10 @@ export function createSponsoredWatchService(params: {
         ? item.tokenSymbol.trim()
         : knownMeta?.symbol ?? null;
     const human = parseFloat(humanizeTokenAmount(amount, decimals).replace(/,/g, ""));
+    // Never fabricate an unknown-token event: without a valid token contract
+    // this row cannot be attributed to any token, so it must be a native
+    // transfer (handled above) or an unusable row.
+    if (!tokenAddress) return null;
     return {
       event: {
         id: deterministicRpcEventId(
@@ -535,7 +541,9 @@ export function createSponsoredWatchService(params: {
         asset_symbols: symbol ? [symbol] : knownMeta ? [knownMeta.symbol] : null,
         magnitude: Number.isFinite(human)
           ? {
-              value: Math.round(human * 100) / 100,
+              // 6-decimal rounding keeps tiny amounts (e.g. 0.0044) visible
+              // instead of collapsing to 0 in the alert text.
+              value: Math.round(human * 1_000_000) / 1_000_000,
               unit: knownMeta?.isStableUsd ? "USD" : symbol ?? "tokens",
             }
           : null,
@@ -1139,8 +1147,8 @@ export function createSponsoredWatchService(params: {
       detailLines.length === 1 ? detailLines[0] : detailLines.join(" · ");
     const summary =
       newEvents.length === 1
-        ? `Matched 1 on-chain event on ${kind} ${watch.target_contract}: ${summaryDetail}`
-        : `Matched ${newEvents.length} on-chain events on ${kind} ${watch.target_contract}: ${summaryDetail}${
+        ? `Matched 1 new event on ${kind} ${shortTarget}: ${summaryDetail}`
+        : `Matched ${newEvents.length} new events on ${kind} ${shortTarget}: ${summaryDetail}${
             newEvents.length > 5 ? ` (+${newEvents.length - 5} more)` : ""
           }`;
     const sourceTx = primary.transaction_hash ?? null;

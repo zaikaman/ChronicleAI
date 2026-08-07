@@ -565,6 +565,101 @@ describe("SponsoredWatchService", () => {
       }
     });
 
+    it("treats tokentx rows with an empty contractAddress as native ETH transfers, not '0 tokens'", async () => {
+      // Regression: Etherscan's tokentx endpoint returns native ETH sends as
+      // rows where contractAddress is an EMPTY STRING. The old mapper only
+      // checked `contractAddress == null`, so these fell into the token branch
+      // with a null token identity and rendered as "0 tokens" in the DM.
+      const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+      const watch = {
+        ...mockWatchRow,
+        status: "monitoring" as const,
+        target_kind: "wallet" as const,
+        target_contract: wallet,
+        source_event_ids: [] as string[],
+        starts_at: "2026-08-06T16:50:00.000Z",
+        ends_at: "2026-08-06T17:50:00.000Z",
+      };
+      const inWindowSec = Math.floor(new Date("2026-08-06T17:20:00.000Z").getTime() / 1000);
+      const nativeTx = "0x" + "77".repeat(32);
+      const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+        const url = String(input);
+        // Both endpoints return this tx; the tokentx one carries the empty
+        // contractAddress shape Etherscan uses for native sends.
+        const rows = url.includes("tokentx")
+          ? [
+              {
+                hash: nativeTx,
+                from: "0x" + "88".repeat(20),
+                to: wallet,
+                contractAddress: "",
+                tokenSymbol: "",
+                tokenName: "",
+                tokenDecimal: "18",
+                value: "4474030340401250",
+                timeStamp: String(inWindowSec),
+                blockNumber: "20000002",
+                isError: "0",
+                txreceipt_status: "1",
+              },
+            ]
+          : [
+              {
+                hash: nativeTx,
+                from: "0x" + "88".repeat(20),
+                to: wallet,
+                value: "4474030340401250",
+                timeStamp: String(inWindowSec),
+                blockNumber: "20000002",
+                isError: "0",
+                txreceipt_status: "1",
+              },
+            ];
+        return { json: async () => ({ status: "1", message: "OK", result: rows }) };
+      });
+      const previousApiKey = process.env.ETHERSCAN_API_KEY;
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({ ok: true, value: [watch] });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.update.mockImplementation(async (id: string, update: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...watch, id, ...update },
+      }));
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: { ...watch } });
+      mockEventRepo.create.mockImplementation(async (data: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...data, id: crypto.randomUUID() },
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+      process.env.ETHERSCAN_API_KEY = "test-key";
+
+      try {
+        const cycle = await service.processCampaignCycle(new Date("2026-08-06T18:00:00.000Z"));
+        expect(cycle.monitored).toBe(1);
+        expect(cycle.failed).toBe(0);
+
+        const createdPayloads = (mockEventRepo.create.mock.calls as Array<[Record<string, unknown>]>).map(
+          (call) => call[0]?.raw_payload as Record<string, unknown> | undefined,
+        );
+        // Both endpoint shapes must resolve to the SAME native event (deduped
+        // by source_event_id), flagged isNative with an ETH amount.
+        expect(createdPayloads.filter((p) => p?.isNative === true).length).toBe(1);
+        const nativePayload = createdPayloads.find((p) => p?.isNative === true);
+        expect(nativePayload?.amountRaw).toBe("4474030340401250");
+        expect(nativePayload?.symbol).toBe("ETH");
+        // No misclassified "tokens"-unit event may be persisted.
+        const magnitudes = (mockEventRepo.create.mock.calls as Array<[Record<string, unknown>]>).map(
+          (call) => call[0]?.magnitude as { unit?: string } | undefined,
+        );
+        expect(magnitudes.some((m) => m?.unit === "tokens")).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+        if (previousApiKey === undefined) delete process.env.ETHERSCAN_API_KEY;
+        else process.env.ETHERSCAN_API_KEY = previousApiKey;
+      }
+    });
+
     it("walks Etherscan pages backward to reach the campaign window for an active wallet", async () => {
       const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
       const watch = {

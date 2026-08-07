@@ -9,6 +9,7 @@ import {
   describeWatchEvent,
   eventMatchesTargetContract,
   eventMatchesWallet,
+  formatEventLine,
   humanizeTokenAmount,
   isPlaceholderSponsoredReport,
   TRANSFER_EVENT_TOPIC0,
@@ -373,8 +374,37 @@ describe("watch event description helpers", () => {
       },
     });
     const line = describeWatchEvent(ev, "wallet", WALLET);
-    expect(line).toContain("Transfer");
     expect(line).toContain("10.901794 ETH received from");
+    expect(line).toContain("· tx ");
+  });
+
+  it("never renders a fabricated '0 tokens' placeholder for legacy misclassified native rows", () => {
+    // Rows persisted before the wallet-mapper fix carried magnitude
+    // { value: 0, unit: "tokens" } because native ETH sends from the
+    // tokentx endpoint have an empty contractAddress and were treated as
+    // unknown tokens. formatEventLine must suppress that placeholder.
+    const ev = event({
+      id: "w-legacy-misclassified",
+      event_type: "wallet_transfer",
+      protocol: "Ethereum Mainnet",
+      magnitude: { value: 0, unit: "tokens" },
+      transaction_hash: "0x" + "ab".repeat(32),
+    });
+    const line = formatEventLine(ev);
+    expect(line).toContain("wallet transfer on Ethereum Mainnet");
+    expect(line).not.toContain("0 tokens");
+  });
+
+  it("still renders real token magnitudes in formatEventLine", () => {
+    const ev = event({
+      id: "w-real-magnitude",
+      event_type: "wallet_transfer",
+      asset_symbols: ["ETH"],
+      magnitude: { value: 0.0045, unit: "ETH" },
+      transaction_hash: "0x" + "cd".repeat(32),
+    });
+    const line = formatEventLine(ev);
+    expect(line).toContain("0.005 ETH");
   });
 
   it("shows direction only for unknown tokens (no fabricated symbol or decimals)", () => {

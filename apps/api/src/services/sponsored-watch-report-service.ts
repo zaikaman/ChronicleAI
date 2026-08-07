@@ -65,7 +65,11 @@ export function formatEventLine(event: MonitoredEventRow): string {
   if (event.magnitude && typeof event.magnitude === "object") {
     const mag = event.magnitude as Record<string, unknown>;
     if (typeof mag.value === "number" && typeof mag.unit === "string") {
-      parts.push(`${mag.value.toLocaleString()} ${mag.unit}`);
+      // Never print a fabricated "0 tokens" placeholder (legacy rows from
+      // native transfers that were misclassified as unknown tokens).
+      const placeholder =
+        mag.unit.toLowerCase() === "tokens" && Math.abs(mag.value) < 1e-9;
+      if (!placeholder) parts.push(`${mag.value.toLocaleString()} ${mag.unit}`);
     }
   }
   if (event.transaction_hash) {
@@ -376,12 +380,12 @@ export function describeWatchEvent(
       } else if (to.toLowerCase() === target) {
         flow = `${amountText} ETH received from ${shortAddress(from)}`;
       } else {
-        flow = `${amountText} ETH · ${parties}`;
+        flow = `Transfer ${amountText} ETH · ${parties}`;
       }
     } else {
-      flow = `${amountText} ETH · ${parties}`;
+      flow = `Transfer ${amountText} ETH · ${parties}`;
     }
-    return `Transfer ${flow}${event.transaction_hash ? ` · tx ${shortTransactionHash(event.transaction_hash)}` : ""}`;
+    return `${flow}${event.transaction_hash ? ` · tx ${shortTransactionHash(event.transaction_hash)}` : ""}`;
   }
 
   if (from && to && amountRaw && tokenAddress) {
