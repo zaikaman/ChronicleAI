@@ -130,6 +130,13 @@ export interface StrategyRunner {
     publishTicket?: boolean | undefined;
     signalType?: string | undefined;
     signalFeatures?: Record<string, unknown> | undefined;
+    /**
+     * Live on-chain USDC balance of the desk wallet read at execution time.
+     * When provided (and below the mark's freeUsdc), the into_aave_link
+     * rotation swap + supply are resized to it so the token pull can never
+     * exceed the wallet balance (avoids Uniswap 'STF' safe-transfer reverts).
+     */
+    liveUsdcBalance?: number | undefined;
   }): Promise<StrategyExecuteResult>;
 }
 
@@ -430,16 +437,52 @@ export function createStrategyRunner(deps: {
         strategy === "yield_rotation" &&
         (isFreeLinkPowderLegs(legs) ||
           (intent.reason_codes ?? []).includes("out_of_free_link"));
+      // Only USDC-spending rotate-in (USDC→LINK swap + Aave supply) can be
+      // capped by the live wallet USDC balance. Exits (out_of_aave_link) and
+      // free-LINK powder spend LINK, not USDC — capping their effective
+      // notional would shrink the near-full max-uint withdraw detection and
+      // reintroduce 1-wei over-size withdraw reverts.
+      const rotateIntoAave =
+        strategy === "yield_rotation" &&
+        !freeLinkPowder &&
+        legs.some(
+          (l) => l.note === "rotate_usdc_to_link" || l.action === "supply",
+        ) &&
+        legs.some((l) => l.protocol === "uniswap");
+      // Live-balance truth: never let a rotate-in spend more USDC than the
+      // wallet holds at execution time (marks can lag a spent wallet and a
+      // swap pull would revert with Uniswap 'STF' safe-transfer-failed).
+      const liveUsdc =
+        rotateIntoAave &&
+        params.liveUsdcBalance != null &&
+        Number.isFinite(params.liveUsdcBalance) &&
+        params.liveUsdcBalance >= 0
+          ? params.liveUsdcBalance
+          : null;
+      const freeUsdcForSizing =
+        liveUsdc != null
+          ? Math.min(params.inventory.freeUsdc, liveUsdc)
+          : params.inventory.freeUsdc;
+      // Resize the LINK estimate with the capped notional so the supply leg
+      // never asks for more LINK than the (capped) swap can produce.
+      const effectiveNotional =
+        liveUsdc != null
+          ? Math.min(
+              intent.notional_usdc,
+              freeUsdcForSizing,
+              deps.config.maxTradeUsdc,
+            )
+          : intent.notional_usdc;
+      const linkPrice = params.inventory.linkUsdPrice;
+      const estimatedLink =
+        linkPrice != null && linkPrice > 0
+          ? effectiveNotional / linkPrice
+          : undefined;
       try {
-        const linkPrice = params.inventory.linkUsdPrice;
-        const estimatedLink =
-          linkPrice != null && linkPrice > 0
-            ? intent.notional_usdc / linkPrice
-            : undefined;
         workflowInput = buildWorkflowInputForPlan({
           plan: planLike,
           deskAddress: params.deskAddress,
-          freeUsdc: params.inventory.freeUsdc,
+          freeUsdc: freeUsdcForSizing,
           maxTradeUsdc: deps.config.maxTradeUsdc,
           estimatedLinkHuman: estimatedLink,
           linkBalanceHuman: freeLinkPowder
@@ -721,6 +764,12 @@ export function createStrategyRunner(deps: {
           executedViaKeeperHub: true,
           ticketId: ticket?.ticket?.id ?? null,
           ticketRegistryTxHash: ticket?.registryTxHash ?? null,
+          ...(liveUsdc != null
+            ? {
+                live_usdc_capped_notional: effectiveNotional,
+                live_usdc_balance: liveUsdc,
+              }
+            : {}),
         });
 
         return { intent: filled, receipt, ticket, executionAudit };

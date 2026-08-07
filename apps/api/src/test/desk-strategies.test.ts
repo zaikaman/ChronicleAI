@@ -97,12 +97,10 @@ describe("strategy-rotation", () => {
     expect(plan.action).toBe("ignore");
   });
 
-  it("executes an absurd APY edge only when Sepolia trust mode is enabled", () => {
-    const trusted = createYieldRotationStrategy({
-      ...config,
-      trustTestnetSignals: true,
-    });
-    const plan = trusted.plan({
+  it("executes an absurd APY edge as a rotate-in thesis", () => {
+    // Testnet edges are trusted: the deterministic engine proposes rotate-in
+    // even above the data-quality ceiling (no absurd gate).
+    const plan = strategy.plan({
       idleUsdcApyBps: 0,
       aaveSupplyApyBps: 22_700,
       consecutiveEdgePolls: 10,
@@ -113,6 +111,8 @@ describe("strategy-rotation", () => {
     if (plan.action === "propose") {
       expect(plan.strategy).toBe("yield_rotation");
       expect(plan.riskIncreasing).toBe(true);
+      expect(plan.reasonCodes).toContain("into_aave_link");
+      expect(plan.reasonCodes).toContain("edge_bps=22700");
     }
   });
 
@@ -162,7 +162,22 @@ describe("strategy-rotation", () => {
     }
   });
 
-  it("refuses absurd APY as yield thesis without freeable inventory", () => {
+  it("still applies the consecutive-poll gate to absurd APY edges", () => {
+    const plan = strategy.plan({
+      idleUsdcApyBps: 0,
+      aaveSupplyApyBps: 22_700,
+      consecutiveEdgePolls: 1, // below the required 2
+      freeUsdc: 40,
+      maxTradeUsdc: 15,
+    });
+    expect(plan.action).toBe("ignore");
+    if (plan.action === "ignore") {
+      expect(plan.reasonCodes).toContain("apy_edge_not_consecutive");
+    }
+  });
+
+  it("proposes absurd APY rotate-in without freeable Aave inventory", () => {
+    // Rotate-in only needs free USDC — no absurd gate blocks the thesis.
     const plan = strategy.plan({
       idleUsdcApyBps: 0,
       aaveSupplyApyBps: 22_700,
@@ -171,9 +186,10 @@ describe("strategy-rotation", () => {
       aaveLinkSupplied: 0,
       maxTradeUsdc: 15,
     });
-    expect(plan.action).toBe("ignore");
-    if (plan.action === "ignore") {
-      expect(plan.reasonCodes).toContain("apy_data_quality");
+    expect(plan.action).toBe("propose");
+    if (plan.action === "propose") {
+      expect(plan.reasonCodes).toContain("into_aave_link");
+      expect(plan.riskIncreasing).toBe(true);
     }
   });
 
@@ -235,24 +251,25 @@ describe("strategy-rotation", () => {
     }
   });
 
-  it("plans apy_data_quality_hold_inventory on absurd edge when free is not short", () => {
+  it("plans maintenance_rebalance when free is not short and book is one-sided", () => {
     const now = 10_000_000;
     const plan = strategy.plan({
       idleUsdcApyBps: 0,
-      aaveSupplyApyBps: 22_700,
-      consecutiveEdgePolls: 10,
+      aaveSupplyApyBps: 80, // honest edge, below absurd
+      consecutiveEdgePolls: 0, // cadence gate blocks rotate-in thesis
       freeUsdc: 15,
       aaveLinkSupplied: 50,
       linkUsdPrice: 12,
       maxTradeUsdc: 15,
       nowMs: now,
-      lastMaintenanceAtMs: null,
+      lastMaintenanceAtMs: now - config.rebalanceIntervalMs - 1,
     });
+    // One-sided Aave book (600 freeable vs 15 free) + interval due → cadence
+    // maintenance (no yield thesis claim without consecutive edge).
     expect(plan.action).toBe("propose");
     if (plan.action === "propose") {
-      expect(plan.reasonCodes).toContain("apy_data_quality_hold_inventory");
+      expect(plan.reasonCodes).toContain("maintenance_rebalance");
       expect(plan.reasonCodes.some((c) => c.startsWith("edge_bps="))).toBe(false);
-      expect(plan.reasonCodes.some((c) => c.startsWith("apy_absurd_bps="))).toBe(true);
       expect(plan.riskIncreasing).toBe(false);
     }
   });

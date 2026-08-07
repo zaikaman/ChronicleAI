@@ -91,6 +91,122 @@ describe("intent-service state machine", () => {
     await expect(service.markExecuting("i1")).rejects.toThrow(/Illegal desk intent transition/);
   });
 
+  it("reconcileFilled promotes a timed-out failed intent to filled", async () => {
+    const store = new Map<string, DeskIntentRow>();
+    store.set(
+      "i1",
+      row({
+        id: "i1",
+        status: "failed",
+        keeper_hub_run_id: "run-timeout",
+        error_message: "Timed out waiting for KeeperHub desk execution",
+      }),
+    );
+
+    const intents: DeskIntentRepository = {
+      create: vi.fn(),
+      findById: async (id) => ({ ok: true, value: store.get(id) ?? null }),
+      update: async (id, update) => {
+        const current = store.get(id)!;
+        const next = {
+          ...current,
+          ...update,
+          updated_at: new Date().toISOString(),
+        } as DeskIntentRow;
+        store.set(id, next);
+        return { ok: true, value: next };
+      },
+      listRecent: async () => ({ ok: true, value: [] }),
+      listPage: async () => ({
+        ok: true,
+        value: {
+          items: [],
+          page: 1,
+          limit: 20,
+          total: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      }),
+      listByStatus: async () => ({ ok: true, value: [] }),
+      findOpenByStrategy: async () => ({ ok: true, value: null }),
+      listOpen: async () => ({ ok: true, value: [] }),
+    };
+
+    const service = createIntentService(intents);
+    const filled = await service.reconcileFilled("i1", "run-timeout");
+    expect(filled.status).toBe("filled");
+    expect(filled.keeper_hub_run_id).toBe("run-timeout");
+    expect(filled.error_message).toBeNull();
+  });
+
+  it("reconcileFilled rejects from cancelled (terminal non-reconcilable)", async () => {
+    const store = new Map<string, DeskIntentRow>();
+    store.set("i1", row({ id: "i1", status: "cancelled" }));
+
+    const intents: DeskIntentRepository = {
+      create: vi.fn(),
+      findById: async (id) => ({ ok: true, value: store.get(id) ?? null }),
+      update: vi.fn(),
+      listRecent: async () => ({ ok: true, value: [] }),
+      listPage: async () => ({
+        ok: true,
+        value: {
+          items: [],
+          page: 1,
+          limit: 20,
+          total: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      }),
+      listByStatus: async () => ({ ok: true, value: [] }),
+      findOpenByStrategy: async () => ({ ok: true, value: null }),
+      listOpen: async () => ({ ok: true, value: [] }),
+    };
+
+    const service = createIntentService(intents);
+    await expect(service.reconcileFilled("i1", "run-x")).rejects.toThrow(
+      /Illegal desk intent transition/,
+    );
+  });
+
+  it("general markFilled still rejects failed → filled (state machine strict)", async () => {
+    const store = new Map<string, DeskIntentRow>();
+    store.set("i1", row({ id: "i1", status: "failed" }));
+
+    const intents: DeskIntentRepository = {
+      create: vi.fn(),
+      findById: async (id) => ({ ok: true, value: store.get(id) ?? null }),
+      update: vi.fn(),
+      listRecent: async () => ({ ok: true, value: [] }),
+      listPage: async () => ({
+        ok: true,
+        value: {
+          items: [],
+          page: 1,
+          limit: 20,
+          total: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      }),
+      listByStatus: async () => ({ ok: true, value: [] }),
+      findOpenByStrategy: async () => ({ ok: true, value: null }),
+      listOpen: async () => ({ ok: true, value: [] }),
+    };
+
+    const service = createIntentService(intents);
+    // Only the dedicated reconcileFilled path may promote a failed intent;
+    // the general markFilled transition must still throw.
+    await expect(service.markFilled("i1", "run-x")).rejects.toThrow(
+      /Illegal desk intent transition/,
+    );
+  });
+
   it("refuses propose when open intent exists for strategy", async () => {
     const intents: DeskIntentRepository = {
       create: vi.fn(),

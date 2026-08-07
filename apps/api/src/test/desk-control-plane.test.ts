@@ -372,6 +372,19 @@ describe("createDeskControlPlane", () => {
         );
         return intentStore.find((i) => i.id === id)!;
       },
+      async reconcileFilled(id, runId) {
+        intentStore = intentStore.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                status: "filled" as const,
+                keeper_hub_run_id: runId ?? i.keeper_hub_run_id,
+                error_message: null,
+              }
+            : i,
+        );
+        return intentStore.find((i) => i.id === id)!;
+      },
       async markFailed(id, errorMessage, runId) {
         intentStore = intentStore.map((i) =>
           i.id === id
@@ -840,6 +853,71 @@ describe("createDeskControlPlane", () => {
     });
     expect(result.intent.status).toBe("filled");
     expect(result.ticket?.ticketHash).toBe("0xabc");
+  });
+
+  it("reconciles a timed-out failed intent to filled on confirmed success", async () => {
+    // Bridge poll deadline expired → intent marked failed, but the KH run
+    // finished on-chain. The success callback must promote instead of throwing
+    // "Illegal desk intent transition failed → filled".
+    const { plane } = buildPlane({
+      intents: [
+        sampleIntent({
+          status: "failed",
+          keeper_hub_run_id: "kh-run-timeout",
+          error_message: "Timed out waiting for KeeperHub desk execution",
+        }),
+      ],
+    });
+    const result = await plane.applyExecutionResult({
+      intentId: "intent-1",
+      success: true,
+      keeperHubRunId: "kh-run-timeout",
+      fills: [{ txHash: "0xfill", step: 0 }],
+    });
+    expect(result.intent.status).toBe("filled");
+    expect(result.intent.keeper_hub_run_id).toBe("kh-run-timeout");
+    expect(result.intent.error_message).toBeNull();
+    // Ticket is published for the reconciled fill.
+    expect(result.ticket?.ticketHash).toBe("0xabc");
+  });
+
+  it("reconciles failed intent when run id unknown on failure", async () => {
+    const { plane } = buildPlane({
+      intents: [
+        sampleIntent({ status: "failed", keeper_hub_run_id: null }),
+      ],
+    });
+    const result = await plane.applyExecutionResult({
+      intentId: "intent-1",
+      success: true,
+      keeperHubRunId: "kh-run-late",
+      fills: [{ txHash: "0xfill", step: 0 }],
+    });
+    expect(result.intent.status).toBe("filled");
+    expect(result.intent.keeper_hub_run_id).toBe("kh-run-late");
+  });
+
+  it("reconciles failed intent even when completion run id drifted (public fallback)", async () => {
+    // Public-fallback completions arrive under `${idempotencyKey}-public-fallback`,
+    // so a run-id mismatch is not a stale callback — on-chain fills win.
+    const { plane } = buildPlane({
+      intents: [
+        sampleIntent({
+          status: "failed",
+          keeper_hub_run_id: "kh-run-private",
+          error_message: "Timed out waiting for KeeperHub desk execution",
+        }),
+      ],
+    });
+    const result = await plane.applyExecutionResult({
+      intentId: "intent-1",
+      success: true,
+      keeperHubRunId: "kh-run-public-fallback",
+      fills: [{ txHash: "0xfill", step: 0 }],
+    });
+    expect(result.intent.status).toBe("filled");
+    expect(result.intent.keeper_hub_run_id).toBe("kh-run-public-fallback");
+    expect(result.intent.error_message).toBeNull();
   });
 
   it("rejects success without real fills", async () => {

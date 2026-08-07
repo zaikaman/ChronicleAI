@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPolicyEngine } from "../desk/policy-engine.ts";
+import { AAVE_MAX_UINT256 } from "../desk/workflow-inputs.ts";
 import { createStrategyRunner } from "../desk/strategy-runner.ts";
 import type { DeskPolicyConfig } from "../desk/types.ts";
 import type { IntentService } from "../desk/intent-service.ts";
@@ -98,6 +99,7 @@ describe("strategy-runner", () => {
       approve: vi.fn(),
       markExecuting: vi.fn(),
       markFilled: vi.fn(),
+      reconcileFilled: vi.fn(),
       markFailed: vi.fn(),
       markDeferred: vi.fn(),
       cancel: vi.fn(),
@@ -144,6 +146,7 @@ describe("strategy-runner", () => {
       approve: vi.fn(),
       markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
       markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      reconcileFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
       markFailed: vi.fn(async (_id, msg) => ({
         ...intent,
         status: "failed" as const,
@@ -239,6 +242,7 @@ describe("strategy-runner", () => {
       approve: vi.fn(),
       markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
       markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      reconcileFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
       markFailed: vi.fn(),
       markDeferred: vi.fn(),
       cancel: vi.fn(),
@@ -314,6 +318,7 @@ describe("strategy-runner", () => {
       approve: vi.fn(),
       markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
       markFilled: vi.fn(),
+      reconcileFilled: vi.fn(),
       markFailed: vi.fn(async (_id, msg) => ({
         ...intent,
         status: "failed" as const,
@@ -370,6 +375,7 @@ describe("strategy-runner", () => {
       approve: vi.fn(),
       markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
       markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      reconcileFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
       markFailed: vi.fn(),
       markDeferred: vi.fn(),
       cancel: vi.fn(),
@@ -447,6 +453,7 @@ describe("strategy-runner", () => {
       approve: vi.fn(),
       markExecuting: vi.fn(),
       markFilled: vi.fn(),
+      reconcileFilled: vi.fn(),
       markFailed: vi.fn(async (_id, msg) => ({
         ...intent,
         status: "failed" as const,
@@ -511,6 +518,321 @@ describe("strategy-runner", () => {
     expect(result.executionAudit?.stages.outcome.status).toBe("skipped");
   });
 
+
+  it("executeIntent caps rotate-in swap to live USDC balance at execution", async () => {
+    // Mark says freeUsdc=20 and intent sized 15, but the wallet only holds 10.
+    // The swap must be resized to 10 so Uniswap never reverts with 'STF'.
+    const intent = makeIntent({
+      strategy: "yield_rotation",
+      notional_usdc: 15,
+      legs: [
+        {
+          protocol: "uniswap",
+          action: "swap-exact-input",
+          tokenIn: "USDC",
+          tokenOut: "LINK",
+          amountIn: "15",
+          note: "rotate_usdc_to_link",
+        },
+        { protocol: "aave-v3", action: "supply", amount: "min(policy,balance)" },
+      ],
+      reason_codes: ["yield_rotation", "apy_delta"],
+      policy_snapshot: { gasRegime: "normal", reasonCodes: ["policy_ok"] },
+    });
+    const intents: IntentService = {
+      propose: vi.fn(),
+      findById: vi.fn(async () => intent),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+      listOpen: vi.fn(),
+      findOpenByStrategy: vi.fn(),
+      transition: vi.fn(),
+      approve: vi.fn(),
+      markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
+      markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      reconcileFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      markFailed: vi.fn(),
+      markDeferred: vi.fn(),
+      cancel: vi.fn(),
+      hasOpenForStrategy: vi.fn(),
+      hasAnyOpen: vi.fn(),
+      isTerminal: vi.fn(),
+      isOpen: vi.fn(),
+      canTransition: vi.fn(),
+    };
+    const bridge: ExecutionBridge = {
+      execute: vi.fn(async (_action: string, input: Record<string, unknown>) => ({
+        keeperHubRunId: "run-live",
+        txHash: "0xlive",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xlive",
+        status: "completed",
+        gasUsed: "80000",
+        input,
+      })),
+      actionForStrategy: vi.fn(() => "rotate" as const),
+      requireWorkflowId: vi.fn(() => "wf"),
+      isConfigured: vi.fn(() => true),
+    };
+    const runner = createStrategyRunner({
+      config,
+      policy,
+      intents,
+      executionBridge: bridge,
+    });
+    const result = await runner.executeIntent({
+      intentId: intent.id,
+      deskAddress: DESK,
+      inventory: { freeUsdc: 20, deskEquityUsdc: 742, linkUsdPrice: 10 },
+      publishTicket: false,
+      liveUsdcBalance: 10,
+    });
+    expect(result.intent.status).toBe("filled");
+    // 10 USDC base units (6 decimals), not the 15 the mark would have allowed.
+    expect(bridge.execute).toHaveBeenCalledWith(
+      "rotate",
+      expect.objectContaining({ amountIn: "10000000" }),
+      expect.anything(),
+    );
+    // amountLink sized from the capped notional (10 USDC / 10 price = 1 LINK).
+    const calledWith = (bridge.execute as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(calledWith.amountLink).toBe("1000000000000000000");
+  });
+
+  it("executeIntent keeps mark sizing when live balance read is absent", async () => {
+    const intent = makeIntent({
+      strategy: "yield_rotation",
+      notional_usdc: 15,
+      legs: [
+        {
+          protocol: "uniswap",
+          action: "swap-exact-input",
+          tokenIn: "USDC",
+          tokenOut: "LINK",
+          amountIn: "15",
+          note: "rotate_usdc_to_link",
+        },
+        { protocol: "aave-v3", action: "supply", amount: "min(policy,balance)" },
+      ],
+      reason_codes: ["yield_rotation", "apy_delta"],
+      policy_snapshot: { gasRegime: "normal", reasonCodes: ["policy_ok"] },
+    });
+    const intents: IntentService = {
+      propose: vi.fn(),
+      findById: vi.fn(async () => intent),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+      listOpen: vi.fn(),
+      findOpenByStrategy: vi.fn(),
+      transition: vi.fn(),
+      approve: vi.fn(),
+      markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
+      markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      reconcileFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      markFailed: vi.fn(),
+      markDeferred: vi.fn(),
+      cancel: vi.fn(),
+      hasOpenForStrategy: vi.fn(),
+      hasAnyOpen: vi.fn(),
+      isTerminal: vi.fn(),
+      isOpen: vi.fn(),
+      canTransition: vi.fn(),
+    };
+    const bridge: ExecutionBridge = {
+      execute: vi.fn(async (_action: string, input: Record<string, unknown>) => ({
+        keeperHubRunId: "run-nolive",
+        txHash: "0xnolive",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xnolive",
+        status: "completed",
+        gasUsed: "80000",
+        input,
+      })),
+      actionForStrategy: vi.fn(() => "rotate" as const),
+      requireWorkflowId: vi.fn(() => "wf"),
+      isConfigured: vi.fn(() => true),
+    };
+    const runner = createStrategyRunner({
+      config,
+      policy,
+      intents,
+      executionBridge: bridge,
+    });
+    await runner.executeIntent({
+      intentId: intent.id,
+      deskAddress: DESK,
+      inventory: { freeUsdc: 20, deskEquityUsdc: 742, linkUsdPrice: 10 },
+      publishTicket: false,
+    });
+    // No live balance → sizing uses the mark freeUsdc=20 capped to maxTrade 15.
+    expect(bridge.execute).toHaveBeenCalledWith(
+      "rotate",
+      expect.objectContaining({ amountIn: "15000000" }),
+      expect.anything(),
+    );
+  });
+
+  it("executeIntent ignores NaN/negative live balance (fall back to mark)", async () => {
+    const intent = makeIntent({
+      strategy: "yield_rotation",
+      notional_usdc: 15,
+      legs: [
+        {
+          protocol: "uniswap",
+          action: "swap-exact-input",
+          tokenIn: "USDC",
+          tokenOut: "LINK",
+          amountIn: "15",
+          note: "rotate_usdc_to_link",
+        },
+        { protocol: "aave-v3", action: "supply", amount: "min(policy,balance)" },
+      ],
+      reason_codes: ["yield_rotation", "apy_delta"],
+      policy_snapshot: { gasRegime: "normal", reasonCodes: ["policy_ok"] },
+    });
+    const intents: IntentService = {
+      propose: vi.fn(),
+      findById: vi.fn(async () => intent),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+      listOpen: vi.fn(),
+      findOpenByStrategy: vi.fn(),
+      transition: vi.fn(),
+      approve: vi.fn(),
+      markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
+      markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      reconcileFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      markFailed: vi.fn(),
+      markDeferred: vi.fn(),
+      cancel: vi.fn(),
+      hasOpenForStrategy: vi.fn(),
+      hasAnyOpen: vi.fn(),
+      isTerminal: vi.fn(),
+      isOpen: vi.fn(),
+      canTransition: vi.fn(),
+    };
+    const bridge: ExecutionBridge = {
+      execute: vi.fn(async (_action: string, input: Record<string, unknown>) => ({
+        keeperHubRunId: "run-nan",
+        txHash: "0xnan",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xnan",
+        status: "completed",
+        gasUsed: "80000",
+        input,
+      })),
+      actionForStrategy: vi.fn(() => "rotate" as const),
+      requireWorkflowId: vi.fn(() => "wf"),
+      isConfigured: vi.fn(() => true),
+    };
+    const runner = createStrategyRunner({
+      config,
+      policy,
+      intents,
+      executionBridge: bridge,
+    });
+    await runner.executeIntent({
+      intentId: intent.id,
+      deskAddress: DESK,
+      inventory: { freeUsdc: 20, deskEquityUsdc: 742, linkUsdPrice: 10 },
+      publishTicket: false,
+      liveUsdcBalance: Number.NaN,
+    });
+    expect(bridge.execute).toHaveBeenCalledWith(
+      "rotate",
+      expect.objectContaining({ amountIn: "15000000" }),
+      expect.anything(),
+    );
+  });
+
+  it("executeIntent does not cap out_of_aave_link exit sizing by live balance", async () => {
+    // Exits run exactly when free USDC is low — a live-balance cap must NOT
+    // shrink the effective notional, or the near-full max-uint withdraw
+    // detection is disabled and float sizing can revert 1-wei over-size.
+    const intent = makeIntent({
+      strategy: "yield_rotation",
+      notional_usdc: 15,
+      legs: [
+        {
+          protocol: "aave-v3",
+          action: "withdraw",
+          asset: "LINK",
+          amount: "1.0",
+          note: "rotate_out_withdraw_link",
+        },
+        {
+          protocol: "uniswap",
+          action: "swap-exact-input",
+          tokenIn: "LINK",
+          tokenOut: "USDC",
+          amountIn: "1.0",
+          note: "rotate_link_to_usdc",
+        },
+      ],
+      reason_codes: ["yield_rotation", "out_of_aave_link", "free_usdc_shortfall"],
+      policy_snapshot: { gasRegime: "normal", reasonCodes: ["policy_ok"] },
+    });
+    const intents: IntentService = {
+      propose: vi.fn(),
+      findById: vi.fn(async () => intent),
+      listRecent: vi.fn(),
+      listPage: vi.fn(),
+      listOpen: vi.fn(),
+      findOpenByStrategy: vi.fn(),
+      transition: vi.fn(),
+      approve: vi.fn(),
+      markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
+      markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      reconcileFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      markFailed: vi.fn(),
+      markDeferred: vi.fn(),
+      cancel: vi.fn(),
+      hasOpenForStrategy: vi.fn(),
+      hasAnyOpen: vi.fn(),
+      isTerminal: vi.fn(),
+      isOpen: vi.fn(),
+      canTransition: vi.fn(),
+    };
+    const bridge: ExecutionBridge = {
+      execute: vi.fn(async (_action: string, input: Record<string, unknown>) => ({
+        keeperHubRunId: "run-exit",
+        txHash: "0xexit",
+        explorerUrl: "https://sepolia.etherscan.io/tx/0xexit",
+        status: "completed",
+        gasUsed: "80000",
+        input,
+      })),
+      actionForStrategy: vi.fn(() => "rotate" as const),
+      requireWorkflowId: vi.fn(() => "wf"),
+      isConfigured: vi.fn(() => true),
+    };
+    const runner = createStrategyRunner({
+      config,
+      policy,
+      intents,
+      executionBridge: bridge,
+    });
+    await runner.executeIntent({
+      intentId: intent.id,
+      deskAddress: DESK,
+      inventory: {
+        freeUsdc: 20,
+        deskEquityUsdc: 742,
+        linkUsdPrice: 15,
+        aaveLinkSupplied: 1,
+      },
+      publishTicket: false,
+      // Wallet is nearly empty — exactly when this exit would be triggered.
+      liveUsdcBalance: 2,
+    });
+    // Direction stays out_of_aave_link and the near-full exit still uses
+    // max-uint withdraw (estimatedLink = 15/15 = 1.0 >= 0.99 * 1 LINK).
+    expect(bridge.execute).toHaveBeenCalledWith(
+      "rotate",
+      expect.objectContaining({ direction: "out_of_aave_link" }),
+      expect.anything(),
+    );
+    const calledWith = (bridge.execute as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(calledWith.amountLink).toBe(AAVE_MAX_UINT256);
+  });
+
   it("Layer A disabled: no khSimulate on preflight (C+B unchanged)", async () => {
     const intent = makeIntent({
       policy_snapshot: { gasRegime: "normal", simulatedHfAfter: 1.4 },
@@ -526,6 +848,7 @@ describe("strategy-runner", () => {
       approve: vi.fn(),
       markExecuting: vi.fn(async () => ({ ...intent, status: "executing" as const })),
       markFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
+      reconcileFilled: vi.fn(async () => ({ ...intent, status: "filled" as const })),
       markFailed: vi.fn(),
       markDeferred: vi.fn(),
       cancel: vi.fn(),

@@ -184,12 +184,6 @@ export function createYieldRotationStrategy(
     const aaveFreeableUsd = aaveLink > 0 ? aaveLink * linkPrice : 0;
     const freeLinkUsd = freeLink > 0 ? freeLink * linkPrice : 0;
 
-    const edgeIntoAave = apyDeltaBps(input.idleUsdcApyBps, input.aaveSupplyApyBps);
-    const absurd =
-      !config.trustTestnetSignals &&
-      Number.isFinite(edgeIntoAave) &&
-      Math.abs(edgeIntoAave) >= config.apyAbsurdBps;
-
     const shortfall = freeUsdc + 1e-9 < minFree;
     const now = input.nowMs ?? Date.now();
     const lastMaint = input.lastMaintenanceAtMs;
@@ -204,14 +198,12 @@ export function createYieldRotationStrategy(
     const oneSidedAave =
       aaveFreeableUsd >= Math.min(maintenanceCapUsdc(), 1) && freeUsdc < aaveFreeableUsd;
 
-    let reason: "free_usdc_shortfall" | "apy_data_quality_hold_inventory" | "maintenance_rebalance" | null =
+    let reason: "free_usdc_shortfall" | "maintenance_rebalance" | null =
       null;
 
     if (shortfall) {
       // Free-powder shortfall is not interval-gated (need dry powder every tick).
       reason = "free_usdc_shortfall";
-    } else if (absurd && oneSidedAave && intervalDue) {
-      reason = "apy_data_quality_hold_inventory";
     } else if (oneSidedAave && intervalDue) {
       reason = "maintenance_rebalance";
     }
@@ -246,9 +238,6 @@ export function createYieldRotationStrategy(
       reason,
       `notional_usdc=${notional}`,
     ];
-    if (absurd) {
-      reasonCodes.push(`apy_absurd_bps=${Math.abs(edgeIntoAave)}`);
-    }
     if (shortfall) {
       reasonCodes.push(`free_usdc=${roundUsdc(freeUsdc)}`, `min_free=${minFree}`);
     }
@@ -274,10 +263,6 @@ export function createYieldRotationStrategy(
       const maintenance = planMaintenance(input);
 
       const edgeIntoAave = apyDeltaBps(input.idleUsdcApyBps, input.aaveSupplyApyBps);
-      const absurd =
-        !config.trustTestnetSignals &&
-        Number.isFinite(edgeIntoAave) &&
-        Math.abs(edgeIntoAave) >= config.apyAbsurdBps;
 
       // Free-USDC shortfall always wins over a yield thesis (cannot open without powder).
       if (
@@ -286,20 +271,6 @@ export function createYieldRotationStrategy(
         maintenance.reasonCodes.includes("free_usdc_shortfall")
       ) {
         return maintenance;
-      }
-
-      // Absurd APY is not a trade thesis — prefer maintenance or honest ignore.
-      if (absurd) {
-        if (maintenance) return maintenance;
-        return {
-          action: "ignore",
-          reasonCodes: [
-            "apy_data_quality",
-            `apy_absurd_bps=${Math.abs(edgeIntoAave)}`,
-            `threshold=${config.apyAbsurdBps}`,
-            "no_maintenance_inventory",
-          ],
-        };
       }
 
       if (input.consecutiveEdgePolls < config.apyConsecutivePolls) {

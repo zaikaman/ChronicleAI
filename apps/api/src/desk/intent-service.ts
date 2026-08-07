@@ -56,6 +56,16 @@ export interface IntentService {
   approve(id: string): Promise<DeskIntentRow>;
   markExecuting(id: string, keeperHubRunId?: string | undefined): Promise<DeskIntentRow>;
   markFilled(id: string, keeperHubRunId?: string | undefined): Promise<DeskIntentRow>;
+  /**
+   * Timeout reconciliation: promote a timed-out (failed) intent to filled
+   * when KeeperHub confirms the run actually completed on-chain with real
+   * fills. Legal only from executing or failed — never from filled/cancelled.
+   *
+   * Contract: this method performs NO run-id / staleness validation — callers
+   * (currently only the execution-result callback) must verify the callback is
+   * authoritative (real fills) before invoking it.
+   */
+  reconcileFilled(id: string, keeperHubRunId?: string | undefined): Promise<DeskIntentRow>;
   markFailed(id: string, errorMessage: string, keeperHubRunId?: string | undefined): Promise<DeskIntentRow>;
   markDeferred(id: string, reason?: string | undefined): Promise<DeskIntentRow>;
   cancel(id: string, reason?: string | undefined): Promise<DeskIntentRow>;
@@ -209,6 +219,27 @@ export function createIntentService(intents: DeskIntentRepository): IntentServic
         keeperHubRunId: keeperHubRunId ?? null,
         errorMessage: null,
       });
+    },
+
+    async reconcileFilled(id, keeperHubRunId) {
+      const found = await intents.findById(id);
+      if (!found.ok) throw found.error;
+      if (!found.value) {
+        throw new Error(`Desk intent not found: ${id}`);
+      }
+      const from = found.value.status as DeskIntentStatus;
+      if (from !== "executing" && from !== "failed") {
+        throw new Error(
+          `Illegal desk intent transition ${from} → filled for intent ${id}`,
+        );
+      }
+      const updated = await intents.update(id, {
+        status: "filled",
+        keeper_hub_run_id: keeperHubRunId ?? null,
+        error_message: null,
+      });
+      if (!updated.ok) throw updated.error;
+      return updated.value;
     },
 
     markFailed(id, errorMessage, keeperHubRunId) {

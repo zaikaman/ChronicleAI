@@ -164,6 +164,7 @@ describe("policy-engine", () => {
     expect(decision.reasonCodes).toContain("simulated_hf_below_warn");
   });
 
+
   it("refuses stale oracle for non-defend", () => {
     const now = Date.now();
     const decision = engine.evaluate(

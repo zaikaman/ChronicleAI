@@ -955,6 +955,23 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
     }
   }
 
+  /**
+   * Fresh on-chain USDC balance of the desk wallet at execution time.
+   * Marks can lag a spent wallet (freeUsdc in the agent context is the last
+   * mark), so rotate-in sizing is re-capped against this live read to avoid
+   * Uniswap 'STF' safe-transfer reverts when the wallet cannot cover the
+   * sized swap. Soft-fails to undefined (fall back to mark sizing).
+   */
+  async function liveDeskUsdcBalance(): Promise<number | undefined> {
+    if (!deps.positions || !deskAddress) return undefined;
+    try {
+      const balances = await deps.positions.readTokenBalances(deskAddress);
+      return Number.isFinite(balances.usdc) ? balances.usdc : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   async function lastMoveAt(direction: "topup" | "sweep"): Promise<string | null> {
     const result = await deps.capitalMoves.findLatestByDirection(direction);
     if (!result.ok) throw result.error;
@@ -2215,6 +2232,12 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
                 publishTicket: true,
                 signalType: match.signal?.signal_type ?? "maintenance_inventory",
                 signalFeatures: features,
+                // Only rotate-in sizing consumes the live balance; skip the
+                // extra RPC for every other strategy execution.
+                liveUsdcBalance:
+                  evalResult.intent.strategy === "yield_rotation"
+                    ? await liveDeskUsdcBalance()
+                    : undefined,
               });
               executions.push(execResult);
               const executionActionStatus: AlertActionStatus =
@@ -2537,6 +2560,12 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
                   monitoredEventId: eligibility.trigger?.monitoredEventId ?? null,
                   eventType: eligibility.trigger?.eventType ?? null,
                 },
+                // Microtrades are USDC-spending but sized by the plan legs;
+                // only rotation intents consume the live balance cap.
+                liveUsdcBalance:
+                  evalResult.intent.strategy === "yield_rotation"
+                    ? await liveDeskUsdcBalance()
+                    : undefined,
               });
               executions.push(execResult);
               if (microtradeAlertId) {
@@ -2769,12 +2798,36 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
         );
       }
 
-      // Transition through executing if still proposed/approved
-      if (existing.status === "proposed" || existing.status === "approved") {
-        await deps.intents.markExecuting(intentId, keeperHubRunId);
+      // Timeout reconciliation: executeIntent marks the intent failed when the
+      // bridge's poll deadline expires, but the KeeperHub run may still finish
+      // on-chain afterwards. A confirmed success with real fills is on-chain
+      // truth — promote the timed-out intent instead of throwing an illegal
+      // failed → filled transition.
+      let filled: DeskIntentRow;
+      if (existing.status === "failed") {
+        // Run-id drift is expected on the public-fallback path (completion
+        // arrives under `${idempotencyKey}-public-fallback`), so a mismatch is
+        // not a stale callback — the signed success body with real fills is
+        // authoritative. Log the drift and reconcile anyway.
+        if (
+          existing.keeper_hub_run_id &&
+          keeperHubRunId &&
+          existing.keeper_hub_run_id !== keeperHubRunId
+        ) {
+          deskLog.warn("reconciling timed-out intent with drifted run id", {
+            intentId,
+            failedRunId: existing.keeper_hub_run_id,
+            completedRunId: keeperHubRunId,
+          });
+        }
+        filled = await deps.intents.reconcileFilled(intentId, keeperHubRunId);
+      } else {
+        // Transition through executing if still proposed/approved
+        if (existing.status === "proposed" || existing.status === "approved") {
+          await deps.intents.markExecuting(intentId, keeperHubRunId);
+        }
+        filled = await deps.intents.markFilled(intentId, keeperHubRunId);
       }
-
-      const filled = await deps.intents.markFilled(intentId, keeperHubRunId);
 
       let ticket: TicketPublishResult | undefined;
       const publishTicket = asBoolean(body.publishTicket, true);
