@@ -416,6 +416,61 @@ describe("SponsoredWatchService", () => {
   });
 
   describe("processCampaignCycle", () => {
+    it("does not treat historical Etherscan logs as events in the campaign window", async () => {
+      const watch = {
+        ...mockWatchRow,
+        status: "monitoring" as const,
+        target_kind: "wallet" as const,
+        starts_at: "2026-08-06T16:50:00.000Z",
+        ends_at: "2026-08-06T17:50:00.000Z",
+      };
+      const transferTopic =
+        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+      const walletTopic = `0x${"0".repeat(24)}${watch.target_contract.slice(2)}`;
+      const historicalLog = {
+        transactionHash: "0x" + "99".repeat(32),
+        logIndex: "0x0",
+        timeStamp: "1562684042",
+        topics: [transferTopic, walletTopic, `0x${"0".repeat(64)}`],
+        data: `0x${"0".repeat(63)}1`,
+        address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      };
+      const previousApiKey = process.env.ETHERSCAN_API_KEY;
+      const fetchMock = vi.fn().mockResolvedValue({
+        json: async () => ({ status: "1", message: "OK", result: [historicalLog] }),
+      });
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({ ok: true, value: [watch] });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.update.mockResolvedValue({
+        ok: true,
+        value: { ...watch, monitored_event_count: 0 },
+      });
+      mockWatchRepo.findById.mockResolvedValue({
+        ok: true,
+        value: { ...watch, monitored_event_count: 0 },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      process.env.ETHERSCAN_API_KEY = "test-key";
+
+      try {
+        const cycle = await service.processCampaignCycle(new Date("2026-08-06T17:00:00.000Z"));
+
+        expect(cycle.monitored).toBe(1);
+        expect(cycle.failed).toBe(0);
+        expect(mockEventRepo.create).not.toHaveBeenCalled();
+        expect(mockWatchRepo.update).toHaveBeenCalledWith(
+          watch.id,
+          expect.objectContaining({ monitored_event_count: 0, source_event_ids: [] }),
+        );
+      } finally {
+        vi.unstubAllGlobals();
+        if (previousApiKey === undefined) delete process.env.ETHERSCAN_API_KEY;
+        else process.env.ETHERSCAN_API_KEY = previousApiKey;
+      }
+    });
+
     it("does not overlap a slow cycle with the next invocation", async () => {
       let releaseFirstList: (() => void) | undefined;
       const firstList = new Promise<void>((resolve) => {

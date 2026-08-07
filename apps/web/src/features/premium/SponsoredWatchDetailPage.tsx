@@ -1,5 +1,17 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
+import {
+  Activity,
+  ArrowUpRight,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  FileCheck2,
+  Fingerprint,
+  Layers3,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
 import {
@@ -47,6 +59,7 @@ interface WatchDetail {
   reportAnalysis?: string;
   monitoredEventCount?: number;
   lastMonitoredAt?: string;
+  targetKind?: "wallet" | "contract";
   auditTrail?: WatchAuditTrail;
 }
 
@@ -83,14 +96,98 @@ function TxLink({
             href={explorerUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-foreground hover:text-muted-foreground transition-colors"
+            className="inline-flex items-center gap-1.5 text-foreground hover:text-muted-foreground transition-colors"
           >
             {hash}
+            <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
           </a>
         ) : (
           <span className="text-foreground">{hash}</span>
         )}
       </dd>
+    </div>
+  );
+}
+
+function formatCount(value: number): string {
+  return value.toLocaleString("en-US");
+}
+
+function formatWindowDuration(startsAt: string, endsAt: string): string {
+  const durationMs = new Date(endsAt).getTime() - new Date(startsAt).getTime();
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return "Unknown";
+
+  const minutes = Math.max(1, Math.round(durationMs / 60_000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = minutes / 60;
+  if (Number.isInteger(hours)) return `${hours} hr`;
+  return `${hours.toFixed(1)} hr`;
+}
+
+function formatTargetKind(targetKind?: "wallet" | "contract"): string {
+  return targetKind === "wallet" ? "Wallet activity" : "Contract activity";
+}
+
+function splitReportBlocks(analysis?: string): Array<{ heading?: string; body: string }> {
+  return (analysis ?? "")
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      const newline = block.indexOf("\n");
+      if (newline > 0 && newline < 36) {
+        return { heading: block.slice(0, newline).trim(), body: block.slice(newline + 1).trim() };
+      }
+      return { body: block };
+    });
+}
+
+function isRepetitiveHighlightSet(highlights?: string[]): boolean {
+  const lines = (highlights ?? []).map((line) =>
+    line
+      .replace(/^\d+\.\s*/, "")
+      .replace(/tx\s+0x[0-9a-fA-F]+(?:…|\.\.\.)?/g, "tx <hash>")
+      .replace(/\s*\(significance:\s*[^)]+\)/gi, "")
+      .trim()
+      .toLowerCase(),
+  );
+  return lines.length >= 4 && new Set(lines).size === 1;
+}
+
+function HighlightText({ line }: { line: string }): ReactElement {
+  const separator = line.indexOf(":");
+  if (separator > 0 && separator < 24) {
+    return (
+      <>
+        <span className="font-semibold text-foreground">{line.slice(0, separator)}:</span>
+        {line.slice(separator + 1)}
+      </>
+    );
+  }
+  return <>{line}</>;
+}
+
+function SignalMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+}): ReactElement {
+  return (
+    <div className="p-4 sm:p-5">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <Icon aria-hidden="true" className="h-4 w-4 text-foreground" strokeWidth={1.8} />
+        {label}
+      </div>
+      <p className="mt-2 text-xl font-semibold tracking-tight text-foreground tabular-nums">
+        {value}
+      </p>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{detail}</p>
     </div>
   );
 }
@@ -198,6 +295,31 @@ export function SponsoredWatchDetailPage(): ReactElement {
   const sourceEventRoot = watch.auditTrail?.sourceEventRoot ?? watch.sourceEventRoot;
   const reportContentHash = watch.auditTrail?.reportContentHash ?? watch.reportContentHash;
   const dualTrailComplete = Boolean(createTx && reportTx);
+  const sourceEventCount = watch.sourceEventIds?.length ?? watch.monitoredEventCount ?? 0;
+  const reportNeedsContext = isRepetitiveHighlightSet(watch.reportHighlights);
+  const displaySummary = reportNeedsContext
+    ? `The campaign recorded ${formatCount(watch.monitoredEventCount ?? 0)} matching event records across ${formatCount(sourceEventCount)} committed source records. The stored narrative contains abbreviated transaction references but does not include decoded asset, amount, or direction metadata.`
+    : watch.reportSummary;
+  const displayHighlights = reportNeedsContext
+    ? [
+        `Coverage: ${formatCount(watch.monitoredEventCount ?? 0)} matching event records were retained for this campaign.`,
+        "Interpretation: the stored report does not support a token amount or USD-value conclusion because those fields were not decoded.",
+        `Verification: the source-event root and publication transaction are the authoritative evidence for the committed source set.`,
+      ]
+    : watch.reportHighlights;
+  const reportBlocks = reportNeedsContext
+    ? [
+        {
+          heading: "Readout",
+          body: "This report body is a legacy narrative with repeated event formatting. It confirms the size of the committed source set, but not the economic meaning of each transfer.",
+        },
+        {
+          heading: "Evidence",
+          body: "Use the source-event root and publication transaction below to verify the committed record set. New campaigns use decoded activity summaries with cadence, flow, asset, and counterparty context.",
+        },
+      ]
+    : splitReportBlocks(watch.reportAnalysis);
+  const reportVerified = Boolean(dualTrailComplete && reportContentHash && sourceEventRoot);
 
   return (
     <Page data-testid="watch-detail">
@@ -216,39 +338,70 @@ export function SponsoredWatchDetailPage(): ReactElement {
         }
       />
 
-      <Surface className="p-5 mb-8">
-        <dl className="grid gap-4 sm:grid-cols-2 text-sm">
-          <div>
-            <dt className="text-xs text-muted-foreground font-medium mb-1">Target contract</dt>
-            <dd className="font-mono break-all text-foreground">{watch.targetContract}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground font-medium mb-1">Watch spec hash</dt>
-            <dd className="font-mono break-all text-foreground">{watch.watchSpecHash}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground font-medium mb-1">Starts</dt>
-            <dd>
-              <TimestampDisplay timestamp={watch.startsAt} />
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground font-medium mb-1">Ends</dt>
-            <dd>
-              <TimestampDisplay timestamp={watch.endsAt} />
-            </dd>
-          </div>
-          {watch.onChainWatchId != null ? (
-            <div>
-              <dt className="text-xs text-muted-foreground font-medium mb-1">On-chain watch id</dt>
-              <dd className="font-mono text-foreground">{watch.onChainWatchId}</dd>
+      <Surface className="mb-8 overflow-hidden" data-testid="watch-campaign-overview">
+        <div className="border-b border-border bg-card-secondary/30 p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 max-w-3xl">
+              <p className="text-xs font-semibold tracking-wide text-muted-foreground">CAMPAIGN OUTCOME</p>
+              <h2
+                className="mt-2 break-words text-xl font-semibold tracking-tight text-foreground sm:text-2xl"
+                style={{ overflowWrap: "anywhere" }}
+              >
+                {displaySummary ?? "Monitoring campaign completed."}
+              </h2>
             </div>
-          ) : null}
-          <div>
-            <dt className="text-xs text-muted-foreground font-medium mb-1">Events matched</dt>
-            <dd className="text-foreground">{watch.monitoredEventCount ?? 0}</dd>
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-accent" />
+              {reportVerified ? "Source-backed report" : "Report proof pending"}
+            </div>
           </div>
-        </dl>
+        </div>
+
+        <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <SignalMetric
+            icon={Activity}
+            label="Observations"
+            value={formatCount(watch.monitoredEventCount ?? 0)}
+            detail="qualifying events matched"
+          />
+          <SignalMetric
+            icon={Layers3}
+            label="Source records"
+            value={formatCount(sourceEventCount)}
+            detail="records committed to the report"
+          />
+          <SignalMetric
+            icon={Clock3}
+            label="Watch window"
+            value={formatWindowDuration(watch.startsAt, watch.endsAt)}
+            detail="from start to end of monitoring"
+          />
+          <SignalMetric
+            icon={ShieldCheck}
+            label="Verification"
+            value={reportVerified ? "Verified" : "Pending"}
+            detail={reportVerified ? "dual receipt + source root" : "waiting for publication proof"}
+          />
+        </div>
+
+        <div className="grid gap-4 border-t border-border p-5 text-sm sm:grid-cols-2 sm:p-6">
+          <div className="min-w-0">
+            <dt className="text-xs font-medium text-muted-foreground">Target</dt>
+            <dd className="mt-1 break-all font-mono text-foreground">{watch.targetContract}</dd>
+            <p className="mt-1 text-xs text-muted-foreground">{formatTargetKind(watch.targetKind)} on Ethereum Mainnet</p>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-muted-foreground">Observed window</dt>
+            <dd className="mt-1 text-foreground">
+              <TimestampDisplay timestamp={watch.startsAt} format="full" />
+              <span className="px-1 text-muted-foreground">to</span>
+              <TimestampDisplay timestamp={watch.endsAt} format="full" />
+            </dd>
+            {watch.onChainWatchId != null ? (
+              <p className="mt-1 text-xs text-muted-foreground">On-chain watch ID {watch.onChainWatchId}</p>
+            ) : null}
+          </div>
+        </div>
       </Surface>
 
       <PageSection
@@ -256,86 +409,146 @@ export function SponsoredWatchDetailPage(): ReactElement {
         description="Paid campaigns record both acceptance (createSponsoredWatch) and final report publication (publishSponsoredReport with source-event root)."
         data-testid="watch-audit-trail"
       >
-        <Surface className="p-5">
-          <dl className="grid gap-4 sm:grid-cols-2 text-sm">
-            <TxLink
-              {...(createTx !== undefined ? { hash: createTx } : {})}
-              {...(createExplorer !== undefined
-                ? { explorerUrl: createExplorer }
-                : {})}
-              label="Create tx (createSponsoredWatch)"
-            />
-            <TxLink
-              {...(reportTx !== undefined ? { hash: reportTx } : {})}
-              {...(reportExplorer !== undefined
-                ? { explorerUrl: reportExplorer }
-                : {})}
-              label="Report tx (publishSponsoredReport)"
-            />
-            {reportContentHash ? (
-              <div className="sm:col-span-2">
-                <dt className="text-xs text-muted-foreground font-medium mb-1">
-                  Report content hash
-                </dt>
-                <dd className="font-mono break-all text-foreground">{reportContentHash}</dd>
+        <Surface className="overflow-hidden">
+          <div className="grid divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
+            <div className="p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+                  <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-muted-foreground">ACCEPTED</p>
+                  <h3 className="mt-1 font-semibold text-foreground">Watch registered on-chain</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    createSponsoredWatch established the campaign scope and target.
+                  </p>
+                  <div className="mt-4">
+                    <TxLink
+                      {...(createTx !== undefined ? { hash: createTx } : {})}
+                      {...(createExplorer !== undefined ? { explorerUrl: createExplorer } : {})}
+                      label="Creation transaction"
+                    />
+                  </div>
+                </div>
               </div>
-            ) : null}
+            </div>
+            <div className="p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-black">
+                  <FileCheck2 aria-hidden="true" className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-muted-foreground">PUBLISHED</p>
+                  <h3 className="mt-1 font-semibold text-foreground">Report committed on-chain</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    publishSponsoredReport binds the report body to the source-event root.
+                  </p>
+                  <div className="mt-4">
+                    <TxLink
+                      {...(reportTx !== undefined ? { hash: reportTx } : {})}
+                      {...(reportExplorer !== undefined ? { explorerUrl: reportExplorer } : {})}
+                      label="Publication transaction"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-5 border-t border-border p-5 text-sm sm:grid-cols-2 sm:p-6">
             {sourceEventRoot ? (
-              <div className="sm:col-span-2">
-                <dt className="text-xs text-muted-foreground font-medium mb-1">
-                  Source event root
-                </dt>
-                <dd
-                  className="font-mono break-all text-foreground"
-                  data-testid="watch-source-event-root"
-                >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <Fingerprint aria-hidden="true" className="h-4 w-4 text-foreground" />
+                  Source-event root
+                </div>
+                <p className="mt-2 break-all font-mono text-xs leading-relaxed text-foreground" data-testid="watch-source-event-root">
                   {sourceEventRoot}
-                </dd>
+                </p>
               </div>
             ) : null}
-            {watch.createKeeperHubRunId ? (
-              <div>
-                <dt className="text-xs text-muted-foreground font-medium mb-1">
-                  Create KeeperHub run
-                </dt>
-                <dd className="font-mono break-all text-foreground">
-                  {watch.createKeeperHubRunId}
-                </dd>
+            {reportContentHash ? (
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <FileCheck2 aria-hidden="true" className="h-4 w-4 text-foreground" />
+                  Report content hash
+                </div>
+                <p className="mt-2 break-all font-mono text-xs leading-relaxed text-foreground">
+                  {reportContentHash}
+                </p>
               </div>
             ) : null}
-            {watch.reportKeeperHubRunId ? (
-              <div>
-                <dt className="text-xs text-muted-foreground font-medium mb-1">
-                  Report KeeperHub run
-                </dt>
-                <dd className="font-mono break-all text-foreground">
-                  {watch.reportKeeperHubRunId}
-                </dd>
-              </div>
-            ) : null}
-          </dl>
+          </div>
+          {(watch.createKeeperHubRunId || watch.reportKeeperHubRunId) ? (
+            <div className="grid gap-4 border-t border-border bg-muted/20 p-5 text-sm sm:grid-cols-2 sm:p-6">
+              {watch.createKeeperHubRunId ? (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Create KeeperHub run</dt>
+                  <dd className="mt-1 break-all font-mono text-xs text-foreground">{watch.createKeeperHubRunId}</dd>
+                </div>
+              ) : null}
+              {watch.reportKeeperHubRunId ? (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Report KeeperHub run</dt>
+                  <dd className="mt-1 break-all font-mono text-xs text-foreground">{watch.reportKeeperHubRunId}</dd>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </Surface>
       </PageSection>
 
-      {(watch.reportSummary ||
-        (watch.reportHighlights && watch.reportHighlights.length > 0)) && (
-        <PageSection title="Campaign report" data-testid="watch-report-body">
-          <Surface className="p-5 space-y-4">
-            {watch.reportSummary ? (
-              <p className="text-sm text-foreground leading-relaxed">{watch.reportSummary}</p>
-            ) : null}
-            {watch.reportHighlights && watch.reportHighlights.length > 0 ? (
-              <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
-                {watch.reportHighlights.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : null}
-            {watch.reportAnalysis ? (
-              <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                {watch.reportAnalysis}
+      {(displaySummary || (displayHighlights && displayHighlights.length > 0)) && (
+        <PageSection
+          title="Campaign report"
+          description="A decision-ready readout of what the watch captured, how the activity behaved, and what evidence supports it."
+          data-testid="watch-report-body"
+        >
+          <Surface className="overflow-hidden">
+            <div className="grid lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+              <div className="p-5 sm:p-6">
+                <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground">
+                  <Activity aria-hidden="true" className="h-4 w-4 text-foreground" />
+                  KEY FINDINGS
+                </div>
+                {displayHighlights && displayHighlights.length > 0 ? (
+                  <ul className="mt-4 space-y-3" data-testid="watch-report-highlights">
+                    {displayHighlights.map((line, index) => (
+                      <li key={`${line}-${index}`} className="flex gap-3 text-sm leading-relaxed text-foreground">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+                        <span><HighlightText line={line} /></span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-4 text-sm text-muted-foreground">No findings were recorded for this campaign.</p>
+                )}
               </div>
-            ) : null}
+
+              <div className="border-t border-border bg-muted/20 p-5 sm:p-6 lg:border-l lg:border-t-0">
+                <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground">
+                  <FileCheck2 aria-hidden="true" className="h-4 w-4 text-foreground" />
+                  ANALYST READOUT
+                </div>
+                <div className="mt-4 space-y-4">
+                  {reportBlocks.length > 0 ? (
+                    reportBlocks.map((block, index) => (
+                      <div key={`${block.heading ?? "block"}-${index}`}>
+                        {block.heading ? (
+                          <h3 className="text-sm font-semibold text-foreground">{block.heading}</h3>
+                        ) : null}
+                        <p className={`${block.heading ? "mt-1" : ""} whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground`}>
+                          {block.body}
+                        </p>
+                      </div>
+                    ))
+                  ) : displaySummary ? (
+                    <p className="text-sm leading-relaxed text-muted-foreground">{displaySummary}</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">The analyst readout is not available.</p>
+                  )}
+                </div>
+              </div>
+            </div>
           </Surface>
         </PageSection>
       )}

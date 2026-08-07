@@ -71,13 +71,24 @@ async function fetchLogsFromEtherscanV2(targetContract: string, startsAt: string
   }> = [];
 
   for (const item of data.result) {
-    const timeStampSec = parseInt(item.timeStamp, 16) || parseInt(item.timeStamp, 10);
+    const rawTimestamp = String(item.timeStamp ?? "").trim();
+    const timeStampSec = /^0x/i.test(rawTimestamp)
+      ? Number.parseInt(rawTimestamp, 16)
+      : Number.parseInt(rawTimestamp, 10);
     const itemMs = timeStampSec * 1000;
-    // Check if within window (or fallback if window is narrow)
+    // Only accept logs observed inside the requested campaign window.
+    if (!Number.isFinite(itemMs) || itemMs < startsMs || itemMs > endsMs) {
+      continue;
+    }
     const txHash = item.transactionHash;
-    const logIndex = parseInt(item.logIndex, 16) || parseInt(item.logIndex, 10) || 0;
-    const blockNumber = item.blockNumber ? (parseInt(item.blockNumber, 16) || item.blockNumber) : null;
-    const observedAt = Number.isFinite(itemMs) ? new Date(itemMs).toISOString() : startsAt;
+    const rawLogIndex = String(item.logIndex ?? "").trim();
+    const logIndex = (/^0x/i.test(rawLogIndex) ? Number.parseInt(rawLogIndex, 16) : Number.parseInt(rawLogIndex, 10)) || 0;
+    const rawBlockNumber = String(item.blockNumber ?? "").trim();
+    const parsedBlockNumber = /^0x/i.test(rawBlockNumber)
+      ? Number.parseInt(rawBlockNumber, 16)
+      : Number.parseInt(rawBlockNumber, 10);
+    const blockNumber = item.blockNumber ? (Number.isFinite(parsedBlockNumber) ? parsedBlockNumber : item.blockNumber) : null;
+    const observedAt = new Date(itemMs).toISOString();
 
     events.push({
       source: "etherscan_v2",

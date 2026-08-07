@@ -57,14 +57,28 @@ async function runDirectRepair() {
   console.log(`Found ${rawLogs.length} raw logs from Etherscan V2`);
 
   const nowIso = new Date().toISOString();
+  const startsMs = Date.parse(watch.starts_at);
+  const endsMs = Date.parse(watch.ends_at);
   const persistedEvents: MonitoredEventRow[] = [];
 
   for (const item of rawLogs.slice(0, 50)) {
     const txHash = item.transactionHash;
-    const logIndex = parseInt(item.logIndex, 16) || parseInt(item.logIndex, 10) || 0;
-    const blockNumber = item.blockNumber ? String(parseInt(item.blockNumber, 16) || item.blockNumber) : null;
-    const timeStampSec = parseInt(item.timeStamp, 16) || parseInt(item.timeStamp, 10);
-    const observedAt = Number.isFinite(timeStampSec) ? new Date(timeStampSec * 1000).toISOString() : watch.starts_at;
+    const rawLogIndex = String(item.logIndex ?? "").trim();
+    const logIndex = (/^0x/i.test(rawLogIndex) ? Number.parseInt(rawLogIndex, 16) : Number.parseInt(rawLogIndex, 10)) || 0;
+    const rawBlockNumber = String(item.blockNumber ?? "").trim();
+    const parsedBlockNumber = /^0x/i.test(rawBlockNumber)
+      ? Number.parseInt(rawBlockNumber, 16)
+      : Number.parseInt(rawBlockNumber, 10);
+    const blockNumber = item.blockNumber ? String(Number.isFinite(parsedBlockNumber) ? parsedBlockNumber : item.blockNumber) : null;
+    const rawTimestamp = String(item.timeStamp ?? "").trim();
+    const timeStampSec = /^0x/i.test(rawTimestamp)
+      ? Number.parseInt(rawTimestamp, 16)
+      : Number.parseInt(rawTimestamp, 10);
+    const itemMs = Number.isFinite(timeStampSec) ? timeStampSec * 1000 : Number.NaN;
+    if (!Number.isFinite(itemMs) || itemMs < startsMs || itemMs > endsMs) {
+      continue;
+    }
+    const observedAt = new Date(itemMs).toISOString();
 
     const sourceEventId = `eth-${txHash}-${logIndex}`;
 

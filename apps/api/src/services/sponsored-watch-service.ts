@@ -22,6 +22,7 @@ import { buildSponsoredReportContentUri } from "./content-uri.ts";
 import type { NotificationService } from "./notification-service.ts";
 import {
   createSponsoredWatchReportService,
+  dedupeSponsoredWatchEvents,
   decodeTransferAmount,
   describeWatchEvent,
   eventMatchesWatchTarget,
@@ -112,6 +113,39 @@ const WATCH_ALERT_THROTTLE_MS = 15 * 60_000;
 
 /** In-process single-flight so concurrent 60s ticks cannot double-publish one watch. */
 const completionInFlight = new Set<string>();
+
+function parseProviderInteger(value: string | number | undefined): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.trunc(value) : null;
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = /^0x/i.test(trimmed)
+    ? Number.parseInt(trimmed, 16)
+    : Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function eventObservedAtMs(event: MonitoredEventRow): number {
+  const observed = event.observed_at ? Date.parse(event.observed_at) : Number.NaN;
+  if (Number.isFinite(observed)) return observed;
+  const captured = Date.parse(event.captured_at);
+  return Number.isFinite(captured) ? captured : Number.NaN;
+}
+
+function eventIsInCampaignWindow(event: MonitoredEventRow, watch: SponsoredWatchRow): boolean {
+  const startsMs = Date.parse(watch.starts_at);
+  const endsMs = Date.parse(watch.ends_at);
+  const observedMs = eventObservedAtMs(event);
+  return (
+    Number.isFinite(startsMs) &&
+    Number.isFinite(endsMs) &&
+    Number.isFinite(observedMs) &&
+    observedMs >= startsMs &&
+    observedMs <= endsMs
+  );
+}
 
 export interface CompleteWatchParams {
   reportContentHash: string;
@@ -252,24 +286,17 @@ export function createSponsoredWatchService(params: {
     if (!txHash || typeof txHash !== "string") return null;
 
     const logIndexRaw = item.logIndex;
-    const logIndex =
-      typeof logIndexRaw === "number"
-        ? logIndexRaw
-        : typeof logIndexRaw === "string"
-          ? parseInt(logIndexRaw, 16) || parseInt(logIndexRaw, 10) || 0
-          : 0;
+    const logIndex = parseProviderInteger(logIndexRaw) ?? 0;
 
-    const timeStampSec =
-      typeof item.timeStamp === "number"
-        ? item.timeStamp
-        : typeof item.timeStamp === "string"
-          ? parseInt(item.timeStamp, 16) || parseInt(item.timeStamp, 10)
-          : Number.NaN;
-    const itemMs = Number.isFinite(timeStampSec) ? timeStampSec * 1000 : Number.NaN;
+    // Etherscan returns decimal strings (for example "1562684042"). Treating
+    // every string as hexadecimal moves those events thousands of years away,
+    // causing the no-match fallback to accept an arbitrary 500-row history.
+    const timeStampSec = parseProviderInteger(item.timeStamp);
+    const itemMs = timeStampSec !== null ? timeStampSec * 1000 : Number.NaN;
     const inWindow =
       Number.isFinite(itemMs) &&
-      itemMs >= startsMs - 3600_000 &&
-      itemMs <= endsMs + 3600_000;
+      itemMs >= startsMs &&
+      itemMs <= endsMs;
     const observedAt = Number.isFinite(itemMs) ? new Date(itemMs).toISOString() : watch.starts_at;
 
     const topics: string[] = Array.isArray(item.topics)
@@ -287,7 +314,7 @@ export function createSponsoredWatchService(params: {
       item.blockNumber != null
         ? String(
             typeof item.blockNumber === "string"
-              ? parseInt(item.blockNumber, 16) || item.blockNumber
+              ? parseProviderInteger(item.blockNumber) ?? item.blockNumber
               : item.blockNumber,
           )
         : null;
@@ -371,9 +398,9 @@ export function createSponsoredWatchService(params: {
               `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs&address=${watch.target_contract}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
             ];
 
-        const allEvents: MonitoredEventRow[] = [];
         const windowEvents: MonitoredEventRow[] = [];
         const seen = new Set<string>();
+        let receivedValidResponse = false;
 
         for (const urlV2 of urls) {
           const res = await fetch(urlV2, { signal: AbortSignal.timeout(10_000) });
@@ -387,6 +414,7 @@ export function createSponsoredWatchService(params: {
           ) {
             continue;
           }
+          receivedValidResponse = true;
           for (const item of data.result) {
             const mapped = mapLogItemToEvent(
               item as Parameters<typeof mapLogItemToEvent>[0],
@@ -400,13 +428,15 @@ export function createSponsoredWatchService(params: {
             const key = `${mapped.event.transaction_hash}:${(mapped.event.raw_payload as { logIndex?: number }).logIndex ?? 0}`;
             if (seen.has(key)) continue;
             seen.add(key);
-            allEvents.push(mapped.event);
             if (mapped.inWindow) windowEvents.push(mapped.event);
           }
         }
 
-        if (windowEvents.length > 0) return windowEvents;
-        if (allEvents.length > 0) return allEvents.slice(0, MAX_RPC_EVENTS_PER_WATCH);
+        if (receivedValidResponse) {
+          // A valid provider response with no exact campaign-window matches is
+          // an empty source set. Never substitute unrelated historical logs.
+          return dedupeSponsoredWatchEvents(windowEvents).slice(0, MAX_RPC_EVENTS_PER_WATCH);
+        }
       } catch (etherscanErr) {
         console.warn(
           `[sponsored-watch] Etherscan V2 log fetch failed for ${watch.id}, falling back to chunked RPC:`,
@@ -432,6 +462,7 @@ export function createSponsoredWatchService(params: {
       topics: readonly string[] | string[];
       data?: string;
       address?: string;
+      blockTimestamp?: number;
     };
 
     function normalizeRpcLog(log: {
@@ -493,7 +524,16 @@ export function createSponsoredWatchService(params: {
           const key = `${normalized.transactionHash}:${normalized.logIndex}`;
           if (seenLog.has(key)) return;
           seenLog.add(key);
-          chunkLogs.push(normalized);
+          const estimatedTimestamp =
+            normalized.blockNumber != null
+              ? latestTs - Number(latestBlock - BigInt(normalized.blockNumber)) * 12
+              : null;
+          chunkLogs.push({
+            ...normalized,
+            ...(estimatedTimestamp !== null && Number.isFinite(estimatedTimestamp)
+              ? { blockTimestamp: Math.floor(estimatedTimestamp) }
+              : {}),
+          });
         };
 
         for (
@@ -557,6 +597,7 @@ export function createSponsoredWatchService(params: {
             transactionHash: log.transactionHash,
             logIndex: log.logIndex,
             blockNumber: log.blockNumber != null ? String(log.blockNumber) : undefined,
+            timeStamp: log.blockTimestamp,
             topics: [...log.topics],
             data: log.data,
             address: log.address,
@@ -567,7 +608,7 @@ export function createSponsoredWatchService(params: {
           startsMs,
           endsMs,
         );
-        return mapped?.event ?? null;
+        return mapped?.inWindow ? mapped.event : null;
       })
       .filter((e): e is MonitoredEventRow => e != null);
   }
@@ -602,8 +643,12 @@ export function createSponsoredWatchService(params: {
           }
         }
         const kind = watchTargetKind(watch);
-        const matchedPrior = loaded.filter((event) =>
-          eventMatchesWatchTarget(event, watch.target_contract, kind),
+        const matchedPrior = dedupeSponsoredWatchEvents(
+          loaded.filter(
+            (event) =>
+              eventIsInCampaignWindow(event, watch) &&
+              eventMatchesWatchTarget(event, watch.target_contract, kind),
+          ),
         );
         if (matchedPrior.length > 0) {
           return matchedPrior;
@@ -621,8 +666,12 @@ export function createSponsoredWatchService(params: {
       throw new Error(`Failed to load campaign events: ${result.error.message}`);
     }
     const kind = watchTargetKind(watch);
-    const dbMatched = result.value.filter((event) =>
-      eventMatchesWatchTarget(event, watch.target_contract, kind),
+    const dbMatched = dedupeSponsoredWatchEvents(
+      result.value.filter(
+        (event) =>
+          eventIsInCampaignWindow(event, watch) &&
+          eventMatchesWatchTarget(event, watch.target_contract, kind),
+      ),
     );
     if (dbMatched.length > 0) {
       return dbMatched;
@@ -642,7 +691,9 @@ export function createSponsoredWatchService(params: {
       const rpcMatched = await collectRpcLogsForWindow(watch);
       if (rpcMatched.length > 0) {
         const persisted: MonitoredEventRow[] = [];
-        const candidates = rpcMatched.slice(0, 500);
+        const candidates = dedupeSponsoredWatchEvents(rpcMatched)
+          .filter((event) => eventIsInCampaignWindow(event, watch))
+          .slice(0, MAX_RPC_EVENTS_PER_WATCH);
         for (let i = 0; i < candidates.length; i += 25) {
           const chunk = candidates.slice(i, i + 25);
           const chunkResults = await Promise.all(
@@ -672,9 +723,9 @@ export function createSponsoredWatchService(params: {
           }
         }
         if (persisted.length > 0) {
-          return persisted;
+          return dedupeSponsoredWatchEvents(persisted);
         }
-        return rpcMatched;
+        return candidates;
       }
     } catch (error) {
       console.warn(
@@ -1047,7 +1098,7 @@ export function createSponsoredWatchService(params: {
   }
 
   async function refreshMonitoring(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
-    const matching = await collectMatchingEvents(watch);
+    const matching = dedupeSponsoredWatchEvents(await collectMatchingEvents(watch));
     const sourceEventIds = matching.map((e) => e.id).filter((id) => UUID_RE.test(id));
     const priorIds = new Set((watch.source_event_ids ?? []).filter((id) => UUID_RE.test(id)));
     const newEvents = matching.filter((e) => UUID_RE.test(e.id) && !priorIds.has(e.id));

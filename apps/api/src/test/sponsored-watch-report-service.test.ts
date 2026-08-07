@@ -111,8 +111,37 @@ describe("sponsored-watch-report-service", () => {
     expect(report.reportContentHash.startsWith("0x")).toBe(true);
     expect(report.highlights.length).toBeGreaterThan(0);
     expect(report.title).toContain("Sponsored Watch Report");
-    expect(report.summary).toContain("2 on-chain event");
+    expect(report.summary).toContain("2 qualifying on-chain events");
+    expect(report.highlights.some((line) => line.startsWith("Activity:"))).toBe(true);
+    expect(report.highlights.some((line) => line.startsWith("Cadence:"))).toBe(true);
+    expect(report.analysis).toContain("Observed pattern");
     expect(report.generationSource).toBe("template");
+  });
+
+  it("deduplicates the same chain log before counting and hashing a report", async () => {
+    const txHash = "0x" + "12".repeat(32);
+    const first = event({
+      id: "evt-first",
+      transaction_hash: txHash,
+      raw_payload: { address: TARGET, logIndex: 7 },
+    });
+    const duplicate = event({
+      id: "evt-duplicate",
+      transaction_hash: txHash,
+      raw_payload: { address: TARGET, logIndex: 7 },
+    });
+
+    const report = await service.generateReport({
+      watchId: "watch-dedupe",
+      targetContract: TARGET,
+      watchSpecHash: "0x" + "1".repeat(64),
+      startsAt: "2026-07-01T00:00:00.000Z",
+      endsAt: "2026-07-08T00:00:00.000Z",
+      events: [first, duplicate],
+    });
+
+    expect(report.sourceEventIds).toEqual(["evt-first"]);
+    expect(report.summary).toContain("1 qualifying on-chain event");
   });
 
   it("generates an empty-window report when no events match", async () => {
@@ -324,6 +353,7 @@ describe("watch event description helpers", () => {
     const line = describeWatchEvent(ev, "wallet", WALLET);
     expect(line).toContain("Transfer ·");
     expect(line).toContain("→");
+    expect(line).toContain("tx 0xabababab");
     expect(line).not.toContain("token");
     expect(line).not.toContain("USDC");
   });

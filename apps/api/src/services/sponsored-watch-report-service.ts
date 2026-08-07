@@ -125,6 +125,177 @@ function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
+function eventLogIndex(event: MonitoredEventRow): string | null {
+  if (event.log_index != null && Number.isFinite(event.log_index)) {
+    return String(event.log_index);
+  }
+  const payload = (event.raw_payload ?? {}) as Record<string, unknown>;
+  const rawLogIndex = payload.logIndex ?? payload.log_index;
+  if (typeof rawLogIndex === "number" && Number.isFinite(rawLogIndex)) {
+    return String(rawLogIndex);
+  }
+  if (typeof rawLogIndex === "string" && rawLogIndex.trim()) {
+    return rawLogIndex.trim();
+  }
+  return null;
+}
+
+/**
+ * Stable event identity for sponsored watches.
+ *
+ * Etherscan and direct RPC can describe the same chain log with different
+ * source prefixes, so transaction hash + log index is the canonical key when
+ * available. This prevents one Transfer log from becoming two report rows or
+ * two Telegram details after a provider fallback.
+ */
+export function sponsoredWatchEventIdentity(event: MonitoredEventRow): string {
+  const txHash = event.transaction_hash?.trim().toLowerCase();
+  const logIndex = eventLogIndex(event);
+  if (txHash && logIndex !== null) {
+    return `${event.chain_id}:${txHash}:${logIndex}`;
+  }
+  if (event.source_event_id) {
+    return `${event.source}:${event.source_event_id}`;
+  }
+  return event.id;
+}
+
+export function dedupeSponsoredWatchEvents(
+  events: MonitoredEventRow[],
+): MonitoredEventRow[] {
+  const seen = new Set<string>();
+  const unique: MonitoredEventRow[] = [];
+  for (const event of events) {
+    const identity = sponsoredWatchEventIdentity(event);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    unique.push(event);
+  }
+  return unique;
+}
+
+function shortTransactionHash(hash: string): string {
+  return `${hash.slice(0, 10)}…${hash.slice(-6)}`;
+}
+
+function formatCampaignWindowTimestamp(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+}
+
+function reportEventPayload(event: MonitoredEventRow): Record<string, unknown> {
+  return (event.raw_payload ?? {}) as Record<string, unknown>;
+}
+
+function reportEventAddress(payload: Record<string, unknown>, key: string): string | null {
+  const value = payload[key];
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
+function reportEventTimestamp(event: MonitoredEventRow): number | null {
+  const observed = event.observed_at ? Date.parse(event.observed_at) : Number.NaN;
+  if (Number.isFinite(observed)) return observed;
+  const captured = Date.parse(event.captured_at);
+  return Number.isFinite(captured) ? captured : null;
+}
+
+interface ReportSignalSummary {
+  uniqueTransactions: number;
+  eventTypes: string[];
+  protocols: string[];
+  verifiedAssets: string[];
+  unknownAssetCount: number;
+  outbound: number;
+  inbound: number;
+  unresolvedDirection: number;
+  counterparties: number;
+  firstObserved: string | null;
+  lastObserved: string | null;
+}
+
+function summarizeReportSignals(
+  events: MonitoredEventRow[],
+  targetContract: string,
+): ReportSignalSummary {
+  const transactions = new Set<string>();
+  const eventTypes = new Set<string>();
+  const protocols = new Set<string>();
+  const verifiedAssets = new Set<string>();
+  const unknownAssets = new Set<string>();
+  const counterparties = new Set<string>();
+  const target = targetContract.toLowerCase();
+  let outbound = 0;
+  let inbound = 0;
+  let unresolvedDirection = 0;
+  let firstObservedMs = Number.POSITIVE_INFINITY;
+  let lastObservedMs = Number.NEGATIVE_INFINITY;
+
+  for (const event of events) {
+    if (event.transaction_hash) transactions.add(event.transaction_hash.toLowerCase());
+    eventTypes.add(event.event_type.replace(/_/g, " "));
+    if (event.protocol) protocols.add(event.protocol);
+
+    const payload = reportEventPayload(event);
+    const tokenAddress = reportEventAddress(payload, "address");
+    if (event.asset_symbols?.length) {
+      for (const symbol of event.asset_symbols) verifiedAssets.add(symbol);
+    } else if (tokenAddress) {
+      if (WATCH_TOKEN_META[tokenAddress]) {
+        verifiedAssets.add(WATCH_TOKEN_META[tokenAddress].symbol);
+      } else {
+        unknownAssets.add(tokenAddress);
+      }
+    }
+
+    const isWalletTransfer =
+      event.event_type === "wallet_transfer" || payload.targetKind === "wallet";
+    if (isWalletTransfer) {
+      const from = reportEventAddress(payload, "from");
+      const to = reportEventAddress(payload, "to");
+      if (from === target) {
+        outbound += 1;
+        if (to && to !== target) counterparties.add(to);
+      } else if (to === target) {
+        inbound += 1;
+        if (from && from !== target) counterparties.add(from);
+      } else {
+        unresolvedDirection += 1;
+        if (from && from !== target) counterparties.add(from);
+        if (to && to !== target) counterparties.add(to);
+      }
+    }
+
+    const observedMs = reportEventTimestamp(event);
+    if (observedMs !== null) {
+      firstObservedMs = Math.min(firstObservedMs, observedMs);
+      lastObservedMs = Math.max(lastObservedMs, observedMs);
+    }
+  }
+
+  return {
+    uniqueTransactions: transactions.size,
+    eventTypes: [...eventTypes],
+    protocols: [...protocols],
+    verifiedAssets: [...verifiedAssets],
+    unknownAssetCount: unknownAssets.size,
+    outbound,
+    inbound,
+    unresolvedDirection,
+    counterparties: counterparties.size,
+    firstObserved:
+      Number.isFinite(firstObservedMs) ? new Date(firstObservedMs).toISOString() : null,
+    lastObserved:
+      Number.isFinite(lastObservedMs) ? new Date(lastObservedMs).toISOString() : null,
+  };
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+}
+
 /**
  * Human-readable one-line description of a watch event.
  *
@@ -154,7 +325,7 @@ export function describeWatchEvent(
     const parties = `${shortAddress(from)} → ${shortAddress(to)}`;
     if (!meta) {
       // Unknown token: never fabricate a symbol or decimals — show direction only.
-      return `Transfer · ${parties}`;
+      return `Transfer · ${parties}${event.transaction_hash ? ` · tx ${shortTransactionHash(event.transaction_hash)}` : ""}`;
     }
     let amountText: string;
     try {
@@ -174,7 +345,7 @@ export function describeWatchEvent(
     } else {
       flow = `${amountText} ${meta.symbol} · ${parties}`;
     }
-    return `Transfer ${flow}`;
+    return `Transfer ${flow}${event.transaction_hash ? ` · tx ${shortTransactionHash(event.transaction_hash)}` : ""}`;
   }
 
   return formatEventLine(event);
@@ -261,7 +432,7 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
   const sourceEventIds = events.map((e) => e.id);
   const sourceEventRoot = buildSourceEventRoot(sourceEventIds);
 
-  const windowLabel = `${new Date(startsAt).toISOString().slice(0, 10)} → ${new Date(endsAt).toISOString().slice(0, 10)}`;
+  const windowLabel = `${formatCampaignWindowTimestamp(startsAt)} → ${formatCampaignWindowTimestamp(endsAt)}`;
   const shortTarget = `${targetContract.slice(0, 8)}…${targetContract.slice(-6)}`;
 
   if (events.length === 0) {
@@ -341,23 +512,44 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
   const ranked = [...events].sort(
     (a, b) => (b.significance_score ?? 0) - (a.significance_score ?? 0),
   );
-  const types = new Set(events.map((e) => e.event_type));
-  const protocols = [
-    ...new Set(events.map((e) => e.protocol).filter((p): p is string => Boolean(p))),
-  ];
+  const signals = summarizeReportSignals(events, targetContract);
+  const protocols = signals.protocols;
+  const campaignDurationMs = Date.parse(endsAt) - Date.parse(startsAt);
+  const campaignHours = Number.isFinite(campaignDurationMs) && campaignDurationMs > 0
+    ? campaignDurationMs / 3_600_000
+    : null;
+  const averagePerHour = campaignHours ? events.length / campaignHours : null;
+  const transactionSummary = signals.uniqueTransactions > 0
+    ? pluralize(signals.uniqueTransactions, "unique transaction")
+    : "transaction hashes were not available";
+  const flowSummary = signals.outbound + signals.inbound + signals.unresolvedDirection > 0
+    ? `${pluralize(signals.outbound, "outbound transfer")} · ${pluralize(signals.inbound, "inbound transfer")} · ${pluralize(signals.unresolvedDirection, "undecoded direction")}`
+    : "Transfer direction was not decoded for these events.";
+  const assetSummary = signals.verifiedAssets.length > 0 || signals.unknownAssetCount > 0
+    ? `${signals.verifiedAssets.length > 0 ? signals.verifiedAssets.join(", ") : "No verified asset symbols"}` +
+      `${signals.unknownAssetCount > 0 ? ` · ${pluralize(signals.unknownAssetCount, "unverified token contract")}` : ""}`
+    : "Asset metadata was not available.";
+  const observationRange = signals.firstObserved && signals.lastObserved
+    ? `${formatCampaignWindowTimestamp(signals.firstObserved)} to ${formatCampaignWindowTimestamp(signals.lastObserved)}`
+    : "Observation timestamps were not available.";
 
   const title = `Sponsored Watch Report — ${shortTarget}`;
   const summary =
-    `ChronicleAI observed ${events.length} on-chain event(s) on ${targetContract} ` +
-    `during ${windowLabel}. Event types: ${[...types].map((t) => t.replace(/_/g, " ")).join(", ")}.`;
+    `ChronicleAI observed ${pluralize(events.length, "qualifying on-chain event")} across ${transactionSummary} ` +
+    `on ${shortTarget} via ${signals.protocols.join(", ") || "the monitored chain"} during ${windowLabel}. ` +
+    "The report focuses on activity shape and source-backed evidence, not a raw event dump.";
 
-  const highlights = ranked.slice(0, 8).map((event, i) => {
-    const score =
-      event.significance_score != null
-        ? ` (significance: ${(event.significance_score * 100).toFixed(0)}%)`
-        : "";
-    return `${i + 1}. ${formatEventLine(event)}${score}`;
-  });
+  const topEvent = ranked[0];
+  const highlights = [
+    `Activity: ${pluralize(events.length, "qualifying event")} across ${transactionSummary}.`,
+    `Cadence: ${averagePerHour !== null ? `${averagePerHour.toLocaleString("en-US", { maximumFractionDigits: 1 })} observations per hour` : "campaign rate unavailable"}; observed from ${observationRange}.`,
+    `Flow: ${flowSummary}.`,
+    `Assets: ${assetSummary}.`,
+    `Network context: ${signals.protocols.join(", ") || "protocol metadata unavailable"}; ${pluralize(signals.counterparties, "unique counterparty")}.`,
+    ...(topEvent
+      ? [`Notable source event: ${describeWatchEvent(topEvent, topEvent.event_type === "wallet_transfer" ? "wallet" : "contract", targetContract)}.`]
+      : []),
+  ];
 
   const analysisParts: string[] = [
     `Campaign ${watchId} monitored ${targetContract} (spec ${input.watchSpecHash.slice(0, 18)}…) from ${startsAt} to ${endsAt}.`,
@@ -372,6 +564,14 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
   if (top) {
     analysisParts.push(`Highest-significance observation: ${formatEventLine(top)}.`);
   }
+  const usefulAnalysis = [
+    `Readout\n${summary}`,
+    `Coverage\nCampaign ${watchId} monitored ${targetContract} from ${startsAt} to ${endsAt}. The source set contains ${pluralize(events.length, "event")} across chain id(s) ${[...new Set(events.map((e) => e.chain_id))].join(", ")}.`,
+    `Observed pattern\n${flowSummary}. ${assetSummary}. ${pluralize(signals.counterparties, "unique counterparty")} were identified from decoded transfer parties.`,
+    `Audit\nThe source-event root ${sourceEventRoot.slice(0, 18)}... commits the event id set used for this report. The narrative is deterministic and source-backed; it does not infer USD value where token metadata is unavailable.`,
+    ...(input.description ? [`Watch instructions\n${input.description}`] : []),
+    ...(input.eventSignature ? [`Event filter\n${input.eventSignature}`] : []),
+  ];
   analysisParts.push(
     `Source-event root ${sourceEventRoot.slice(0, 18)}… commits the ordered event id set for on-chain verification.`,
   );
@@ -381,7 +581,7 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
       title,
       summary,
       highlights,
-      analysis: analysisParts.join("\n\n"),
+      analysis: usefulAnalysis.join("\n\n"),
       confidence: events.length >= 3 ? "high" : "medium",
     },
     {
@@ -596,11 +796,15 @@ export function createSponsoredWatchReportService(options?: {
 
   return {
     async generateReport(input) {
-      const sourceEventIds = input.events.map((e) => e.id);
+      const normalizedInput = {
+        ...input,
+        events: dedupeSponsoredWatchEvents(input.events),
+      };
+      const sourceEventIds = normalizedInput.events.map((e) => e.id);
       const sourceEventRoot = buildSourceEventRoot(sourceEventIds);
 
       if (providerConfigs) {
-        const llm = await tryLlmNarrative(input, providerConfigs);
+        const llm = await tryLlmNarrative(normalizedInput, providerConfigs);
         if (llm) {
           return finalizeReport(
             {
@@ -613,9 +817,9 @@ export function createSponsoredWatchReportService(options?: {
             {
               sourceEventIds,
               sourceEventRoot,
-              targetContract: input.targetContract,
-              startsAt: input.startsAt,
-              endsAt: input.endsAt,
+              targetContract: normalizedInput.targetContract,
+              startsAt: normalizedInput.startsAt,
+              endsAt: normalizedInput.endsAt,
               generationSource: "llm",
               generationProvider: llm.provider,
             },
@@ -623,7 +827,7 @@ export function createSponsoredWatchReportService(options?: {
         }
       }
 
-      return buildTemplateReport(input);
+      return buildTemplateReport(normalizedInput);
     },
   };
 }

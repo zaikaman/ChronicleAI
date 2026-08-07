@@ -17,7 +17,10 @@ async function testEtherscanSortDesc() {
 
   let matchedInWindow = 0;
   for (const item of (data.result || [])) {
-    const tsSec = parseInt(item.timeStamp, 16) || parseInt(item.timeStamp, 10);
+    const rawTimestamp = String(item.timeStamp ?? "").trim();
+    const tsSec = /^0x/i.test(rawTimestamp)
+      ? Number.parseInt(rawTimestamp, 16)
+      : Number.parseInt(rawTimestamp, 10);
     const tsIso = new Date(tsSec * 1000).toISOString();
     const inWindow = tsSec * 1000 >= watchStarts && tsSec * 1000 <= watchEnds;
     if (inWindow) {
