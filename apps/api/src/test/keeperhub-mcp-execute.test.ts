@@ -289,6 +289,8 @@ describe("helpers", () => {
         'Step "step//./plugins/web3/steps/approve-token//approveTokenStep" exceeded max retries (1 retry)',
       ),
     ).toBe(true);
+    expect(isRpcTimeoutError("KeeperHub execution exec_123 completed without a transaction hash")).toBe(true);
+    expect(isRpcTimeoutError("KeeperHub MCP execution exec_456 completed without a transaction hash")).toBe(true);
     expect(isRpcTimeoutError("Timed out waiting for KeeperHub execution exec_1")).toBe(false);
     expect(isRpcTimeoutError("contract reverted: insufficient balance")).toBe(false);
   });

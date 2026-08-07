@@ -389,6 +389,20 @@ function alreadyPublished(message: string): boolean {
   return isAlreadyPublishedError(message) || isAlreadyPublishedErrorShared(message);
 }
 
+function isKeeperHubPollTimeout(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  return /timed out waiting for keeperhub/i.test(message);
+}
+
+function isPublicFallbackEligibleError(error: unknown): boolean {
+  return isRpcTimeoutError(error) || isKeeperHubPollTimeout(error);
+}
+
 export function createKeeperHubWriteClient(
   config: KeeperHubWriteClientConfig,
 ): KeeperHubWriteClient {
@@ -553,7 +567,7 @@ export function createKeeperHubWriteClient(
               : new Error(`KeeperHub MCP ${method} failed: ${message}`);
           }
 
-          if (isRpcTimeoutError(mcpError) && publicFallbackWorkflowId) {
+          if (isPublicFallbackEligibleError(mcpError) && publicFallbackWorkflowId) {
             const fallbackIdempotencyKey = `${idempotencyKey}-public-fallback`;
             Object.assign(logContextDetails, {
               workflowId: publicFallbackWorkflowId,
@@ -749,7 +763,7 @@ export function createKeeperHubWriteClient(
       return await runWorkflow(workflowId, input, idempotencyKey);
     } catch (error) {
       const fallbackWorkflowId = workflowIds.publicFallbacks?.[method]?.trim();
-      if (!fallbackWorkflowId || !isRpcTimeoutError(error)) throw error;
+      if (!fallbackWorkflowId || !isPublicFallbackEligibleError(error)) throw error;
       onFallback?.(fallbackWorkflowId);
       console.warn(
         `[keeperhub] ${method} private workflow timed out; ` +

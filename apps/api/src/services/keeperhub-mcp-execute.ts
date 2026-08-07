@@ -510,7 +510,10 @@ export function isRpcTimeoutError(error: unknown): boolean {
     /step\b[\s\S]*?(?:did\s+not\s+record\s+completion|exceeded\s+max\s+retries)/i.test(message) ||
     /\bTIMEOUT\b/i.test(message) ||
     /operation\s*=\s*["']?request\.send/i.test(message) ||
-    /rpc failed[^\n]*\btimeout\b/i.test(message)
+    /rpc failed[^\n]*\btimeout\b/i.test(message) ||
+    /(?:completed|ended)\s+without\s+(?:a\s+)?transaction\s+hash/i.test(message) ||
+    /without\s+(?:a\s+)?transaction\s+hash/i.test(message) ||
+    /without\s+tx\s+hash/i.test(message)
   );
 }
 

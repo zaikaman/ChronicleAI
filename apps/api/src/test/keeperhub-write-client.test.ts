@@ -529,4 +529,75 @@ describe("createKeeperHubWriteClient", () => {
       tokenAddress: baseConfig.usdcAddress,
     });
   });
+
+  it("recordCapitalMove falls back to public fallback workflow when private routing completes without tx hash", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/workflows/wf_cap_private/execute") && init?.method === "POST") {
+        return new Response(JSON.stringify({ executionId: "exec_cap_priv", status: "running" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/workflows/executions/exec_cap_priv/wait")) {
+        // Private workflow completes without transaction hash (private mempool failure/timeout)
+        return new Response(
+          JSON.stringify({
+            executionId: "exec_cap_priv",
+            status: "completed",
+            completed: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/workflows/wf_cap_public/execute") && init?.method === "POST") {
+        return new Response(JSON.stringify({ executionId: "exec_cap_pub", status: "running" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/workflows/executions/exec_cap_pub/wait")) {
+        return new Response(
+          JSON.stringify({
+            executionId: "exec_cap_pub",
+            status: "success",
+            completed: true,
+            transactionHash: "0x" + "77".repeat(32),
+            transactionLink: "https://sepolia.etherscan.io/tx/0x" + "77".repeat(32),
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = createKeeperHubWriteClient({
+      ...baseConfig,
+      workflowIds: {
+        recordCapitalMove: "wf_cap_private",
+        publicFallbacks: {
+          recordCapitalMove: "wf_cap_public",
+        },
+      },
+    });
+
+    const receipt = await client.recordCapitalMove(
+      "move_1",
+      "0x" + "11".repeat(20),
+      "0x" + "22".repeat(20),
+      10,
+      "topup",
+    );
+
+    expect(receipt.keeperHubRunId).toBe("exec_cap_pub");
+    expect(receipt.txHash).toBe("0x" + "77".repeat(32));
+
+    const executeCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("/execute"),
+    );
+    expect(executeCalls).toHaveLength(2);
+    expect(String(executeCalls[0]?.[0])).toContain("/wf_cap_private/execute");
+    expect(String(executeCalls[1]?.[0])).toContain("/wf_cap_public/execute");
+  });
 });
