@@ -109,7 +109,7 @@ export function createAgentActivityService(
     try {
       // Live treasury RPCs run in parallel with the DB aggregate (P1-1).
       const [activityResult, liveBalances, dualRailResult] = await Promise.all([
-        activityRepo.getActivityData(10),
+        activityRepo.getActivityData(50),
         options?.getLiveTreasuryBalances
           ? options.getLiveTreasuryBalances().catch((error) => {
               console.warn(
@@ -403,6 +403,15 @@ export function createAgentActivityService(
         executionLogs,
         payouts,
         activeSponsoredWatches,
+        stats: {
+          totalAlerts: data.totalAlerts ?? alerts.length,
+          totalDigests: data.totalDigests ?? digests.length,
+          totalSettledPayments:
+            data.totalSettledPayments ??
+            payments.filter((p) => p.status === "settled").length,
+          totalPayouts: data.totalPayouts ?? payouts.length,
+          totalDeskTrades: data.totalDeskTrades ?? 0,
+        },
         subscriptionAnalytics,
         referralAttribution,
       };

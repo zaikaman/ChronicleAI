@@ -81,6 +81,11 @@ export interface AgentActivityData {
   recentLogs: ExecutionLogRow[];
   totalMonitoredEvents: number;
   totalQualifiedEvents: number;
+  totalAlerts?: number;
+  totalDigests?: number;
+  totalSettledPayments?: number;
+  totalPayouts?: number;
+  totalDeskTrades?: number;
   /**
    * Prefer SQL aggregates when present (P1-1). When set, service skips
    * row-sample rebuild of subscription analytics.
@@ -167,8 +172,8 @@ function parseReferralSnapshot(raw: unknown): ActivityReferralAttributionSnapsho
 
 export function createAgentActivityRepository(supabase: SupabaseClient): AgentActivityRepository {
   return {
-    async getActivityData(limitParam = 10) {
-      const limit = Math.min(50, Math.max(1, limitParam));
+    async getActivityData(limitParam = 50) {
+      const limit = Math.min(100, Math.max(1, limitParam));
 
       try {
         // All independent reads fan out in parallel (P1-1).
@@ -183,6 +188,11 @@ export function createAgentActivityRepository(supabase: SupabaseClient): AgentAc
           logsResult,
           totalEventsResult,
           qualifiedEventsResult,
+          totalAlertsResult,
+          totalDigestsResult,
+          totalSettledPaymentsResult,
+          totalPayoutsResult,
+          totalDeskTradesResult,
           subscriptionRpc,
           referralRpc,
         ] = await Promise.all([
@@ -263,6 +273,27 @@ export function createAgentActivityRepository(supabase: SupabaseClient): AgentAc
             .from("monitored_events")
             .select("*", { count: "exact", head: true })
             .eq("status", "qualified"),
+
+          supabase
+            .from("public_alerts")
+            .select("*", { count: "exact", head: true }),
+
+          supabase
+            .from("daily_digests")
+            .select("*", { count: "exact", head: true }),
+
+          supabase
+            .from("payment_records")
+            .select("*", { count: "exact", head: true })
+            .eq("status", "settled"),
+
+          supabase
+            .from("payout_records")
+            .select("*", { count: "exact", head: true }),
+
+          supabase
+            .from("desk_tickets")
+            .select("*", { count: "exact", head: true }),
 
           supabase.rpc("activity_subscription_analytics"),
           supabase.rpc("activity_referral_attribution"),
@@ -366,6 +397,11 @@ export function createAgentActivityRepository(supabase: SupabaseClient): AgentAc
           recentLogs: (logsResult.data ?? []) as unknown as ExecutionLogRow[],
           totalMonitoredEvents: totalEventsResult.count ?? 0,
           totalQualifiedEvents: qualifiedEventsResult.count ?? 0,
+          totalAlerts: totalAlertsResult.count ?? mappedAlerts.length,
+          totalDigests: totalDigestsResult.count ?? (digestsResult.data?.length ?? 0),
+          totalSettledPayments: totalSettledPaymentsResult.count ?? (paymentsResult.data?.filter(p => p.status === 'settled').length ?? 0),
+          totalPayouts: totalPayoutsResult.count ?? (payoutsResult.data?.length ?? 0),
+          totalDeskTrades: totalDeskTradesResult.count ?? 0,
           paymentAnalytics,
           newsletterAnalytics,
           affiliates,

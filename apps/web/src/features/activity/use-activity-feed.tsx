@@ -471,12 +471,14 @@ export function useActivityFeed(): ActivityFeedState {
       };
     }
     return {
-      alerts: data.alerts.length,
-      digests: data.digests.length,
+      alerts: data.stats?.totalAlerts ?? data.alerts.length,
+      digests: data.stats?.totalDigests ?? data.digests.length,
       anchoredDigests: data.digests.filter((d) => Boolean(d.registryTxHash)).length,
-      settledPayments: data.payments.filter((p) => p.status === "settled").length,
-      payouts: data.payouts?.length ?? 0,
-      deskTrades: tickets.pagination.total ?? 0,
+      settledPayments:
+        data.stats?.totalSettledPayments ??
+        data.payments.filter((p) => p.status === "settled").length,
+      payouts: data.stats?.totalPayouts ?? data.payouts?.length ?? 0,
+      deskTrades: data.stats?.totalDeskTrades ?? tickets.pagination.total ?? 0,
     };
   }, [aggregate.data, tickets.pagination.total]);
 

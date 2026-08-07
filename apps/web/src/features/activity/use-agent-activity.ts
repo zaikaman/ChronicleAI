@@ -152,6 +152,13 @@ export interface AgentActivityData {
     status: string;
     createdAt: string;
   }>;
+  stats?: {
+    totalAlerts: number;
+    totalDigests: number;
+    totalSettledPayments: number;
+    totalPayouts: number;
+    totalDeskTrades: number;
+  };
   subscriptionAnalytics?: SubscriptionAnalyticsData;
   referralAttribution?: ReferralAttributionData;
 }

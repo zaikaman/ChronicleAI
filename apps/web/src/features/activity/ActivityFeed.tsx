@@ -1,7 +1,7 @@
 // Unified activity feed — one chronological stream replaces the old 5-tab / 13-panel layout.
 // Filter chips: All / Publications / Desk / Money / System (dense execution log).
 
-import { type ReactElement, useMemo } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { StatusBadge, TimestampDisplay } from "../../components/data-primitives.tsx";
 import { Surface } from "../../components/page-chrome.tsx";
@@ -124,6 +124,29 @@ function FeedView({
   onRetry: () => void;
   showKind: boolean;
 }): ReactElement {
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
+
+  const paginatedItems = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return items.slice(start, start + pageSize);
+  }, [items, safePage, pageSize]);
+
+  const pagination = useMemo(
+    () => ({
+      page: safePage,
+      limit: pageSize,
+      total,
+      totalPages,
+      hasNextPage: safePage < totalPages,
+      hasPreviousPage: safePage > 1,
+    }),
+    [safePage, pageSize, total, totalPages],
+  );
+
   if (isLoading) {
     return <SkeletonPanel rows={6} data-testid="activity-feed-loading" />;
   }
@@ -153,14 +176,22 @@ function FeedView({
 
   return (
     <div data-testid="activity-feed-list">
-      <p className="mb-4 text-xs text-muted-foreground" data-testid="activity-feed-count">
-        {items.length} recent event{items.length === 1 ? "" : "s"} · newest first
-      </p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground" data-testid="activity-feed-count">
+          Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, total)} of {total} events · newest first
+        </p>
+      </div>
       <ul className="flex flex-col gap-3">
-        {items.map((item) => (
+        {paginatedItems.map((item) => (
           <FeedRow key={item.key} item={item} showKind={showKind} />
         ))}
       </ul>
+      <PaginationControls
+        pagination={pagination}
+        onPageChange={setPage}
+        disabled={isLoading}
+        data-testid="activity-feed-pagination"
+      />
     </div>
   );
 }

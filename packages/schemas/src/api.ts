@@ -555,6 +555,14 @@ export interface AgentActivityResponse {
   executionLogs: Array<Record<string, unknown>>;
   payouts?: Array<Record<string, unknown>>;
   activeSponsoredWatches?: Array<Record<string, unknown>>;
+  /** Exact database total counts for headline status tiles. */
+  stats?: {
+    totalAlerts: number;
+    totalDigests: number;
+    totalSettledPayments: number;
+    totalPayouts: number;
+    totalDeskTrades: number;
+  };
   /** Public subscription economics (MRR, conversion, route mix). */
   subscriptionAnalytics?: SubscriptionAnalytics;
   /** Public referral partner attribution from payment/newsletter intent metadata. */
