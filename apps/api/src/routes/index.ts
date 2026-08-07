@@ -377,6 +377,12 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
           execLogRepo: deps.execLogRepo,
           isKillSwitchArmed: () => deskKillSwitchRef?.isArmed() ?? false,
           treasuryPrivateTransferThresholdUsdc: env.treasuryPrivateTransferThresholdUsdc,
+          readDeskUsdcBalance: deskPositionService
+            ? () =>
+                deskPositionService
+                  .readTokenBalances(deskWalletAddress)
+                  .then((b) => b.usdc)
+            : null,
         })
       : null;
 

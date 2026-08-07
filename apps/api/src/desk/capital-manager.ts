@@ -80,6 +80,13 @@ export interface CapitalManagerDeps {
   isKillSwitchArmed?: () => boolean;
   /** Legacy routing threshold retained for API compatibility. */
   treasuryPrivateTransferThresholdUsdc?: number;
+  /**
+   * Live on-chain USDC balance reader for the desk wallet. When present,
+   * non-emergency sweeps re-verify the free balance at dispatch time and are
+   * capped to `free - minFreeUsdc` (skipped entirely when free < minFreeUsdc),
+   * closing the window where the policy decision used a stale mark.
+   */
+  readDeskUsdcBalance?: (() => Promise<number | null>) | null;
 }
 
 export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
@@ -323,6 +330,13 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
     const f = 1e8;
     return (Math.round(n * f) / f).toFixed(8);
   }
+
+  function roundUsdc(n: number): number {
+    return Math.round(n * 1e6) / 1e6;
+  }
+
+  /** Dust floor for non-emergency sweeps (USDC). Below this, skip. */
+  const SWEEP_DUST_USDC = 0.01;
 
   async function executeFreeInventory(
     amountUsdc: number,
@@ -1075,6 +1089,98 @@ export function createCapitalManager(deps: CapitalManagerDeps): CapitalManager {
         decision: { action: "none", amountUsdc: 0, reason: "zero_sweep" },
         errorMessage: "Sweep amount must be positive",
       };
+    }
+
+    // Live reserve guard: non-emergency sweeps re-read the on-chain free USDC
+    // at dispatch time. Cap the executed amount to `free - minFreeUsdc` and
+    // skip entirely when the desk is below the powder reserve. The policy
+    // decision may have used a stale mark; this closes that window so we never
+    // dispatch a sweep the desk cannot fund.
+    if (!emergency && deps.readDeskUsdcBalance) {
+      let liveFree: number | null;
+      try {
+        liveFree = await deps.readDeskUsdcBalance();
+      } catch (error) {
+        capitalLog.warn("live desk USDC balance read failed; skipping sweep", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        liveFree = null;
+      }
+      const minFree = Math.max(0, config.minFreeUsdc);
+      if (liveFree == null || !Number.isFinite(liveFree)) {
+        const errorMessage =
+          "Sweep skipped: live desk USDC balance unavailable at dispatch";
+        await logCapitalOutcome({
+          status: "failed",
+          message: errorMessage,
+          direction,
+          amountUsdc: 0,
+          reason,
+          startedAt,
+          details: { reason: "live_balance_unavailable", requestedAmountUsdc: amountUsdc },
+        });
+        return {
+          decision: { action: "none", amountUsdc: 0, reason: "free_usdc_balance_unavailable" },
+          errorMessage,
+        };
+      }
+      if (liveFree + 1e-9 < minFree) {
+        await logCapitalOutcome({
+          status: "failed",
+          message: `Desk capital ${direction} skipped: live free USDC ${liveFree.toFixed(6)} below minFree ${minFree}`,
+          direction,
+          amountUsdc: 0,
+          reason,
+          startedAt,
+          details: {
+            reason: "free_usdc_below_min_reserve",
+            phase: "sweep_execution_guard",
+            liveFreeUsdc: liveFree,
+            minFreeUsdc: minFree,
+            requestedAmountUsdc: amountUsdc,
+            skipped: true,
+          },
+        });
+        return {
+          decision: { action: "none", amountUsdc: 0, reason: "free_usdc_below_min_reserve" },
+        };
+      }
+      const sweepableUsdc = roundUsdc(Math.max(0, liveFree - minFree));
+      const cappedUsdc = roundUsdc(Math.min(amountUsdc, sweepableUsdc));
+      if (cappedUsdc < SWEEP_DUST_USDC) {
+        await logCapitalOutcome({
+          status: "failed",
+          message: `Desk capital ${direction} skipped: ${cappedUsdc.toFixed(6)} USDC below sweep dust`,
+          direction,
+          amountUsdc: 0,
+          reason,
+          startedAt,
+          details: {
+            reason: "free_usdc_reserved_for_powder",
+            phase: "sweep_execution_guard",
+            liveFreeUsdc: liveFree,
+            minFreeUsdc: minFree,
+            requestedAmountUsdc: amountUsdc,
+            cappedAmountUsdc: cappedUsdc,
+            skipped: true,
+          },
+        });
+        return {
+          decision: { action: "none", amountUsdc: 0, reason: "free_usdc_reserved_for_powder" },
+        };
+      }
+      if (cappedUsdc < amountUsdc - 1e-9) {
+        capitalLog.info(
+          "desk sweep amount capped by live free minus reserve",
+          {
+            requestedAmountUsdc: amountUsdc,
+            liveFreeUsdc: liveFree,
+            minFreeUsdc: minFree,
+            cappedAmountUsdc: cappedUsdc,
+          },
+        );
+        amountUsdc = cappedUsdc;
+      }
     }
 
     if (!executionBridge) {
