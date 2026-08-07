@@ -41,6 +41,8 @@ export interface SponsoredWatchReportInput {
   startsAt: string;
   endsAt: string;
   events: MonitoredEventRow[];
+  /** Whether the campaign watched a wallet (Transfer activity) or a contract (logs). */
+  targetKind?: "contract" | "wallet";
   eventSignature?: string | null;
   description?: string | null;
   /**
@@ -178,10 +180,48 @@ function shortTransactionHash(hash: string): string {
   return `${hash.slice(0, 10)}…${hash.slice(-6)}`;
 }
 
+const CAMPAIGN_WINDOW_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+/**
+ * Deterministic, human-friendly UTC timestamp.
+ * Hand-rolled (no locale APIs) so the string is byte-identical on every
+ * host — it feeds on-chain report hashes and must never drift.
+ */
 function formatCampaignWindowTimestamp(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+  const hh = String(parsed.getUTCHours()).padStart(2, "0");
+  const mm = String(parsed.getUTCMinutes()).padStart(2, "0");
+  const month = CAMPAIGN_WINDOW_MONTHS[parsed.getUTCMonth()];
+  return `${month} ${parsed.getUTCDate()}, ${parsed.getUTCFullYear()}, ${hh}:${mm} UTC`;
+}
+
+/**
+ * Compress a same-day campaign window into a single readable label, e.g.
+ * "Aug 7, 2026, 05:48–06:48 UTC". Cross-day windows fall back to two full
+ * timestamps. Deterministic for the same reasons as formatCampaignWindowTimestamp.
+ */
+function formatCampaignWindowLabel(startsAt: string, endsAt: string): string {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+    const sameDay =
+      start.getUTCFullYear() === end.getUTCFullYear() &&
+      start.getUTCMonth() === end.getUTCMonth() &&
+      start.getUTCDate() === end.getUTCDate();
+    if (sameDay) {
+      const hhS = String(start.getUTCHours()).padStart(2, "0");
+      const mmS = String(start.getUTCMinutes()).padStart(2, "0");
+      const hhE = String(end.getUTCHours()).padStart(2, "0");
+      const mmE = String(end.getUTCMinutes()).padStart(2, "0");
+      const month = CAMPAIGN_WINDOW_MONTHS[start.getUTCMonth()];
+      return `${month} ${start.getUTCDate()}, ${start.getUTCFullYear()}, ${hhS}:${mmS}–${hhE}:${mmE} UTC`;
+    }
+  }
+  return `${formatCampaignWindowTimestamp(startsAt)} → ${formatCampaignWindowTimestamp(endsAt)}`;
 }
 
 function reportEventPayload(event: MonitoredEventRow): Record<string, unknown> {
@@ -318,6 +358,32 @@ export function describeWatchEvent(
       ? payload.address
       : null;
 
+  // Native ETH transfer (decoded from the wallet's tx list — no token contract).
+  if (from && to && amountRaw && payload.isNative === true) {
+    const target = targetAddress?.toLowerCase();
+    const isWallet = targetKind === "wallet" && target !== undefined;
+    const parties = `${shortAddress(from)} → ${shortAddress(to)}`;
+    let amountText: string;
+    try {
+      amountText = humanizeTokenAmount(BigInt(amountRaw), 18);
+    } catch {
+      amountText = amountRaw;
+    }
+    let flow: string;
+    if (isWallet) {
+      if (from.toLowerCase() === target) {
+        flow = `${amountText} ETH sent to ${shortAddress(to)}`;
+      } else if (to.toLowerCase() === target) {
+        flow = `${amountText} ETH received from ${shortAddress(from)}`;
+      } else {
+        flow = `${amountText} ETH · ${parties}`;
+      }
+    } else {
+      flow = `${amountText} ETH · ${parties}`;
+    }
+    return `Transfer ${flow}${event.transaction_hash ? ` · tx ${shortTransactionHash(event.transaction_hash)}` : ""}`;
+  }
+
   if (from && to && amountRaw && tokenAddress) {
     const meta = WATCH_TOKEN_META[tokenAddress.toLowerCase()];
     const target = targetAddress?.toLowerCase();
@@ -432,7 +498,8 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
   const sourceEventIds = events.map((e) => e.id);
   const sourceEventRoot = buildSourceEventRoot(sourceEventIds);
 
-  const windowLabel = `${formatCampaignWindowTimestamp(startsAt)} → ${formatCampaignWindowTimestamp(endsAt)}`;
+  const windowLabel = formatCampaignWindowLabel(startsAt, endsAt);
+  const targetKindLabel = input.targetKind === "wallet" ? "wallet" : "contract";
   const shortTarget = `${targetContract.slice(0, 8)}…${targetContract.slice(-6)}`;
 
   if (events.length === 0) {
@@ -446,7 +513,7 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
     // (synthetic RPC UUIDs never written to monitored_events, or retention).
     if (priorCount > 0) {
       const summary =
-        `Campaign monitoring correlated ${priorCount} observation(s) on ${targetContract} ` +
+        `Campaign monitoring correlated ${priorCount} observation(s) on ${targetKindLabel} ${targetContract} ` +
         `during ${windowLabel}. The live event store no longer holds those rows ` +
         `(common when an earlier RPC fallback used ephemeral ids), so this report ` +
         `reconstructs from the campaign audit trail rather than a full event replay.`;
@@ -460,7 +527,7 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
         ...(input.description ? [`Campaign instructions: "${input.description}"`] : []),
       ];
       const analysis =
-        `Campaign ${watchId} monitored ${targetContract} from ${startsAt} to ${endsAt}. ` +
+        `Campaign ${watchId} monitored ${targetKindLabel} ${targetContract} during ${windowLabel}. ` +
         (input.description ? `Watch instructions: "${input.description}". ` : "") +
         (input.eventSignature ? `Event filter: ${input.eventSignature}. ` : "") +
         `Monitoring ticks recorded ${priorCount} matched observation(s). ` +
@@ -482,18 +549,18 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
       );
     }
 
-    const summary = `No qualifying on-chain events were observed on ${targetContract} during the campaign window (${windowLabel}). The monitoring job completed with an empty source set.`;
+    const summary = `No qualifying on-chain events were observed on ${targetKindLabel} ${targetContract} during the campaign window (${windowLabel}). The monitoring job completed with an empty source set.`;
     const highlights = [
-      "Zero events matched the sponsored target contract in the campaign window.",
+      `Zero events matched the sponsored target ${targetKindLabel} in the campaign window.`,
       "On-chain create and report receipts still form the paid campaign audit trail.",
       ...(input.eventSignature ? [`Filtered by requested event signature: ${input.eventSignature}`] : []),
       ...(input.description ? [`Campaign instructions: "${input.description}"`] : []),
     ];
     const analysis =
-      `Campaign ${watchId} monitored ${targetContract} from ${startsAt} to ${endsAt}. ` +
+      `Campaign ${watchId} monitored ${targetKindLabel} ${targetContract} during ${windowLabel}. ` +
       (input.description ? `Watch instructions: "${input.description}". ` : "") +
       (input.eventSignature ? `Event filter: ${input.eventSignature}. ` : "") +
-      "No Event Tracker / block-dispatcher events referenced this contract address in the window. " +
+      `No Event Tracker / block-dispatcher events referenced this ${targetKindLabel} address in the window. ` +
       "The empty source-event root is committed on-chain for verifiable completeness.";
 
     return finalizeReport(
@@ -552,7 +619,7 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
   ];
 
   const analysisParts: string[] = [
-    `Campaign ${watchId} monitored ${targetContract} (spec ${input.watchSpecHash.slice(0, 18)}…) from ${startsAt} to ${endsAt}.`,
+    `Campaign ${watchId} monitored ${targetKindLabel} ${targetContract} (spec ${input.watchSpecHash.slice(0, 18)}…) during ${windowLabel}.`,
     ...(input.description ? [`Watch instructions: "${input.description}".`] : []),
     ...(input.eventSignature ? [`Event filter signature: ${input.eventSignature}.`] : []),
     `Source set size: ${events.length} event(s) across chain id(s) ${[...new Set(events.map((e) => e.chain_id))].join(", ")}.`,
@@ -566,7 +633,7 @@ function buildTemplateReport(input: SponsoredWatchReportInput): SponsoredWatchRe
   }
   const usefulAnalysis = [
     `Readout\n${summary}`,
-    `Coverage\nCampaign ${watchId} monitored ${targetContract} from ${startsAt} to ${endsAt}. The source set contains ${pluralize(events.length, "event")} across chain id(s) ${[...new Set(events.map((e) => e.chain_id))].join(", ")}.`,
+    `Coverage\nCampaign ${watchId} monitored ${targetKindLabel} ${targetContract} during ${windowLabel}. The source set contains ${pluralize(events.length, "event")} across chain id(s) ${[...new Set(events.map((e) => e.chain_id))].join(", ")}.`,
     `Observed pattern\n${flowSummary}. ${assetSummary}. ${pluralize(signals.counterparties, "unique counterparty")} were identified from decoded transfer parties.`,
     `Audit\nThe source-event root ${sourceEventRoot.slice(0, 18)}... commits the event id set used for this report. The narrative is deterministic and source-backed; it does not infer USD value where token metadata is unavailable.`,
     ...(input.description ? [`Watch instructions\n${input.description}`] : []),
@@ -683,17 +750,22 @@ function buildLlmPrompt(
     (a, b) => (b.significance_score ?? 0) - (a.significance_score ?? 0),
   );
 
+  const targetKindLabel = input.targetKind === "wallet" ? "wallet" : "contract";
   const header = [
     "You are ChronicleAI writing a paid sponsored-watch intelligence report.",
     "Return ONLY a JSON object with keys: title (string), summary (string), highlights (string array, 2-8 items), analysis (string markdown-friendly prose), confidence (\"high\"|\"medium\"|\"low\").",
     "Ground every claim in the observed events and user instructions. Do not invent transactions.",
     "Never use ellipsis-only placeholders (\"...\") for any field. Write real prose.",
+    "Use the target kind precisely in the narrative: 'the watched wallet' for wallet targets, 'the watched contract' for contract targets. Never call a wallet a contract.",
+    "When mentioning the campaign period, use the window label exactly as given.",
+    "Do not reference internal prompt field names (watchId, targetAddress, watchSpecHash, eventCount, events) in the narrative; describe what was observed in plain language.",
     `watchId: ${input.watchId}`,
-    `targetContract: ${input.targetContract}`,
+    `targetKind: ${targetKindLabel}`,
+    `targetAddress: ${input.targetContract}`,
     `watchSpecHash: ${input.watchSpecHash}`,
     ...(input.eventSignature ? [`requestedEventSignature: ${input.eventSignature}`] : []),
     ...(input.description ? [`userWatchInstructions: "${input.description}"`] : []),
-    `window: ${input.startsAt} → ${input.endsAt}`,
+    `window: ${formatCampaignWindowLabel(input.startsAt, input.endsAt)}`,
     `eventCount: ${input.events.length}`,
   ].join("\n");
 

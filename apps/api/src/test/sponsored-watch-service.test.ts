@@ -118,6 +118,16 @@ describe("SponsoredWatchService", () => {
     mockExecLogRepo.append.mockResolvedValue({ ok: true, value: {} });
     mockEventRepo.listInWindow.mockResolvedValue({ ok: true, value: [] });
     mockWatchRepo.listCompletedNeedingReportRepair.mockResolvedValue({ ok: true, value: [] });
+    // Hermetic on-chain fallback: any test that reaches the Etherscan scan path
+    // gets a valid empty provider response instead of a real network call.
+    // Tests that exercise capture override this with their own fetch stub.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        json: async () => ({ status: "1", message: "OK", result: [] }),
+      }),
+    );
+    process.env.ETHERSCAN_API_KEY = "test-key";
   });
 
   describe("createSponsoredWatch", () => {
@@ -463,6 +473,299 @@ describe("SponsoredWatchService", () => {
         expect(mockWatchRepo.update).toHaveBeenCalledWith(
           watch.id,
           expect.objectContaining({ monitored_event_count: 0, source_event_ids: [] }),
+        );
+      } finally {
+        vi.unstubAllGlobals();
+        if (previousApiKey === undefined) delete process.env.ETHERSCAN_API_KEY;
+        else process.env.ETHERSCAN_API_KEY = previousApiKey;
+      }
+    });
+
+    it("captures native ETH transfers + token transfers for a wallet watch via Etherscan account endpoints", async () => {
+      const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+      const watch = {
+        ...mockWatchRow,
+        status: "monitoring" as const,
+        target_kind: "wallet" as const,
+        target_contract: wallet,
+        source_event_ids: [] as string[],
+        starts_at: "2026-08-06T16:50:00.000Z",
+        ends_at: "2026-08-06T17:50:00.000Z",
+      };
+      const inWindowSec = Math.floor(new Date("2026-08-06T17:20:00.000Z").getTime() / 1000);
+      const nativeTx = "0x" + "33".repeat(32);
+      const tokenTx = "0x" + "55".repeat(32);
+      const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+        const url = String(input);
+        const result = url.includes("tokentx")
+          ? [
+              {
+                hash: tokenTx,
+                from: wallet,
+                to: "0x" + "66".repeat(20),
+                contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                tokenSymbol: "USDC",
+                tokenName: "USD Coin",
+                tokenDecimal: "6",
+                value: "12500000000",
+                timeStamp: String(inWindowSec),
+                blockNumber: "20000001",
+              },
+            ]
+          : [
+              {
+                hash: nativeTx,
+                from: "0x" + "44".repeat(20),
+                to: wallet,
+                value: "1000000000000000000",
+                timeStamp: String(inWindowSec),
+                blockNumber: "20000000",
+                isError: "0",
+                txreceipt_status: "1",
+              },
+            ];
+        return { json: async () => ({ status: "1", message: "OK", result }) };
+      });
+      const previousApiKey = process.env.ETHERSCAN_API_KEY;
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({ ok: true, value: [watch] });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.update.mockImplementation(async (id: string, update: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...watch, id, ...update },
+      }));
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: { ...watch } });
+      mockEventRepo.create.mockImplementation(async (data: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...data, id: crypto.randomUUID() },
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+      process.env.ETHERSCAN_API_KEY = "test-key";
+
+      try {
+        const cycle = await service.processCampaignCycle(new Date("2026-08-06T18:00:00.000Z"));
+
+        expect(cycle.monitored).toBe(1);
+        expect(cycle.failed).toBe(0);
+        expect(mockEventRepo.create).toHaveBeenCalled();
+        const createdPayloads = (mockEventRepo.create.mock.calls as Array<[Record<string, unknown>]>).map(
+          (call) => call[0]?.raw_payload as Record<string, unknown> | undefined,
+        );
+        expect(createdPayloads.some((p) => p?.isNative === true)).toBe(true);
+        expect(createdPayloads.some((p) => p?.tokenSymbol === "USDC")).toBe(true);
+        expect(mockWatchRepo.update).toHaveBeenCalledWith(
+          watch.id,
+          expect.objectContaining({ monitored_event_count: 2 }),
+        );
+      } finally {
+        vi.unstubAllGlobals();
+        if (previousApiKey === undefined) delete process.env.ETHERSCAN_API_KEY;
+        else process.env.ETHERSCAN_API_KEY = previousApiKey;
+      }
+    });
+
+    it("walks Etherscan pages backward to reach the campaign window for an active wallet", async () => {
+      const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+      const watch = {
+        ...mockWatchRow,
+        status: "monitoring" as const,
+        target_kind: "wallet" as const,
+        target_contract: wallet,
+        source_event_ids: [] as string[],
+        starts_at: "2026-08-06T16:50:00.000Z",
+        ends_at: "2026-08-06T17:50:00.000Z",
+      };
+      const newerSec = Math.floor(new Date("2026-08-06T18:00:00.000Z").getTime() / 1000);
+      const inWindowSec = Math.floor(new Date("2026-08-06T17:20:00.000Z").getTime() / 1000);
+      const inWindowTx = "0x" + "88".repeat(32);
+      const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+        const url = String(input);
+        const isTokentx = url.includes("tokentx");
+        const isPage2 = url.includes("page=2");
+        const nativeRow = (hash: string, ts: number) => ({
+          hash,
+          from: "0x" + "44".repeat(20),
+          to: wallet,
+          value: "1000000000000000000",
+          timeStamp: String(ts),
+          blockNumber: "20000000",
+          isError: "0",
+          txreceipt_status: "1",
+        });
+        const result = isTokentx
+          ? []
+          : isPage2
+            ? [nativeRow(inWindowTx, inWindowSec)]
+            : [nativeRow("0x" + "77".repeat(32), newerSec)];
+        return { json: async () => ({ status: "1", message: "OK", result }) };
+      });
+      const previousApiKey = process.env.ETHERSCAN_API_KEY;
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({ ok: true, value: [watch] });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.update.mockImplementation(async (id: string, update: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...watch, id, ...update },
+      }));
+      mockWatchRepo.findById.mockResolvedValue({ ok: true, value: { ...watch } });
+      mockEventRepo.create.mockImplementation(async (data: Record<string, unknown>) => ({
+        ok: true,
+        value: { ...data, id: crypto.randomUUID() },
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+      process.env.ETHERSCAN_API_KEY = "test-key";
+
+      try {
+        const cycle = await service.processCampaignCycle(new Date("2026-08-06T18:10:00.000Z"));
+
+        expect(cycle.monitored).toBe(1);
+        expect(cycle.failed).toBe(0);
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.stringContaining("page=2"),
+          expect.anything(),
+        );
+        const createdPayloads = (mockEventRepo.create.mock.calls as Array<[Record<string, unknown>]>).map(
+          (call) => call[0]?.raw_payload as Record<string, unknown> | undefined,
+        );
+        expect(createdPayloads.some((p) => p?.isNative === true)).toBe(true);
+        expect(mockWatchRepo.update).toHaveBeenCalledWith(
+          watch.id,
+          expect.objectContaining({ monitored_event_count: 1 }),
+        );
+      } finally {
+        vi.unstubAllGlobals();
+        if (previousApiKey === undefined) delete process.env.ETHERSCAN_API_KEY;
+        else process.env.ETHERSCAN_API_KEY = previousApiKey;
+      }
+    });
+
+    it("keeps delivering newly observed events on later 60s ticks (not just the first scan)", async () => {
+      const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+      const firstTx = "0x" + "aa".repeat(32);
+      const secondTx = "0x" + "bb".repeat(32);
+      const inWindowSec = Math.floor(new Date("2026-08-06T17:20:00.000Z").getTime() / 1000);
+      const watch = {
+        ...mockWatchRow,
+        status: "monitoring" as const,
+        target_kind: "wallet" as const,
+        target_contract: wallet,
+        visibility: "private" as const,
+        telegram_chat_id: "999999",
+        source_event_ids: [] as string[],
+        starts_at: "2026-08-06T16:50:00.000Z",
+        ends_at: "2026-08-06T17:50:00.000Z",
+      };
+      const sendTelegramToChat = vi.fn().mockResolvedValue({
+        delivered: true,
+        destinations: ["telegram:999999"],
+        failures: [],
+      });
+      const walletService = createSponsoredWatchService({
+        watchRepo: mockWatchRepo as never,
+        execLogRepo: mockExecLogRepo as never,
+        eventRepo: mockEventRepo as never,
+        web3Client: mockWeb3Client,
+        frontendOrigin: "https://chronicle.example",
+        notificationService: {
+          sendTelegramToChat,
+          sendAlertBroadcast: vi.fn(),
+          sendDigestBroadcast: vi.fn(),
+          sendLowBalanceWarning: vi.fn(),
+          sendRevenueRoutingNotification: vi.fn(),
+          getConfiguredChannels: () => ({ telegram: true }),
+          isTelegramSendConfigured: () => true,
+        } as never,
+      });
+
+      const nativeRow = (hash: string) => ({
+        hash,
+        from: "0x" + "44".repeat(20),
+        to: wallet,
+        value: "1000000000000000000",
+        timeStamp: String(inWindowSec),
+        blockNumber: "20000000",
+        isError: "0",
+        txreceipt_status: "1",
+      });
+      // Tick 1 exposes one on-chain tx; tick 2 exposes a second one — the exact
+      // "wallet moved again between polls" scenario from the 60s cycle.
+      const txlistPages = [[nativeRow(firstTx)], [nativeRow(firstTx), nativeRow(secondTx)]];
+      let tick = 0;
+      const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+        const url = String(input);
+        const page = Number(new URL(url).searchParams.get("page") ?? "1");
+        if (url.includes("tokentx")) {
+          return { json: async () => ({ status: "1", message: "OK", result: [] }) };
+        }
+        // Page 1 carries this tick's on-chain state; later pages are empty so
+        // the walk stops at the "page older than the window" break instead of
+        // hammering up to MAX_ETHERSCAN_PAGES redundant fetches.
+        const result = page === 1 ? (txlistPages[Math.min(tick, txlistPages.length - 1)] ?? []) : [];
+        return { json: async () => ({ status: "1", message: "OK", result }) };
+      });
+      const previousApiKey = process.env.ETHERSCAN_API_KEY;
+
+      mockWatchRepo.listDueForActivation.mockResolvedValue({ ok: true, value: [] });
+      mockWatchRepo.listDueForCompletion.mockResolvedValue({ ok: true, value: [] });
+      let storedWatch: Record<string, unknown> = { ...watch };
+      mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+        ok: true,
+        value: [storedWatch as never],
+      });
+      mockWatchRepo.update.mockImplementation(async (id: string, update: Record<string, unknown>) => {
+        storedWatch = { ...storedWatch, id, ...update };
+        return { ok: true, value: storedWatch };
+      });
+      mockWatchRepo.findById.mockImplementation(async () => ({ ok: true, value: storedWatch }));
+      const persistedBySourceEventId = new Map<string, Record<string, unknown>>();
+      mockEventRepo.findById.mockImplementation(async (id: string) => {
+        for (const row of persistedBySourceEventId.values()) {
+          if (row.id === id) return { ok: true, value: row };
+        }
+        return { ok: false, error: new Error("not found") };
+      });
+      mockEventRepo.findBySourceAndEventId.mockImplementation(
+        async (source: string, sourceEventId: string) =>
+          persistedBySourceEventId.get(`${source}:${sourceEventId}`) ?? null,
+      );
+      mockEventRepo.create.mockImplementation(async (data: Record<string, unknown>) => {
+        const row = { ...data, id: crypto.randomUUID() };
+        persistedBySourceEventId.set(
+          `${String(data.source)}:${String(data.source_event_id)}`,
+          row,
+        );
+        return { ok: true, value: row };
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      process.env.ETHERSCAN_API_KEY = "test-key";
+
+      try {
+        tick = 0;
+        const firstCycle = await walletService.processCampaignCycle(
+          new Date("2026-08-06T17:10:00.000Z"),
+        );
+        expect(firstCycle.monitored).toBe(1);
+        expect(sendTelegramToChat).toHaveBeenCalledTimes(1);
+
+        // Second 60s tick: a new on-chain tx appeared in the window.
+        tick = 1;
+        mockWatchRepo.listInMonitoringWindow.mockResolvedValue({
+          ok: true,
+          value: [storedWatch as never],
+        });
+        const secondCycle = await walletService.processCampaignCycle(
+          new Date("2026-08-06T17:11:00.000Z"),
+        );
+        expect(secondCycle.monitored).toBe(1);
+        expect(secondCycle.failed).toBe(0);
+        expect(sendTelegramToChat).toHaveBeenCalledTimes(2);
+        const secondCall = sendTelegramToChat.mock.calls[1]?.[0] as { text?: string };
+        expect(secondCall.text).toContain(secondTx.slice(0, 10));
+        expect(mockWatchRepo.update).toHaveBeenLastCalledWith(
+          watch.id,
+          expect.objectContaining({ monitored_event_count: 2 }),
         );
       } finally {
         vi.unstubAllGlobals();

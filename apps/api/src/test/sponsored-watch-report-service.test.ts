@@ -160,6 +160,27 @@ describe("sponsored-watch-report-service", () => {
     expect(report.confidence).toBe("high");
   });
 
+  it("calls a wallet target a wallet (never a contract) with a human-friendly window", async () => {
+    const wallet = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+    const report = await service.generateReport({
+      watchId: "watch-wallet",
+      targetContract: wallet,
+      watchSpecHash: "0x" + "e".repeat(64),
+      startsAt: "2026-08-07T05:48:22.662Z",
+      endsAt: "2026-08-07T06:48:22.662Z",
+      events: [],
+      targetKind: "wallet",
+    });
+
+    expect(report.summary).toContain("wallet");
+    expect(report.summary).toContain("Aug 7, 2026, 05:48–06:48 UTC");
+    expect(report.summary).not.toContain("T05:48");
+    expect(report.summary.toLowerCase()).not.toContain("contract");
+    expect(report.highlights.some((h) => h.includes("target wallet"))).toBe(true);
+    expect(report.analysis).toContain("monitored wallet");
+    expect(report.analysis).toContain("referenced this wallet address");
+  });
+
   it("uses prior correlation count when live events are gone", async () => {
     const report = await service.generateReport({
       watchId: "watch-orphan-ids",
@@ -337,6 +358,23 @@ describe("watch event description helpers", () => {
     const line = describeWatchEvent(ev, "wallet", WALLET);
     expect(line).toContain("5 USDC");
     expect(line).toContain("sent to");
+  });
+
+  it("describes a native ETH transfer (wallet tx list, no token contract)", () => {
+    const ev = event({
+      id: "w-native",
+      event_type: "wallet_transfer",
+      asset_symbols: ["ETH"],
+      raw_payload: {
+        from: "0x1111111111111111111111111111111111111111",
+        to: WALLET,
+        amountRaw: "10901794397071411217",
+        isNative: true,
+      },
+    });
+    const line = describeWatchEvent(ev, "wallet", WALLET);
+    expect(line).toContain("Transfer");
+    expect(line).toContain("10.901794 ETH received from");
   });
 
   it("shows direction only for unknown tokens (no fabricated symbol or decimals)", () => {

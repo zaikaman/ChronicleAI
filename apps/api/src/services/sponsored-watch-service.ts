@@ -102,11 +102,20 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** Keep a fallback scan bounded even when a provider returns no logs. */
 const RPC_LOG_CHUNK_SIZE = 45n;
-const MAX_RPC_CALLS_PER_WATCH = 8;
+// Budget large enough to fully cover a 1-hour Mainnet window (~300 blocks):
+// wallet watches need 2 log calls per 45-block chunk (from + to), so ~7 chunks
+// need 14 calls, plus 1 reserved eth_getBlock.
+const MAX_RPC_CALLS_PER_WATCH = 16;
 const MAX_RPC_LOG_CALLS_PER_WATCH = MAX_RPC_CALLS_PER_WATCH - 1; // reserve one call for eth_getBlock
 const MAX_RPC_BLOCK_SPAN = RPC_LOG_CHUNK_SIZE * BigInt(MAX_RPC_LOG_CALLS_PER_WATCH) - 1n;
-const RPC_RESCAN_INTERVAL_MS = 5 * 60_000;
+// Re-scan on-chain at most once per ~45s so the 60s campaign cycle effectively
+// rescans every tick — new wallet txs / contract logs are only visible via a
+// fresh scan, so this drives the near-realtime alert cadence.
+const RPC_RESCAN_INTERVAL_MS = 45_000;
 const MAX_RPC_EVENTS_PER_WATCH = 500;
+
+/** Max Etherscan pages walked backward per endpoint until the window is covered. */
+const MAX_ETHERSCAN_PAGES = 10;
 
 /** Minimum gap between alert deliveries per watch (registry gas + DM calm). */
 const WATCH_ALERT_THROTTLE_MS = 15 * 60_000;
@@ -372,6 +381,192 @@ export function createSponsoredWatchService(params: {
     return { event, inWindow };
   }
 
+  /**
+   * Map an Etherscan account-endpoint row to a wallet watch event.
+   * Handles `txlist` (native ETH transfers + value-bearing calls) and `tokentx`
+   * (ERC-20/721/1155 transfers). Wallets emit no logs, so this is the primary
+   * capture path for wallet watches — Transfer-log queries alone miss native
+   * ETH sends, which never emit an ERC-20 Transfer log.
+   */
+  function mapWalletAccountItemToEvent(
+    item: {
+      hash?: string;
+      from?: string;
+      to?: string;
+      value?: string | number;
+      timeStamp?: string | number;
+      blockNumber?: string | number;
+      isError?: string;
+      txreceipt_status?: string;
+      contractAddress?: string;
+      tokenSymbol?: string;
+      tokenName?: string;
+      tokenDecimal?: string | number;
+    },
+    watch: SponsoredWatchRow,
+    nowIso: string,
+    startsMs: number,
+    endsMs: number,
+  ): { event: MonitoredEventRow; inWindow: boolean } | null {
+    const txHash = item.hash;
+    if (!txHash || typeof txHash !== "string") return null;
+
+    const timeStampSec = parseProviderInteger(item.timeStamp);
+    const itemMs = timeStampSec !== null ? timeStampSec * 1000 : Number.NaN;
+    const inWindow = Number.isFinite(itemMs) && itemMs >= startsMs && itemMs <= endsMs;
+    const observedAt = Number.isFinite(itemMs) ? new Date(itemMs).toISOString() : watch.starts_at;
+
+    const from =
+      typeof item.from === "string" && isAddress(item.from, { strict: false })
+        ? getAddress(item.from)
+        : null;
+    const to =
+      typeof item.to === "string" && isAddress(item.to, { strict: false })
+        ? getAddress(item.to)
+        : null;
+    if (!from || !to) return null;
+
+    const blockNumber =
+      item.blockNumber != null
+        ? String(
+            typeof item.blockNumber === "string"
+              ? parseProviderInteger(item.blockNumber) ?? item.blockNumber
+              : item.blockNumber,
+          )
+        : null;
+
+    // Native ETH transfer (txlist row). Skip failed / zero-value txs — zero
+    // value means a token or contract call, which the tokentx side covers.
+    if (item.contractAddress == null) {
+      const isError = String(item.isError ?? "0");
+      const receiptStatus = String(item.txreceipt_status ?? "1");
+      if (isError !== "0" || receiptStatus !== "1") return null;
+      const valueRaw =
+        typeof item.value === "string" || typeof item.value === "number"
+          ? String(item.value)
+          : null;
+      if (!valueRaw || !/^\d+$/.test(valueRaw)) return null;
+      let amount: bigint;
+      try {
+        amount = BigInt(valueRaw);
+      } catch {
+        return null;
+      }
+      if (amount <= 0n) return null;
+
+      const human = parseFloat(humanizeTokenAmount(amount, 18).replace(/,/g, ""));
+      return {
+        event: {
+          id: deterministicRpcEventId(`${txHash}:native`, 0),
+          source: "etherscan_v2",
+          source_event_id: `native-${txHash}`,
+          event_type: "wallet_transfer",
+          chain_id: WATCH_MONITOR_CHAIN_ID,
+          protocol: "Ethereum Mainnet",
+          asset_symbols: ["ETH"],
+          magnitude: Number.isFinite(human)
+            ? { value: Math.round(human * 1_000_000) / 1_000_000, unit: "ETH" }
+            : null,
+          transaction_hash: txHash,
+          observed_at: observedAt,
+          captured_at: nowIso,
+          significance_score: 0.75,
+          raw_payload: {
+            address: null,
+            topics: [],
+            data: null,
+            blockNumber,
+            source: "etherscan_v2",
+            from,
+            to,
+            amountRaw: valueRaw,
+            isNative: true,
+            symbol: "ETH",
+            decimals: 18,
+            targetKind: "wallet",
+          },
+          status: "qualified",
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+        inWindow,
+      };
+    }
+
+    // Token transfer (tokentx row).
+    const isError = String(item.isError ?? "0");
+    const receiptStatus = String(item.txreceipt_status ?? "1");
+    if (isError !== "0" || receiptStatus !== "1") return null;
+    const tokenAddress = isAddress(item.contractAddress, { strict: false })
+      ? getAddress(item.contractAddress)
+      : null;
+    const decimalsRaw = parseProviderInteger(item.tokenDecimal);
+    const decimals =
+      decimalsRaw !== null && decimalsRaw >= 0 && decimalsRaw <= 36 ? decimalsRaw : 18;
+    const valueRaw =
+      typeof item.value === "string" || typeof item.value === "number"
+        ? String(item.value)
+        : null;
+    if (!valueRaw || !/^\d+$/.test(valueRaw)) return null;
+    let amount: bigint;
+    try {
+      amount = BigInt(valueRaw);
+    } catch {
+      return null;
+    }
+    if (amount <= 0n) return null;
+
+    const knownMeta = tokenAddress ? WATCH_TOKEN_META[tokenAddress.toLowerCase()] : undefined;
+    const symbol =
+      typeof item.tokenSymbol === "string" && item.tokenSymbol.trim()
+        ? item.tokenSymbol.trim()
+        : knownMeta?.symbol ?? null;
+    const human = parseFloat(humanizeTokenAmount(amount, decimals).replace(/,/g, ""));
+    return {
+      event: {
+        id: deterministicRpcEventId(
+          `${txHash}:${tokenAddress ?? "?"}:${from}:${to}:${valueRaw}`,
+          0,
+        ),
+        source: "etherscan_v2",
+        source_event_id: `tokentx-${txHash}-${(tokenAddress ?? "?").toLowerCase()}-${from.toLowerCase()}-${to.toLowerCase()}-${valueRaw}`,
+        event_type: "wallet_transfer",
+        chain_id: WATCH_MONITOR_CHAIN_ID,
+        protocol: "Ethereum Mainnet",
+        asset_symbols: symbol ? [symbol] : knownMeta ? [knownMeta.symbol] : null,
+        magnitude: Number.isFinite(human)
+          ? {
+              value: Math.round(human * 100) / 100,
+              unit: knownMeta?.isStableUsd ? "USD" : symbol ?? "tokens",
+            }
+          : null,
+        transaction_hash: txHash,
+        observed_at: observedAt,
+        captured_at: nowIso,
+        significance_score: 0.75,
+        raw_payload: {
+          address: tokenAddress,
+          topics: [],
+          data: null,
+          blockNumber,
+          source: "etherscan_v2",
+          from,
+          to,
+          amountRaw: valueRaw,
+          tokenAddress,
+          tokenSymbol: symbol,
+          tokenName: typeof item.tokenName === "string" ? item.tokenName : null,
+          decimals,
+          targetKind: "wallet",
+        },
+        status: "qualified",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      inWindow,
+    };
+  }
+
   async function collectRpcLogsForWindow(watch: SponsoredWatchRow): Promise<MonitoredEventRow[]> {
     const startsMs = new Date(watch.starts_at).getTime();
     const endsMs = new Date(watch.ends_at).getTime();
@@ -384,62 +579,117 @@ export function createSponsoredWatchService(params: {
     const kind = watchTargetKind(watch);
     const isWallet = kind === "wallet";
 
-    // 1. Try Etherscan V2 API first (Mainnet chainId 1)
+    // 1. Try Etherscan V2 API first (Ethereum Mainnet chainId 1)
     if (apiKey) {
       try {
-        const urls: string[] = isWallet
-          ? [
-              // Transfer where wallet is `from` (topic1)
-              `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs&topic0=${TRANSFER_EVENT_TOPIC0}&topic0_1_opr=and&topic1=${walletTopic(watch.target_contract)}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
-              // Transfer where wallet is `to` (topic2)
-              `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs&topic0=${TRANSFER_EVENT_TOPIC0}&topic0_2_opr=and&topic2=${walletTopic(watch.target_contract)}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
-            ]
-          : [
-              `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs&address=${watch.target_contract}&page=1&offset=500&sort=desc&apikey=${apiKey}`,
-            ];
-
+        // Wallets emit no logs of their own. A wallet's activity is the set of
+        // transactions where it is `from` or `to`:
+        //   - txlist  → normal transactions (native ETH transfers, contract calls)
+        //   - tokentx → ERC-20 / ERC-721 / ERC-1155 transfers
+        // Transfer-log queries alone miss native ETH sends (no ERC-20 log is
+        // emitted), which is why a busy wallet previously reported zero events.
+        //
+        // Pages are walked newest-first until a page is older than the campaign
+        // window (or the page cap is hit), so an active address can never push
+        // its window off page 1 — the failure mode that produced "0 events" on
+        // a wallet that was clearly moving funds.
         const windowEvents: MonitoredEventRow[] = [];
         const seen = new Set<string>();
-        let receivedValidResponse = false;
+        let failedResponses = 0;
+        let coveredWindow = true;
 
-        for (const urlV2 of urls) {
-          const res = await fetch(urlV2, { signal: AbortSignal.timeout(10_000) });
-          const data = (await res.json()) as {
-            status?: string;
-            message?: string;
-            result?: Array<Record<string, unknown>>;
-          };
-          if (
-            !(data && (data.status === "1" || data.message === "OK") && Array.isArray(data.result))
-          ) {
-            continue;
+        const fetchPage = async (
+          url: string,
+        ): Promise<Array<Record<string, unknown>> | null> => {
+          try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+            const data = (await res.json()) as {
+              status?: string;
+              message?: string;
+              result?: Array<Record<string, unknown>>;
+            };
+            if (
+              !(data && (data.status === "1" || data.message === "OK") && Array.isArray(data.result))
+            ) {
+              return null;
+            }
+            return data.result;
+          } catch {
+            return null;
           }
-          receivedValidResponse = true;
-          for (const item of data.result) {
-            const mapped = mapLogItemToEvent(
-              item as Parameters<typeof mapLogItemToEvent>[0],
-              watch,
-              "etherscan_v2",
-              nowIso,
-              startsMs,
-              endsMs,
-            );
+        };
+
+        const collectPage = (items: Array<Record<string, unknown>>): void => {
+          for (const item of items) {
+            const mapped = isWallet
+              ? mapWalletAccountItemToEvent(
+                  item as Parameters<typeof mapWalletAccountItemToEvent>[0],
+                  watch,
+                  nowIso,
+                  startsMs,
+                  endsMs,
+                )
+              : mapLogItemToEvent(
+                  item as Parameters<typeof mapLogItemToEvent>[0],
+                  watch,
+                  "etherscan_v2",
+                  nowIso,
+                  startsMs,
+                  endsMs,
+                );
             if (!mapped) continue;
-            const key = `${mapped.event.transaction_hash}:${(mapped.event.raw_payload as { logIndex?: number }).logIndex ?? 0}`;
+            const key = `${mapped.event.source}:${mapped.event.source_event_id}`;
             if (seen.has(key)) continue;
             seen.add(key);
             if (mapped.inWindow) windowEvents.push(mapped.event);
           }
+        };
+
+        const oldestItemMs = (items: Array<Record<string, unknown>>): number => {
+          let oldestMs = Number.POSITIVE_INFINITY;
+          for (const item of items) {
+            const rawTs = item.timeStamp;
+            const tsSec = parseProviderInteger(
+              typeof rawTs === "string" || typeof rawTs === "number" ? rawTs : undefined,
+            );
+            if (tsSec !== null) oldestMs = Math.min(oldestMs, tsSec * 1000);
+          }
+          return oldestMs;
+        };
+
+        const endpointActions = isWallet ? (["txlist", "tokentx"] as const) : (["getLogs"] as const);
+
+        for (const action of endpointActions) {
+          let endpointOk = false;
+          for (let page = 1; page <= MAX_ETHERSCAN_PAGES; page++) {
+            const url =
+              action === "getLogs"
+                ? `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs&address=${watch.target_contract}&page=${page}&offset=1000&sort=desc&apikey=${apiKey}`
+                : `https://api.etherscan.io/v2/api?chainid=1&module=account&action=${action}&address=${watch.target_contract}&page=${page}&offset=1000&sort=desc&apikey=${apiKey}`;
+            const items = await fetchPage(url);
+            if (!items) {
+              failedResponses += 1;
+              coveredWindow = false;
+              break;
+            }
+            endpointOk = true;
+            collectPage(items);
+            // Walked past the window start (or no more rows): this endpoint
+            // provably covered the campaign window.
+            if (items.length === 0 || oldestItemMs(items) <= startsMs) break;
+            if (page >= MAX_ETHERSCAN_PAGES) coveredWindow = false;
+          }
+          if (!endpointOk) coveredWindow = false;
         }
 
-        if (receivedValidResponse) {
-          // A valid provider response with no exact campaign-window matches is
-          // an empty source set. Never substitute unrelated historical logs.
+        if (windowEvents.length > 0 || (failedResponses === 0 && coveredWindow)) {
+          // In-window matches, or every endpoint answered with valid pages that
+          // covered the campaign window. Never substitute unrelated logs.
           return dedupeSponsoredWatchEvents(windowEvents).slice(0, MAX_RPC_EVENTS_PER_WATCH);
         }
       } catch (etherscanErr) {
         console.warn(
-          `[sponsored-watch] Etherscan V2 log fetch failed for ${watch.id}, falling back to chunked RPC:`,
+          `[sponsored-watch] Etherscan V2 fetch failed for ${watch.id}, falling back to chunked RPC:`,
           etherscanErr instanceof Error ? etherscanErr.message : etherscanErr,
         );
       }
@@ -536,15 +786,17 @@ export function createSponsoredWatchService(params: {
           });
         };
 
+        // Scan newest-first: if the call budget ever runs out, the tail of the
+        // window (the most recent activity) is always covered.
         for (
-          let chunkFrom = fromBlock;
-          chunkFrom <= toBlock && rpcCalls < MAX_RPC_CALLS_PER_WATCH;
-          chunkFrom += RPC_LOG_CHUNK_SIZE
+          let chunkTo = toBlock;
+          chunkTo >= fromBlock && rpcCalls < MAX_RPC_CALLS_PER_WATCH;
+          chunkTo -= RPC_LOG_CHUNK_SIZE
         ) {
-          const chunkTo =
-            chunkFrom + RPC_LOG_CHUNK_SIZE - 1n > toBlock
-              ? toBlock
-              : chunkFrom + RPC_LOG_CHUNK_SIZE - 1n;
+          const chunkFrom =
+            chunkTo - RPC_LOG_CHUNK_SIZE + 1n < fromBlock
+              ? fromBlock
+              : chunkTo - RPC_LOG_CHUNK_SIZE + 1n;
           try {
             if (isWallet) {
               // Two queries: Transfer from wallet + Transfer to wallet.
@@ -616,13 +868,17 @@ export function createSponsoredWatchService(params: {
   async function collectMatchingEvents(
     watch: SponsoredWatchRow,
     options: { forceRpcScan?: boolean } = {},
+    now = new Date(),
   ) {
     if (!eventRepo) {
       return [];
     }
+    const kind = watchTargetKind(watch);
 
-    // 1) Reload previously correlated rows by id (survives across ticks when they are real DB rows).
+    // 1) Reload previously correlated rows by id (they are real DB rows once
+    //    persisted, so this keeps the campaign source set across ticks).
     const priorIds = (watch.source_event_ids ?? []).filter((id) => UUID_RE.test(id)).slice(0, 500);
+    const known: MonitoredEventRow[] = [];
     if (priorIds.length > 0) {
       const loaded: MonitoredEventRow[] = [];
       const probe = priorIds.slice(0, 25);
@@ -642,21 +898,23 @@ export function createSponsoredWatchService(params: {
             if (row.ok) loaded.push(row.value);
           }
         }
-        const kind = watchTargetKind(watch);
-        const matchedPrior = dedupeSponsoredWatchEvents(
-          loaded.filter(
-            (event) =>
-              eventIsInCampaignWindow(event, watch) &&
-              eventMatchesWatchTarget(event, watch.target_contract, kind),
+        known.push(
+          ...dedupeSponsoredWatchEvents(
+            loaded.filter(
+              (event) =>
+                eventIsInCampaignWindow(event, watch) &&
+                eventMatchesWatchTarget(event, watch.target_contract, kind),
+            ),
           ),
         );
-        if (matchedPrior.length > 0) {
-          return matchedPrior;
-        }
       }
     }
 
-    // 2) Window scan of Event Tracker / block-dispatcher rows in DB.
+    // 2) Window scan of Event Tracker / block-dispatcher rows in DB. Runs on
+    //    every tick (cheap) so tracker-ingested events keep alerting at the 60s
+    //    cadence. Merged with the reloaded set instead of short-circuiting —
+    //    returning early here froze the source set after the first scan and
+    //    silently stopped delivering new events for the rest of the campaign.
     const result = await eventRepo.listInWindow({
       periodStart: watch.starts_at,
       periodEnd: watch.ends_at,
@@ -665,7 +923,6 @@ export function createSponsoredWatchService(params: {
     if (!result.ok) {
       throw new Error(`Failed to load campaign events: ${result.error.message}`);
     }
-    const kind = watchTargetKind(watch);
     const dbMatched = dedupeSponsoredWatchEvents(
       result.value.filter(
         (event) =>
@@ -673,20 +930,41 @@ export function createSponsoredWatchService(params: {
           eventMatchesWatchTarget(event, watch.target_contract, kind),
       ),
     );
-    if (dbMatched.length > 0) {
-      return dbMatched;
-    }
+    const allSoFar = dedupeSponsoredWatchEvents([...known, ...dbMatched]);
 
+    // Rescan throttle: bound Etherscan/RPC calls to roughly one per cycle. New
+    // on-chain events (wallet txs, contract logs without tracker coverage) only
+    // surface via a fresh scan, so this must not stay skipped while the
+    // campaign is inside its window.
     const lastMonitoredMs = watch.last_monitored_at
       ? Date.parse(watch.last_monitored_at)
       : Number.NaN;
     const rpcScanRecentlyAttempted =
-      Number.isFinite(lastMonitoredMs) && Date.now() - lastMonitoredMs < RPC_RESCAN_INTERVAL_MS;
+      Number.isFinite(lastMonitoredMs) && now.getTime() - lastMonitoredMs < RPC_RESCAN_INTERVAL_MS;
     if (!options.forceRpcScan && rpcScanRecentlyAttempted) {
-      return dbMatched;
+      return allSoFar;
     }
 
-    // 3) Etherscan / RPC fallback: fetch on-chain logs and persist discovered events to monitored_events table.
+    // Tracker-owned contract watches: every event arrives via the ingestion
+    // pipeline into monitored_events (step 2 picks new ones up next tick), so
+    // a live re-scan adds nothing. Everything else — wallets, contracts without
+    // tracker coverage, and any forced (completion/repair) scan — falls through
+    // to the on-chain scan and merges its results.
+    const scanSourcedRows = allSoFar.filter(
+      (event) => event.source === "etherscan_v2" || event.source === "rpc_direct",
+    );
+    if (
+      !options.forceRpcScan &&
+      kind === "contract" &&
+      allSoFar.length > 0 &&
+      scanSourcedRows.length === 0
+    ) {
+      return allSoFar;
+    }
+
+    // 3) Etherscan / RPC fallback: fetch on-chain logs/transactions, persist
+    //    newly discovered events, and merge them into the DB-backed set so the
+    //    next tick can diff against the cursor and alert on exactly what is new.
     try {
       const rpcMatched = await collectRpcLogsForWindow(watch);
       if (rpcMatched.length > 0) {
@@ -722,10 +1000,7 @@ export function createSponsoredWatchService(params: {
             if (item) persisted.push(item);
           }
         }
-        if (persisted.length > 0) {
-          return dedupeSponsoredWatchEvents(persisted);
-        }
-        return candidates;
+        return dedupeSponsoredWatchEvents([...allSoFar, ...persisted]);
       }
     } catch (error) {
       console.warn(
@@ -733,7 +1008,7 @@ export function createSponsoredWatchService(params: {
         error instanceof Error ? error.message : error,
       );
     }
-    return dbMatched;
+    return allSoFar;
   }
 
   async function activateWatch(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
@@ -849,13 +1124,14 @@ export function createSponsoredWatchService(params: {
   async function deliverWatchAlert(
     watch: SponsoredWatchRow,
     newEvents: MonitoredEventRow[],
+    now = new Date(),
   ): Promise<boolean> {
     if (newEvents.length === 0) return true;
 
     const visibility = watchVisibility(watch);
     const kind = watchTargetKind(watch);
     const primary = newEvents[0]!;
-    const now = new Date().toISOString();
+    const nowIso = now.toISOString();
 
     const shortTarget = `${watch.target_contract.slice(0, 8)}…${watch.target_contract.slice(-6)}`;
     const title =
@@ -894,8 +1170,8 @@ export function createSponsoredWatchService(params: {
             matchedEventCount: newEvents.length,
             sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
           },
-          started_at: now,
-          completed_at: now,
+          started_at: nowIso,
+          completed_at: nowIso,
         });
         return false;
       }
@@ -906,7 +1182,7 @@ export function createSponsoredWatchService(params: {
         summary,
         detailLines,
         sourceExplorer,
-        now,
+        now: nowIso,
       });
       return dm.delivered;
     }
@@ -931,7 +1207,7 @@ export function createSponsoredWatchService(params: {
         summary,
         detailLines,
         sourceExplorer,
-        now,
+        now: nowIso,
       });
       publicDmDelivered = dm.delivered;
     } else if (publicChatId && !notificationService) {
@@ -948,8 +1224,8 @@ export function createSponsoredWatchService(params: {
           matchedEventCount: newEvents.length,
           sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
         },
-        started_at: now,
-        completed_at: now,
+        started_at: nowIso,
+        completed_at: nowIso,
       });
     }
 
@@ -961,7 +1237,7 @@ export function createSponsoredWatchService(params: {
     const lastSentMs = watch.last_alert_sent_at
       ? Date.parse(watch.last_alert_sent_at)
       : Number.NaN;
-    if (Number.isFinite(lastSentMs) && Date.now() - lastSentMs < WATCH_ALERT_THROTTLE_MS) {
+    if (Number.isFinite(lastSentMs) && now.getTime() - lastSentMs < WATCH_ALERT_THROTTLE_MS) {
       await execLogRepo.append({
         action_type: "generate_alert",
         entity_type: "sponsored_watch",
@@ -974,8 +1250,8 @@ export function createSponsoredWatchService(params: {
           matchedEventCount: newEvents.length,
           sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
         },
-        started_at: now,
-        completed_at: now,
+        started_at: nowIso,
+        completed_at: nowIso,
       });
       // Inside a throttle window the DM is the delivery the buyer opted into:
       // only fold events into the cursor when it went out. A failed DM keeps
@@ -1015,8 +1291,8 @@ export function createSponsoredWatchService(params: {
           matchedEventCount: newEvents.length,
           sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
         },
-        started_at: now,
-        completed_at: now,
+        started_at: nowIso,
+        completed_at: nowIso,
       });
       return true;
     }
@@ -1062,8 +1338,8 @@ export function createSponsoredWatchService(params: {
         status: "failed",
         message: `Public watch alert create failed: ${alertResult.error.message}`,
         details: { visibility: "public", error: alertResult.error.message },
-        started_at: now,
-        completed_at: now,
+        started_at: nowIso,
+        completed_at: nowIso,
       });
       return false;
     }
@@ -1091,18 +1367,21 @@ export function createSponsoredWatchService(params: {
         sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
         registrySuspended: publication.registrySuspended ?? false,
       },
-      started_at: now,
-      completed_at: now,
+      started_at: nowIso,
+      completed_at: nowIso,
     });
     return publication.success;
   }
 
-  async function refreshMonitoring(watch: SponsoredWatchRow): Promise<SponsoredWatchRow> {
-    const matching = dedupeSponsoredWatchEvents(await collectMatchingEvents(watch));
+  async function refreshMonitoring(
+    watch: SponsoredWatchRow,
+    now = new Date(),
+  ): Promise<SponsoredWatchRow> {
+    const matching = dedupeSponsoredWatchEvents(await collectMatchingEvents(watch, {}, now));
     const sourceEventIds = matching.map((e) => e.id).filter((id) => UUID_RE.test(id));
     const priorIds = new Set((watch.source_event_ids ?? []).filter((id) => UUID_RE.test(id)));
     const newEvents = matching.filter((e) => UUID_RE.test(e.id) && !priorIds.has(e.id));
-    const now = new Date().toISOString();
+    const nowIso = now.toISOString();
 
     // Deliver-then-commit: only advance the alert cursor (source_event_ids +
     // last_alert_sent_at) once delivery succeeds. On a transient Telegram or
@@ -1111,7 +1390,7 @@ export function createSponsoredWatchService(params: {
     let deliveryOk = true;
     if (newEvents.length > 0) {
       try {
-        deliveryOk = await deliverWatchAlert(watch, newEvents);
+        deliveryOk = await deliverWatchAlert(watch, newEvents, now);
       } catch (alertError) {
         deliveryOk = false;
         console.warn(
@@ -1130,7 +1409,7 @@ export function createSponsoredWatchService(params: {
             matchedEventCount: newEvents.length,
             sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
           },
-          started_at: now,
+          started_at: nowIso,
           completed_at: new Date().toISOString(),
         });
       }
@@ -1139,9 +1418,9 @@ export function createSponsoredWatchService(params: {
     const result = await watchRepo.update(watch.id, {
       source_event_ids: deliveryOk ? sourceEventIds : [...priorIds],
       monitored_event_count: matching.length,
-      last_monitored_at: now,
+      last_monitored_at: nowIso,
       status: "monitoring",
-      ...(newEvents.length > 0 && deliveryOk ? { last_alert_sent_at: now } : {}),
+      ...(newEvents.length > 0 && deliveryOk ? { last_alert_sent_at: nowIso } : {}),
     });
     if (!result.ok) {
       throw new Error(`Failed to update monitoring state: ${result.error.message}`);
@@ -1163,8 +1442,8 @@ export function createSponsoredWatchService(params: {
         sourceEventIds: sourceEventIds.slice(0, 50),
         window: { startsAt: watch.starts_at, endsAt: watch.ends_at },
       },
-      started_at: now,
-      completed_at: now,
+      started_at: nowIso,
+      completed_at: nowIso,
     });
 
     // Re-read so last_alert_sent_at (if set) is returned.
@@ -1198,6 +1477,7 @@ export function createSponsoredWatchService(params: {
       startsAt: watch.starts_at,
       endsAt: watch.ends_at,
       events: matching,
+      targetKind: watchTargetKind(watch),
       eventSignature: spec.eventSignature,
       description: spec.description,
       priorMonitoredCount: watch.monitored_event_count ?? 0,
@@ -1714,7 +1994,7 @@ export function createSponsoredWatchService(params: {
     } else {
       for (const watch of inWindow.value) {
         try {
-          await refreshMonitoring(watch);
+          await refreshMonitoring(watch, now);
           cycle.monitored += 1;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
