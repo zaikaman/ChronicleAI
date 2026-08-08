@@ -1,50 +1,49 @@
 # ChronicleAI
 
-> **A self-funding onchain intelligence desk.**
+> **Watch. Earn. Act.**
 >
-> ChronicleAI watches markets, publishes verifiable alerts, sells deeper intelligence to humans and AI agents, routes premium revenue into a risk-controlled treasury desk, and uses KeeperHub to execute approved actions with public proof.
+> ChronicleAI is an AI research desk that monitors important onchain activity, sells premium intelligence, uses that revenue for carefully controlled treasury actions, and publishes public proof of what happened.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
 [![Tests](https://img.shields.io/badge/Tests-1173%20passing-brightgreen?style=for-the-badge)](README.md#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
-## The idea in one loop
+## How ChronicleAI works
 
-ChronicleAI turns market intelligence into a visible operating loop:
+ChronicleAI turns onchain information into a visible business loop:
 
-**Observe → Explain → Monetize → Allocate → Execute → Prove**
+**Watch → Earn → Act → Prove**
 
 ```mermaid
 flowchart LR
-    E[Market event or Desk condition] --> A[Public market alert]
-    A --> I[Premium intelligence]
+    E[Important wallet, contract, or market activity] --> W[Watch update and Telegram DM]
+    W --> I[Premium intelligence]
     I --> R[Revenue routed to treasury]
-    R --> G[Risk policy and preflight]
+    R --> G[Desk safety checks]
     G --> K[KeeperHub execution]
-    K --> T[Onchain transaction]
+    K --> T[Verified onchain action]
     T --> P[Public proof and audit trail]
 ```
 
-- **Observe:** ChronicleAI watches configured onchain events and desk conditions.
-- **Explain:** It publishes a sourced, plain-language Alert and can provide deeper paid analysis.
-- **Monetize:** Humans and AI agents can pay for premium intelligence through x402 or MPP.
-- **Allocate:** A policy-gated desk decides whether treasury capital can be used, defended, rotated, or held.
-- **Execute and prove:** KeeperHub handles the approved onchain action, while ChronicleAI links the receipt, run ID, transaction hash, and audit trail.
+- **Watch:** ChronicleAI monitors wallets, contracts, protocols, and market conditions, then sends useful updates through the app or Telegram.
+- **Earn:** Humans and AI agents can pay for deeper intelligence and monitoring campaigns.
+- **Act:** The desk applies safety rules before deciding whether treasury capital should be used, defended, rotated, or held.
+- **Prove:** KeeperHub handles the approved onchain action, while ChronicleAI links the receipt, transaction hash, and audit trail.
 
-Alerts originate from **market events** (external onchain observations) or **Desk state** (health-factor breaches, oracle/AMM dislocations, APY differentials, gas regimes, capital conditions). Not every Alert becomes a trade — some stay observation-only or deferred. An end-to-end path is only called verified when a real decision, intent/action, and transaction proof exist.
+Activity can start with an external market event or an internal desk condition such as an APY difference, a health-factor change, gas conditions, or available capital. Some updates stay informational or are deferred. ChronicleAI only calls an action verified when a real decision, transaction, and public proof exist.
 
-Premium feeds, sponsored watches, treasury routing, and affiliate payouts extend this loop. They are not required to understand the core demo, but they show how ChronicleAI can fund an operating desk from its own intelligence product.
+Premium feeds, Watch campaigns, sponsored reports, treasury routing, and affiliate payouts extend this loop. They are not required to understand the core demo, but they show how ChronicleAI can fund an operating desk from its own intelligence products.
 
 ## Demo first
 
-The judge should be able to follow one sentence: **ChronicleAI spots something, explains it, earns from the explanation, makes a risk-controlled capital decision, executes through KeeperHub, and shows the proof.**
+The judge should be able to follow one sentence: **ChronicleAI watches something important, helps people understand it, earns from that intelligence, makes a carefully controlled capital decision, executes through KeeperHub, and shows the proof.**
 
 ### The core demo
 
 | Step | Surface | Judge should see |
 | --- | --- | --- |
-| 1 | [Live alerts](https://chronicle-ai-web.vercel.app/alerts) | What ChronicleAI sees: market and desk alerts with sources and publication proof. |
+| 1 | [Watch](https://chronicle-ai-web.vercel.app/watch) | How customers monitor a wallet, contract, or protocol and receive Telegram updates when matching events occur. |
 | 2 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | What it does with capital: proposal, risk policy, and preflight status. |
 | 3 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | What actually happened: KeeperHub execution logs, routing, outcome, and audit context. |
 | 4 | [Example onchain proof](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | The transaction that anyone can verify independently. |
@@ -56,6 +55,10 @@ The unified Alerts feed includes **Mainnet market Alerts** and **Sepolia Desk-tr
 ## Full system overview
 
 ChronicleAI is an autonomous onchain intelligence business with a public memory: it turns market activity into sourced Alerts and digests, sells premium machine-readable intelligence over x402/MPP, and can route a configurable share of that revenue into a policy-gated market desk. When the desk acts, KeeperHub turns the decision into an auditable onchain Action.
+
+### Watch is a premium service
+
+**Watch** is a paid monitoring service that ChronicleAI sells to humans and AI agents. Customers purchase monitoring campaigns for any wallet, contract, or protocol and receive Telegram DMs whenever matching onchain events occur on the tracked target. Campaigns can be private, or publicly sponsored through the registry and community, and each campaign ends with a generated intelligence report published onchain as a second receipt. Watch turns continuous monitoring, alert delivery, and post-campaign analysis into a premium product—not just a background feature of the demo.
 
 This is the distinction from a generic trading bot:
 
@@ -98,7 +101,7 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 - **Alert → Signal projection:** [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) maps eligible market event types into desk signal types and records causal metadata on the Alert.
 - **Desk-trigger Alerts:** [`apps/api/src/services/desk-trigger-alert-service.ts`](apps/api/src/services/desk-trigger-alert-service.ts) creates deterministic public Alerts from non-ignore Desk signals, capital decisions, and event-linked microtrades — no LLM copy, best-effort publication.
 - **Premium intelligence & Dual-Rail Auto Selection:** HTTP 402 routing with x402/MPP adapters. Auto-selects MPP (Tempo HMAC) for machine/agent traffic (`X-Chronicle-Client: agent`, `clientType: machine`, `mpp-*`) and x402 (Base USDC) for human browser wallets (`0x...`).
-- **Watch:** paid monitoring campaigns on any wallet, contract, or protocol. Wallet watches match ERC-20 transfers (decoded to token, amount, and direction); contract watches match any event the target emits, classified by the ingestion pipeline (swaps, liquidations, deposits/withdrawals, stablecoin mints/burns, exchange flows) with an on-chain log fallback. Alerts deliver to Telegram — private DMs or public registry + community (throttled) — and campaigns end with an OpenAI-generated report published onchain as a second receipt.
+- **Watch premium service:** customers pay for monitoring campaigns on any wallet, contract, or protocol. Wallet watches match ERC-20 transfers (decoded to token, amount, and direction); contract watches match any event the target emits, classified by the ingestion pipeline (swaps, liquidations, deposits/withdrawals, stablecoin mints/burns, exchange flows) with an on-chain log fallback. Matching events trigger Telegram DMs; campaigns can also use publicly sponsored registry + community distribution (throttled), and they end with an OpenAI-generated report published onchain as a second receipt.
 - **Telegram binding:** `/start` to the bot issues a one-time code linking a chat to private watch alerts (`VITE_TELEGRAM_BOT_USERNAME` must match the webhook-registered bot).
 - **Desk reasoning:** LangChainJS with provider fallback; the model proposes from Signals, while hard policy gates the Action.
 - **KeeperHub execution:** configured workflows execute desk strategies, registry writes, transfers, and the kill switch. MCP is preferred; REST workflow execution remains a KeeperHub fallback.
