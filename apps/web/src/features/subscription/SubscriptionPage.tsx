@@ -117,11 +117,11 @@ export function SubscriptionPage(): ReactElement {
 
   const handleAuthenticate = async () => {
     setAction({ status: "running", message: null });
-    const ok = await subscription.authenticate();
+    const result = await subscription.authenticate();
     setAction(
-      ok
+      result.status === "success"
         ? { status: "success", message: "Wallet connected — your Chronicle Pass is loaded." }
-        : { status: "error", message: "Wallet connection was rejected or failed. Try again." },
+        : result,
     );
   };
 
@@ -190,15 +190,15 @@ export function SubscriptionPage(): ReactElement {
         />
       ) : !subscription.isAuthenticated ? (
         <Surface className="p-6 sm:p-8" data-testid="subscription-wallet-gate">
-          <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+            <div className="min-w-0">
               <h2 className="text-lg font-semibold text-foreground">
-                Connect your wallet to manage your Pass
+                Get Chronicle Pass · {CHRONICLE_PASS_PRICE_USDC.toFixed(2)} USDC/month
               </h2>
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-xl">
-                Chronicle Pass is bound to the wallet that pays. Signing a short message proves you
-                control it — no passwords, no email login. You can then renew, cancel, update
-                delivery preferences, and review payment history.
+                One pass unlocks every human deep dive and the full editorial archive. Enter your
+                email, then connect your wallet and authorize the payment — renewals happen only
+                when you choose.
               </p>
               <ul className="mt-4 space-y-2">
                 {PASS_BENEFITS.map((benefit) => (
@@ -215,15 +215,68 @@ export function SubscriptionPage(): ReactElement {
                 ))}
               </ul>
             </div>
-            <button
-              type="button"
-              onClick={() => void handleAuthenticate()}
-              disabled={subscription.isSessionLoading}
-              data-testid="subscription-connect-btn"
-              className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-accent text-black font-semibold text-sm hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <ButtonSpinner loading={subscription.isSessionLoading}>Connect wallet</ButtonSpinner>
-            </button>
+            <div className="flex min-w-0 flex-col gap-4">
+              <form
+                onSubmit={(e) => void handleSubscribe(e)}
+                data-testid="subscription-subscribe-form"
+              >
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@protocol.xyz"
+                    aria-label="Email for premium digests"
+                    className="min-w-0 flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <button
+                    type="submit"
+                    disabled={action?.status === "running"}
+                    data-testid="subscription-subscribe-btn"
+                    className="shrink-0 rounded-xl bg-accent text-black px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <ButtonSpinner loading={action?.status === "running"}>
+                      Get Chronicle Pass · {CHRONICLE_PASS_PRICE_USDC.toFixed(2)} USDC/mo
+                    </ButtonSpinner>
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
+                  You'll approve a one-time USDC payment in your wallet. No automatic charges —
+                  renewals are wallet-authorized.
+                </p>
+              </form>
+              {/* Managing an existing pass needs a wallet. Connecting is owned by
+                  the header's Connect button — never duplicated here. When the
+                  wallet is already connected, the only remaining step is the
+                  wallet sign-in that establishes the management session. */}
+              <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
+                {wallet.address ? (
+                  <>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Wallet connected ({shortenAddress(wallet.address)}). Sign in to load or manage
+                      an existing pass:
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleAuthenticate()}
+                      disabled={action?.status === "running"}
+                      data-testid="subscription-signin-btn"
+                      className="mt-2.5 w-full rounded-xl bg-foreground text-background px-4 py-2.5 text-sm font-semibold hover:bg-foreground/90 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <ButtonSpinner loading={action?.status === "running"}>
+                        Sign in with your wallet
+                      </ButtonSpinner>
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Have an existing pass? Connect your wallet with the button in the header, then
+                    come back here to sign in and manage it.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
           <ActionFeedback action={action} />
         </Surface>

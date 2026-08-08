@@ -34,7 +34,7 @@ export interface UseSubscriptionResult {
   statusError: string | null;
   payments: ChroniclePassPaymentHistoryItem[];
   isPaymentsLoading: boolean;
-  authenticate: () => Promise<boolean>;
+  authenticate: () => Promise<SubscriptionActionResult>;
   logout: () => Promise<void>;
   refresh: () => void;
   updatePreferences: (input: {
@@ -67,6 +67,10 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
 
 export function useSubscription(): UseSubscriptionResult {
   const wallet = useWallet();
+  // Always read the latest wallet context (stub → live) from a ref so async
+  // closures created before the wallet stack loads can still sign afterwards.
+  const walletRef = useRef(wallet);
+  walletRef.current = wallet;
   const queryClient = useQueryClient();
   const [session, setSession] = useState<SubscriptionSessionResponse | null>(null);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -142,17 +146,20 @@ export function useSubscription(): UseSubscriptionResult {
     void queryClient.invalidateQueries({ queryKey: queryKeys.subscription.all });
   }, [loadSession, queryClient]);
 
-  const authenticate = useCallback(async (): Promise<boolean> => {
+  const authenticate = useCallback(async (): Promise<SubscriptionActionResult> => {
     requestControllerRef.current?.abort();
     const controller = new AbortController();
     requestControllerRef.current = controller;
 
     try {
-      let address = wallet.address && isEvmAddress(wallet.address) ? wallet.address : null;
+      let address =
+        walletRef.current.address && isEvmAddress(walletRef.current.address)
+          ? walletRef.current.address
+          : null;
       if (!address) {
-        const connected = await wallet.connect();
+        const connected = await walletRef.current.connect();
         if (!isEvmAddress(connected)) {
-          return false;
+          return { status: "error", message: "Wallet connection was rejected or failed." };
         }
         address = connected;
       }
@@ -167,7 +174,9 @@ export function useSubscription(): UseSubscriptionResult {
         body: JSON.stringify({ wallet: address }),
       });
 
-      const signature = await wallet.signMessage(challenge.message);
+      // walletRef.current is re-read here: after connect() resolves, the wallet
+      // stack has mounted and the ref now points at the live (signing) wallet.
+      const signature = await walletRef.current.signMessage(challenge.message);
 
       await requestJson<SubscriptionSessionResponse>("/subscriptions/auth/verify", {
         method: "POST",
@@ -182,17 +191,30 @@ export function useSubscription(): UseSubscriptionResult {
       });
 
       setAuthenticatedWallet(address.toLowerCase());
-      await loadSession();
+      // Success is only real when the session cookie round-trips: the server
+      // accepted the signature, but a blocked / cross-site cookie would still
+      // leave the gate stuck — surface that instead of a fake success.
+      const sessionResult = await loadSession();
+      if (sessionResult.authenticated !== true) {
+        return {
+          status: "error",
+          message:
+            "Your wallet signed in, but the session could not be confirmed. Make sure cookies are enabled for this site, then try again.",
+        };
+      }
       void queryClient.invalidateQueries({ queryKey: queryKeys.subscription.all });
-      return true;
-    } catch {
-      return false;
+      return { status: "success", message: null };
+    } catch (err) {
+      return {
+        status: "error",
+        message: toErrorMessage(err, "Wallet sign-in failed. Please try again."),
+      };
     } finally {
       if (requestControllerRef.current === controller) {
         requestControllerRef.current = null;
       }
     }
-  }, [wallet, loadSession, queryClient]);
+  }, [loadSession, queryClient]);
 
   const logout = useCallback(async (): Promise<void> => {
     try {
@@ -290,8 +312,8 @@ export function useSubscription(): UseSubscriptionResult {
         return { status: "error", message: "Server returned an incomplete renewal challenge." };
       }
 
-      await wallet.ensureChain();
-      const settlementReference = await signX402Settlement(nestedChallenge, wallet);
+      await walletRef.current.ensureChain();
+      const settlementReference = await signX402Settlement(nestedChallenge, walletRef.current);
 
       const settleResult = await requestJson<{ settled: boolean; error?: string }>(
         "/subscriptions/me/settle",
@@ -326,7 +348,7 @@ export function useSubscription(): UseSubscriptionResult {
         requestControllerRef.current = null;
       }
     }
-  }, [wallet, queryClient, statusQuery.data]);
+  }, [queryClient, statusQuery.data]);
 
   const settleRenewal = useCallback(
     async (input: {
@@ -358,9 +380,12 @@ export function useSubscription(): UseSubscriptionResult {
       requestControllerRef.current = controller;
 
       try {
-        let address = wallet.address && isEvmAddress(wallet.address) ? wallet.address : null;
+        let address =
+          walletRef.current.address && isEvmAddress(walletRef.current.address)
+            ? walletRef.current.address
+            : null;
         if (!address) {
-          const connected = await wallet.connect();
+          const connected = await walletRef.current.connect();
           if (!isEvmAddress(connected)) {
             return { status: "error", message: "Wallet did not return a valid account." };
           }
@@ -383,8 +408,8 @@ export function useSubscription(): UseSubscriptionResult {
           };
         }
 
-        await wallet.ensureChain();
-        const settlementReference = await signX402Settlement(nestedChallenge, wallet);
+        await walletRef.current.ensureChain();
+        const settlementReference = await signX402Settlement(nestedChallenge, walletRef.current);
 
         const settleResult = await requestJson<{ settled: boolean; error?: string }>(
           "/subscribers/newsletter/settlements",
@@ -409,13 +434,13 @@ export function useSubscription(): UseSubscriptionResult {
         // Establish the pass session (challenge → sign → verify) so the page
         // shows the active pass immediately instead of the wallet gate. The
         // user just authorized the settlement, so this is the linking step.
-        const authenticated = await authenticate();
+        const authResult = await authenticate();
         const activatedMessage = `Chronicle Pass activated — ${challenge.amountRequested} ${challenge.currency}/month.`;
-        return authenticated
+        return authResult.status === "success"
           ? { status: "success", message: activatedMessage }
           : {
               status: "success",
-              message: `${activatedMessage} Connect your wallet to manage it.`,
+              message: `${activatedMessage} Sign in with your wallet to manage it.`,
             };
       } catch (err) {
         return {
@@ -428,7 +453,7 @@ export function useSubscription(): UseSubscriptionResult {
         }
       }
     },
-    [wallet, authenticate, queryClient],
+    [authenticate, queryClient],
   );
 
   return {

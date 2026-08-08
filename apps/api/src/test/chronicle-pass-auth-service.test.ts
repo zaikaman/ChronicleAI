@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CHRONICLE_PASS_SESSION_COOKIE,
   ChroniclePassAuthService,
+  buildChroniclePassSessionClearCookie,
+  buildChroniclePassSessionCookie,
 } from "../services/chronicle-pass-auth-service.ts";
 
 const CHAIN_ID = 84_532;
@@ -262,6 +264,55 @@ describe("ChroniclePassAuthService", () => {
           signature,
         }),
       ).rejects.toMatchObject({ statusCode: 401 });
+    });
+  });
+
+  describe("session cookie attributes", () => {
+    it("uses SameSite=Lax (no Secure) for same-site local development", () => {
+      const cookie = buildChroniclePassSessionCookie({
+        token: "tok",
+        maxAgeSeconds: 3600,
+        secure: false,
+        sameSite: "lax",
+      });
+      expect(cookie).toContain(`${CHRONICLE_PASS_SESSION_COOKIE}=tok`);
+      expect(cookie).toContain("Path=/");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Lax");
+      expect(cookie).not.toContain("Secure");
+      expect(cookie).not.toContain("SameSite=None");
+    });
+
+    it("uses SameSite=None; Secure for cross-site production (web on Vercel, API on Heroku)", () => {
+      const cookie = buildChroniclePassSessionCookie({
+        token: "tok",
+        maxAgeSeconds: 3600,
+        secure: true,
+        sameSite: "none",
+      });
+      expect(cookie).toContain("SameSite=None");
+      expect(cookie).toContain("Secure");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).not.toContain("SameSite=Lax");
+    });
+
+    it("forces Secure whenever SameSite=None (browser requirement)", () => {
+      const cookie = buildChroniclePassSessionCookie({
+        token: "tok",
+        maxAgeSeconds: 3600,
+        secure: false,
+        sameSite: "none",
+      });
+      expect(cookie).toContain("SameSite=None");
+      expect(cookie).toContain("Secure");
+    });
+
+    it("clears the cookie with matching attributes", () => {
+      const clear = buildChroniclePassSessionClearCookie(true, "none");
+      expect(clear).toContain(`${CHRONICLE_PASS_SESSION_COOKIE}=`);
+      expect(clear).toContain("Max-Age=0");
+      expect(clear).toContain("SameSite=None");
+      expect(clear).toContain("Secure");
     });
   });
 

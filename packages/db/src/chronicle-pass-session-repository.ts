@@ -75,11 +75,15 @@ export function createChroniclePassSessionRepository(
 
     async activate(id, update) {
       // Compare-and-swap: only a still-unconsumed challenge can become a session.
+      // expires_at is rolled forward to the session window: the expiry sweep
+      // filters on expires_at, so leaving it at the 5-minute challenge TTL
+      // would kill the freshly activated session at the next sweep.
       const { data, error } = await table()
         .update({
           status: "active" as const,
           session_token_hash: update.sessionTokenHash,
           session_expires_at: update.sessionExpiresAt,
+          expires_at: update.sessionExpiresAt,
           last_seen_at: new Date().toISOString(),
         })
         .eq("id", id)

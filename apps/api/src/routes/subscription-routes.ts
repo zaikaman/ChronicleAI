@@ -61,6 +61,10 @@ export function createSubscriptionRoutes(params: {
   secureCookies: boolean;
 }): RouterType {
   const router: RouterType = Router();
+  // Production serves the web app (Vercel) and API (Heroku) on different
+  // origins — the session cookie must cross sites there (SameSite=None; Secure).
+  // Local development is same-site (localhost:5173 → localhost:4000).
+  const sameSite: "lax" | "none" = params.secureCookies ? "none" : "lax";
 
   const requirePassSession = async (
     req: Parameters<Parameters<RouterType["use"]>[1]>[0],
@@ -128,6 +132,7 @@ export function createSubscriptionRoutes(params: {
           token: session.token,
           maxAgeSeconds: params.authService.sessionTtlSeconds,
           secure: params.secureCookies,
+          sameSite,
         }),
       );
       res.json({
@@ -146,7 +151,10 @@ export function createSubscriptionRoutes(params: {
       await params.authService.logout(
         typeof req.headers.cookie === "string" ? req.headers.cookie : undefined,
       );
-      res.setHeader("Set-Cookie", buildChroniclePassSessionClearCookie(params.secureCookies));
+      res.setHeader(
+        "Set-Cookie",
+        buildChroniclePassSessionClearCookie(params.secureCookies, sameSite),
+      );
       res.json({ authenticated: false, wallet: null, expiresAt: null });
     } catch (error) {
       next(error);

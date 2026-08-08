@@ -232,26 +232,40 @@ export class ChroniclePassAuthService {
   }
 }
 
-/** Build the Set-Cookie value for the HttpOnly bearer session cookie. */
+/**
+ * Build the Set-Cookie value for the HttpOnly bearer session cookie.
+ *
+ * The web app (Vercel) and the API (Heroku) are different origins in
+ * production, so the cookie must be cross-site-capable there: SameSite=None
+ * (which requires Secure). Local development is same-site (localhost), where
+ * SameSite=Lax is preferred and keeps the cookie out of third-party contexts.
+ */
 export function buildChroniclePassSessionCookie(params: {
   token: string;
   maxAgeSeconds: number;
   secure: boolean;
+  /** "none" when the web origin and API origin differ (cross-site cookies). */
+  sameSite?: "lax" | "none";
 }): string {
+  const sameSite = params.sameSite ?? "lax";
   const parts = [
     `${CHRONICLE_PASS_SESSION_COOKIE}=${encodeURIComponent(params.token)}`,
     "Path=/",
     "HttpOnly",
     `Max-Age=${Math.max(0, Math.floor(params.maxAgeSeconds))}`,
-    ...(params.secure ? ["Secure"] : []),
-    "SameSite=Lax",
+    // SameSite=None is only valid with Secure — force it whenever cross-site.
+    ...(sameSite === "none" || params.secure ? ["Secure"] : []),
+    `SameSite=${sameSite === "none" ? "None" : "Lax"}`,
   ];
   return parts.join("; ");
 }
 
 /** Clear the session cookie (logout). */
-export function buildChroniclePassSessionClearCookie(secure: boolean): string {
-  return buildChroniclePassSessionCookie({ token: "", maxAgeSeconds: 0, secure });
+export function buildChroniclePassSessionClearCookie(
+  secure: boolean,
+  sameSite?: "lax" | "none",
+): string {
+  return buildChroniclePassSessionCookie({ token: "", maxAgeSeconds: 0, secure, sameSite });
 }
 
 export function toSubscriptionSessionResponse(
