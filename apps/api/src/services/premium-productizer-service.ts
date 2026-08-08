@@ -4,7 +4,6 @@
 
 import {
   ACTIVE_INTELLIGENCE_CHAIN_ID,
-  PRIMARY_SIGNAL_CHAIN_ID,
   PREMIUM_CASCADE_MIN_LIQUIDATIONS,
   PREMIUM_CASCADE_MIN_TOTAL_USD,
   PREMIUM_CLUSTER_WINDOW_HOURS,
@@ -15,6 +14,7 @@ import {
   PREMIUM_HISTORICAL_MIN_EVENTS,
   PREMIUM_MIN_CLUSTER_EVENTS,
   PREMIUM_STRUCTURED_FEED_PRICE_USDC,
+  PRIMARY_SIGNAL_CHAIN_ID,
   chainLabel,
   isAllowedSignalSourceChain,
 } from "@chronicleai/config";
@@ -177,7 +177,9 @@ function formatEventLine(event: MonitoredEventRow): string {
 
 function deepDivePrice(base: number, eventCount: number): number {
   const bump = 0.5 * Math.min(Math.max(eventCount - 3, 0), 10);
-  return Math.round((base + bump) * 100) / 100;
+  // Hard ceiling: per-item premium products are capped at 1 USDC so the
+  // Chronicle Pass ($4.99/mo) is the clear value path for heavy readers.
+  return Math.min(1, Math.round((base + bump) * 100) / 100);
 }
 
 function rankEvents(events: MonitoredEventRow[]): MonitoredEventRow[] {
@@ -798,7 +800,8 @@ export function createPremiumProductizerService(deps: {
         contentPrivate: composed.contentPrivate,
         sourceEventIds: protocolEvents.map((e) => e.id),
         sourceChainId,
-        priceAmount: config.historicalFeedPriceUsdc,
+        // Same 1 USDC per-item ceiling as deep dives.
+        priceAmount: Math.min(1, config.historicalFeedPriceUsdc),
       });
       recordEnsure(result, ensured, `exists:${slug}`);
     }

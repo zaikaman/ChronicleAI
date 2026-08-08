@@ -11,7 +11,6 @@ import {
   Globe,
   Network,
   ShieldCheck,
-  Tags,
   Terminal,
 } from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -24,7 +23,7 @@ const FALLBACK_DISCOVERY: AgentPaymentsDiscovery = {
   version: "1",
   name: "ChronicleAI Premium Payments",
   description:
-    "Dual-rail micropayments for machine-readable intelligence and sponsored contract watches. Human editorial reads are covered by Chronicle Pass ($4.99/month); machines pay per item with x402/MPP.",
+    "Dual-rail micropayments for machine-readable intelligence and sponsored contract watches. People can buy single reports with a wallet or cover everything with Chronicle Pass ($4.99/month); machines pay per item with x402/MPP.",
   routes: [
     {
       id: "x402",
@@ -112,7 +111,7 @@ const FALLBACK_DISCOVERY: AgentPaymentsDiscovery = {
   humanUi: {
     path: "/subscription",
     paymentRoute: "x402",
-    note: "People subscribe with Chronicle Pass; agents use this API flow for per-item purchases.",
+    note: "People can buy a single report with their wallet or subscribe with Chronicle Pass; agents use this API flow for per-item purchases.",
   },
 };
 
@@ -123,31 +122,6 @@ interface AgentPaymentsPanelProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   "data-testid"?: string;
-}
-
-interface PerItemCatalogRow {
-  id: string;
-  title: string;
-  contentType?: string;
-  priceAmount: number;
-  priceCurrency: string;
-  paymentRoutes?: string[];
-}
-
-function formatCatalogType(raw?: string): string {
-  if (!raw?.trim()) return "Report";
-  return raw
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatCatalogPrice(amount: number, currency: string): string {
-  const formatted =
-    Number.isFinite(amount) && amount % 1 !== 0
-      ? amount.toFixed(2)
-      : String(Number.isFinite(amount) ? amount : 0);
-  return `${formatted} ${(currency || "USDC").toUpperCase()}`;
 }
 
 function buildCurlExamples(apiBase: string): { challenge: string; settle: string; access: string } {
@@ -195,8 +169,6 @@ export function AgentPaymentsPanel({
 
   const [discovery, setDiscovery] = useState<AgentPaymentsDiscovery>(FALLBACK_DISCOVERY);
   const [source, setSource] = useState<"live" | "fallback">("fallback");
-  const [catalog, setCatalog] = useState<PerItemCatalogRow[] | null>(null);
-  const [catalogError, setCatalogError] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -214,25 +186,6 @@ export function AgentPaymentsPanel({
         }
       } catch {
         // Keep static fallback — panel must work offline / if API is down.
-      }
-    })();
-    return () => controller.abort();
-  }, []);
-
-  // Per-item machine pricing catalog (public-safe teasers carry prices).
-  useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const res = await fetchWithTimeout(`${API_BASE}/premium/items?limit=100`, {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = (await res.json()) as { items?: PerItemCatalogRow[] };
-        setCatalog(Array.isArray(body.items) ? body.items : []);
-      } catch {
-        setCatalogError(true);
       }
     })();
     return () => controller.abort();
@@ -280,8 +233,8 @@ export function AgentPaymentsPanel({
               Machine payments
             </h2>
             <p className="mt-1 text-sm text-muted-foreground leading-relaxed max-w-3xl">
-              Human editorial reads are covered by Chronicle Pass. Automated agents buy machine
-              feeds and reports per item through the API using{" "}
+              People can buy a single report with a wallet or cover everything with Chronicle Pass.
+              Automated agents buy machine feeds and reports per item through the API using{" "}
               <span className="font-semibold text-foreground">MPP</span>. The guide below shows the
               exact machine-to-machine flow.
             </p>
@@ -402,68 +355,6 @@ export function AgentPaymentsPanel({
             </a>
           </div>
         </div>
-      </div>
-
-      {/* Per-item machine pricing catalog */}
-      <div className="mt-5 rounded-xl border border-border/60 bg-muted/20 p-4">
-        <div className="flex items-center gap-2 mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          <Tags className="w-3.5 h-3.5 text-primary" />
-          Per-item pricing
-        </div>
-
-        {catalogError ? (
-          <p className="text-xs text-muted-foreground">Could not load the item catalog.</p>
-        ) : catalog === null ? (
-          <p className="text-xs text-muted-foreground">Loading catalog…</p>
-        ) : catalog.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No per-item products available right now.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-xl border border-border/40 bg-background/50">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-border/40 bg-muted/30 text-left">
-                  <th className="px-3 py-2 font-medium text-muted-foreground">Item</th>
-                  <th className="px-3 py-2 font-medium text-muted-foreground">Type</th>
-                  <th className="px-3 py-2 font-medium text-muted-foreground text-right">Price</th>
-                  <th className="px-3 py-2 font-medium text-muted-foreground">Routes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {catalog.map((item) => (
-                  <tr key={item.id} className="border-b border-border/30 last:border-0">
-                    <td className="px-3 py-2 text-foreground font-medium max-w-[280px] truncate">
-                      {item.title}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                      {formatCatalogType(item.contentType)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold text-primary whitespace-nowrap">
-                      {formatCatalogPrice(item.priceAmount, item.priceCurrency)}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <div className="flex flex-wrap gap-1">
-                        {sortPaymentRoutes(item.paymentRoutes ?? []).map((route) => (
-                          <span
-                            key={route}
-                            className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted/40 border border-border/40 font-mono text-[10px] text-muted-foreground"
-                          >
-                            {formatPaymentRoute(route).badge}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <p className="mt-3 text-[11px] text-muted-foreground leading-relaxed">
-          These are the prices automated clients pay per item through the API (x402 or MPP).
-          Editorial deep dives and archive items are included with Chronicle Pass for people;
-          machines always buy per item.
-        </p>
       </div>
 
       {/* Expanded API Guide Drawer */}

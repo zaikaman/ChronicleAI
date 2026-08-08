@@ -95,17 +95,8 @@ export function PremiumTeaserCard({
       </p>
 
       <div className="flex items-center justify-between gap-4 pt-4 border-t border-border mt-auto">
-        {coveredByPass ? (
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-accent">Included with Chronicle Pass</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {passEntitled || unlocked
-                ? "Full analysis unlocked with your pass."
-                : "Start at $4.99 USDC/month for every deep dive + archive."}
-            </p>
-          </div>
-        ) : (
-          <div className="flex items-baseline gap-1.5 min-w-0">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-semibold tabular-nums text-accent tracking-tight">
               {price.amount}
             </span>
@@ -113,7 +104,14 @@ export function PremiumTeaserCard({
               {price.currency}
             </span>
           </div>
-        )}
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            {unlocked || (coveredByPass && passEntitled)
+              ? "Full analysis unlocked."
+              : coveredByPass
+                ? "One-time purchase, or included with Chronicle Pass."
+                : "One-time purchase via wallet or API."}
+          </p>
+        </div>
 
         <button
           type="button"
@@ -131,9 +129,7 @@ export function PremiumTeaserCard({
               ? "Opening…"
               : unlocked || (coveredByPass && passEntitled)
                 ? "Open"
-                : coveredByPass
-                  ? "Get Chronicle Pass"
-                  : "Access"}
+                : "Unlock"}
           </ButtonSpinner>
         </button>
       </div>

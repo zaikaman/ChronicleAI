@@ -194,7 +194,7 @@ export function PremiumPage(): ReactElement {
     <Page data-testid="premium-page">
       <PageHeader
         title="Premium intelligence"
-        description="Deep dives, historical analysis, and the full editorial archive are included with Chronicle Pass. Sponsored watches and machine-readable feeds are priced separately."
+        description="Deep dives, historical analysis, and the full editorial archive are included with Chronicle Pass — or buy any single report with your wallet. Sponsored watches and machine-readable feeds are priced separately."
         meta={
           !isLoading && !error ? (
             <span>
@@ -231,7 +231,7 @@ export function PremiumPage(): ReactElement {
             <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
               {passEntitled
                 ? "Your pass covers human editorial intelligence. Machine feeds and sponsored watches stay separate."
-                : "One wallet-authorized subscription replaces per-report checkout for people. Connect your wallet to activate it."}
+                : "Buy individual reports with your wallet (from 0.50 USDC), or get Chronicle Pass for every deep dive and the full archive."}
             </p>
           </div>
           {!passEntitled ? (

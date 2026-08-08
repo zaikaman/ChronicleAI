@@ -203,11 +203,11 @@ export const PREMIUM_HISTORICAL_LOOKBACK_DAYS = 7;
 /** Minimum events for a protocol historical feed SKU. */
 export const PREMIUM_HISTORICAL_MIN_EVENTS = 5;
 /** Base USDC price for auto-minted deep dives (scales slightly with event count). */
-export const PREMIUM_DEEP_DIVE_BASE_PRICE_USDC = 3;
+export const PREMIUM_DEEP_DIVE_BASE_PRICE_USDC = 1;
 /** USDC price for machine-readable structured feeds. */
 export const PREMIUM_STRUCTURED_FEED_PRICE_USDC = 0.5;
 /** USDC price for multi-day historical protocol feeds. */
-export const PREMIUM_HISTORICAL_FEED_PRICE_USDC = 5;
+export const PREMIUM_HISTORICAL_FEED_PRICE_USDC = 1;
 
 // ── Chronicle Desk policy defaults (testnet; env-overridable) ─
 // Sized for the funded Sepolia demo book (~$1k Aave inventory), not a $50 toy desk.
