@@ -7,6 +7,7 @@ import {
   API_BASE,
   apiGetJson,
   apiPostJson,
+  apiUrl,
   fetchWithTimeout,
   toErrorMessage,
 } from "../../lib/api.ts";
@@ -82,20 +83,27 @@ export function usePremiumTeasers(payerAddress?: string, limit = 20): PremiumTea
   const query = useQuery({
     queryKey: queryKeys.premium.teasers(page, limit, payerAddress),
     queryFn: async ({ signal }) => {
-      const data = await apiGetJson<{
-        items: PremiumItemTeaserResponse[];
+      // The teasers envelope carries session-derived pass entitlement, so the
+      // session cookie must travel with the request (ApiClient omits cookies).
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (payerAddress) {
+        params.set("payer", payerAddress);
+      }
+      const response = await fetchWithTimeout(`${apiUrl("/premium/items")}?${params.toString()}`, {
+        credentials: "include",
+        signal,
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        items?: PremiumItemTeaserResponse[];
         pagination?: unknown;
         unlockedItemIds?: string[];
         receipts?: Record<string, string>;
         passEntitled?: boolean;
-      }>("/premium/items", {
-        signal,
-        params: {
-          page,
-          limit,
-          ...(payerAddress ? { payer: payerAddress } : {}),
-        },
-      });
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? `Request failed (${response.status})`);
+      }
 
       if (data.receipts) {
         for (const [itemId, token] of Object.entries(data.receipts)) {

@@ -130,7 +130,7 @@ export function PremiumTeaserCard({
             {isLoading
               ? "Opening…"
               : unlocked || (coveredByPass && passEntitled)
-                ? "Read"
+                ? "Open"
                 : coveredByPass
                   ? "Get Chronicle Pass"
                   : "Access"}
