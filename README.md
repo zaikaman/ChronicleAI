@@ -35,18 +35,18 @@ Activity can start with an external market event or an internal desk condition s
 
 Premium feeds, Watch campaigns, sponsored reports, treasury routing, and affiliate payouts extend this loop. They are not required to understand the core demo, but they show how ChronicleAI can fund an operating desk from its own intelligence products.
 
-## Demo first
+## See it in action
 
-The judge should be able to follow one sentence: **ChronicleAI watches something important, helps people understand it, earns from that intelligence, makes a carefully controlled capital decision, executes through KeeperHub, and shows the proof.**
+In one sentence: **ChronicleAI watches something important, helps people understand it, earns from that intelligence, makes a carefully controlled capital decision, executes through KeeperHub, and shows the proof.**
 
-### The core demo
+Explore the product and a verified execution path:
 
-| Step | Surface | Judge should see |
-| --- | --- | --- |
-| 1 | [Watch](https://chronicle-ai-web.vercel.app/watch) | How customers monitor a wallet, contract, or protocol and receive Telegram updates when matching events occur. |
-| 2 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | What it does with capital: proposal, risk policy, and preflight status. |
-| 3 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | What actually happened: KeeperHub execution logs, routing, outcome, and audit context. |
-| 4 | [Example onchain proof](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | The transaction that anyone can verify independently. |
+| Surface | What it shows |
+| --- | --- |
+| [Watch](https://chronicle-ai-web.vercel.app/watch) | Premium monitoring for wallets, contracts, and protocols, with Telegram updates when matching events occur. |
+| [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | Treasury proposals, safety rules, and preflight status. |
+| [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, routing, outcomes, and audit context. |
+| [Verified transaction](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | An onchain action that anyone can verify independently. |
 
 ### Source vs execution chains
 
