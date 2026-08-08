@@ -47,10 +47,10 @@ function AlertCardPreview({ latestAlert }: { latestAlert: AlertPreview | null })
           <Activity className="h-3.5 w-3.5" /> 1 · What it sees
         </div>
         <h3 className="mb-2 text-2xl font-medium leading-tight text-neutral-900 md:text-3xl">
-          A public intelligence feed
+          An intelligence feed anyone can verify
         </h3>
         <p className="text-sm text-neutral-700">
-          Onchain activity becomes a sourced, plain-language Alert that anyone can read and verify.
+          Onchain activity becomes a clear, sourced update that anyone can read and verify.
         </p>
       </div>
 
@@ -100,11 +100,11 @@ function DecisionCard({
           <Landmark className="h-3.5 w-3.5" /> 2 · What it does
         </div>
         <h3 className="mb-2 text-xl font-medium leading-tight text-card-foreground md:text-2xl">
-          Revenue enters a risk-controlled desk
+          Premium revenue can fund action
         </h3>
         <p className="text-sm text-card-foreground-muted">
-          Premium revenue can enter the treasury desk. The model proposes; hard policy checks size,
-          health, pause state, and route before any Action.
+          Premium revenue can support the treasury desk. Safety rules decide whether capital can move,
+          while the AI helps propose what to do.
         </p>
       </div>
 
@@ -242,11 +242,11 @@ export function FeaturesBento(): ReactNode {
         <div className="mb-8 max-w-2xl">
           <p className="text-sm font-semibold text-accent">The business loop</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            Intelligence that can pay for action.
+          Watch what matters. Earn from insight. Act with proof.
           </h2>
           <p className="mt-3 text-base leading-relaxed text-foreground/60">
-            The same market intelligence can be published, paid for, routed into the desk, acted on,
-            and independently verified.
+            Track what matters, sell the deeper answer, route revenue through safety rules, and publish
+            proof of every action.
           </p>
         </div>
 

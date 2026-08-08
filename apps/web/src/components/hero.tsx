@@ -22,8 +22,8 @@ const fadeInScale = {
 };
 
 const logos: LogoItem[] = [
-  { node: <span className="text-[1em] font-semibold tracking-tight">Market signal</span> },
-  { node: <span className="text-[1em] font-semibold tracking-tight">Premium brief</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Wallet &amp; contract watch</span> },
+  { node: <span className="text-[1em] font-semibold tracking-tight">Premium intelligence</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Treasury desk</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub execution</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Public proof</span> },
@@ -93,10 +93,10 @@ function HeroDashboard(): ReactNode {
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
-            ChronicleAI · Intelligence → Treasury → Action
+            ChronicleAI · Watch → Earn → Act → Prove
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-4xl">
-            A visible intelligence loop
+            A visible business loop
           </h2>
         </div>
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-black">
@@ -108,10 +108,10 @@ function HeroDashboard(): ReactNode {
         <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="mb-4 flex items-center justify-between gap-2">
             <span className="text-sm text-white/60">
-              {isLoading ? "Loading signals…" : "1 · Latest market signal"}
+              {isLoading ? "Loading updates…" : "1 · What it sees"}
             </span>
             <span className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-black">
-              Public intelligence
+              Live intelligence
             </span>
           </div>
           <div className="space-y-3">
@@ -267,7 +267,7 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            Self-funding onchain intelligence desk
+            Watch · Earn · Act · Prove
           </motion.div>
 
           <h1 className="mb-6 text-7xl font-medium leading-[1.05] tracking-tight text-black max-[850px]:text-5xl">
@@ -280,7 +280,7 @@ export function Hero(): ReactNode {
               ChronicleAI
             </motion.span>
             <motion.span className="block" variants={fadeInUp} transition={{ duration: 0.8, ease }}>
-              Sell insight. Fund the desk. <span className="font-serif italic text-accent">Prove the action.</span>
+              Watch what matters. Earn from insight. <span className="font-serif italic text-accent">Prove the action.</span>
             </motion.span>
           </h1>
 
@@ -289,9 +289,9 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            ChronicleAI watches markets, publishes public alerts, sells deeper analysis to humans and
-            AI agents, and routes premium revenue into a risk-controlled treasury desk. When it acts,
-            KeeperHub executes the transaction and ChronicleAI shows the proof.
+            ChronicleAI watches wallets, contracts, and market activity. Customers pay for deeper
+            intelligence and Watch campaigns delivered through Telegram. Revenue can support a careful
+            treasury desk; when it acts, KeeperHub executes the transaction and ChronicleAI shows the proof.
           </motion.p>
 
           <motion.div

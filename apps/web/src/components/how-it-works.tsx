@@ -7,27 +7,27 @@ import { Link } from "react-router-dom";
 const steps = [
   {
     icon: Activity,
-    title: "Watch the market",
+    title: "Watch what matters",
     description:
-      "ChronicleAI watches configured onchain events and desk conditions, then turns meaningful activity into a sourced, plain-language public Alert.",
+      "Track wallets, contracts, protocols, and market conditions. ChronicleAI turns important activity into a clear update with sources.",
   },
   {
     icon: BrainCircuit,
-    title: "Sell the deeper answer",
+    title: "Earn from the deeper answer",
     description:
-      "The public Alert is the headline. Humans and AI agents can pay for the deeper analysis and machine-readable intelligence through x402 or MPP.",
+      "The public update is the headline. Customers can pay for deeper analysis, premium intelligence, and Watch campaigns delivered through Telegram.",
   },
   {
     icon: ShieldCheck,
-    title: "Route revenue through risk controls",
+    title: "Let safety rules decide",
     description:
-      "Premium revenue can support the treasury desk, but the model never gets a free hand. Size limits, health checks, pause state, routing, and preflight decide whether an Action can proceed.",
+      "Revenue can support the treasury desk, but no single AI decision is enough. Limits and health checks decide whether capital can move.",
   },
   {
     icon: Landmark,
-    title: "Execute and prove it",
+    title: "Act, then show the proof",
     description:
-      "Approved Actions run through KeeperHub. The transaction, registry receipt, and execution trail give anyone evidence of what the desk actually did.",
+      "When the desk acts, KeeperHub handles the transaction. ChronicleAI shows the receipt, status, and public transaction link.",
   },
 ];
 
@@ -77,16 +77,16 @@ export function HowItWorks(): ReactNode {
             How it works
           </h2>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-foreground/60">
-            From a market observation to paid intelligence, treasury allocation, and a KeeperHub
-            transaction anyone can verify.
+            From a wallet or market update to paid intelligence, a careful treasury decision, and public
+            proof.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Link
-                to="/alerts"
+                to="/watch"
                 className="inline-flex cursor-pointer items-center rounded-xl bg-foreground px-6 py-3 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
               >
-                View live alerts
+                Try Watch
               </Link>
             </motion.div>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
