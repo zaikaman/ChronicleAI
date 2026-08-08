@@ -7,6 +7,7 @@ import {
   Landmark,
   type LucideIcon,
   Sparkles,
+  Ticket,
   Users,
 } from "lucide-react";
 
@@ -70,6 +71,14 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     icon: Archive,
   },
   {
+    id: "subscription",
+    label: "Subscription",
+    href: "/subscription",
+    description: "Chronicle Pass & membership",
+    group: "Business",
+    icon: Ticket,
+  },
+  {
     id: "premium",
     label: "Premium",
     href: "/premium",
@@ -100,6 +109,10 @@ export function isActiveNavPath(pathname: string, href: string): boolean {
   // Premium list + onchain content-URI detail (/premium/watches/:id)
   if (href === "/premium") {
     return pathname === "/premium" || pathname.startsWith("/premium/");
+  }
+  // Subscription route
+  if (href === "/subscription") {
+    return pathname === "/subscription" || pathname.startsWith("/subscription/");
   }
   // Alert detail
   if (href === "/alerts") {
