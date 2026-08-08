@@ -26,15 +26,17 @@ describe("Premium Access Integration", () => {
     markRegistryProof: vi.fn(),
     expireOpenChallenges: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
     listByPremiumItem: vi.fn(),
-    list: vi.fn(), listPage: vi.fn(),
-      listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
+    list: vi.fn(),
+    listPage: vi.fn(),
+    listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
     findSettledByPayer: vi.fn(),
   };
 
   const mockExecLogRepo = {
     append: vi.fn(),
     listByEntity: vi.fn(),
-    listRecent: vi.fn(), listPage: vi.fn()
+    listRecent: vi.fn(),
+    listPage: vi.fn(),
   };
 
   const receiptService = new PremiumAccessReceiptService({
@@ -135,7 +137,10 @@ describe("Premium Access Integration", () => {
 
     it("should reject a wallet address without authenticated ownership proof", async () => {
       mockPremiumRepo.findById.mockResolvedValue({ ok: true, value: mockPremiumItem });
-      mockPaymentRecordRepo.findSettledByPayer.mockResolvedValue({ ok: true, value: settledPayment });
+      mockPaymentRecordRepo.findSettledByPayer.mockResolvedValue({
+        ok: true,
+        value: settledPayment,
+      });
       mockPaymentRecordRepo.findById.mockResolvedValue({ ok: true, value: settledPayment });
       const issueSpy = vi.spyOn(receiptService, "issue");
 
@@ -221,6 +226,76 @@ describe("Premium Access Integration", () => {
           accessReceipt: receipt,
         }),
       ).rejects.toThrow(PaymentRequiredError);
+    });
+  });
+
+  describe("Chronicle Pass entitlement", () => {
+    const structuredFeedItem = {
+      ...mockPremiumItem,
+      id: "structured-feed-001",
+      slug: "structured-feed-001",
+      content_type: "structured_feed" as const,
+      title: "Structured Feed: USDC flows",
+    };
+
+    it("unlocks a pass-covered deep dive for an entitled wallet session", async () => {
+      mockPremiumRepo.findById.mockResolvedValue({ ok: true, value: mockPremiumItem });
+
+      const result = await accessService.accessPremiumItem({
+        itemId: mockPremiumItem.id,
+        passEntitlement: { entitled: true },
+      });
+
+      expect(result.allowed).toBe(true);
+      if (result.allowed) {
+        expect(result.content.contentPrivate).toEqual({ key: "secret data" });
+      }
+      // No receipt lookup needed — entitlement is the unlock.
+      expect(mockPaymentRecordRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it("requests the Pass upgrade (passRequired) for covered items without entitlement", async () => {
+      mockPremiumRepo.findById.mockResolvedValue({ ok: true, value: mockPremiumItem });
+
+      try {
+        await accessService.accessPremiumItem({
+          itemId: mockPremiumItem.id,
+          passEntitlement: { entitled: false },
+        });
+        throw new Error("expected PaymentRequiredError");
+      } catch (error) {
+        expect(error).toBeInstanceOf(PaymentRequiredError);
+        expect((error as PaymentRequiredError).passRequired).toBe(true);
+      }
+    });
+
+    it("keeps machine feeds outside the Pass (per-item payment required)", async () => {
+      mockPremiumRepo.findById.mockResolvedValue({ ok: true, value: structuredFeedItem });
+
+      try {
+        await accessService.accessPremiumItem({
+          itemId: structuredFeedItem.id,
+          passEntitlement: { entitled: true },
+        });
+        throw new Error("expected PaymentRequiredError");
+      } catch (error) {
+        expect(error).toBeInstanceOf(PaymentRequiredError);
+        expect((error as PaymentRequiredError).passRequired).toBe(false);
+      }
+    });
+
+    it("expired entitlement still requires a valid receipt", async () => {
+      mockPremiumRepo.findById.mockResolvedValue({ ok: true, value: mockPremiumItem });
+      mockPaymentRecordRepo.findById.mockResolvedValue({ ok: true, value: settledPayment });
+
+      const receipt = issueValidReceipt();
+      const result = await accessService.accessPremiumItem({
+        itemId: mockPremiumItem.id,
+        accessReceipt: receipt,
+        passEntitlement: { entitled: false },
+      });
+
+      expect(result.allowed).toBe(true);
     });
   });
 

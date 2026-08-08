@@ -2,10 +2,20 @@
 // Humans still checkout via x402 in PaymentChallengePanel.
 
 import type { AgentPaymentsDiscovery } from "@chronicleai/schemas";
+import {
+  ChevronDown,
+  ChevronUp,
+  Code2,
+  Cpu,
+  ExternalLink,
+  Globe,
+  Network,
+  ShieldCheck,
+  Terminal,
+} from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { formatPaymentRoute, sortPaymentRoutes } from "./payment-route-labels.ts";
-import { ChevronDown, ChevronUp, Code2, Cpu, ExternalLink, Globe, Network, ShieldCheck, Terminal } from "lucide-react";
 
 import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
 
@@ -13,7 +23,7 @@ const FALLBACK_DISCOVERY: AgentPaymentsDiscovery = {
   version: "1",
   name: "ChronicleAI Premium Payments",
   description:
-    "Dual-rail micropayments for premium intelligence and sponsored contract watches. Humans pay with x402 (wallet USDC). Machines pay with MPP (HMAC on Tempo).",
+    "Dual-rail micropayments for machine-readable intelligence and sponsored contract watches. Human editorial reads are covered by Chronicle Pass ($4.99/month); machines pay per item with x402/MPP.",
   routes: [
     {
       id: "x402",
@@ -99,9 +109,9 @@ const FALLBACK_DISCOVERY: AgentPaymentsDiscovery = {
     ],
   },
   humanUi: {
-    path: "/premium",
+    path: "/subscription",
     paymentRoute: "x402",
-    note: "Web checkout is x402-only; agents use this API flow for MPP.",
+    note: "People subscribe with Chronicle Pass; agents use this API flow for per-item purchases.",
   },
 };
 
@@ -206,9 +216,7 @@ export function AgentPaymentsPanel({
           <div className="flex flex-wrap items-center gap-2">
             {routeIds.map((id) => {
               const display = formatPaymentRoute(id);
-              return (
-                <StatusBadge key={id} label={display.badge} variant={display.badgeVariant} />
-              );
+              return <StatusBadge key={id} label={display.badge} variant={display.badgeVariant} />;
             })}
             <div className="h-3.5 w-px bg-border/60 mx-1 hidden sm:block" />
             <StatusBadge
@@ -225,9 +233,10 @@ export function AgentPaymentsPanel({
               Machine payments
             </h2>
             <p className="mt-1 text-sm text-muted-foreground leading-relaxed max-w-3xl">
-              People unlock reports with a wallet. Automated agents can buy the same items through
-              the API using <span className="font-semibold text-foreground">MPP</span>. The guide below
-              shows the exact machine-to-machine flow.
+              Human editorial reads are covered by Chronicle Pass. Automated agents buy machine
+              feeds and reports per item through the API using{" "}
+              <span className="font-semibold text-foreground">MPP</span>. The guide below shows the
+              exact machine-to-machine flow.
             </p>
           </div>
         </div>
@@ -241,7 +250,11 @@ export function AgentPaymentsPanel({
         >
           <Terminal className="w-4 h-4 text-primary" />
           <span>{open ? "Hide API guide" : "Show API guide"}</span>
-          {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          {open ? (
+            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          )}
         </button>
       </div>
 
@@ -287,11 +300,15 @@ export function AgentPaymentsPanel({
                 <div className="pt-2 border-t border-border/40 space-y-1 text-[11px] text-muted-foreground font-mono">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground/70">Network</span>
-                    <span className="font-semibold text-foreground/90 truncate max-w-[150px]">{route.network}</span>
+                    <span className="font-semibold text-foreground/90 truncate max-w-[150px]">
+                      {route.network}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground/70">Auth Type</span>
-                    <span className="font-semibold text-foreground/90 truncate max-w-[150px]">{route.verificationType}</span>
+                    <span className="font-semibold text-foreground/90 truncate max-w-[150px]">
+                      {route.verificationType}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground/70">Currency</span>

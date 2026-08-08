@@ -60,6 +60,7 @@ describe("PaymentSettlementService", () => {
       list: vi.fn(),
       listPage: vi.fn(),
       listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
+      listByPayer: vi.fn(),
       findSettledByPayer: vi.fn(),
     };
 

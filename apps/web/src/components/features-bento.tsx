@@ -100,11 +100,12 @@ function DecisionCard({
           <Landmark className="h-3.5 w-3.5" /> 2 · What it does
         </div>
         <h3 className="mb-2 text-xl font-medium leading-tight text-card-foreground md:text-2xl">
-          Premium revenue can fund action
+          Subscription revenue funds action
         </h3>
         <p className="text-sm text-card-foreground-muted">
-          Premium revenue can support the treasury desk. Safety rules decide whether capital can move,
-          while the AI helps propose what to do.
+          Predictable Chronicle Pass revenue ($4.99/month) and separate Watch/machine products
+          support the treasury desk. Safety rules decide whether capital can move, while the AI
+          helps propose what to do.
         </p>
       </div>
 
@@ -242,11 +243,11 @@ export function FeaturesBento(): ReactNode {
         <div className="mb-8 max-w-2xl">
           <p className="text-sm font-semibold text-accent">The business loop</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          Watch what matters. Earn from insight. Act with proof.
+            Watch what matters. Earn from insight. Act with proof.
           </h2>
           <p className="mt-3 text-base leading-relaxed text-foreground/60">
-            Track what matters, sell the deeper answer, route revenue through safety rules, and publish
-            proof of every action.
+            Track what matters, sell the deeper answer, route revenue through safety rules, and
+            publish proof of every action.
           </p>
         </div>
 

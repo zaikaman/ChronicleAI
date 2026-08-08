@@ -2,7 +2,7 @@
 
 > **Watch. Earn. Act.**
 >
-> ChronicleAI is an AI research desk that monitors important onchain activity, sells premium intelligence, uses that revenue for carefully controlled treasury actions, and publishes public proof of what happened.
+> ChronicleAI is an AI research desk that monitors important onchain activity, sells a **Chronicle Pass** subscription for deeper intelligence, uses that predictable revenue for carefully controlled treasury actions, and publishes public proof of what happened.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
 [![Tests](https://img.shields.io/badge/Tests-1173%20passing-brightgreen?style=for-the-badge)](README.md#verification)
@@ -27,17 +27,17 @@ flowchart LR
 ```
 
 - **Watch:** ChronicleAI monitors wallets, contracts, protocols, and market conditions, then sends useful updates through the app or Telegram.
-- **Earn:** Humans and AI agents can pay for deeper intelligence and monitoring campaigns.
+- **Earn:** Readers subscribe to **Chronicle Pass at $4.99/month** for every deep dive and the full archive; sponsored Watch campaigns and machine/API feeds are separate products.
 - **Act:** The desk applies safety rules before deciding whether treasury capital should be used, defended, rotated, or held.
 - **Prove:** KeeperHub handles the approved onchain action, while ChronicleAI links the receipt, transaction hash, and audit trail.
 
 Activity can start with an external market event or an internal desk condition such as an APY difference, a health-factor change, gas conditions, or available capital. Some updates stay informational or are deferred. ChronicleAI only calls an action verified when a real decision, transaction, and public proof exist.
 
-Premium feeds, Watch campaigns, sponsored reports, treasury routing, and affiliate payouts extend this loop. They are not required to understand the core demo, but they show how ChronicleAI can fund an operating desk from its own intelligence products.
+Chronicle Pass subscriptions, per-item machine feeds, Watch campaigns, sponsored reports, treasury routing, and affiliate payouts extend this loop. They are not required to understand the core demo, but they show how ChronicleAI can fund an operating desk from predictable intelligence revenue.
 
 ## See it in action
 
-In one sentence: **ChronicleAI watches something important, helps people understand it, earns from that intelligence, makes a carefully controlled capital decision, executes through KeeperHub, and shows the proof.**
+In one sentence: **ChronicleAI watches something important, helps people understand it, sells a $4.99/month Chronicle Pass for the deeper answer, routes that subscription revenue through safety rules into a treasury desk, executes through KeeperHub, and shows the proof.**
 
 Explore the product and a verified execution path:
 
@@ -54,7 +54,22 @@ The unified Alerts feed includes **Mainnet market Alerts** and **Sepolia Desk-tr
 
 ## Full system overview
 
-ChronicleAI is an autonomous onchain intelligence business with a public memory: it turns market activity into sourced Alerts and digests, sells premium machine-readable intelligence over x402/MPP, and can route a configurable share of that revenue into a policy-gated market desk. When the desk acts, KeeperHub turns the decision into an auditable onchain Action.
+ChronicleAI is an autonomous onchain intelligence business with a public memory: it turns market activity into sourced Alerts and digests, sells a **Chronicle Pass** subscription for human editorial intelligence, sells machine-readable feeds over x402/MPP as a separate product line, and routes a configurable share of that revenue into a policy-gated market desk. When the desk acts, KeeperHub turns the decision into an auditable onchain Action.
+
+### Chronicle Pass — subscription-first premium
+
+Chronicle Pass is the primary human monetization path at **$4.99 USDC/month**, authorized and renewed by the reader's wallet — ChronicleAI never charges silently.
+
+| Tier | Includes |
+| --- | --- |
+| **Free** | Public alerts, digest highlights, archive previews, and one editorially selected deep dive per month |
+| **Chronicle Pass ($4.99/mo)** | Every human deep dive as it publishes, historical premium items, the full editorial archive, and premium digest delivery |
+
+- **Wallet-authenticated management:** a short-lived signed-message challenge (`POST /subscriptions/auth/challenge` → `/verify`) creates a secure HttpOnly session; the reader manages everything at `/subscription` — status, cancel-at-period-end, resume, renew, delivery email, digest/alert preferences, and payment history.
+- **Entitlement is checked on every request:** cancellation completion, expiry, and failed renewal revoke access at the entitlement layer even if an old client token still exists.
+- **Separate product lines:** sponsored Watch campaigns, machine-readable feeds, desk feeds, and per-item API payments are deliberately outside the Pass.
+
+Existing payment records and legacy access receipts remain valid until their normal expiry, and the underlying `x402_newsletter_subscriptions` tables keep their v1 names.
 
 ### Watch is a premium service
 
@@ -63,7 +78,7 @@ ChronicleAI is an autonomous onchain intelligence business with a public memory:
 This is the distinction from a generic trading bot:
 
 - It **publishes what it sees** as Alerts instead of keeping its market view private.
-- It **monetizes deeper intelligence** so research becomes a product, not an invisible prompt.
+- It **monetizes deeper intelligence through a recurring Chronicle Pass subscription** so research becomes a predictable product line, not an invisible prompt.
 - It **routes revenue into a controlled treasury desk** rather than pretending every observation should become a trade.
 - It **acts only after policy and preflight checks** instead of letting an LLM broadcast arbitrary calldata.
 - It **proves what happened** with registry receipts, KeeperHub run IDs, transaction hashes, routing metadata, and an activity trail.
@@ -100,7 +115,8 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 - **Public intelligence:** Alerts (market-event and desk-trigger), daily digests, trade tickets, capital-move records, and proof-of-publication receipts.
 - **Alert → Signal projection:** [`apps/api/src/services/alert-to-signal-service.ts`](apps/api/src/services/alert-to-signal-service.ts) maps eligible market event types into desk signal types and records causal metadata on the Alert.
 - **Desk-trigger Alerts:** [`apps/api/src/services/desk-trigger-alert-service.ts`](apps/api/src/services/desk-trigger-alert-service.ts) creates deterministic public Alerts from non-ignore Desk signals, capital decisions, and event-linked microtrades — no LLM copy, best-effort publication.
-- **Premium intelligence & Dual-Rail Auto Selection:** HTTP 402 routing with x402/MPP adapters. Auto-selects MPP (Tempo HMAC) for machine/agent traffic (`X-Chronicle-Client: agent`, `clientType: machine`, `mpp-*`) and x402 (Base USDC) for human browser wallets (`0x...`).
+- **Chronicle Pass subscription:** wallet-authenticated $4.99/month pass covering every human deep dive and the full archive ([`apps/api/src/services/chronicle-pass-service.ts`](apps/api/src/services/chronicle-pass-service.ts), management at `/subscription`). Entitlement is re-derived from the stored agreement on every premium request.
+- **Premium intelligence & Dual-Rail Auto Selection:** HTTP 402 routing with x402/MPP adapters. Auto-selects MPP (Tempo HMAC) for machine/agent traffic (`X-Chronicle-Client: agent`, `clientType: machine`, `mpp-*`) and x402 (Base USDC) for human browser wallets (`0x...`). Machine feeds remain per-item outside the Pass.
 - **Watch premium service:** customers pay for monitoring campaigns on any wallet, contract, or protocol. Wallet watches match ERC-20 transfers (decoded to token, amount, and direction); contract watches match any event the target emits, classified by the ingestion pipeline (swaps, liquidations, deposits/withdrawals, stablecoin mints/burns, exchange flows) with an on-chain log fallback. Matching events trigger Telegram DMs; campaigns can also use publicly sponsored registry + community distribution (throttled), and they end with an OpenAI-generated report published onchain as a second receipt.
 - **Telegram binding:** `/start` to the bot issues a one-time code linking a chat to private watch alerts (`VITE_TELEGRAM_BOT_USERNAME` must match the webhook-registered bot).
 - **Desk reasoning:** LangChainJS with provider fallback; the model proposes from Signals, while hard policy gates the Action.

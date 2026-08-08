@@ -1,5 +1,7 @@
 import { type MouseEvent, type ReactElement, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { StatusBadge } from "../../components/data-primitives.tsx";
+import { CHRONICLE_PASS_PRICE_USDC } from "../subscription/use-subscription.ts";
 import { PaymentChallengePanel } from "./PaymentChallengePanel.tsx";
 import type { PremiumItemAccessResult } from "./use-premium.ts";
 
@@ -53,10 +55,12 @@ export function PaymentRequiredModal({
     }
   };
 
+  const passRequired = paymentChallenge.passRequired === true;
+
   return (
     <dialog
       ref={dialogRef}
-      aria-label="Payment required"
+      aria-label={passRequired ? "Chronicle Pass required" : "Payment required"}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -72,7 +76,74 @@ export function PaymentRequiredModal({
       className="fixed inset-0 m-0 flex h-full w-full max-w-none items-center justify-center bg-transparent p-4 text-foreground backdrop:bg-black/60 sm:p-6"
       data-testid="payment-required-modal"
     >
-      {showPaymentPanel ? (
+      {passRequired ? (
+        <div
+          role="document"
+          className="w-full max-w-md rounded-2xl border border-border bg-frame p-6 sm:p-8"
+          data-testid="pass-upgrade-cta"
+        >
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <StatusBadge label="Chronicle Pass" variant="info" />
+              <h2 className="mt-3 text-xl font-semibold leading-snug tracking-tight text-foreground">
+                Included with Chronicle Pass
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 rounded-lg p-1.5 text-xl leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="Close dialog"
+            >
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+
+          {itemTitle ? (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">{itemTitle}</span> is part of the
+              Chronicle Pass — one subscription unlocks every deep dive and the full archive.
+            </p>
+          ) : (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              This report is included with Chronicle Pass — one subscription unlocks every deep dive
+              and the full archive.
+            </p>
+          )}
+
+          <div className="mt-6 flex items-baseline gap-2 border-y border-border py-4">
+            <span className="text-3xl font-semibold tabular-nums tracking-tight text-accent">
+              {CHRONICLE_PASS_PRICE_USDC.toFixed(2)}
+            </span>
+            <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+              USDC / month
+            </span>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3">
+            <Link
+              to={paymentChallenge.upgradePath ?? "/subscription"}
+              className="w-full rounded-xl bg-accent px-5 py-3 text-center text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              data-testid="pass-upgrade-cta-link"
+            >
+              Get Chronicle Pass
+            </Link>
+            <button
+              type="button"
+              onClick={onShowAgentGuide}
+              className="w-full cursor-pointer rounded-xl border border-border bg-background px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:border-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              data-testid="pay-mpp-agent-cta"
+            >
+              Agent/API purchase guide
+            </button>
+          </div>
+
+          <p className="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
+            Chronicle Pass covers human editorial intelligence. Automated agents and machine feeds
+            use the per-item API checkout.
+          </p>
+        </div>
+      ) : showPaymentPanel ? (
         <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto sm:max-h-[calc(100vh-3rem)]">
           <PaymentChallengePanel
             premiumItemId={paymentChallenge.premiumItemId}

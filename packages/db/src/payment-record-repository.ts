@@ -87,6 +87,11 @@ export interface PaymentRecordRepository {
     premiumItemId: string,
     limitParam?: number,
   ): Promise<Result<PaymentRecordRow[]>>;
+  /**
+   * Payment history for a payer reference (bounded, newest first). Used by the
+   * Chronicle Pass management surface.
+   */
+  listByPayer(payerReference: string, limitParam?: number): Promise<Result<PaymentRecordRow[]>>;
   list(limit?: number): Promise<Result<PaymentRecordRow[]>>;
   listPage(params?: PaginationParams): Promise<Result<PaginatedResult<PaymentRecordRow>>>;
   /**
@@ -265,6 +270,21 @@ export function createPaymentRecordRepository(supabase: SupabaseClient): Payment
       deletedCount += (data ?? []).length;
 
       return success(deletedCount);
+    },
+
+    async listByPayer(payerReference, limitParam = 20) {
+      const normalizedPayer = normalizePayerReference(payerReference);
+      if (!normalizedPayer) return success([]);
+      // P2-1: bound per-wallet payment history.
+      const limit = Math.min(50, Math.max(1, limitParam));
+      const { data, error } = await table()
+        .select("*")
+        .eq("payer_reference", normalizedPayer)
+        .order("requested_at", { ascending: false })
+        .limit(limit);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(data ?? []);
     },
 
     async listByPremiumItem(premiumItemId, limitParam = 100) {

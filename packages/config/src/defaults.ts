@@ -94,6 +94,10 @@ export const AAVE_FLOW_CORRELATION_MAGNITUDE_TOLERANCE = 0.005;
 // ── Payment Defaults ────────────────────────────────────
 export const PAYMENT_CHALLENGE_EXPIRY_MS = 600_000; // 10 minutes in milliseconds
 
+// ── Chronicle Pass (monthly subscription) ────────────────
+/** Default Chronicle Pass monthly price in USDC (4.99). */
+export const CHRONICLE_PASS_PRICE_USDC_DEFAULT = 4.99;
+
 // ── Dashboard Row Limits ───────────────────────────────
 export const DASHBOARD_ROW_LIMITS = {
   alerts: 50,

@@ -377,6 +377,60 @@ export type Database = {
         }
         Relationships: []
       }
+      chronicle_pass_sessions: {
+        Row: {
+          chain_id: number
+          created_at: string
+          expires_at: string
+          id: string
+          ip_address: string | null
+          issued_at: string
+          last_seen_at: string | null
+          message: string
+          nonce: string
+          session_expires_at: string | null
+          session_token_hash: string | null
+          status: string
+          updated_at: string
+          user_agent: string | null
+          wallet_address: string
+        }
+        Insert: {
+          chain_id: number
+          created_at?: string
+          expires_at: string
+          id?: string
+          ip_address?: string | null
+          issued_at?: string
+          last_seen_at?: string | null
+          message: string
+          nonce: string
+          session_expires_at?: string | null
+          session_token_hash?: string | null
+          status?: string
+          updated_at?: string
+          user_agent?: string | null
+          wallet_address: string
+        }
+        Update: {
+          chain_id?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          ip_address?: string | null
+          issued_at?: string
+          last_seen_at?: string | null
+          message?: string
+          nonce?: string
+          session_expires_at?: string | null
+          session_token_hash?: string | null
+          status?: string
+          updated_at?: string
+          user_agent?: string | null
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       daily_digests: {
         Row: {
           analysis: string | null

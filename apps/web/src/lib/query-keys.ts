@@ -21,19 +21,9 @@ export const queryKeys = {
       limit: number,
       entityId?: string | null,
       entityType?: string | null,
-    ) =>
-      [
-        "activity",
-        "execution-logs",
-        page,
-        limit,
-        entityId ?? null,
-        entityType ?? null,
-      ] as const,
-    payments: (page: number, limit: number) =>
-      ["activity", "payments", page, limit] as const,
-    payouts: (page: number, limit: number) =>
-      ["activity", "payouts", page, limit] as const,
+    ) => ["activity", "execution-logs", page, limit, entityId ?? null, entityType ?? null] as const,
+    payments: (page: number, limit: number) => ["activity", "payments", page, limit] as const,
+    payouts: (page: number, limit: number) => ["activity", "payouts", page, limit] as const,
     cctpRebalances: (page: number, limit: number) =>
       ["activity", "cctp-rebalances", page, limit] as const,
   },
@@ -43,8 +33,7 @@ export const queryKeys = {
     intents: (page: number, limit: number) => ["desk", "intents", page, limit] as const,
     tickets: (page: number, limit: number) => ["desk", "tickets", page, limit] as const,
     ticket: (ticketId: string) => ["desk", "ticket", ticketId] as const,
-    capitalMoves: (page: number, limit: number) =>
-      ["desk", "capital-moves", page, limit] as const,
+    capitalMoves: (page: number, limit: number) => ["desk", "capital-moves", page, limit] as const,
     relatedTicket: (signalHash: string | null | undefined, refId: string | null) =>
       ["desk", "related-ticket", signalHash ?? null, refId] as const,
   },
@@ -52,12 +41,17 @@ export const queryKeys = {
     all: ["premium"] as const,
     teasers: (page: number, limit: number, payer?: string) =>
       ["premium", "teasers", page, limit, payer ?? null] as const,
-    watches: (page: number, limit: number) =>
-      ["premium", "watches", page, limit] as const,
+    watches: (page: number, limit: number) => ["premium", "watches", page, limit] as const,
   },
   affiliates: {
     all: ["affiliates"] as const,
     list: (page: number, limit: number) => ["affiliates", "list", page, limit] as const,
     me: (wallet: string) => ["affiliates", "me", wallet.toLowerCase()] as const,
+  },
+  subscription: {
+    all: ["subscription"] as const,
+    session: ["subscription", "session"] as const,
+    status: (wallet: string | null) => ["subscription", "status", wallet ?? null] as const,
+    payments: (wallet: string | null) => ["subscription", "payments", wallet ?? null] as const,
   },
 } as const;

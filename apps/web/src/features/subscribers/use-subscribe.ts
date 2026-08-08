@@ -2,12 +2,12 @@
 // Flow: email → connect wallet → issue challenge → EIP-712 sign → settle → entitlement
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isEvmAddress, signX402Settlement, useWallet } from "../wallet";
 import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
 import { attributeReferralOnConnect, getStoredReferralRef } from "../../lib/referral.ts";
+import { isEvmAddress, signX402Settlement, useWallet } from "../wallet";
 
-/** Matches server default NEWSLETTER_MONTHLY_PRICE_USDC. */
-export const DEFAULT_NEWSLETTER_PRICE_USDC = 2;
+/** Matches server default CHRONICLE_PASS_PRICE_USDC / NEWSLETTER_MONTHLY_PRICE_USDC. */
+export const DEFAULT_NEWSLETTER_PRICE_USDC = 4.99;
 
 export type SubscribeStep =
   | "idle"
@@ -271,8 +271,7 @@ export function useSubscribe(): UseSubscribeResult {
 
         const sub = settleBody.subscription;
         const amountPerPeriod = sub?.amountPerPeriod;
-        const currency =
-          sub?.currency ?? settleBody.verification?.currency ?? "USDC";
+        const currency = sub?.currency ?? settleBody.verification?.currency ?? "USDC";
         const summary: NewsletterSubscriptionSummary = {
           id: sub?.id ?? challengeBody.subscriptionId ?? "",
           email: sub?.email ?? trimmed,
@@ -312,10 +311,7 @@ export function useSubscribe(): UseSubscribeResult {
   );
 
   const isBusy =
-    step === "connecting" ||
-    step === "challenging" ||
-    step === "signing" ||
-    step === "settling";
+    step === "connecting" || step === "challenging" || step === "signing" || step === "settling";
 
   return {
     step,

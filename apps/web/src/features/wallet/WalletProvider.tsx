@@ -3,9 +3,9 @@
 // Must mount under the router (uses useLocation).
 
 import {
-  createContext,
   type ReactElement,
   type ReactNode,
+  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -19,7 +19,7 @@ import { waitForWalletConnection } from "./connect-bridge.ts";
 import type { WalletContextValue } from "./types.ts";
 
 /** Routes that need wallet connectivity without an explicit Connect click. */
-const WALLET_ROUTE_PREFIXES = ["/premium", "/affiliates"] as const;
+const WALLET_ROUTE_PREFIXES = ["/premium", "/subscription", "/affiliates"] as const;
 
 const WALLET_STORAGE_PREFIX = "chronicleai.wallet";
 
@@ -59,7 +59,7 @@ export function hasStoredWalletSession(): boolean {
   try {
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i);
-      if (key && key.startsWith(WALLET_STORAGE_PREFIX)) {
+      if (key?.startsWith(WALLET_STORAGE_PREFIX)) {
         const value = window.localStorage.getItem(key);
         if (value && value !== "null" && value !== "{}" && value !== "[]") {
           return true;
@@ -168,17 +168,12 @@ export function WalletProvider({ children }: { children: ReactNode }): ReactElem
     [stackModule, isStackLoading, ensureWalletStack],
   );
 
-  const stubWallet = useMemo(
-    () => createStubWallet(ensureWalletStack),
-    [ensureWalletStack],
-  );
+  const stubWallet = useMemo(() => createStubWallet(ensureWalletStack), [ensureWalletStack]);
 
   if (!stackModule) {
     return (
       <WalletBootstrapContext.Provider value={bootstrap}>
-        <WalletApiContext.Provider value={stubWallet}>
-          {children}
-        </WalletApiContext.Provider>
+        <WalletApiContext.Provider value={stubWallet}>{children}</WalletApiContext.Provider>
       </WalletBootstrapContext.Provider>
     );
   }
@@ -210,9 +205,5 @@ function LiveWalletApiBridge({
   fallback: WalletContextValue;
 }): ReactElement {
   const live = useLiveWalletContext();
-  return (
-    <WalletApiContext.Provider value={live ?? fallback}>
-      {children}
-    </WalletApiContext.Provider>
-  );
+  return <WalletApiContext.Provider value={live ?? fallback}>{children}</WalletApiContext.Provider>;
 }

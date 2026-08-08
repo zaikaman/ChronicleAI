@@ -10,6 +10,7 @@ export type RouteId =
   | "digests"
   | "desk"
   | "premium"
+  | "subscription"
   | "affiliates"
   | "activity";
 
@@ -28,6 +29,7 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { id: "digests", path: "/digests/latest", label: "Latest Digest" },
   { id: "desk", path: "/desk", label: "Desk" },
   { id: "premium", path: "/premium", label: "Premium" },
+  { id: "subscription", path: "/subscription", label: "Subscription" },
   { id: "affiliates", path: "/affiliates", label: "Affiliates" },
   { id: "activity", path: "/activity", label: "Activity" },
 ];

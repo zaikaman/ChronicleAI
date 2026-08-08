@@ -9,7 +9,7 @@ import type {
   SponsoredWatchRepository,
 } from "@chronicleai/db";
 import type { PremiumIntelligenceItemRow } from "@chronicleai/db";
-import type { PaymentRoute } from "@chronicleai/schemas";
+import { type PaymentRoute, isChroniclePassCoveredContentType } from "@chronicleai/schemas";
 import type { PremiumAccessReceiptService } from "./premium-access-receipt-service.ts";
 import {
   PremiumContentVisibilityService,
@@ -62,8 +62,11 @@ export class PremiumAccessService {
   /**
    * Attempt to access premium content.
    *
-   * Access is granted only when a valid HMAC-signed access receipt is presented
-   * and the referenced payment record is still settled for this item.
+   * Access is granted when:
+   *   1. The item is covered by Chronicle Pass AND the request carries a valid
+   *      wallet-authenticated pass session with active entitlement, or
+   *   2. A valid HMAC-signed access receipt is presented and the referenced
+   *      payment record is still settled for this item.
    * Bare payer references are not accepted as proof of entitlement.
    *
    * Otherwise throws PaymentRequiredError (402).
@@ -73,6 +76,8 @@ export class PremiumAccessService {
     accessReceipt?: string | undefined;
     payerReference?: string | undefined;
     paymentRoute?: PaymentRoute | undefined;
+    /** Resolved from the wallet session cookie — never from client input. */
+    passEntitlement?: { entitled: boolean } | undefined;
   }): Promise<PremiumAccessResult & { accessReceipt?: string }> {
     const itemResult = await this.premiumRepo.findById(params.itemId);
 
@@ -81,41 +86,47 @@ export class PremiumAccessService {
     }
 
     const item = itemResult.value;
-    const paymentRoute =
-      params.paymentRoute ?? (item.payment_routes[0] as PaymentRoute) ?? "x402";
+    const paymentRoute = params.paymentRoute ?? (item.payment_routes[0] as PaymentRoute) ?? "x402";
+    const coveredByPass = isChroniclePassCoveredContentType(item.content_type);
+
+    // Chronicle Pass holders unlock human editorial intelligence directly.
+    if (coveredByPass && params.passEntitlement?.entitled === true) {
+      const fullContent = this.visibilityService.toFullWithPrivateContent(item);
+      return {
+        allowed: true,
+        content: fullContent,
+      };
+    }
 
     // A client-supplied wallet address is intentionally ignored. Ownership is
     // established only by a receipt issued after authenticated settlement.
     const receiptToken = params.accessReceipt?.trim();
 
     if (!receiptToken) {
-      throw new PaymentRequiredError(item, paymentRoute);
+      throw new PaymentRequiredError(item, paymentRoute, coveredByPass);
     }
 
     const verified = this.receiptService.verify(receiptToken);
     if (!verified.ok) {
-      throw new PaymentRequiredError(item, paymentRoute);
+      throw new PaymentRequiredError(item, paymentRoute, coveredByPass);
     }
 
     const { claims } = verified;
 
     // Receipt must be bound to the requested item
     if (claims.pi !== params.itemId) {
-      throw new PaymentRequiredError(item, paymentRoute);
+      throw new PaymentRequiredError(item, paymentRoute, coveredByPass);
     }
 
     // Defense in depth: re-check settlement status in the database
     const paymentResult = await this.paymentRecordRepo.findById(claims.pr);
     if (!paymentResult.ok || !paymentResult.value) {
-      throw new PaymentRequiredError(item, paymentRoute);
+      throw new PaymentRequiredError(item, paymentRoute, coveredByPass);
     }
 
     const payment = paymentResult.value;
-    if (
-      payment.status !== "settled" ||
-      payment.premium_item_id !== params.itemId
-    ) {
-      throw new PaymentRequiredError(item, paymentRoute);
+    if (payment.status !== "settled" || payment.premium_item_id !== params.itemId) {
+      throw new PaymentRequiredError(item, paymentRoute, coveredByPass);
     }
 
     // If the receipt carries a payer claim, it must match the settled record
@@ -124,7 +135,7 @@ export class PremiumAccessService {
       const claimPay = claims.pay.trim().toLowerCase();
       const storedPay = payment.payer_reference.trim().toLowerCase();
       if (claimPay !== storedPay) {
-        throw new PaymentRequiredError(item, paymentRoute);
+        throw new PaymentRequiredError(item, paymentRoute, coveredByPass);
       }
     }
 
@@ -141,11 +152,14 @@ export class PremiumAccessService {
           const targetContract = String(privateObj.targetContract ?? "").toLowerCase();
           const watchSpecHash = String(privateObj.watchSpecHash ?? "").toLowerCase();
 
-          const match = watchesResult.value.find((w: { watch_spec_hash?: string | null; target_contract?: string | null }) => {
-            if (watchSpecHash && w.watch_spec_hash?.toLowerCase() === watchSpecHash) return true;
-            if (targetContract && w.target_contract?.toLowerCase() === targetContract) return true;
-            return false;
-          });
+          const match = watchesResult.value.find(
+            (w: { watch_spec_hash?: string | null; target_contract?: string | null }) => {
+              if (watchSpecHash && w.watch_spec_hash?.toLowerCase() === watchSpecHash) return true;
+              if (targetContract && w.target_contract?.toLowerCase() === targetContract)
+                return true;
+              return false;
+            },
+          );
 
           if (match) {
             fullContent.contentPrivate = {
@@ -198,11 +212,14 @@ export class PaymentRequiredError extends Error {
   public readonly statusCode = 402;
   public readonly item: PremiumIntelligenceItemRow;
   public readonly paymentRoute: PaymentRoute;
+  /** True when the item is covered by Chronicle Pass (upgrade CTA, not per-item). */
+  public readonly passRequired: boolean;
 
-  constructor(item: PremiumIntelligenceItemRow, paymentRoute: PaymentRoute) {
+  constructor(item: PremiumIntelligenceItemRow, paymentRoute: PaymentRoute, passRequired = false) {
     super("Payment required to access premium content");
     this.name = "PaymentRequiredError";
     this.item = item;
     this.paymentRoute = paymentRoute;
+    this.passRequired = passRequired;
   }
 }

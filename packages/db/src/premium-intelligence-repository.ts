@@ -36,9 +36,13 @@ export interface PremiumIntelligenceRepository {
     limitParam?: number,
     filters?: { chainId?: number },
   ): Promise<Result<PremiumIntelligenceTeaserRow[]>>;
-  /** Page-based public catalog teasers (no content_private). */
+  /**
+   * Page-based public catalog teasers (no content_private).
+   * `includeArchived` expands the catalog with archived editorial items — only
+   * ever enabled for authenticated Chronicle Pass holders.
+   */
   listTeasersPage(
-    params?: PaginationParams & { chainId?: number },
+    params?: PaginationParams & { chainId?: number; includeArchived?: boolean },
   ): Promise<Result<PaginatedResult<PremiumIntelligenceTeaserRow>>>;
   findBySlug(slug: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
   findById(id: string): Promise<Result<PremiumIntelligenceItemRow | null>>;
@@ -94,7 +98,12 @@ export function createPremiumIntelligenceRepository(
       });
       let query = table()
         .select(PREMIUM_TEASER_COLUMNS, { count: "exact" })
-        .eq("status", "available")
+        .in(
+          "status",
+          params?.includeArchived === true
+            ? (["available", "archived"] as const)
+            : (["available"] as const),
+        )
         .neq("content_type", "monthly_newsletter")
         .neq("slug", "chronicle-desk-feed");
       if (params?.chainId !== undefined) query = query.eq("source_chain_id", params.chainId);

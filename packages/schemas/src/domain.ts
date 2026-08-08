@@ -348,6 +348,38 @@ export const DEFAULT_NEWSLETTER_BILLING_PERIOD_DAYS = 30;
 /** Default grace window after period end before status becomes expired (days). */
 export const DEFAULT_NEWSLETTER_GRACE_PERIOD_DAYS = 3;
 
+// ── Chronicle Pass (user-facing monthly subscription) ──
+/** Canonical Chronicle Pass monthly price in USDC (default 4.99). */
+export const CHRONICLE_PASS_PRICE_USDC = 4.99 as const;
+
+/**
+ * User-facing Chronicle Pass lifecycle. Derived from the stored newsletter
+ * subscription state plus explicit cancel-at-period-end handling.
+ */
+export type ChroniclePassStatus =
+  | "none"
+  | "pending"
+  | "active"
+  | "past_due"
+  | "canceling"
+  | "cancelled"
+  | "expired";
+
+export const CHRONICLE_PASS_STATUSES: readonly ChroniclePassStatus[] = [
+  "none",
+  "pending",
+  "active",
+  "past_due",
+  "canceling",
+  "cancelled",
+  "expired",
+] as const;
+
+/** Whether a premium catalog item is covered by the Chronicle Pass. */
+export function isChroniclePassCoveredContentType(contentType: string | null | undefined): boolean {
+  return contentType === "deep_dive" || contentType === "historical_feed";
+}
+
 // ── Referral Affiliates ─────────────────────────────────
 /** Partner status for referral earnings eligibility. Only `approved` can earn and withdraw. */
 export type AffiliateStatus = "pending" | "approved" | "suspended";

@@ -1,10 +1,10 @@
 // Frontend app router with route-level code splitting (React.lazy + Suspense).
 
 import type { RouteDefinition } from "@chronicleai/schemas";
-import { lazy, Suspense, type ComponentType, type ReactElement } from "react";
+import { type ComponentType, type ReactElement, Suspense, lazy } from "react";
 import { type RouteObject, createBrowserRouter } from "react-router-dom";
-import { App } from "./App.tsx";
 import { RouteFallback } from "../components/route-fallback.tsx";
+import { App } from "./App.tsx";
 
 // ── Lazy product pages (each becomes its own chunk) ─────
 // Keep the shell (App) eager; pages load on navigation.
@@ -48,6 +48,11 @@ const DeskTicketPage = lazy(() =>
 const PremiumPage = lazy(() =>
   import("../features/premium/PremiumPage.tsx").then((m) => ({ default: m.PremiumPage })),
 );
+const SubscriptionPage = lazy(() =>
+  import("../features/subscription/SubscriptionPage.tsx").then((m) => ({
+    default: m.SubscriptionPage,
+  })),
+);
 const WatchPage = lazy(() =>
   import("../features/watch/WatchPage.tsx").then((m) => ({ default: m.WatchPage })),
 );
@@ -84,6 +89,7 @@ export const routeDefinitions: RouteDefinition[] = [
   { id: "digests", path: "/digests/latest", label: "Digest" },
   { id: "desk", path: "/desk", label: "Desk" },
   { id: "premium", path: "/premium", label: "Premium" },
+  { id: "subscription", path: "/subscription", label: "Subscription" },
   { id: "affiliates", path: "/affiliates", label: "Affiliates" },
   { id: "activity", path: "/activity", label: "Activity" },
 ];
@@ -106,6 +112,7 @@ const routes: RouteObject[] = [
       { path: "watch", element: withSuspense(WatchPage) },
       { path: "watch/:watchId", element: withSuspense(SponsoredWatchDetailPage) },
       { path: "premium", element: withSuspense(PremiumPage) },
+      { path: "subscription", element: withSuspense(SubscriptionPage) },
       // HTTPS content-URI target baked into onchain publishSponsoredReport proofs
       { path: "premium/watches/:watchId", element: withSuspense(SponsoredWatchDetailPage) },
       { path: "affiliates", element: withSuspense(AffiliatePage) },

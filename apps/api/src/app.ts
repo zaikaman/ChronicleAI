@@ -5,6 +5,7 @@ import {
   createAffiliateRepository,
   createAffiliateWithdrawalRepository,
   createAgentActivityRepository,
+  createChroniclePassSessionRepository,
   createDailyDigestRepository,
   createEmailSubscriberRepository,
   createExecutionLogRepository,
@@ -104,6 +105,7 @@ try {
   const digestRepo = createDailyDigestRepository(supabase);
   const subscriberRepo = createEmailSubscriberRepository(supabase);
   const newsletterRepo = createNewsletterSubscriptionRepository(supabase);
+  const passSessionRepo = createChroniclePassSessionRepository(supabase);
   const premiumRepo = createPremiumIntelligenceRepository(supabase);
   const paymentRecordRepo = createPaymentRecordRepository(supabase);
   const watchRepo = createSponsoredWatchRepository(supabase);
@@ -202,6 +204,7 @@ try {
     subscriberRepo,
     treasuryRepo,
     newsletterRepo,
+    passSessionRepo,
     premiumRepo,
     paymentRecordRepo,
     affiliateRepo,

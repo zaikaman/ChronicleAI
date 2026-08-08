@@ -301,6 +301,43 @@ export class NewsletterSubscriptionService {
   }
 
   /**
+   * Issue a renewal x402 challenge for an existing agreement owned by a wallet.
+   * Stacks on the remaining period when still entitled; otherwise starts a new
+   * period from now. Used by the Chronicle Pass renew flow (wallet-authorized).
+   */
+  async renewForWallet(params: {
+    wallet: string;
+    referralAddress?: string | undefined;
+  }): Promise<NewsletterChallengeResult> {
+    const payerWallet = normalizeWalletAddress(params.wallet);
+    if (!payerWallet) {
+      throw badRequest("wallet must be a valid 0x EVM address");
+    }
+    const found = await this.newsletterRepo.findByPayerWallet(payerWallet);
+    if (!found.ok) {
+      throw badRequest(found.error.message);
+    }
+    const subscription = found.value;
+    if (!subscription) {
+      throw badRequest("No Chronicle Pass subscription found for this wallet");
+    }
+    if (subscription.status === "pending") {
+      throw badRequest(
+        "Subscription is awaiting its first payment — settle the pending challenge first",
+      );
+    }
+
+    const product = await this.ensureNewsletterProduct();
+    return this.issueChallenge({
+      subscription,
+      product,
+      periodKind: "renewal",
+      payerReference: payerWallet,
+      referralAddress: subscription.referral_address ?? params.referralAddress ?? null,
+    });
+  }
+
+  /**
    * Settle an x402 newsletter challenge and advance the billing period.
    */
   async settle(params: {

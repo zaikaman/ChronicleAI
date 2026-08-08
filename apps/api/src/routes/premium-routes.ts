@@ -9,14 +9,33 @@ import type {
   PremiumIntelligenceRepository,
   SponsoredWatchRepository,
 } from "@chronicleai/db";
+import { isChroniclePassCoveredContentType } from "@chronicleai/schemas";
 import { Router, type Router as RouterType } from "express";
 import { fromDbPage, parsePaginationQuery } from "../lib/pagination.ts";
+import {
+  getChroniclePassAuthService,
+  getChroniclePassService,
+} from "../services/chronicle-pass-bridge.ts";
 import {
   type PremiumAccessReceiptService,
   extractAccessReceiptFromRequest,
 } from "../services/premium-access-receipt-service.ts";
 import { PaymentRequiredError, PremiumAccessService } from "../services/premium-access-service.ts";
 import { PremiumContentVisibilityService } from "../services/premium-content-visibility-service.ts";
+
+async function resolvePassEntitlement(req: { headers: Record<string, unknown> }): Promise<{
+  entitled: boolean;
+  passStatus: string;
+}> {
+  const authService = getChroniclePassAuthService();
+  const passService = getChroniclePassService();
+  if (!authService || !passService) return { entitled: false, passStatus: "none" };
+  const cookieHeader = typeof req.headers.cookie === "string" ? req.headers.cookie : undefined;
+  const session = await authService.resolveSession(cookieHeader);
+  if (!session) return { entitled: false, passStatus: "none" };
+  const entitlement = await passService.resolveEntitlement(session.wallet);
+  return { entitled: entitlement.entitled, passStatus: entitlement.passStatus };
+}
 
 function queryString(value: unknown): string | undefined {
   if (typeof value === "string") return value;
@@ -45,10 +64,18 @@ function premiumChainScope(req: { query: Record<string, unknown> }):
     return { error: "scope must be mainnet or sepolia" };
   }
   const requestedChainId = chainValue === undefined ? undefined : Number(chainValue);
-  if (chainValue !== undefined && requestedChainId !== 1 && requestedChainId !== ACTIVE_INTELLIGENCE_CHAIN_ID) {
+  if (
+    chainValue !== undefined &&
+    requestedChainId !== 1 &&
+    requestedChainId !== ACTIVE_INTELLIGENCE_CHAIN_ID
+  ) {
     return { error: `Unsupported premium source chain: ${chainValue}` };
   }
-  if (scopeChainId !== undefined && requestedChainId !== undefined && scopeChainId !== requestedChainId) {
+  if (
+    scopeChainId !== undefined &&
+    requestedChainId !== undefined &&
+    scopeChainId !== requestedChainId
+  ) {
     return { error: "scope and chainId select different premium source chains" };
   }
   return { chainId: requestedChainId ?? scopeChainId ?? PRIMARY_SIGNAL_CHAIN_ID };
@@ -261,10 +288,15 @@ export function createPremiumRoutes(params: {
         return;
       }
 
+      const passEntitlement = await resolvePassEntitlement(req);
+
       const result = await params.premiumRepo.listTeasersPage({
         page: parsed.page,
         limit: parsed.limit,
         chainId: selectedScope.chainId,
+        // Chronicle Pass holders see archived editorial items; everyone else
+        // only ever receives safe public teaser metadata.
+        includeArchived: passEntitlement.entitled === true,
       });
 
       if (!result.ok) {
@@ -273,7 +305,12 @@ export function createPremiumRoutes(params: {
       }
 
       const page = result.value;
-      const items = visibilityService.toTeaserList(page.items);
+      const items = visibilityService.toTeaserList(page.items).map((item) => ({
+        ...item,
+        ...(passEntitlement.entitled && isChroniclePassCoveredContentType(item.contentType)
+          ? { includedWithPass: true as const }
+          : {}),
+      }));
 
       res.json({
         items,
@@ -287,6 +324,8 @@ export function createPremiumRoutes(params: {
         },
         // Entitlements are returned only from the authenticated settlement
         // response. A public wallet address is not an ownership proof.
+        passEntitled: passEntitlement.entitled,
+        passStatus: passEntitlement.passStatus,
         unlockedItemIds: [],
         receipts: {},
       });
@@ -358,9 +397,11 @@ export function createPremiumRoutes(params: {
 
       // Try to access the item (may throw PaymentRequiredError)
       try {
+        const passEntitlement = await resolvePassEntitlement(req);
         const accessResult = await accessService.accessPremiumItem({
           itemId: id,
           accessReceipt,
+          passEntitlement,
         });
 
         if (accessResult.allowed) {
@@ -375,14 +416,18 @@ export function createPremiumRoutes(params: {
           // Return 402 with challenge details
           const item = error.item;
           const teaser = visibilityService.toTeaser(item);
+          const coveredByPass = isChroniclePassCoveredContentType(item.content_type);
 
-          // Advertise dual-rail support so agents do not assume x402-only.
+          // Human editorial items route to the Chronicle Pass upgrade flow;
+          // machine products (and agent clients) keep the per-item challenge.
           res.status(402).json({
             error: "Payment required",
             item: teaser,
             paymentRoute: error.paymentRoute,
             supportedPaymentRoutes: item.payment_routes,
             premiumItemId: item.id,
+            passRequired: coveredByPass,
+            ...(coveredByPass ? { upgradePath: "/subscription" } : {}),
             agentPaymentsDiscovery: "/payments",
           });
           return;

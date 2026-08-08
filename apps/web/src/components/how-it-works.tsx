@@ -15,7 +15,7 @@ const steps = [
     icon: BrainCircuit,
     title: "Earn from the deeper answer",
     description:
-      "The public update is the headline. Customers can pay for deeper analysis, premium intelligence, and Watch campaigns delivered through Telegram.",
+      "The public update is the headline. Chronicle Pass ($4.99/month) unlocks every deep dive and the full archive; sponsored Watch campaigns and machine feeds are separate products.",
   },
   {
     icon: ShieldCheck,
@@ -77,8 +77,8 @@ export function HowItWorks(): ReactNode {
             How it works
           </h2>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-foreground/60">
-            From a wallet or market update to paid intelligence, a careful treasury decision, and public
-            proof.
+            From a wallet or market update to paid intelligence, a careful treasury decision, and
+            public proof.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>

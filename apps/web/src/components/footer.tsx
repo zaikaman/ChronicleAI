@@ -1,11 +1,8 @@
 import { ArrowRight, Mail } from "lucide-react";
-import { Link } from "react-router-dom";
 import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
-import {
-  DEFAULT_NEWSLETTER_PRICE_USDC,
-  useSubscribe,
-} from "../features/subscribers/use-subscribe";
+import { Link } from "react-router-dom";
+import { DEFAULT_NEWSLETTER_PRICE_USDC, useSubscribe } from "../features/subscribers/use-subscribe";
 import { shortenAddress, useWallet } from "../features/wallet";
 
 const footerLinks = {
@@ -14,6 +11,7 @@ const footerLinks = {
     { label: "Market Alerts", href: "/alerts" },
     { label: "Publications Archive", href: "/publications" },
     { label: "Chronicle Desk", href: "/desk" },
+    { label: "Chronicle Pass", href: "/subscription" },
     { label: "Premium Intelligence", href: "/premium" },
     { label: "Affiliates", href: "/affiliates" },
     { label: "Agent Activity", href: "/activity" },
@@ -68,9 +66,7 @@ export function Footer(): ReactNode {
   const isSuccess = step === "success";
   const isError = step === "error";
   const displayPrice =
-    Number.isFinite(priceAmount) && priceAmount > 0
-      ? priceAmount
-      : DEFAULT_NEWSLETTER_PRICE_USDC;
+    Number.isFinite(priceAmount) && priceAmount > 0 ? priceAmount : DEFAULT_NEWSLETTER_PRICE_USDC;
   const displayCurrency = priceCurrency || "USDC";
 
   return (
@@ -93,12 +89,18 @@ export function Footer(): ReactNode {
                 Funded by intelligence, driven by code.
               </h2>
               <p className="text-sm text-black/70 max-w-md mb-10 max-[850px]:mb-6 leading-relaxed">
-                Subscribe to ChronicleAI’s monthly intelligence brief —{" "}
+                Chronicle Pass —{" "}
                 <span className="font-semibold text-black">
                   {displayPrice} {displayCurrency}/month
                 </span>{" "}
-                via x402 on {wallet.targetChain.name}. Connect your wallet, authorize USDC, and
-                unlock paid delivery.
+                unlocks every deep dive and the full archive. Connect your wallet, authorize USDC on{" "}
+                {wallet.targetChain.name}, and renew on your terms.{" "}
+                <Link
+                  to="/subscription"
+                  className="font-semibold text-black underline underline-offset-2"
+                >
+                  Manage subscription
+                </Link>
               </p>
 
               <form
@@ -203,10 +205,9 @@ export function Footer(): ReactNode {
               </form>
 
               {message ? (
-                <p
-                  role="status"
+                <output
                   data-testid="newsletter-subscribe-status"
-                  className={`mt-4 text-sm max-w-md ${
+                  className={`block mt-4 text-sm max-w-md ${
                     isSuccess
                       ? "text-neutral-900/80"
                       : isError
@@ -215,7 +216,7 @@ export function Footer(): ReactNode {
                   }`}
                 >
                   {message}
-                </p>
+                </output>
               ) : null}
             </div>
           </div>
@@ -296,8 +297,8 @@ export function Footer(): ReactNode {
 
           <div className="mt-16 pt-6">
             <p className="text-sm text-neutral-900/50 text-center">
-              © {new Date().getFullYear()} ChronicleAI. Autonomous newspaper + market desk powered by
-              KeeperHub.
+              © {new Date().getFullYear()} ChronicleAI. Autonomous newspaper + market desk powered
+              by KeeperHub.
             </p>
           </div>
         </div>

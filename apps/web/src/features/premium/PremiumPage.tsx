@@ -1,15 +1,17 @@
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { Page, PageHeader, PageSection } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { SubscriptionAnalyticsPanel } from "../activity/SubscriptionAnalyticsPanel.tsx";
 import { useAgentActivity } from "../activity/use-agent-activity.ts";
+import { CHRONICLE_PASS_PRICE_USDC } from "../subscription/use-subscription.ts";
 import { useWallet } from "../wallet";
 import { AgentPaymentsPanel } from "./AgentPaymentsPanel.tsx";
 import { PaymentRequiredModal } from "./PaymentRequiredModal.tsx";
 import { PremiumContentView } from "./PremiumContentView.tsx";
-import { PremiumTeaserCard } from "./PremiumTeaserCard.tsx";
+import { PremiumTeaserCard, isPassCoveredContentType } from "./PremiumTeaserCard.tsx";
 import {
   loadPremiumAccessReceipt,
   storePremiumAccessReceipt,
@@ -28,6 +30,7 @@ export function PremiumPage(): ReactElement {
     isLoading,
     error,
     refetch,
+    passEntitled,
   } = usePremiumTeasers(wallet.address ?? undefined, 12);
   const {
     isLoading: isAccessLoading,
@@ -55,12 +58,19 @@ export function PremiumPage(): ReactElement {
     void receiptVersion;
     const ids = new Set<string>(unlockedItemIds);
     for (const item of items) {
+      // Active Chronicle Pass unlocks every covered editorial item.
+      if (
+        passEntitled &&
+        isPassCoveredContentType((item as { contentType?: string }).contentType)
+      ) {
+        ids.add(item.id);
+      }
       if (loadPremiumAccessReceipt(item.id)) {
         ids.add(item.id);
       }
     }
     return ids;
-  }, [items, unlockedItemIds, receiptVersion]);
+  }, [items, unlockedItemIds, receiptVersion, passEntitled]);
 
   // Prefer server 402 challenge amounts when present; otherwise keep teaser price.
   useEffect(() => {
@@ -184,7 +194,7 @@ export function PremiumPage(): ReactElement {
     <Page data-testid="premium-page">
       <PageHeader
         title="Premium intelligence"
-        description="Unlock deeper market analysis and historical feeds. Wallet payments are available for people; API payments are available for agents."
+        description="Deep dives, historical analysis, and the full editorial archive are included with Chronicle Pass. Sponsored watches and machine-readable feeds are priced separately."
         meta={
           !isLoading && !error ? (
             <span>
@@ -194,11 +204,55 @@ export function PremiumPage(): ReactElement {
         }
         below={
           <>
-            <StatusBadge label="Wallet checkout" variant="info" />
+            {passEntitled ? (
+              <StatusBadge label="Chronicle Pass active" variant="success" />
+            ) : (
+              <StatusBadge label="Chronicle Pass · $4.99/mo" variant="info" />
+            )}
             <StatusBadge label="Agent payments" variant="default" />
           </>
         }
       />
+
+      {/* Chronicle Pass banner / upgrade CTA */}
+      <div
+        className={`mb-8 rounded-2xl border p-5 sm:p-6 ${
+          passEntitled ? "border-emerald-500/30 bg-emerald-500/10" : "border-accent/30 bg-accent/5"
+        }`}
+        data-testid="pass-banner"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">
+              {passEntitled
+                ? "Chronicle Pass active — every deep dive and the full archive are unlocked."
+                : `Chronicle Pass — ${CHRONICLE_PASS_PRICE_USDC.toFixed(2)} USDC/month for every deep dive and the full archive.`}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+              {passEntitled
+                ? "Your pass covers human editorial intelligence. Machine feeds and sponsored watches stay separate."
+                : "One wallet-authorized subscription replaces per-report checkout for people. Connect your wallet to activate it."}
+            </p>
+          </div>
+          {!passEntitled ? (
+            <Link
+              to="/subscription"
+              className="shrink-0 inline-flex items-center justify-center rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+              data-testid="pass-upgrade-link"
+            >
+              Get Chronicle Pass
+            </Link>
+          ) : (
+            <Link
+              to="/subscription"
+              className="shrink-0 inline-flex items-center justify-center rounded-xl border border-border bg-background px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-accent/40"
+              data-testid="pass-manage-link"
+            >
+              Manage subscription
+            </Link>
+          )}
+        </div>
+      </div>
 
       {activityData?.subscriptionAnalytics ? (
         <div className="mb-8">
@@ -279,6 +333,7 @@ export function PremiumPage(): ReactElement {
                   key={item.id}
                   item={item}
                   unlocked={unlockedIds.has(item.id)}
+                  passEntitled={passEntitled}
                   isLoading={isAccessLoading && selectedItemId === item.id}
                   onAccess={handleAccessItem}
                   data-testid={`premium-card-${item.id}`}

@@ -20,6 +20,7 @@ import type { ServerEnv } from "@chronicleai/config";
 import { registerGroqKeyIndexPersister, setGroqKeyIndex } from "@chronicleai/config";
 import type {
   AffiliateRepository,
+  ChroniclePassSessionRepository,
   DailyDigestRepository,
   EmailSubscriberRepository,
   ExecutionLogRepository,
@@ -92,15 +93,21 @@ import { createPriceOracle } from "../monitoring/price-oracle-service.ts";
 import { X402PaymentAdapter } from "../payments/x402-payment-adapter.ts";
 import { createAlertPublicationService } from "../services/alert-publication-service.ts";
 import { createAlertToSignalService } from "../services/alert-to-signal-service.ts";
+import { ChroniclePassAuthService } from "../services/chronicle-pass-auth-service.ts";
+import {
+  registerChroniclePassAuthService,
+  registerChroniclePassService,
+} from "../services/chronicle-pass-bridge.ts";
+import { createChroniclePassService } from "../services/chronicle-pass-service.ts";
+import {
+  type ChronicleRegistryService,
+  createChronicleRegistryService,
+} from "../services/chronicle-registry-service.ts";
 import { createDeskTriggerAlertService } from "../services/desk-trigger-alert-service.ts";
 import { warnIfPrivateRoutingMisconfigured } from "../services/keeperhub-private-capability.ts";
 import { type LLMProviderMap, createProviderConfigs } from "../services/llm-provider-client.ts";
 import { createNewsletterSubscriptionService } from "../services/newsletter-subscription-service.ts";
 import { PaymentSettlementService } from "../services/payment-settlement-service.ts";
-import {
-  createChronicleRegistryService,
-  type ChronicleRegistryService,
-} from "../services/chronicle-registry-service.ts";
 import { createPremiumReceiptPublicationService } from "../services/premium-receipt-publication-service.ts";
 import { createPremiumReceiptPublicationWorker } from "../services/premium-receipt-publication-worker.ts";
 import {
@@ -378,10 +385,7 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
           isKillSwitchArmed: () => deskKillSwitchRef?.isArmed() ?? false,
           treasuryPrivateTransferThresholdUsdc: env.treasuryPrivateTransferThresholdUsdc,
           readDeskUsdcBalance: deskPositionService
-            ? () =>
-                deskPositionService
-                  .readTokenBalances(deskWalletAddress)
-                  .then((b) => b.usdc)
+            ? () => deskPositionService.readTokenBalances(deskWalletAddress).then((b) => b.usdc)
             : null,
         })
       : null;
@@ -697,8 +701,9 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     // reply to chats that have messaged it. Replying from the send bot would
     // 400 "chat not found" whenever the two bots differ (documented setup).
     const replyBotToken = env.telegramIngestBotToken ?? env.telegramBotToken;
-    let bindingHandler: import("../services/telegram-ingest-service.ts").TelegramBindingHandler | null =
-      null;
+    let bindingHandler:
+      | import("../services/telegram-ingest-service.ts").TelegramBindingHandler
+      | null = null;
     if (deps.telegramBindingRepo && replyBotToken) {
       const token = replyBotToken;
       bindingHandler = createTelegramBindingHandler({
@@ -803,6 +808,7 @@ import { createWeb3Client } from "../services/web3-client-service.ts";
 import { createDigestRoutes } from "./digest-routes.ts";
 import { createKeeperhubDigestRoutes } from "./keeperhub-digest-routes.ts";
 import { createSubscriberRoutes } from "./subscriber-routes.ts";
+import { createSubscriptionRoutes } from "./subscription-routes.ts";
 
 export interface US2Dependencies {
   eventRepo: MonitoredEventRepository;
@@ -817,6 +823,8 @@ export interface US2Dependencies {
   treasuryRepo: TreasurySnapshotRepository;
   /** Required for recurring x402 newsletter agreements + premium digest fan-out. */
   newsletterRepo: NewsletterSubscriptionRepository;
+  /** Chronicle Pass wallet-auth session store (nonces + session token hashes). */
+  passSessionRepo: ChroniclePassSessionRepository;
   premiumRepo: PremiumIntelligenceRepository;
   paymentRecordRepo: PaymentRecordRepository;
   /** Validates referralAddress on newsletter subscribe against approved partners. */
@@ -981,6 +989,42 @@ export function setupUS2Routes(_app: Express, env: ServerEnv, deps: US2Dependenc
 
   // Latest digest (no auth required)
   apiRouter.use(createDigestRoutes(deps.digestRepo));
+
+  // Chronicle Pass: wallet auth + self-service subscription management
+  const passAuthService = new ChroniclePassAuthService({
+    sessionRepo: deps.passSessionRepo,
+    config: { chainId: env.x402ChainId },
+  });
+  const passService = createChroniclePassService({
+    newsletterService,
+    newsletterRepo: deps.newsletterRepo,
+    paymentRecordRepo: deps.paymentRecordRepo,
+    subscriberRepo: deps.subscriberRepo,
+    premiumRepo: deps.premiumRepo,
+    monthlyPriceUsdc: env.newsletterMonthlyPriceUsdc,
+  });
+  registerChroniclePassAuthService(passAuthService);
+  registerChroniclePassService(passService);
+
+  apiRouter.use(
+    createSubscriptionRoutes({
+      authService: passAuthService,
+      passService,
+      secureCookies: env.nodeEnv === "production",
+    }),
+  );
+
+  // Best-effort expiry sweep for stale challenges/sessions.
+  const PASS_SESSION_SWEEP_MS = 5 * 60_000;
+  const runPassSessionSweep = () => {
+    void passAuthService.expireSweep().then((expired) => {
+      if (expired > 0) {
+        console.info(`Chronicle Pass session sweep: expired ${expired} challenge(s)/session(s)`);
+      }
+    });
+  };
+  runPassSessionSweep();
+  setInterval(runPassSessionSweep, PASS_SESSION_SWEEP_MS).unref?.();
 
   // Free email opt-in + recurring x402 newsletter subscribe / settle
   apiRouter.use(createSubscriberRoutes(deps.subscriberRepo, newsletterService));

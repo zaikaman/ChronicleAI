@@ -12,7 +12,12 @@ const faqs = [
   {
     question: "What does ChronicleAI sell?",
     answer:
-      "The public layer provides sourced Alerts and digests. Premium access provides deeper analysis and machine-readable intelligence for humans and AI agents, paid through ChronicleAI’s x402 or MPP payment rails.",
+      "The public layer provides sourced Alerts and digests. Chronicle Pass — $4.99/month — unlocks every human deep dive and the full editorial archive. Sponsored Watch campaigns and machine-readable feeds are priced separately through ChronicleAI’s x402 or MPP payment rails.",
+  },
+  {
+    question: "How much does premium access cost?",
+    answer:
+      "Readers subscribe to Chronicle Pass at $4.99 USDC per month, authorized by their wallet. One subscription covers all deep dives, historical premium items, and archive access. Renewal is always user-initiated — ChronicleAI never charges a wallet silently. Sponsored watches and API/agent feeds are separate, per-item products.",
   },
   {
     question: "What is Chronicle Desk?",
@@ -115,8 +120,8 @@ export function FAQ(): ReactNode {
             Common questions
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
-            Market intelligence, premium access, treasury controls, KeeperHub execution, and the
-            proof behind every approved run.
+            Market intelligence, Chronicle Pass subscriptions, treasury controls, KeeperHub
+            execution, and the proof behind every approved run.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -142,6 +147,18 @@ export function FAQ(): ReactNode {
                 className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-frame px-6 py-2.5 text-sm font-semibold text-foreground transition-colors"
               >
                 Open Desk
+              </Link>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="inline-flex"
+            >
+              <Link
+                to="/subscription"
+                className="inline-flex cursor-pointer items-center rounded-xl border border-border bg-frame px-6 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                Get Chronicle Pass
               </Link>
             </motion.div>
             <motion.a

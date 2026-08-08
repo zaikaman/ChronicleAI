@@ -4,6 +4,7 @@ import type {
   AlertDeliveryStatus,
   AlertKind,
   AlertSignalStatus,
+  ChroniclePassStatus,
   Confidence,
   DeskPolicyVerdict,
   DeskSignalType,
@@ -691,6 +692,86 @@ export interface NewsletterSettlementResponse {
     payerReference?: string;
   };
 }
+
+// ── Chronicle Pass (user-facing monthly subscription) ──
+/** Server-issued signed-message challenge for wallet-authenticated Pass management. */
+export interface SubscriptionAuthChallengeResponse {
+  nonce: string;
+  /** Exact message the wallet must sign (embeds wallet, nonce, issue/expiry, chain). */
+  message: string;
+  issuedAt: string;
+  expiresAt: string;
+  chainId: number;
+  /** Seconds until the challenge expires. */
+  ttlSeconds: number;
+}
+
+export interface SubscriptionAuthVerifyRequest {
+  wallet: string;
+  nonce: string;
+  message: string;
+  signature: string;
+  /** Chain context from the challenge; defaults to server x402 chain when omitted. */
+  chainId?: number;
+}
+
+/** Current wallet-authenticated session state (cookie-scoped). */
+export interface SubscriptionSessionResponse {
+  authenticated: boolean;
+  wallet: string | null;
+  expiresAt: string | null;
+}
+
+/** Delivery / notification preferences for a Chronicle Pass holder. */
+export interface ChroniclePassPreferences {
+  email: string;
+  receivesDigests: boolean;
+  receivesAlerts: boolean;
+}
+
+/** Full self-service status for a wallet-authenticated Chronicle Pass. */
+export interface ChroniclePassStatusResponse extends ChroniclePassPreferences {
+  /** Canonical subscription id when a stored agreement exists, else null. */
+  subscriptionId: string | null;
+  passStatus: ChroniclePassStatus;
+  /** True when the pass currently unlocks content (period window + grace). */
+  entitled: boolean;
+  amountPerPeriod: number;
+  currency: string;
+  billingPeriodDays: number;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  nextRenewalAt: string | null;
+  periodsPaid: number;
+  payerWallet: string | null;
+  cancelAtPeriodEnd: boolean;
+  cancelledAt: string | null;
+  lastSettledAt: string | null;
+}
+
+export interface ChroniclePassUpdateRequest {
+  email?: string;
+  receivesDigests?: boolean;
+  receivesAlerts?: boolean;
+}
+
+/** Bounded, ordered payment history entry for the authenticated wallet. */
+export interface ChroniclePassPaymentHistoryItem {
+  id: string;
+  status: PaymentStatus;
+  paymentRoute: PaymentRoute;
+  amountRequested: number | null;
+  amountSettled: number | null;
+  currency: string | null;
+  requestedAt: string | null;
+  settledAt: string | null;
+  settlementReference: string | null;
+  registryTxHash: string | null;
+  explorerUrl: string | null;
+}
+
+/** Wallet-authorized renewal challenge (x402) — identical to newsletter renew shape. */
+export type ChroniclePassRenewResponse = NewsletterChallengeResponse;
 
 // ── Response Wrappers ───────────────────────────────────
 export interface ItemsResponse<T> {

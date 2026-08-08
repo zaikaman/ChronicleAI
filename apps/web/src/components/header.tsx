@@ -11,7 +11,11 @@ const navLinks = [
   { label: "Activity", href: "/activity", description: "Public proof trail" },
   { label: "Digest", href: "/digests/latest", description: "Latest market intelligence brief" },
   { label: "Archive", href: "/publications", description: "Past publications and proof records" },
-  { label: "Premium", href: "/premium", description: "Deeper intelligence for humans and agents" },
+  {
+    label: "Premium",
+    href: "/premium",
+    description: "Deep dives & archive — included with Chronicle Pass",
+  },
 ];
 
 const ease = [0.23, 1, 0.32, 1] as const;
@@ -114,6 +118,13 @@ export function Header(): ReactNode {
         </nav>
 
         <div className="flex items-center gap-3 max-[850px]:hidden">
+          <Link
+            to="/subscription"
+            data-testid="header-pass-link"
+            className="px-2.5 py-2 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors rounded-full hover:bg-foreground/5"
+          >
+            Pass
+          </Link>
           <ConnectWalletButton data-testid="header-connect-wallet" />
           <Link to="/alerts" className="group relative inline-flex items-center">
             <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-xl bg-accent" />
@@ -177,6 +188,13 @@ export function Header(): ReactNode {
               <div className="flex flex-col gap-4 pt-8 pb-2">
                 <ConnectWalletButton data-testid="mobile-connect-wallet" />
                 <div className="flex items-center justify-between">
+                  <Link
+                    to="/subscription"
+                    className="text-base font-medium text-foreground"
+                    onClick={closeMobile}
+                  >
+                    Manage subscription
+                  </Link>
                   <Link
                     to="/premium"
                     className="text-base font-medium text-foreground"

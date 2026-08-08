@@ -48,6 +48,8 @@ export interface PremiumTeasersState {
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
+  /** True when the session wallet holds an active Chronicle Pass. */
+  passEntitled: boolean;
 }
 
 export interface PremiumItemAccessResult {
@@ -65,16 +67,16 @@ export interface PremiumItemAccessResult {
     paymentRoute: string;
     amountRequested: number;
     currency: string;
+    /** True when this item is covered by Chronicle Pass (upgrade CTA, no per-item checkout). */
+    passRequired?: boolean;
+    upgradePath?: string;
   } | null;
 }
 
 /**
  * Hook to fetch premium item teasers (page-based).
  */
-export function usePremiumTeasers(
-  payerAddress?: string,
-  limit = 20,
-): PremiumTeasersState {
+export function usePremiumTeasers(payerAddress?: string, limit = 20): PremiumTeasersState {
   const [page, setPage] = useState(1);
 
   const query = useQuery({
@@ -85,6 +87,7 @@ export function usePremiumTeasers(
         pagination?: unknown;
         unlockedItemIds?: string[];
         receipts?: Record<string, string>;
+        passEntitled?: boolean;
       }>("/premium/items", {
         signal,
         params: {
@@ -111,6 +114,7 @@ export function usePremiumTeasers(
           limit,
           itemCount: items.length,
         }),
+        passEntitled: data.passEntitled === true,
       };
     },
     placeholderData: (previous) => previous,
@@ -132,6 +136,7 @@ export function usePremiumTeasers(
     refetch: () => {
       void query.refetch();
     },
+    passEntitled: query.data?.passEntitled ?? false,
   };
 }
 
@@ -160,105 +165,107 @@ export function usePremiumItemAccess(): PremiumItemAccessResult {
     };
   }, []);
 
-  const accessItem = useCallback(async (itemId: string, accessReceipt?: string, payerReference?: string) => {
-    accessControllerRef.current?.abort();
-    const controller = new AbortController();
-    accessControllerRef.current = controller;
-    setIsLoading(true);
-    setError(null);
-    setData(null);
-    setIsPaymentRequired(false);
-    setPaymentChallenge(null);
+  const accessItem = useCallback(
+    async (itemId: string, accessReceipt?: string, payerReference?: string) => {
+      accessControllerRef.current?.abort();
+      const controller = new AbortController();
+      accessControllerRef.current = controller;
+      setIsLoading(true);
+      setError(null);
+      setData(null);
+      setIsPaymentRequired(false);
+      setPaymentChallenge(null);
 
-    try {
-      const receipt = accessReceipt?.trim() || loadPremiumAccessReceipt(itemId) || undefined;
+      try {
+        const receipt = accessReceipt?.trim() || loadPremiumAccessReceipt(itemId) || undefined;
 
-      const headers: Record<string, string> = {};
-      if (receipt) {
-        headers.Authorization = `Bearer ${receipt}`;
-        headers["X-Premium-Access-Receipt"] = receipt;
-      }
-      if (payerReference) {
-        headers["X-Payer-Reference"] = payerReference;
-      }
-
-      const url = payerReference
-        ? `${API_BASE}/premium/items/${itemId}?payer=${encodeURIComponent(payerReference)}`
-        : `${API_BASE}/premium/items/${itemId}`;
-
-      const response = await fetchWithTimeout(url, {
-        headers,
-        credentials: "include",
-        signal: controller.signal,
-      });
-
-      if (response.status === 200) {
-        const autoReceipt = response.headers.get("X-Premium-Access-Receipt");
-        if (autoReceipt) {
-          storePremiumAccessReceipt(itemId, autoReceipt);
-        }
-        const itemData = (await response.json()) as Record<string, unknown>;
-        setData(itemData);
-        return;
-      }
-
-      if (response.status === 402) {
+        const headers: Record<string, string> = {};
         if (receipt) {
-          clearPremiumAccessReceipt(itemId);
+          headers.Authorization = `Bearer ${receipt}`;
+          headers["X-Premium-Access-Receipt"] = receipt;
         }
-        const body = (await response.json()) as {
-          premiumItemId?: string;
-          paymentRoute?: string;
-          amountRequested?: number;
-          currency?: string;
-          item?: {
-            priceAmount?: number;
-            priceCurrency?: string;
-            price_amount?: number;
-            price_currency?: string;
-          };
-        };
+        if (payerReference) {
+          headers["X-Payer-Reference"] = payerReference;
+        }
 
-        const rawAmount =
-          body.item?.priceAmount ??
-          body.amountRequested ??
-          body.item?.price_amount ??
-          0;
-        const amountRequested =
-          typeof rawAmount === "number" && Number.isFinite(rawAmount)
-            ? rawAmount
-            : Number(rawAmount) || 0;
+        const url = payerReference
+          ? `${API_BASE}/premium/items/${itemId}?payer=${encodeURIComponent(payerReference)}`
+          : `${API_BASE}/premium/items/${itemId}`;
 
-        setIsPaymentRequired(true);
-        setPaymentChallenge({
-          premiumItemId: body.premiumItemId ?? itemId,
-          paymentRoute: body.paymentRoute ?? "x402",
-          amountRequested,
-          currency:
-            body.item?.priceCurrency ??
-            body.currency ??
-            body.item?.price_currency ??
-            "USDC",
+        const response = await fetchWithTimeout(url, {
+          headers,
+          credentials: "include",
+          signal: controller.signal,
         });
-        return;
-      }
 
-      if (response.status === 404) {
-        setError("Premium item not found");
-        return;
-      }
+        if (response.status === 200) {
+          const autoReceipt = response.headers.get("X-Premium-Access-Receipt");
+          if (autoReceipt) {
+            storePremiumAccessReceipt(itemId, autoReceipt);
+          }
+          const itemData = (await response.json()) as Record<string, unknown>;
+          setData(itemData);
+          return;
+        }
 
-      throw new Error(`Unexpected response: ${response.statusText}`);
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : "Failed to access premium item");
-    } finally {
-      if (accessControllerRef.current === controller) {
-        accessControllerRef.current = null;
-        setIsLoading(false);
+        if (response.status === 402) {
+          if (receipt) {
+            clearPremiumAccessReceipt(itemId);
+          }
+          const body = (await response.json()) as {
+            premiumItemId?: string;
+            paymentRoute?: string;
+            amountRequested?: number;
+            currency?: string;
+            passRequired?: boolean;
+            upgradePath?: string;
+            item?: {
+              priceAmount?: number;
+              priceCurrency?: string;
+              price_amount?: number;
+              price_currency?: string;
+            };
+          };
+
+          const rawAmount =
+            body.item?.priceAmount ?? body.amountRequested ?? body.item?.price_amount ?? 0;
+          const amountRequested =
+            typeof rawAmount === "number" && Number.isFinite(rawAmount)
+              ? rawAmount
+              : Number(rawAmount) || 0;
+
+          setIsPaymentRequired(true);
+          setPaymentChallenge({
+            premiumItemId: body.premiumItemId ?? itemId,
+            paymentRoute: body.paymentRoute ?? "x402",
+            amountRequested,
+            currency:
+              body.item?.priceCurrency ?? body.currency ?? body.item?.price_currency ?? "USDC",
+            ...(body.passRequired
+              ? { passRequired: true, upgradePath: body.upgradePath ?? "/subscription" }
+              : {}),
+          });
+          return;
+        }
+
+        if (response.status === 404) {
+          setError("Premium item not found");
+          return;
+        }
+
+        throw new Error(`Unexpected response: ${response.statusText}`);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : "Failed to access premium item");
+      } finally {
+        if (accessControllerRef.current === controller) {
+          accessControllerRef.current = null;
+          setIsLoading(false);
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   return {
     isLoading,
@@ -362,9 +369,7 @@ export function useSponsoredWatches(limit = 20): SponsoredWatchesState {
     page,
     setPage: handleSetPage,
     isLoading: query.isLoading || (query.isFetching && !query.data),
-    error: query.error
-      ? toErrorMessage(query.error, "Failed to load sponsored watches")
-      : null,
+    error: query.error ? toErrorMessage(query.error, "Failed to load sponsored watches") : null,
     refetch: () => {
       void query.refetch();
     },

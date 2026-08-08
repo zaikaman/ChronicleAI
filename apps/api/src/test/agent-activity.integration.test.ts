@@ -174,6 +174,7 @@ describe("Agent Activity Integration", () => {
       list: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
       listPage: vi.fn(),
       listSettledWithReferral: vi.fn().mockResolvedValue({ ok: true as const, value: [] }),
+      listByPayer: vi.fn(),
       findSettledByPayer: vi.fn(),
     };
 

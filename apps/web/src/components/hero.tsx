@@ -22,7 +22,11 @@ const fadeInScale = {
 };
 
 const logos: LogoItem[] = [
-  { node: <span className="text-[1em] font-semibold tracking-tight">Wallet &amp; contract watch</span> },
+  {
+    node: (
+      <span className="text-[1em] font-semibold tracking-tight">Wallet &amp; contract watch</span>
+    ),
+  },
   { node: <span className="text-[1em] font-semibold tracking-tight">Premium intelligence</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">Treasury desk</span> },
   { node: <span className="text-[1em] font-semibold tracking-tight">KeeperHub execution</span> },
@@ -280,7 +284,8 @@ export function Hero(): ReactNode {
               ChronicleAI
             </motion.span>
             <motion.span className="block" variants={fadeInUp} transition={{ duration: 0.8, ease }}>
-              Watch what matters. Earn from insight. <span className="font-serif italic text-accent">Prove the action.</span>
+              Watch what matters. Earn from insight.{" "}
+              <span className="font-serif italic text-accent">Prove the action.</span>
             </motion.span>
           </h1>
 
@@ -289,9 +294,11 @@ export function Hero(): ReactNode {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease }}
           >
-            ChronicleAI watches wallets, contracts, and market activity. Customers pay for deeper
-            intelligence and Watch campaigns delivered through Telegram. Revenue can support a careful
-            treasury desk; when it acts, KeeperHub executes the transaction and ChronicleAI shows the proof.
+            ChronicleAI watches wallets, contracts, and market activity. A Chronicle Pass —
+            $4.99/month — unlocks every deep dive and the full editorial archive for readers;
+            sponsored Watch campaigns and machine feeds are priced separately. Recurring
+            subscription revenue can support a careful treasury desk; when it acts, KeeperHub
+            executes the transaction and ChronicleAI shows the proof.
           </motion.p>
 
           <motion.div
@@ -317,6 +324,13 @@ export function Hero(): ReactNode {
               className="inline-flex items-center justify-center rounded-xl border border-black/15 bg-white/80 px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-white max-[850px]:w-full"
             >
               Read live intelligence
+            </Link>
+            <Link
+              to="/subscription"
+              data-testid="hero-pass-cta"
+              className="inline-flex items-center justify-center text-sm font-semibold text-black underline underline-offset-4 transition-opacity hover:opacity-70 max-[850px]:w-full"
+            >
+              Get Chronicle Pass · $4.99/mo
             </Link>
           </motion.div>
         </motion.div>

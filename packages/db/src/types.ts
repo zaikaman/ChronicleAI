@@ -647,6 +647,51 @@ export interface NewsletterSubscriptionInsert {
 
 export type NewsletterSubscriptionUpdate = Partial<NewsletterSubscriptionInsert>;
 
+// ── Chronicle Pass wallet sessions ───────────────────────
+export type ChroniclePassSessionStatus = "challenge_issued" | "active" | "expired" | "revoked";
+
+export interface ChroniclePassSessionRow {
+  id: string;
+  wallet_address: string;
+  nonce: string;
+  chain_id: number;
+  status: ChroniclePassSessionStatus;
+  /** Full challenge message the wallet signed. */
+  message: string;
+  issued_at: string;
+  expires_at: string;
+  /** SHA-256 hex of the bearer session token (never the raw token). */
+  session_token_hash: string | null;
+  session_expires_at: string | null;
+  user_agent: string | null;
+  ip_address: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChroniclePassSessionInsert {
+  wallet_address: string;
+  nonce: string;
+  chain_id: number;
+  status?: ChroniclePassSessionStatus;
+  message: string;
+  issued_at: string;
+  expires_at: string;
+  session_token_hash?: string | null;
+  session_expires_at?: string | null;
+  user_agent?: string | null;
+  ip_address?: string | null;
+  last_seen_at?: string | null;
+}
+
+export type ChroniclePassSessionUpdate = Partial<
+  Pick<
+    ChroniclePassSessionInsert,
+    "status" | "session_token_hash" | "session_expires_at" | "last_seen_at"
+  >
+>;
+
 // ── Referral Affiliates ─────────────────────────────────
 export interface AffiliateRow {
   id: string;

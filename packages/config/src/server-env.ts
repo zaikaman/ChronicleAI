@@ -15,6 +15,7 @@ import {
   CCTP_REBALANCE_MAX_CHUNK_USDC,
   CCTP_REBALANCE_SCHEDULE_INTERVAL_MS,
   CCTP_REBALANCE_THRESHOLD_USDC,
+  CHRONICLE_PASS_PRICE_USDC_DEFAULT,
   DESK_AGENT_FORCE_DEFEND_ON_CRITICAL_HF,
   DESK_AGENT_MAX_SIGNALS,
   DESK_AGENT_MIN_CONFIDENCE,
@@ -24,7 +25,6 @@ import {
   DESK_APY_CONSECUTIVE_POLLS,
   DESK_APY_DELTA_BPS,
   DESK_BASIS_BPS,
-  DESK_TRUST_TESTNET_SIGNALS,
   DESK_EVENT_MICROTRADE_COOLDOWN_MS,
   DESK_EVENT_MICROTRADE_ENABLED,
   DESK_EVENT_MICROTRADE_LOOKBACK_MS,
@@ -53,6 +53,7 @@ import {
   DESK_TARGET_AUM_USDC,
   DESK_TOPUP_CHUNK_USDC,
   DESK_TOPUP_COOLDOWN_MS,
+  DESK_TRUST_TESTNET_SIGNALS,
   DESK_USE_PRIVATE_MEMPOOL,
   DIGEST_SCHEDULE_CHECK_INTERVAL_MS,
   PREMIUM_DESK_FEED_PRICE_USDC,
@@ -547,8 +548,9 @@ export interface ServerEnv {
   smtpPass: string | undefined;
   smtpFromAddress: string | undefined;
   /**
-   * Monthly x402 newsletter price in USDC (human units, e.g. 2 = 2 USDC).
-   * Default 2 USDC / billing period.
+   * Monthly Chronicle Pass price in USDC (human units, e.g. 4.99 = 4.99 USDC).
+   * Canonical env: CHRONICLE_PASS_PRICE_USDC. Legacy alias NEWSLETTER_MONTHLY_PRICE_USDC
+   * still applies when CHRONICLE_PASS_PRICE_USDC is unset. Default 4.99 USDC / period.
    */
   newsletterMonthlyPriceUsdc: number;
   /** Billing period length in days for recurring newsletter agreements. Default 30. */
@@ -1068,10 +1070,8 @@ export function loadServerEnv(): ServerEnv {
   const deskApyAbsurdBps = parsePositiveIntEnv("DESK_APY_ABSURD_BPS", DESK_APY_ABSURD_BPS);
   const deskTrustTestnetSignals =
     (
-      optionalEnv(
-        "DESK_TRUST_TESTNET_SIGNALS",
-        DESK_TRUST_TESTNET_SIGNALS ? "true" : "false",
-      ) ?? (DESK_TRUST_TESTNET_SIGNALS ? "true" : "false")
+      optionalEnv("DESK_TRUST_TESTNET_SIGNALS", DESK_TRUST_TESTNET_SIGNALS ? "true" : "false") ??
+      (DESK_TRUST_TESTNET_SIGNALS ? "true" : "false")
     ).toLowerCase() === "true";
   const deskRebalanceIntervalMs = parsePositiveIntEnv(
     "DESK_REBALANCE_INTERVAL_MS",
@@ -1454,7 +1454,10 @@ export function loadServerEnv(): ServerEnv {
     smtpUser: optionalEnv("SMTP_USER"),
     smtpPass: optionalEnv("SMTP_PASS"),
     smtpFromAddress: optionalEnv("SMTP_FROM_ADDRESS"),
-    newsletterMonthlyPriceUsdc: parsePositiveNumberEnv("NEWSLETTER_MONTHLY_PRICE_USDC", 2),
+    newsletterMonthlyPriceUsdc: parsePositiveNumberEnv(
+      "CHRONICLE_PASS_PRICE_USDC",
+      parsePositiveNumberEnv("NEWSLETTER_MONTHLY_PRICE_USDC", CHRONICLE_PASS_PRICE_USDC_DEFAULT),
+    ),
     newsletterBillingPeriodDays: parsePositiveIntEnv("NEWSLETTER_BILLING_PERIOD_DAYS", 30),
     newsletterGracePeriodDays: parseNonNegativeIntEnv("NEWSLETTER_GRACE_PERIOD_DAYS", 3),
     telegramIngestBotToken,
