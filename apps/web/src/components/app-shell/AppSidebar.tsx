@@ -64,9 +64,7 @@ export function AppSidebar({ open, onNavigate }: AppSidebarProps): ReactNode {
         {/* Mobile drawer header with close */}
         <div className="md:hidden flex items-center justify-between gap-2 px-3 py-3 border-b border-border">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background shrink-0">
-              CAI
-            </div>
+            <img src="/logo.png" alt="ChronicleAI Logo" className="h-7 w-7 object-contain shrink-0" />
             <span id="app-sidebar-title" className="text-sm font-semibold text-foreground">
               Sections
             </span>

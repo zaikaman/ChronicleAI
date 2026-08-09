@@ -51,9 +51,7 @@ export function AppNav({
         <div className="hidden sm:block h-4 w-px bg-border shrink-0" aria-hidden="true" />
 
         <Link to="/" className="flex items-center gap-2 min-w-0">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background shrink-0">
-            CAI
-          </div>
+          <img src="/logo.png" alt="ChronicleAI Logo" className="h-7 w-7 object-contain shrink-0" />
           <span className="text-base font-semibold text-foreground truncate">ChronicleAI</span>
         </Link>
 

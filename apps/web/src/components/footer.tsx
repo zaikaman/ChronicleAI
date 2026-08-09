@@ -223,9 +223,11 @@ export function Footer(): ReactNode {
 
           <div className="flex items-start justify-between gap-12 max-[850px]:flex-col max-[850px]:gap-10">
             <Link to="/" className="flex items-center gap-2" aria-label="ChronicleAI home">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-[11px] font-bold text-accent">
-                CAI
-              </div>
+              <img
+                src="/logo.png"
+                alt="ChronicleAI Logo"
+                className="h-8 w-8 object-contain"
+              />
               <span className="text-xl font-semibold text-neutral-900 leading-none">
                 ChronicleAI
               </span>

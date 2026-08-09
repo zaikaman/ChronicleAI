@@ -132,9 +132,11 @@ export function Header(): ReactNode {
           className="flex items-center gap-2.5 ml-2 max-[850px]:ml-0 group"
           onClick={closeMobile}
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground text-[11px] font-bold text-background shadow-md group-hover:scale-105 transition-transform duration-200">
-            CAI
-          </div>
+          <img
+            src="/logo.png"
+            alt="ChronicleAI Logo"
+            className="h-9 w-9 object-contain group-hover:scale-105 transition-transform duration-200"
+          />
           <span className="text-lg font-semibold text-foreground leading-none tracking-tight">
             ChronicleAI
           </span>
