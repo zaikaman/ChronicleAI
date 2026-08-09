@@ -5,7 +5,7 @@
 > ChronicleAI is an AI research desk that monitors important onchain activity, sells a **Chronicle Pass** subscription for deeper intelligence, uses that predictable revenue for carefully controlled treasury actions, and publishes public proof of what happened.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
-[![Tests](https://img.shields.io/badge/Tests-1240%20passing-brightgreen?style=for-the-badge)](https://github.com/zaikaman/ChronicleAI#verification)
+[![Tests](https://img.shields.io/badge/Tests-1241%20passing-brightgreen?style=for-the-badge)](https://github.com/zaikaman/ChronicleAI#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
@@ -51,7 +51,7 @@ Chronicle Pass subscriptions, per-item machine feeds, Watch campaigns, sponsored
 **ChronicleAI watches something important, helps people understand it, sells a $4.99/month Chronicle Pass for the deeper answer, routes subscription revenue through safety rules into a treasury desk, executes through KeeperHub, and shows the proof.**
 
 > [!IMPORTANT]
-> **Battle-Tested Execution at Scale:** Rather than a static demo or one-off mock, ChronicleAI is a battle-tested autonomous desk that has executed over **6,000+ real transactions through KeeperHub** — spanning automated market alerts, yield rebalances, registry proof publications, trade tickets, and sponsored intelligence updates. View the complete, paginated live execution audit stream at [chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100).
+> **Battle-Tested Execution at Scale:** Rather than a static demo or one-off mock, ChronicleAI is a battle-tested autonomous desk that has executed over **2,400+ unique verified transactions through KeeperHub** — spanning automated market alerts, yield rebalances, registry proof publications, trade tickets, and sponsored intelligence updates. View the complete, paginated live execution audit stream at [chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100).
 
 | Surface | What it shows |
 | --- | --- |
@@ -60,7 +60,7 @@ Chronicle Pass subscriptions, per-item machine feeds, Watch campaigns, sponsored
 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | Treasury proposals, safety rules, and preflight status. |
 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, routing, outcomes, and audit context. |
 | [Verified transaction](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | Onchain action verified independently. |
-| [6,000+ Transaction Audit Stream](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100) | Full paginated live audit log of 6,000+ real transactions executed through KeeperHub. |
+| [2,400+ Unique Transaction Audit Stream](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100) | Full paginated live audit log of 2,400+ unique verified transactions executed through KeeperHub. |
 
 ### Source vs execution chains
 
@@ -128,7 +128,7 @@ KeeperHub owns execution; ChronicleAI owns intelligence, Alert→Signal projecti
 | Live activity & execution proof | [chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity) |
 | Live desk & audit timeline | [chronicle-ai-web.vercel.app/desk](https://chronicle-ai-web.vercel.app/desk) |
 | Live alerts & causal chains | [chronicle-ai-web.vercel.app/alerts](https://chronicle-ai-web.vercel.app/alerts) |
-| Live 6,000+ KeeperHub Tx audit stream | [chronicleai-76fcd1c06def.herokuapp.com/transactions.txt](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100) |
+| Live 2,400+ KeeperHub Tx audit stream | [chronicleai-76fcd1c06def.herokuapp.com/transactions.txt](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100) |
 | Registry contract | [`0xD8Deb4475a7E23E194Bc93f8739858Fb20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) |
 
 ## Key capabilities
@@ -282,7 +282,7 @@ Local endpoints:
 
 ## Verification
 
-1,240 passing tests across 145 test files, 33 KeeperHub workflows.
+1,241 passing tests across 145 test files, 33 KeeperHub workflows.
 
 ```bash
 pnpm type-check
