@@ -26,23 +26,25 @@ export const WORKFLOW_FILE_BY_ENV: Readonly<Record<string, string>> = {
   KEEPERHUB_WORKFLOW_PUBLISH_TRADE_TICKET:
     "chronicle-publish-trade-ticket.workflow.json",
   KEEPERHUB_WORKFLOW_RECORD_CAPITAL_MOVE:
-    "chronicle-record-capital-move.workflow.json",
-  KEEPERHUB_WORKFLOW_RECORD_CAPITAL_MOVE_PUBLIC_FALLBACK:
     "chronicle-record-capital-move-public-fallback.workflow.json",
+  KEEPERHUB_WORKFLOW_RECORD_CAPITAL_MOVE_PUBLIC_FALLBACK:
+    "chronicle-record-capital-move.workflow.json",
   KEEPERHUB_WORKFLOW_TRANSFER: "chronicle-revenue-transfer.workflow.json",
   KEEPERHUB_WORKFLOW_DESK_SWEEP: "desk-sweep.workflow.json",
-  KEEPERHUB_WORKFLOW_DESK_DEFEND: "desk-defend.workflow.json",
-  KEEPERHUB_WORKFLOW_DESK_DEFEND_PUBLIC_FALLBACK:
-    "desk-defend-public-fallback.workflow.json",
-  KEEPERHUB_WORKFLOW_DESK_ROTATE: "desk-rotate-yield.workflow.json",
-  KEEPERHUB_WORKFLOW_DESK_ROTATE_PUBLIC_FALLBACK:
+  KEEPERHUB_WORKFLOW_DESK_DEFEND: "desk-defend-public-fallback.workflow.json",
+  KEEPERHUB_WORKFLOW_DESK_DEFEND_PUBLIC_FALLBACK: "desk-defend.workflow.json",
+  KEEPERHUB_WORKFLOW_DESK_ROTATE:
     "desk-rotate-yield-public-fallback.workflow.json",
-  KEEPERHUB_WORKFLOW_DESK_ORACLE_ARB: "desk-oracle-arb.workflow.json",
-  KEEPERHUB_WORKFLOW_DESK_ORACLE_ARB_PUBLIC_FALLBACK:
+  KEEPERHUB_WORKFLOW_DESK_ROTATE_PUBLIC_FALLBACK:
+    "desk-rotate-yield.workflow.json",
+  KEEPERHUB_WORKFLOW_DESK_ORACLE_ARB:
     "desk-oracle-arb-public-fallback.workflow.json",
-  KEEPERHUB_WORKFLOW_DESK_KILL_SWITCH: "desk-kill-switch.workflow.json",
-  KEEPERHUB_WORKFLOW_DESK_KILL_SWITCH_PUBLIC_FALLBACK:
+  KEEPERHUB_WORKFLOW_DESK_ORACLE_ARB_PUBLIC_FALLBACK:
+    "desk-oracle-arb.workflow.json",
+  KEEPERHUB_WORKFLOW_DESK_KILL_SWITCH:
     "desk-kill-switch-public-fallback.workflow.json",
+  KEEPERHUB_WORKFLOW_DESK_KILL_SWITCH_PUBLIC_FALLBACK:
+    "desk-kill-switch.workflow.json",
   KEEPERHUB_WORKFLOW_AAVE_LIQUIDATION: "aave-v3-liquidation.workflow.json",
   KEEPERHUB_WORKFLOW_COW_TRADE: "cow-protocol-trade.workflow.json",
   KEEPERHUB_WORKFLOW_UNISWAP_USDC_WETH_SWAP:
