@@ -321,13 +321,21 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
         if (res.data) allItems.push(...(res.data as unknown as ExecutionLogRow[]));
       }
 
-      // Filter ONLY rows that have an explorer link
-      const validItems = allItems.filter(hasExplorerLink);
-      const total = validItems.length;
+      // Filter ONLY rows that have a valid tx hash / explorer link AND deduplicate by unique transaction hash/key
+      const uniqueMap = new Map<string, ExecutionLogRow>();
+      for (const item of allItems) {
+        const key = getTxHashKey(item);
+        if (key && !uniqueMap.has(key)) {
+          uniqueMap.set(key, item);
+        }
+      }
+
+      const validUniqueItems = Array.from(uniqueMap.values());
+      const total = validUniqueItems.length;
 
       if (pageOpt === "all") {
         return success({
-          items: validItems,
+          items: validUniqueItems,
           total,
           page: "all" as const,
           limit: total,
@@ -337,7 +345,7 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
 
       const pageNum = typeof pageOpt === "number" ? Math.max(1, pageOpt) : 1;
       const offset = (pageNum - 1) * limitOpt;
-      const pageItems = validItems.slice(offset, offset + limitOpt);
+      const pageItems = validUniqueItems.slice(offset, offset + limitOpt);
 
       return success({
         items: pageItems,

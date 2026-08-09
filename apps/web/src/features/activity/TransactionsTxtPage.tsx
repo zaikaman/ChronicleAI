@@ -9,8 +9,8 @@ import { useState } from "react";
 import { API_BASE } from "../../lib/api.ts";
 import { useExecutionLogs } from "./use-activity-lists.ts";
 
-export function hasExplorerLink(log: unknown): boolean {
-  if (!log || typeof log !== "object") return false;
+export function getTxHashKey(log: unknown): string | null {
+  if (!log || typeof log !== "object") return null;
   const l = log as Record<string, unknown>;
   const details =
     l.details && typeof l.details === "object" && !Array.isArray(l.details)
@@ -35,7 +35,9 @@ export function hasExplorerLink(log: unknown): boolean {
     getString(details.actionTransactionHash) ||
     null;
 
-  const validTxHash = txHash && /^0x[0-9a-fA-F]{10,}$/.test(txHash) ? txHash : null;
+  if (txHash && /^0x[0-9a-fA-F]{10,}$/.test(txHash)) {
+    return txHash.toLowerCase();
+  }
 
   const explorerUrl =
     getString(l.explorer_url) ||
@@ -46,13 +48,30 @@ export function hasExplorerLink(log: unknown): boolean {
     getString(details.actionExplorerUrl) ||
     getString(details.protectStatusUrl) ||
     getString(l.protectStatusUrl) ||
-    (validTxHash ? `https://sepolia.etherscan.io/tx/${validTxHash}` : null);
+    null;
 
-  return Boolean(explorerUrl && explorerUrl.startsWith("http"));
+  if (explorerUrl && explorerUrl.startsWith("http")) {
+    const txMatch = explorerUrl.match(/0x[0-9a-fA-F]{10,}/i);
+    if (txMatch) return txMatch[0].toLowerCase();
+    return explorerUrl.toLowerCase();
+  }
+
+  return null;
+}
+
+export function hasExplorerLink(log: unknown): boolean {
+  return Boolean(getTxHashKey(log));
 }
 
 export function formatTransactionsTextList(logs: any[], startNum = 1, totalCount?: number): string {
-  const validLogs = logs.filter(hasExplorerLink);
+  const uniqueMap = new Map<string, any>();
+  for (const log of logs) {
+    const key = getTxHashKey(log);
+    if (key && !uniqueMap.has(key)) {
+      uniqueMap.set(key, log);
+    }
+  }
+  const validLogs = Array.from(uniqueMap.values());
   const count = validLogs.length;
   const total = totalCount ?? count;
   const nowIso = new Date().toISOString();
