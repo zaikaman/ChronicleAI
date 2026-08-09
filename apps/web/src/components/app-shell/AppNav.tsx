@@ -1,5 +1,5 @@
 import { ConnectWalletButton } from "@/features/wallet";
-import { ArrowLeft, Menu } from "lucide-react";
+import { ArrowLeft, ExternalLink, Menu, Send } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { Link } from "react-router-dom";
 import { Badge } from "../ui/badge.tsx";
@@ -73,6 +73,18 @@ export function AppNav({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        <a
+          href="https://t.me/chronicleaialerts"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="app-nav-telegram-link"
+          title="Open Telegram Alerts Channel"
+          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/40 bg-muted/60 text-xs font-medium text-foreground hover:bg-accent/20 hover:border-accent/40 transition-colors"
+        >
+          <Send className="h-3.5 w-3.5 text-accent shrink-0" />
+          <span>Telegram Alerts</span>
+          <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+        </a>
         <ConnectWalletButton data-testid="app-nav-connect-wallet" />
       </div>
     </nav>

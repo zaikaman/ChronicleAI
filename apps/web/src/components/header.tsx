@@ -5,7 +5,9 @@ import {
   Archive,
   ArrowDownRight,
   ChevronDown,
+  ExternalLink,
   FileText,
+  Send,
   Sparkles,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -38,6 +40,13 @@ const intelLinks = [
     href: "/activity",
     description: "Public proof & transaction trail",
     icon: Activity,
+  },
+  {
+    label: "Telegram Alerts",
+    href: "https://t.me/chronicleaialerts",
+    description: "Real-time onchain signals channel",
+    icon: Send,
+    isExternal: true,
   },
 ];
 
@@ -218,7 +227,32 @@ export function Header(): ReactNode {
                   <div className="space-y-0.5">
                     {intelLinks.map((link) => {
                       const Icon = link.icon;
-                      const active = isActivePath(pathname, link.href);
+                      const active = !link.isExternal && isActivePath(pathname, link.href);
+                      if (link.isExternal) {
+                        return (
+                          <a
+                            key={link.href}
+                            href={link.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setIntelMenuOpen(false)}
+                            className="flex items-start gap-3 p-2.5 rounded-xl transition-all hover:bg-foreground/5 text-foreground/80 hover:text-foreground group"
+                          >
+                            <div className="mt-0.5 p-1.5 rounded-lg flex items-center justify-center bg-foreground/5 text-foreground/70 group-hover:bg-accent group-hover:text-black transition-colors">
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between text-sm font-medium leading-none mb-1">
+                                <span>{link.label}</span>
+                                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                              </div>
+                              <div className="text-xs text-muted-foreground font-normal line-clamp-1">
+                                {link.description}
+                              </div>
+                            </div>
+                          </a>
+                        );
+                      }
                       return (
                         <Link
                           key={link.href}
@@ -276,6 +310,17 @@ export function Header(): ReactNode {
 
         {/* Right CTA / Wallet */}
         <div className="flex items-center gap-3 max-[850px]:hidden">
+          <a
+            href="https://t.me/chronicleaialerts"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="header-telegram-link"
+            title="Join Telegram Alerts Channel"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-foreground rounded-full border border-border/40 bg-foreground/5 hover:bg-accent/20 hover:border-accent/40 transition-colors"
+          >
+            <Send className="w-3.5 h-3.5 text-accent" />
+            <span>Telegram</span>
+          </a>
           <ConnectWalletButton data-testid="header-connect-wallet" />
           <Link to="/alerts" className="group relative inline-flex items-center">
             <span className="absolute right-0 inset-y-0 w-[calc(100%-1.5rem)] rounded-xl bg-accent" />
@@ -343,19 +388,38 @@ export function Header(): ReactNode {
                     Intelligence
                   </div>
                   <div className="space-y-1">
-                    {intelLinks.map((link) => (
-                      <Link
-                        key={link.href}
-                        to={link.href}
-                        className="flex flex-col py-2.5 text-base font-medium text-foreground border-b border-foreground/10"
-                        onClick={closeMobile}
-                      >
-                        <span>{link.label}</span>
-                        <span className="text-xs text-muted-foreground font-normal mt-0.5">
-                          {link.description}
-                        </span>
-                      </Link>
-                    ))}
+                    {intelLinks.map((link) =>
+                      link.isExternal ? (
+                        <a
+                          key={link.href}
+                          href={link.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between py-2.5 text-base font-medium text-foreground border-b border-foreground/10"
+                          onClick={closeMobile}
+                        >
+                          <div>
+                            <span>{link.label}</span>
+                            <span className="block text-xs text-muted-foreground font-normal mt-0.5">
+                              {link.description}
+                            </span>
+                          </div>
+                          <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                        </a>
+                      ) : (
+                        <Link
+                          key={link.href}
+                          to={link.href}
+                          className="flex flex-col py-2.5 text-base font-medium text-foreground border-b border-foreground/10"
+                          onClick={closeMobile}
+                        >
+                          <span>{link.label}</span>
+                          <span className="text-xs text-muted-foreground font-normal mt-0.5">
+                            {link.description}
+                          </span>
+                        </Link>
+                      ),
+                    )}
                   </div>
                 </div>
               </nav>

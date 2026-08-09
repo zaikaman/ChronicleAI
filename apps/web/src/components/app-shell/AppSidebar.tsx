@@ -1,5 +1,5 @@
 import { prefetchRoute } from "@/lib/route-prefetch.ts";
-import { Search, X } from "lucide-react";
+import { ExternalLink, Search, Send, X } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { APP_NAV_ITEMS, type AppNavItem, isActiveNavPath } from "./nav-items.ts";
@@ -149,7 +149,27 @@ export function AppSidebar({ open, onNavigate }: AppSidebarProps): ReactNode {
           )}
         </nav>
 
-        <div className="p-3 border-t border-border">
+        <div className="p-3 border-t border-border space-y-2">
+          <a
+            href="https://t.me/chronicleaialerts"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="sidebar-telegram-link"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-accent/10 border border-accent/20 text-foreground hover:bg-accent/20 hover:border-accent/40 transition group"
+          >
+            <div className="h-7 w-7 rounded-lg bg-accent/20 flex items-center justify-center text-accent shrink-0 group-hover:scale-105 transition-transform">
+              <Send className="h-3.5 w-3.5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-xs font-semibold text-foreground truncate">Telegram Alerts</span>
+                <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-foreground shrink-0 transition-colors" />
+              </div>
+              <span className="block text-[11px] text-muted-foreground truncate">
+                Real-time onchain signals
+              </span>
+            </div>
+          </a>
           <p className="px-1 text-[11px] text-muted-foreground leading-relaxed">
             Verified desk · proofs on-chain
           </p>
