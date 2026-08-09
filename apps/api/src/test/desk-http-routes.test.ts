@@ -204,6 +204,12 @@ function mockControlPlane(overrides: Partial<DeskControlPlane> = {}): DeskContro
     async findTicketByIntentId(intentId) {
       return intentId === "intent-1" ? sampleTicket() : null;
     },
+    async findTicketByKeeperHubRunId(keeperHubRunId) {
+      return keeperHubRunId === "run-1" ? sampleTicket() : null;
+    },
+    async findTicketByTxHash(txHash) {
+      return txHash === "0xtx" ? sampleTicket() : null;
+    },
     async listCapitalMoves() {
       return [];
     },

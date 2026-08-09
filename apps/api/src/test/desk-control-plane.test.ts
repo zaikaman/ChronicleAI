@@ -448,6 +448,12 @@ describe("createDeskControlPlane", () => {
       async findBySignalHash() {
         return null;
       },
+      async findByKeeperHubRunId() {
+        return null;
+      },
+      async findByTxHash() {
+        return null;
+      },
       async listRecent() {
         return [sampleTicket()];
       },

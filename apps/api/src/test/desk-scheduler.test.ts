@@ -121,6 +121,12 @@ function mockControlPlane(
     async findTicketByIntentId() {
       return null;
     },
+    async findTicketByKeeperHubRunId() {
+      return null;
+    },
+    async findTicketByTxHash() {
+      return null;
+    },
     async listCapitalMoves() {
       return [];
     },
