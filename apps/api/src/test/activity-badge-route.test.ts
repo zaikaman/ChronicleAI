@@ -193,16 +193,22 @@ describe("GET /activity stats & badge endpoints", () => {
 
   it("GET /transactions.txt returns formatted plain text chronological log", async () => {
     const listAllChronological = vi.fn().mockResolvedValue(
-      success([
-        {
-          id: "log-1",
-          action_type: "publish_alert",
-          status: "succeeded",
-          message: "Alert published on-chain",
-          details: { keeper_hub_run_id: "kh_run_001", txHash: "0xabc123" },
-          created_at: "2026-07-27T10:00:00.000Z",
-        },
-      ]),
+      success({
+        items: [
+          {
+            id: "log-1",
+            action_type: "publish_alert",
+            status: "succeeded",
+            message: "Alert published on-chain",
+            details: { keeper_hub_run_id: "kh_run_001", txHash: "0xabc123" },
+            created_at: "2026-07-27T10:00:00.000Z",
+          },
+        ],
+        total: 29541,
+        page: 1,
+        limit: 100,
+        totalPages: 296,
+      }),
     );
 
     await withServer(
@@ -225,7 +231,8 @@ describe("GET /activity stats & badge endpoints", () => {
         expect(res.headers.get("content-type")).toContain("text/plain");
         const text = await res.text();
         expect(text).toContain("CHRONICLE AI — KEEPERHUB TRANSACTIONS");
-        expect(text).toContain("Total Transactions Executed: 1");
+        expect(text).toContain("Total Transactions Executed: 29541");
+        expect(text).toContain("Showing: Page 1 of 296");
         expect(text).toContain("#1 | [2026-07-27T10:00:00.000Z]");
         expect(text).toContain("Action: publish_alert");
         expect(text).toContain("KeeperHub Run ID: kh_run_001");

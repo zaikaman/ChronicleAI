@@ -47,9 +47,18 @@ export interface ExecutionLogRepository {
     fromIso?: string,
     toIso?: string,
   ): Promise<Result<number>>;
-  listAllChronological?(
-    limitParam?: number,
-  ): Promise<Result<ExecutionLogRow[]>>;
+  listAllChronological?(options?: {
+    page?: number | "all";
+    limit?: number;
+  }): Promise<
+    Result<{
+      items: ExecutionLogRow[];
+      total: number;
+      page: number | "all";
+      limit: number;
+      totalPages: number;
+    }>
+  >;
 }
 
 export function createExecutionLogRepository(supabase: SupabaseClient): ExecutionLogRepository {
@@ -220,17 +229,75 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
       return success(count ?? 0);
     },
 
-    async listAllChronological(limitParam = 5000) {
-      const limit = Math.min(10000, Math.max(1, limitParam));
+    async listAllChronological(options) {
+      const pageOpt = options?.page ?? 1;
+      const limitOpt = Math.min(1000, Math.max(1, options?.limit ?? 100));
+
+      const { count, error: countErr } = await table().select("id", {
+        count: "exact",
+        head: true,
+      });
+
+      if (countErr) {
+        return failure(mapPostgrestError(countErr));
+      }
+
+      const total = count ?? 0;
+
+      if (pageOpt === "all") {
+        const batchSize = 1000;
+        const totalBatches = Math.ceil(total / batchSize) || 1;
+        const batchPromises: Array<Promise<any>> = [];
+
+        for (let b = 0; b < totalBatches; b++) {
+          const from = b * batchSize;
+          const to = from + batchSize - 1;
+          batchPromises.push(
+            Promise.resolve(
+              table()
+                .select("*")
+                .order("created_at", { ascending: true })
+                .range(from, to),
+            ),
+          );
+        }
+
+        const results = await Promise.all(batchPromises);
+        const allItems: ExecutionLogRow[] = [];
+        for (const res of results) {
+          if (res.error) return failure(mapPostgrestError(res.error));
+          if (res.data) allItems.push(...(res.data as unknown as ExecutionLogRow[]));
+        }
+
+        return success({
+          items: allItems,
+          total,
+          page: "all" as const,
+          limit: total,
+          totalPages: 1,
+        });
+      }
+
+      const pageNum = typeof pageOpt === "number" ? Math.max(1, pageOpt) : 1;
+      const offset = (pageNum - 1) * limitOpt;
+
       const { data: rows, error } = await table()
         .select("*")
         .order("created_at", { ascending: true })
-        .limit(limit);
+        .range(offset, offset + limitOpt - 1);
 
       if (error) {
         return failure(mapPostgrestError(error));
       }
-      return success((rows ?? []) as unknown as ExecutionLogRow[]);
+
+      const items = (rows ?? []) as unknown as ExecutionLogRow[];
+      return success({
+        items,
+        total,
+        page: pageNum,
+        limit: limitOpt,
+        totalPages: Math.ceil(total / limitOpt) || 1,
+      });
     },
   };
 }

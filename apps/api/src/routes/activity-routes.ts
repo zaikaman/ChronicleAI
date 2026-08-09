@@ -127,35 +127,63 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   /**
    * Helper to format execution logs in plain text format (1st to last transaction).
    */
-  const renderTransactionsTxt = async (res: any) => {
-    const result = execLogRepo.listAllChronological
-      ? await execLogRepo.listAllChronological()
-      : await execLogRepo.listPage({ page: 1, limit: 1000 }).then((r) => {
-          if (!r.ok) return r;
-          const items = [...r.value.items].sort(
-            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-          );
-          return { ok: true as const, value: items };
-        });
+  const renderTransactionsTxt = async (req: any, res: any) => {
+    const rawPage = req.query?.page;
+    const rawLimit = req.query?.limit;
 
-    const logs = result.ok ? result.value : [];
-    const count = logs.length;
+    const pageParam = rawPage === "all" ? "all" : Math.max(1, Number.parseInt(String(rawPage || "1"), 10) || 1);
+    const limitParam = Math.min(1000, Math.max(1, Number.parseInt(String(rawLimit || "100"), 10) || 100));
+
+    let logs: any[] = [];
+    let totalCount = 0;
+    let currentPage: number | "all" = pageParam;
+    let totalPages = 1;
+
+    if (execLogRepo.listAllChronological) {
+      const result = await execLogRepo.listAllChronological({
+        page: pageParam,
+        limit: limitParam,
+      });
+      if (result.ok) {
+        logs = result.value.items;
+        totalCount = result.value.total;
+        currentPage = result.value.page;
+        totalPages = result.value.totalPages;
+      }
+    } else {
+      const result = await execLogRepo.listPage({ page: 1, limit: 1000 });
+      if (result.ok) {
+        logs = [...result.value.items].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
+        totalCount = result.value.total;
+      }
+    }
+
     const nowIso = new Date().toISOString();
+    const isAll = currentPage === "all";
+    const startNum = isAll ? 1 : ((currentPage as number) - 1) * limitParam + 1;
+    const endNum = isAll ? totalCount : Math.min(totalCount, (currentPage as number) * limitParam);
 
     let out = `================================================================================\n`;
     out += `                    CHRONICLE AI — KEEPERHUB TRANSACTIONS                       \n`;
     out += `================================================================================\n`;
-    out += `Total Transactions Executed: ${count}\n`;
+    out += `Total Transactions Executed: ${totalCount}\n`;
+    if (isAll) {
+      out += `Showing: All ${totalCount} Transactions (#1 to #${totalCount}, Chronological #1 = oldest)\n`;
+    } else {
+      out += `Showing: Page ${currentPage} of ${totalPages} (Transactions #${startNum} to #${endNum})\n`;
+      out += `Pagination Query: ?page=1..${totalPages} (or ?page=all) | limit=100\n`;
+    }
     out += `Last Updated (UTC): ${nowIso}\n`;
-    out += `Order: Chronological (#1 = 1st transaction executed, #${count} = latest)\n`;
     out += `Public Audit URL: https://chronicle-ai-web.vercel.app/transactions.txt\n`;
     out += `================================================================================\n\n`;
 
-    if (count === 0) {
+    if (logs.length === 0) {
       out += `No transactions executed yet.\n\n`;
     } else {
       logs.forEach((log: any, index: number) => {
-        const num = index + 1;
+        const num = startNum + index;
         const createdAt = log.created_at || log.createdAt || "N/A";
         const actionType = log.action_type || log.actionType || "N/A";
         const status = (log.status || "UNKNOWN").toUpperCase();
@@ -194,7 +222,7 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
     }
 
     out += `================================================================================\n`;
-    out += `End of ChronicleAI KeeperHub Execution Audit Trail (${count} total transactions)\n`;
+    out += `End of ChronicleAI Execution Log (Page ${currentPage}/${totalPages} — ${totalCount} Total)\n`;
     out += `================================================================================\n`;
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -206,17 +234,17 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
    * GET /transactions.txt & GET /activity/transactions.txt
    * Plain text realtime audit log showing count and chronological list of transactions.
    */
-  router.get("/transactions.txt", async (_req, res, next) => {
+  router.get("/transactions.txt", async (req, res, next) => {
     try {
-      await renderTransactionsTxt(res);
+      await renderTransactionsTxt(req, res);
     } catch (error) {
       next(error);
     }
   });
 
-  router.get("/activity/transactions.txt", async (_req, res, next) => {
+  router.get("/activity/transactions.txt", async (req, res, next) => {
     try {
-      await renderTransactionsTxt(res);
+      await renderTransactionsTxt(req, res);
     } catch (error) {
       next(error);
     }

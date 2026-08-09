@@ -1,24 +1,25 @@
 // Real-time plain text audit trail page: /transactions.txt
 // Displays total transaction count and chronological list (#1 to #N).
-// Auto-refreshes in real-time.
+// Supports pagination (100 per page) and 'View All' (parallel batching for all 29k+ transactions).
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, RefreshCw } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, ExternalLink, RefreshCw } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
 import { API_BASE } from "../../lib/api.ts";
 import { useExecutionLogs } from "./use-activity-lists.ts";
 
-export function formatTransactionsTextList(logs: any[]): string {
+export function formatTransactionsTextList(logs: any[], startNum = 1, totalCount?: number): string {
   const count = logs.length;
+  const total = totalCount ?? count;
   const nowIso = new Date().toISOString();
 
   let out = `================================================================================\n`;
   out += `                    CHRONICLE AI — KEEPERHUB TRANSACTIONS                       \n`;
   out += `================================================================================\n`;
-  out += `Total Transactions Executed: ${count}\n`;
+  out += `Total Transactions Executed: ${total}\n`;
+  out += `Showing: Transactions #${startNum} to #${startNum + count - 1} (${count} shown on this page)\n`;
   out += `Last Updated (UTC): ${nowIso}\n`;
-  out += `Order: Chronological (#1 = 1st transaction executed, #${count} = latest)\n`;
   out += `Public Audit URL: https://chronicle-ai-web.vercel.app/transactions.txt\n`;
   out += `================================================================================\n\n`;
 
@@ -26,7 +27,7 @@ export function formatTransactionsTextList(logs: any[]): string {
     out += `No transactions executed yet.\n\n`;
   } else {
     logs.forEach((log: any, index: number) => {
-      const num = index + 1;
+      const num = startNum + index;
       const createdAt = log.createdAt || log.created_at || "N/A";
       const actionType = log.actionType || log.action_type || "N/A";
       const status = (log.status || "UNKNOWN").toUpperCase();
@@ -67,7 +68,7 @@ export function formatTransactionsTextList(logs: any[]): string {
   }
 
   out += `================================================================================\n`;
-  out += `End of ChronicleAI KeeperHub Execution Audit Trail (${count} total transactions)\n`;
+  out += `End of ChronicleAI Execution Log (Showing ${count} of ${total} Total Transactions)\n`;
   out += `================================================================================\n`;
 
   return out;
@@ -75,13 +76,16 @@ export function formatTransactionsTextList(logs: any[]): string {
 
 export function TransactionsTxtPage(): React.ReactElement {
   const [copied, setCopied] = useState(false);
+  const [page, setPage] = useState<number | "all">(1);
+  const [limit, setLimit] = useState<number>(100);
 
-  // Poll raw text endpoint or execution logs list every 5 seconds for real-time updates
+  // Poll raw text endpoint with page and limit parameters
   const { data: rawText, isFetching, refetch } = useQuery({
-    queryKey: ["transactions-txt-raw"],
+    queryKey: ["transactions-txt-raw", page, limit],
     queryFn: async () => {
       try {
-        const res = await fetch(`${API_BASE.replace(/\/+$/, "")}/transactions.txt`);
+        const url = `${API_BASE.replace(/\/+$/, "")}/transactions.txt?page=${page}&limit=${limit}`;
+        const res = await fetch(url);
         if (res.ok) {
           return await res.text();
         }
@@ -94,14 +98,14 @@ export function TransactionsTxtPage(): React.ReactElement {
   });
 
   // Client-side fallback using execution logs list
-  const logsState = useExecutionLogs(100);
+  const logsState = useExecutionLogs(limit);
   const fallbackLogs = (logsState.items ?? []).slice().reverse(); // reverse from DESC to ASC (1st to last)
 
   const textContent =
-    rawText && rawText.length > 0 ? rawText : formatTransactionsTextList(fallbackLogs);
+    rawText && rawText.length > 0 ? rawText : formatTransactionsTextList(fallbackLogs, 1, logsState.pagination.total);
 
-  const logsCount =
-    logsState.pagination.total ?? (fallbackLogs.length > 0 ? fallbackLogs.length : 0);
+  const logsCount = logsState.pagination.total ?? 0;
+  const totalPages = Math.ceil(logsCount / limit) || 1;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(textContent);
@@ -132,7 +136,7 @@ export function TransactionsTxtPage(): React.ReactElement {
           borderBottom: "1px solid #1e293b",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
           <span style={{ fontWeight: "bold", fontSize: "14px", color: "#f8fafc" }}>
             transactions.txt
           </span>
@@ -146,7 +150,7 @@ export function TransactionsTxtPage(): React.ReactElement {
               fontWeight: "600",
             }}
           >
-            {logsCount} Transactions
+            {logsCount > 0 ? `${logsCount.toLocaleString()} Total Transactions` : "Loading..."}
           </span>
           <span
             style={{
@@ -168,7 +172,69 @@ export function TransactionsTxtPage(): React.ReactElement {
           </span>
         </div>
 
-        <div style={{ display: "flex", gap: "8px" }}>
+        {/* Pagination controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {page !== "all" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => (typeof p === "number" ? Math.max(1, p - 1) : 1))}
+                style={{
+                  padding: "4px 8px",
+                  fontSize: "12px",
+                  backgroundColor: page <= 1 ? "#0f172a" : "#1e293b",
+                  color: page <= 1 ? "#475569" : "#f8fafc",
+                  border: "1px solid #334155",
+                  borderRadius: "4px",
+                  cursor: page <= 1 ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <ChevronLeft style={{ width: "14px", height: "14px" }} /> Prev
+              </button>
+              <span style={{ fontSize: "12px", color: "#94a3b8", padding: "0 4px" }}>
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => (typeof p === "number" ? Math.min(totalPages, p + 1) : 1))}
+                style={{
+                  padding: "4px 8px",
+                  fontSize: "12px",
+                  backgroundColor: page >= totalPages ? "#0f172a" : "#1e293b",
+                  color: page >= totalPages ? "#475569" : "#f8fafc",
+                  border: "1px solid #334155",
+                  borderRadius: "4px",
+                  cursor: page >= totalPages ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                Next <ChevronRight style={{ width: "14px", height: "14px" }} />
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setPage(page === "all" ? 1 : "all")}
+            style={{
+              padding: "4px 10px",
+              fontSize: "12px",
+              backgroundColor: page === "all" ? "#7c3aed" : "#1e293b",
+              color: "#f8fafc",
+              border: "1px solid #6d28d9",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "600",
+            }}
+          >
+            {page === "all" ? "Paginated View (100/pg)" : `Fetch All (${logsCount.toLocaleString()})`}
+          </button>
+
           <button
             onClick={handleCopy}
             type="button"
@@ -189,7 +255,7 @@ export function TransactionsTxtPage(): React.ReactElement {
             {copied ? "Copied" : "Copy .txt"}
           </button>
           <a
-            href={`${API_BASE.replace(/\/+$/, "")}/transactions.txt`}
+            href={`${API_BASE.replace(/\/+$/, "")}/transactions.txt?page=${page}&limit=${limit}`}
             target="_blank"
             rel="noreferrer"
             style={{
