@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Aave V3 Supply Monitor — Ethereum Mainnet (Telegram bridge)",
-    "description": "Mainnet protocol-context source: Event Tracker on Ethereum Mainnet Aave V3 Pool Supply → Telegram → Chronicle. Classified as protocol_deposit; no direct execution in v1. FREE TIER. Sparse Event trigger (not hot-path)."
+    "description": "Mainnet protocol-context source: Event Tracker on Ethereum Mainnet Aave V3 Pool Supply → Telegram → Chronicle. Classified as protocol_deposit (threshold ≥ $100M); no direct execution in v1. FREE TIER. Sparse Event trigger (not hot-path)."
   },
   "nodes": [
     {

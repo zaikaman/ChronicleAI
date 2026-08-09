@@ -154,18 +154,18 @@ describe("EventQualificationService", () => {
     ).toBe(false);
   });
 
-  it("qualifies protocol_deposit and protocol_withdraw at $500k", () => {
+  it("qualifies protocol_deposit and protocol_withdraw at $100M+", () => {
     expect(
       service.qualify({
         eventType: "protocol_deposit",
-        magnitude: { value: 500_000, unit: "USD" },
+        magnitude: { value: 100_000_000, unit: "USD" },
         chainId: 11_155_111,
       }).qualified,
     ).toBe(true);
     expect(
       service.qualify({
         eventType: "protocol_withdraw",
-        magnitude: { value: 499_999, unit: "USD" },
+        magnitude: { value: 99_999_999, unit: "USD" },
         chainId: 11_155_111,
       }).qualified,
     ).toBe(false);

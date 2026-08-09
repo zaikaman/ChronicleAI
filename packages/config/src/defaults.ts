@@ -21,8 +21,8 @@ export const EVENT_THRESHOLDS = {
   contract_deployment: { minMagnitude: Number.MAX_SAFE_INTEGER, unit: "any" },
   cex_inflow: { minMagnitude: 500_000, unit: "USD" },
   cex_outflow: { minMagnitude: 500_000, unit: "USD" },
-  protocol_deposit: { minMagnitude: 500_000, unit: "USD" },
-  protocol_withdraw: { minMagnitude: 500_000, unit: "USD" },
+  protocol_deposit: { minMagnitude: 100_000_000, unit: "USD" },
+  protocol_withdraw: { minMagnitude: 100_000_000, unit: "USD" },
   /** Higher than swaps — mints are noisy at large scale. */
   stablecoin_mint: { minMagnitude: 1_000_000, unit: "USD" },
   stablecoin_burn: { minMagnitude: 1_000_000, unit: "USD" },
