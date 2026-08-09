@@ -9,8 +9,44 @@ import { useState } from "react";
 import { API_BASE } from "../../lib/api.ts";
 import { useExecutionLogs } from "./use-activity-lists.ts";
 
+export function hasExplorerLink(log: unknown): boolean {
+  if (!log || typeof log !== "object") return false;
+  const l = log as Record<string, unknown>;
+  const details =
+    l.details && typeof l.details === "object" && !Array.isArray(l.details)
+      ? (l.details as Record<string, unknown>)
+      : {};
+
+  const txHash =
+    l.tx_hash ||
+    l.txHash ||
+    l.transaction_hash ||
+    l.transactionHash ||
+    details.txHash ||
+    details.transactionHash ||
+    details.registryTxHash ||
+    details.payoutTxHash ||
+    details.burnTxHash ||
+    details.mintTxHash ||
+    details.action_transaction_hash ||
+    null;
+
+  const explorerUrl =
+    l.explorer_url ||
+    l.explorerUrl ||
+    details.explorer_url ||
+    details.explorerUrl ||
+    details.action_explorer_url ||
+    details.protectStatusUrl ||
+    l.protectStatusUrl ||
+    (txHash ? `https://sepolia.etherscan.io/tx/${txHash}` : null);
+
+  return Boolean(explorerUrl);
+}
+
 export function formatTransactionsTextList(logs: any[], startNum = 1, totalCount?: number): string {
-  const count = logs.length;
+  const validLogs = logs.filter(hasExplorerLink);
+  const count = validLogs.length;
   const total = totalCount ?? count;
   const nowIso = new Date().toISOString();
 
@@ -18,7 +54,7 @@ export function formatTransactionsTextList(logs: any[], startNum = 1, totalCount
   out += `                    CHRONICLE AI — KEEPERHUB TRANSACTIONS                       \n`;
   out += `================================================================================\n`;
   out += `Total Transactions Executed: ${total}\n`;
-  out += `Showing: Transactions #${startNum} to #${startNum + count - 1} (${count} shown on this page)\n`;
+  out += `Showing: Transactions #${startNum} to #${startNum + Math.max(0, count - 1)} (${count} shown on this page)\n`;
   out += `Last Updated (UTC): ${nowIso}\n`;
   out += `Public Audit URL: https://chronicle-ai-web.vercel.app/transactions.txt\n`;
   out += `================================================================================\n\n`;
@@ -26,7 +62,7 @@ export function formatTransactionsTextList(logs: any[], startNum = 1, totalCount
   if (count === 0) {
     out += `No transactions executed yet.\n\n`;
   } else {
-    logs.forEach((log: any, index: number) => {
+    validLogs.forEach((log: any, index: number) => {
       const num = startNum + index;
       const createdAt = log.createdAt || log.created_at || "N/A";
       const actionType = log.actionType || log.action_type || "N/A";
@@ -99,10 +135,10 @@ export function TransactionsTxtPage(): React.ReactElement {
 
   // Client-side fallback using execution logs list
   const logsState = useExecutionLogs(limit);
-  const fallbackLogs = (logsState.items ?? []).slice().reverse(); // reverse from DESC to ASC (1st to last)
+  const fallbackLogs = (logsState.items ?? []).filter(hasExplorerLink).slice().reverse();
 
   const textContent =
-    rawText && rawText.length > 0 ? rawText : formatTransactionsTextList(fallbackLogs, 1, logsState.pagination.total);
+    rawText && rawText.length > 0 ? rawText : formatTransactionsTextList(fallbackLogs, 1, fallbackLogs.length);
 
   const logsCount = logsState.pagination.total ?? 0;
   const totalPages = Math.ceil(logsCount / limit) || 1;

@@ -61,6 +61,41 @@ export interface ExecutionLogRepository {
   >;
 }
 
+export function hasExplorerLink(log: unknown): boolean {
+  if (!log || typeof log !== "object") return false;
+  const l = log as Record<string, unknown>;
+  const details =
+    l.details && typeof l.details === "object" && !Array.isArray(l.details)
+      ? (l.details as Record<string, unknown>)
+      : {};
+
+  const txHash =
+    l.tx_hash ||
+    l.txHash ||
+    l.transaction_hash ||
+    l.transactionHash ||
+    details.txHash ||
+    details.transactionHash ||
+    details.registryTxHash ||
+    details.payoutTxHash ||
+    details.burnTxHash ||
+    details.mintTxHash ||
+    details.action_transaction_hash ||
+    null;
+
+  const explorerUrl =
+    l.explorer_url ||
+    l.explorerUrl ||
+    details.explorer_url ||
+    details.explorerUrl ||
+    details.action_explorer_url ||
+    details.protectStatusUrl ||
+    l.protectStatusUrl ||
+    (txHash ? `https://sepolia.etherscan.io/tx/${txHash}` : null);
+
+  return Boolean(explorerUrl);
+}
+
 export function createExecutionLogRepository(supabase: SupabaseClient): ExecutionLogRepository {
   const table = () => supabase.from("execution_logs");
 
@@ -242,35 +277,38 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
         return failure(mapPostgrestError(countErr));
       }
 
-      const total = count ?? 0;
+      const rawTotal = count ?? 0;
+      const batchSize = 1000;
+      const totalBatches = Math.ceil(rawTotal / batchSize) || 1;
+      const batchPromises: Array<Promise<any>> = [];
+
+      for (let b = 0; b < totalBatches; b++) {
+        const from = b * batchSize;
+        const to = from + batchSize - 1;
+        batchPromises.push(
+          Promise.resolve(
+            table()
+              .select("*")
+              .order("created_at", { ascending: true })
+              .range(from, to),
+          ),
+        );
+      }
+
+      const results = await Promise.all(batchPromises);
+      const allItems: ExecutionLogRow[] = [];
+      for (const res of results) {
+        if (res.error) return failure(mapPostgrestError(res.error));
+        if (res.data) allItems.push(...(res.data as unknown as ExecutionLogRow[]));
+      }
+
+      // Filter ONLY rows that have an explorer link
+      const validItems = allItems.filter(hasExplorerLink);
+      const total = validItems.length;
 
       if (pageOpt === "all") {
-        const batchSize = 1000;
-        const totalBatches = Math.ceil(total / batchSize) || 1;
-        const batchPromises: Array<Promise<any>> = [];
-
-        for (let b = 0; b < totalBatches; b++) {
-          const from = b * batchSize;
-          const to = from + batchSize - 1;
-          batchPromises.push(
-            Promise.resolve(
-              table()
-                .select("*")
-                .order("created_at", { ascending: true })
-                .range(from, to),
-            ),
-          );
-        }
-
-        const results = await Promise.all(batchPromises);
-        const allItems: ExecutionLogRow[] = [];
-        for (const res of results) {
-          if (res.error) return failure(mapPostgrestError(res.error));
-          if (res.data) allItems.push(...(res.data as unknown as ExecutionLogRow[]));
-        }
-
         return success({
-          items: allItems,
+          items: validItems,
           total,
           page: "all" as const,
           limit: total,
@@ -280,19 +318,10 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
 
       const pageNum = typeof pageOpt === "number" ? Math.max(1, pageOpt) : 1;
       const offset = (pageNum - 1) * limitOpt;
+      const pageItems = validItems.slice(offset, offset + limitOpt);
 
-      const { data: rows, error } = await table()
-        .select("*")
-        .order("created_at", { ascending: true })
-        .range(offset, offset + limitOpt - 1);
-
-      if (error) {
-        return failure(mapPostgrestError(error));
-      }
-
-      const items = (rows ?? []) as unknown as ExecutionLogRow[];
       return success({
-        items,
+        items: pageItems,
         total,
         page: pageNum,
         limit: limitOpt,
