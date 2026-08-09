@@ -80,7 +80,12 @@ export function ActivityPage(): ReactElement {
       <PageHeader
         title="Activity"
         description="Everything ChronicleAI did, newest first: what was published, what money settled, and what the desk recorded — each with proof links when available."
-        meta={<SectionLink to="/desk">Open desk →</SectionLink>}
+        meta={
+          <div className="flex items-center gap-3">
+            <SectionLink to="/transactions.txt">Raw transactions.txt →</SectionLink>
+            <SectionLink to="/desk">Open desk →</SectionLink>
+          </div>
+        }
       />
 
       <div className="mb-8">

@@ -125,6 +125,104 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
   });
 
   /**
+   * Helper to format execution logs in plain text format (1st to last transaction).
+   */
+  const renderTransactionsTxt = async (res: any) => {
+    const result = execLogRepo.listAllChronological
+      ? await execLogRepo.listAllChronological()
+      : await execLogRepo.listPage({ page: 1, limit: 1000 }).then((r) => {
+          if (!r.ok) return r;
+          const items = [...r.value.items].sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          );
+          return { ok: true as const, value: items };
+        });
+
+    const logs = result.ok ? result.value : [];
+    const count = logs.length;
+    const nowIso = new Date().toISOString();
+
+    let out = `================================================================================\n`;
+    out += `                    CHRONICLE AI — KEEPERHUB TRANSACTIONS                       \n`;
+    out += `================================================================================\n`;
+    out += `Total Transactions Executed: ${count}\n`;
+    out += `Last Updated (UTC): ${nowIso}\n`;
+    out += `Order: Chronological (#1 = 1st transaction executed, #${count} = latest)\n`;
+    out += `Public Audit URL: https://chronicle-ai-web.vercel.app/transactions.txt\n`;
+    out += `================================================================================\n\n`;
+
+    if (count === 0) {
+      out += `No transactions executed yet.\n\n`;
+    } else {
+      logs.forEach((log: any, index: number) => {
+        const num = index + 1;
+        const createdAt = log.created_at || log.createdAt || "N/A";
+        const actionType = log.action_type || log.actionType || "N/A";
+        const status = (log.status || "UNKNOWN").toUpperCase();
+        const message = log.message || "No message provided";
+
+        const details =
+          typeof log.details === "object" && log.details ? (log.details as Record<string, any>) : {};
+        const keeperHubRunId =
+          log.keeper_hub_run_id || details.keeper_hub_run_id || details.keeperHubRunId || null;
+        const txHash =
+          log.tx_hash ||
+          details.txHash ||
+          details.transactionHash ||
+          details.registryTxHash ||
+          details.payoutTxHash ||
+          details.burnTxHash ||
+          details.mintTxHash ||
+          null;
+        const explorerUrl =
+          log.explorer_url ||
+          details.explorer_url ||
+          details.explorerUrl ||
+          (txHash ? `https://sepolia.etherscan.io/tx/${txHash}` : null);
+        const routing = details.routing || log.routing || null;
+
+        out += `#${num} | [${createdAt}]\n`;
+        out += `Action: ${actionType}\n`;
+        out += `Status: ${status}\n`;
+        if (keeperHubRunId) out += `KeeperHub Run ID: ${keeperHubRunId}\n`;
+        if (txHash) out += `Tx Hash: ${txHash}\n`;
+        if (explorerUrl) out += `Explorer: ${explorerUrl}\n`;
+        if (routing) out += `Routing: ${routing}\n`;
+        out += `Message: ${message}\n`;
+        out += `--------------------------------------------------------------------------------\n\n`;
+      });
+    }
+
+    out += `================================================================================\n`;
+    out += `End of ChronicleAI KeeperHub Execution Audit Trail (${count} total transactions)\n`;
+    out += `================================================================================\n`;
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+    res.send(out);
+  };
+
+  /**
+   * GET /transactions.txt & GET /activity/transactions.txt
+   * Plain text realtime audit log showing count and chronological list of transactions.
+   */
+  router.get("/transactions.txt", async (_req, res, next) => {
+    try {
+      await renderTransactionsTxt(res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/activity/transactions.txt", async (_req, res, next) => {
+    try {
+      await renderTransactionsTxt(res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * GET /activity/execution-logs
    * Page-based KeeperHub execution audit trail.
    * Optional ?entityId= (UUID) and ?entityType= for ticket deep links (Phase 4).

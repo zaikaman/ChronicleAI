@@ -12,7 +12,8 @@ export type RouteId =
   | "premium"
   | "subscription"
   | "affiliates"
-  | "activity";
+  | "activity"
+  | "transactions-txt";
 
 export interface RouteDefinition {
   id: RouteId;

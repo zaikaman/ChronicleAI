@@ -47,6 +47,9 @@ export interface ExecutionLogRepository {
     fromIso?: string,
     toIso?: string,
   ): Promise<Result<number>>;
+  listAllChronological?(
+    limitParam?: number,
+  ): Promise<Result<ExecutionLogRow[]>>;
 }
 
 export function createExecutionLogRepository(supabase: SupabaseClient): ExecutionLogRepository {
@@ -215,6 +218,19 @@ export function createExecutionLogRepository(supabase: SupabaseClient): Executio
         return failure(mapPostgrestError(error));
       }
       return success(count ?? 0);
+    },
+
+    async listAllChronological(limitParam = 5000) {
+      const limit = Math.min(10000, Math.max(1, limitParam));
+      const { data: rows, error } = await table()
+        .select("*")
+        .order("created_at", { ascending: true })
+        .limit(limit);
+
+      if (error) {
+        return failure(mapPostgrestError(error));
+      }
+      return success((rows ?? []) as unknown as ExecutionLogRow[]);
     },
   };
 }

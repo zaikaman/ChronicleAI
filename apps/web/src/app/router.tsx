@@ -71,6 +71,11 @@ const ActivityPage = lazy(() =>
     default: m.ActivityPage,
   })),
 );
+const TransactionsTxtPage = lazy(() =>
+  import("../features/activity/TransactionsTxtPage.tsx").then((m) => ({
+    default: m.TransactionsTxtPage,
+  })),
+);
 
 function withSuspense(Page: ComponentType): ReactElement {
   return (
@@ -92,9 +97,14 @@ export const routeDefinitions: RouteDefinition[] = [
   { id: "subscription", path: "/subscription", label: "Subscription" },
   { id: "affiliates", path: "/affiliates", label: "Affiliates" },
   { id: "activity", path: "/activity", label: "Activity" },
+  { id: "transactions-txt", path: "/transactions.txt", label: "transactions.txt" },
 ];
 
 const routes: RouteObject[] = [
+  {
+    path: "/transactions.txt",
+    element: withSuspense(TransactionsTxtPage),
+  },
   {
     path: "/",
     element: <App />,
@@ -117,6 +127,7 @@ const routes: RouteObject[] = [
       { path: "premium/watches/:watchId", element: withSuspense(SponsoredWatchDetailPage) },
       { path: "affiliates", element: withSuspense(AffiliatePage) },
       { path: "activity", element: withSuspense(ActivityPage) },
+      { path: "transactions.txt", element: withSuspense(TransactionsTxtPage) },
     ],
   },
 ];

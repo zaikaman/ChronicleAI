@@ -190,4 +190,47 @@ describe("GET /activity stats & badge endpoints", () => {
       },
     );
   });
+
+  it("GET /transactions.txt returns formatted plain text chronological log", async () => {
+    const listAllChronological = vi.fn().mockResolvedValue(
+      success([
+        {
+          id: "log-1",
+          action_type: "publish_alert",
+          status: "succeeded",
+          message: "Alert published on-chain",
+          details: { keeper_hub_run_id: "kh_run_001", txHash: "0xabc123" },
+          created_at: "2026-07-27T10:00:00.000Z",
+        },
+      ]),
+    );
+
+    await withServer(
+      (app) => {
+        app.use(
+          createActivityRoutes({
+            activityService: mockActivityService,
+            execLogRepo: {
+              ...mockExecLogRepo,
+              listAllChronological,
+            } as unknown as ExecutionLogRepository,
+            paymentRecordRepo: mockPaymentRecordRepo,
+            payoutRepo: mockPayoutRepo,
+          }),
+        );
+      },
+      async (baseUrl) => {
+        const res = await fetch(`${baseUrl}/transactions.txt`);
+        expect(res.status).toBe(200);
+        expect(res.headers.get("content-type")).toContain("text/plain");
+        const text = await res.text();
+        expect(text).toContain("CHRONICLE AI — KEEPERHUB TRANSACTIONS");
+        expect(text).toContain("Total Transactions Executed: 1");
+        expect(text).toContain("#1 | [2026-07-27T10:00:00.000Z]");
+        expect(text).toContain("Action: publish_alert");
+        expect(text).toContain("KeeperHub Run ID: kh_run_001");
+        expect(text).toContain("Tx Hash: 0xabc123");
+      },
+    );
+  });
 });

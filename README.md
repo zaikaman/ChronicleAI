@@ -26,7 +26,7 @@ flowchart LR
     T --> P[Public proof and audit trail]
 ```
 
-- **Watch:** ChronicleAI monitors wallets, contracts, protocols, and market conditions, then sends useful updates through the app or Telegram.
+- **Watch:** ChronicleAI continuously monitors onchain activity across two streams: public **Market events** and **Desk triggers** published on the [Alerts](https://chronicle-ai-web.vercel.app/alerts) feed, and targeted wallet/contract monitoring with Telegram notifications on [Watch](https://chronicle-ai-web.vercel.app/watch).
 - **Earn:** Readers subscribe to **Chronicle Pass at $4.99/month** for every deep dive and the full archive; sponsored Watch campaigns and machine/API feeds are separate products.
 - **Act:** The desk applies safety rules before deciding whether treasury capital should be used, defended, rotated, or held.
 - **Prove:** KeeperHub handles the approved onchain action, while ChronicleAI links the receipt, transaction hash, and audit trail.
@@ -43,7 +43,8 @@ Explore the product and a verified execution path:
 
 | Surface | What it shows |
 | --- | --- |
-| [Watch](https://chronicle-ai-web.vercel.app/watch) | Premium monitoring for wallets, contracts, and protocols, with Telegram updates when matching events occur. |
+| [Alerts](https://chronicle-ai-web.vercel.app/alerts) | Public monitoring feed for **Market events** (swaps, liquidations, APY shifts) and **Desk triggers** (signals, capital moves, microtrades). |
+| [Watch](https://chronicle-ai-web.vercel.app/watch) | Premium targeted monitoring for wallets, contracts, and protocols, with Telegram updates when matching events occur. |
 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | Treasury proposals, safety rules, and preflight status. |
 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, routing, outcomes, and audit context. |
 | [Verified transaction](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | An onchain action that anyone can verify independently. |
@@ -71,9 +72,12 @@ Chronicle Pass is the primary human monetization path at **$4.99 USDC/month**, a
 
 Existing payment records and legacy access receipts remain valid until their normal expiry, and the underlying `x402_newsletter_subscriptions` tables keep their v1 names.
 
-### Watch is a premium service
+### Watch & Alerts — continuous public & targeted monitoring
 
-**Watch** is a paid monitoring service that ChronicleAI sells to humans and AI agents. Customers purchase monitoring campaigns for any wallet, contract, or protocol and receive Telegram DMs whenever matching onchain events occur on the tracked target. Campaigns can be private, or publicly sponsored through the registry and community, and each campaign ends with a generated intelligence report published onchain as a second receipt. Watch turns continuous monitoring, alert delivery, and post-campaign analysis into a premium product—not just a background feature of the demo.
+ChronicleAI watches onchain activity across two complementary layers:
+
+1. **Public Alerts feed ([`/alerts`](https://chronicle-ai-web.vercel.app/alerts)):** Continuous public monitoring for **Market events** (swaps, liquidations, stablecoin movements, APY differentials observed on Ethereum Mainnet) and **Desk triggers** (desk signals, capital moves, microtrades, and safety alerts executed on Sepolia).
+2. **Targeted Watch Service ([`/watch`](https://chronicle-ai-web.vercel.app/watch)):** Premium paid monitoring for humans and AI agents. Customers purchase monitoring campaigns for any wallet, contract, or protocol and receive private Telegram DMs whenever matching onchain events occur. Campaigns can be private or publicly sponsored, ending with an OpenAI-generated intelligence report published onchain as a second receipt.
 
 This is the distinction from a generic trading bot:
 
