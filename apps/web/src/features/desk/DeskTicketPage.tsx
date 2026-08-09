@@ -12,6 +12,7 @@ import {
 import { RoutingBadge } from "../../components/routing-badge.tsx";
 import { EmptyState, LoadingState, RetryState } from "../../components/state-views.tsx";
 import { flashbotsProtectStatusUrl, sepoliaTxUrl } from "../../lib/explorer.ts";
+import { useRelatedAlert } from "../alerts/use-alerts.ts";
 import { ExecutionAuditMissing, ExecutionAuditTimeline } from "./ExecutionAuditTimeline.tsx";
 import { ProofMonoLink } from "./ProofMonoLink.tsx";
 import {
@@ -28,6 +29,10 @@ import { useDeskTicket } from "./use-desk.ts";
 export function DeskTicketPage(): ReactElement {
   const { ticketId } = useParams<{ ticketId: string }>();
   const { state, refetch } = useDeskTicket(ticketId);
+  const { alert: sourceAlert } = useRelatedAlert({
+    ticketId: state.status === "success" ? state.ticket.id : undefined,
+    intentId: state.status === "success" ? state.ticket.intentId : undefined,
+  });
 
   if (state.status === "loading") {
     return (
@@ -73,7 +78,18 @@ export function DeskTicketPage(): ReactElement {
 
   return (
     <Page data-testid="desk-ticket-page">
-      <PageBackLink to="/desk/intents">Desk proposals</PageBackLink>
+      <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
+        <PageBackLink to="/desk/intents">Desk proposals</PageBackLink>
+        {sourceAlert ? (
+          <Link
+            to={`/alerts/${sourceAlert.id}`}
+            className="text-xs font-medium text-accent hover:underline inline-flex items-center gap-1"
+            data-testid="ticket-top-alert-link"
+          >
+            ← Back to Source Alert
+          </Link>
+        ) : null}
+      </div>
       <PageHeader
         title={title}
         description="Follow the Alert → Signal → Action path: decision, execution, and proof for this trade."
@@ -94,6 +110,36 @@ export function DeskTicketPage(): ReactElement {
           </>
         }
       />
+
+      {sourceAlert ? (
+        <aside
+          className="mb-6 rounded-2xl border border-accent/40 bg-accent/5 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          aria-label="Source Alert for this trade ticket"
+          data-testid="desk-ticket-source-alert"
+        >
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-accent">
+                Source Alert
+              </span>
+              {sourceAlert.confidence ? (
+                <StatusBadge label={`${sourceAlert.confidence} confidence`} variant="info" />
+              ) : null}
+            </div>
+            <p className="text-sm font-semibold text-foreground truncate">{sourceAlert.title}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2 leading-relaxed max-w-xl">
+              {sourceAlert.summary}
+            </p>
+          </div>
+          <Link
+            to={`/alerts/${sourceAlert.id}`}
+            className="inline-flex items-center justify-center rounded-xl bg-accent text-black px-4 py-2 text-sm font-semibold hover:opacity-90 transition-opacity shrink-0 shadow-sm"
+            data-testid="ticket-source-alert-link"
+          >
+            ← View Source Alert
+          </Link>
+        </aside>
+      ) : null}
 
       {/* Signal */}
       <PageSection title="Signal" description="What the desk observed before deciding.">

@@ -207,14 +207,13 @@ function CausalChain({
         ? txExplorerUrl(alert.publicationChainId ?? ACTIVE_INTELLIGENCE_CHAIN_ID, actionTxHash)
         : null))
     : null;
-  const actionHref =
-    !isDeferred && !linkable
-      ? alert.ticketId
-        ? `/desk/tickets/${encodeURIComponent(alert.ticketId)}`
-        : alert.intentId
-          ? `/activity?entityId=${encodeURIComponent(alert.intentId)}&entityType=desk_intent`
-          : actionTxHref
-      : null;
+  const actionHref = !isDeferred
+    ? alert.ticketId
+      ? `/desk/tickets/${encodeURIComponent(alert.ticketId)}`
+      : alert.intentId
+        ? `/activity?entityId=${encodeURIComponent(alert.intentId)}&entityType=desk_intent`
+        : actionTxHref
+    : null;
 
   return (
     <div
@@ -222,14 +221,35 @@ function CausalChain({
       data-testid="alert-causal-chain"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Decision details
-        </p>
-        <StatusBadge
-          label={signalStatusCopy(alert)}
-          variant={signalStatusVariant(alert)}
-          data-testid="alert-signal-status"
-        />
+        <div className="flex items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Decision details
+          </p>
+          <StatusBadge
+            label={signalStatusCopy(alert)}
+            variant={signalStatusVariant(alert)}
+            data-testid="alert-signal-status"
+          />
+        </div>
+        {alert.ticketId ? (
+          <Link
+            to={`/desk/tickets/${encodeURIComponent(alert.ticketId)}`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-accent text-black hover:opacity-90 transition-all shadow-sm shrink-0"
+            data-testid="alert-view-ticket-btn"
+            onClick={(event) => event.stopPropagation()}
+          >
+            View Trade Ticket →
+          </Link>
+        ) : alert.intentId ? (
+          <Link
+            to={`/activity?entityId=${encodeURIComponent(alert.intentId)}&entityType=desk_intent`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-accent/20 text-accent border border-accent/40 hover:bg-accent/30 transition-all shrink-0"
+            data-testid="alert-view-intent-btn"
+            onClick={(event) => event.stopPropagation()}
+          >
+            View Trade Intent →
+          </Link>
+        ) : null}
       </div>
 
       <div

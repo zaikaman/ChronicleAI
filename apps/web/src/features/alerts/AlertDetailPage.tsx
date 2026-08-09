@@ -13,6 +13,7 @@ export function AlertDetailPage(): ReactElement {
   const { alertId } = useParams<{ alertId: string }>();
   const { state, refetch } = useAlert(alertId);
   const relatedTicket = useRelatedDeskTicket({
+    ticketId: state.status === "success" ? state.data.ticketId : undefined,
     sourceEventHash: state.status === "success" ? state.data.sourceEventHash : undefined,
     sourceReferences: state.status === "success" ? state.data.sourceReferences : undefined,
   });

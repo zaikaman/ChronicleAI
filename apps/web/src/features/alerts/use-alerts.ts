@@ -197,3 +197,41 @@ export function useAlerts(
     },
   };
 }
+
+/**
+ * Fetch the source alert associated with a given desk ticket or trade intent.
+ */
+export function useRelatedAlert(options: {
+  ticketId?: string | null | undefined;
+  intentId?: string | null | undefined;
+}): {
+  alert: PublicAlertResponse | null;
+  isLoading: boolean;
+} {
+  const { ticketId, intentId } = options;
+  const enabled = Boolean(ticketId || intentId);
+
+  const query = useQuery({
+    queryKey: ["alerts", "related", ticketId ?? "", intentId ?? ""],
+    enabled,
+    queryFn: async ({ signal }) => {
+      const params: Record<string, string> = {};
+      if (ticketId) params.ticketId = ticketId;
+      else if (intentId) params.intentId = intentId;
+
+      const data = await apiGetJson<{
+        items: Array<Record<string, unknown>>;
+      }>("/alerts", { signal, params });
+
+      const items = (data.items ?? []).map(mapAlert).filter(isAlertVisibleInPublicUi);
+      return items[0] ?? null;
+    },
+    staleTime: 60_000,
+  });
+
+  return {
+    alert: query.data ?? null,
+    isLoading: enabled && (query.isLoading || query.isPending),
+  };
+}
+

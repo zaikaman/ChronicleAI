@@ -293,10 +293,44 @@ export function createAlertRoutes(
 
       const alertKindParam = queryString(req.query.alertKind);
       const chainValue = queryString(req.query.chainId);
+      const ticketIdParam = queryString(req.query.ticketId);
+      const intentIdParam = queryString(req.query.intentId);
       const requestedChainId =
         chainValue !== undefined && Number.isInteger(Number(chainValue))
           ? Number(chainValue)
           : undefined;
+
+      if (ticketIdParam && alertRepo.findByTicketId) {
+        const found = await alertRepo.findByTicketId(ticketIdParam);
+        if (found) {
+          let signal: DeskSignalRow | null = null;
+          if (signalRepo && found.desk_signal_id) {
+            const sigRes = await signalRepo.findById(found.desk_signal_id);
+            if (sigRes.ok) signal = sigRes.value;
+          }
+          res.json({
+            items: [formatAlertResponse(found, signal)],
+            pagination: { page: 1, limit: 1, total: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+          });
+          return;
+        }
+      }
+
+      if (intentIdParam && alertRepo.findByIntentId) {
+        const found = await alertRepo.findByIntentId(intentIdParam);
+        if (found) {
+          let signal: DeskSignalRow | null = null;
+          if (signalRepo && found.desk_signal_id) {
+            const sigRes = await signalRepo.findById(found.desk_signal_id);
+            if (sigRes.ok) signal = sigRes.value;
+          }
+          res.json({
+            items: [formatAlertResponse(found, signal)],
+            pagination: { page: 1, limit: 1, total: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+          });
+          return;
+        }
+      }
 
       const result = await alertRepo.listPage({
         page: parsed.page,

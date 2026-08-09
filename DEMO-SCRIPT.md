@@ -1,86 +1,344 @@
-# ChronicleAI Demo Script
+# ChronicleAI — Demo Script (≤ 5 minutes)
 
-Target duration: approximately 4 minutes 30 seconds to 4 minutes 50 seconds. Hard maximum: 5 minutes.
+**Goal:** Win on the criteria that matter for *The Last Mile* — a real KeeperHub execution, reliability, and a product someone would actually run.
 
-Audience: hackathon judges, including non-technical reviewers.
+**Total runtime target:** **4:30** (hard cap **4:55**). Leave 5 seconds of silence at the end for judges to screenshot the tx.
 
-Core story: **ChronicleAI is an AI research desk that watches important wallets, earns money by selling intelligence, and uses that revenue to make carefully controlled onchain moves.**
+**Primary live base URL:** `https://chronicle-ai-web.vercel.app`
 
-The video uses two simple ideas:
+**Hero proof tx (pin this in the description too):**
+[Sepolia · Desk Oracle Arbitrage · private route](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6)
 
-**Watch → Earn → Act**
+---
 
-**Real transaction → Public proof**
+## One-sentence pitch (memorize this)
 
-The narration should stay in plain English. Technical terms can remain visible in the product UI for technical judges, but they should not drive the voiceover.
+> ChronicleAI watches onchain activity, sells a $4.99 Chronicle Pass for deeper intelligence, routes that revenue through hard safety rules into a treasury desk, executes through KeeperHub, and publishes the proof.
 
-## Before recording
+That is the whole product. Everything else is evidence.
 
-Prepare one real example of each item:
+---
 
-- An active Watch campaign for a wallet, contract, or protocol.
-- A real Telegram DM delivered by that campaign for a matching event.
-- A paid intelligence or Watch receipt. If it did not fund the exact transaction shown later, describe it as revenue that supports the desk rather than claiming a direct payment-to-trade link.
-- A desk proposal with visible safety checks.
-- A completed KeeperHub execution with a real transaction hash.
-- The corresponding block explorer page, ready to open at the end.
+## What judges must walk away knowing
 
-Never use a fabricated Telegram message, fake success state, or pending transaction presented as completed. If a live event is difficult to reproduce, use a real previously delivered alert and describe it as a recent campaign result.
+| Judging axis | What this demo proves |
+| --- | --- |
+| **Onchain via KeeperHub** | Real Sepolia tx + KeeperHub run ID on Activity / ticket |
+| **KeeperHub surfaces** | Workflows, MCP path, private routing, gas/routing labels, audit trail |
+| **Reliability** | Policy gate → preflight dry-run → fail-closed private route → audit timeline |
+| **Usefulness** | Not a chat bot that “might trade” — a funded intelligence business that can act |
+| **Integration quality** | Clean public UI: Alerts → Desk → Ticket → Activity → Explorer |
 
-## Timeline and script
+---
 
-| Time | Visual direction | Narration | On-screen text |
-| --- | --- | --- | --- |
-| **0:00–0:15** | Opening title card. Use a clean dark background with the existing chartreuse accent. No UI yet. | “Most crypto tools stop at telling you what happened. ChronicleAI takes the next steps: it watches important wallets, earns money by selling intelligence, and can turn that revenue into carefully controlled onchain action.” | **Watch. Earn. Act.**<br><br>An AI desk that turns intelligence into verified onchain action. |
-| **0:15–0:35** | Keep the first slide on screen. Animate or reveal the three words one at a time. Do not show an architecture diagram. | “The story is simple. A customer asks ChronicleAI to watch something important. People pay for useful intelligence. Then the desk can use its operating revenue to make a carefully checked move.” | **WATCH → EARN → ACT** |
-| **0:35–1:05** | Open `/watch`. Show the page title and the Watch / Alert / Report flow. Pause on the sentence explaining that the service monitors any wallet, contract, or protocol. | “First, imagine that you care about a wallet but do not want to watch it all day. You open ChronicleAI’s Watch service and choose the wallet, contract, or protocol that matters to you.” | **WATCH**<br>Monitor what matters. |
-| **1:05–1:25** | Show the campaign form or an active campaign. Point to the target, campaign window, paid status, and any visible receipt or proof link. | “You choose the monitoring window and start a paid campaign. ChronicleAI keeps watch during that window and records the campaign so the result is not just a message in a chat.” | **Paid monitoring campaign**<br>Target selected<br>Campaign active |
-| **1:25–1:55** | Show the real Telegram DM. Hold long enough to read the target, event summary, timestamp, and proof link. Redact personal chat details if necessary. | “When something relevant happens, the customer gets a Telegram message. It explains what happened in plain language and gives the customer a way to verify that the event was real.” | **Telegram update**<br>Matching event detected<br>Proof available |
-| **1:55–2:20** | Open the Watch campaign detail or show the final report and its onchain receipt. Use a slow zoom or cursor highlight on the report and receipt link. | “At the end of the campaign, ChronicleAI can produce a deeper report and publish it with an onchain receipt. Monitoring, delivery, and the final report are all part of the paid service.” | **Campaign report**<br>Published with proof |
-| **2:20–2:50** | Show `/premium` or the paid Watch receipt. Keep the price, payment status, and receipt visible. Do not explain wallet signatures or payment protocols. | “This is the Earn part of the loop. Customers pay for deeper analysis and personalized monitoring. That revenue gives the desk capital to operate.” | **EARN**<br>Paid intelligence and monitoring |
-| **2:50–3:05** | Briefly show the premium receipt or revenue record in the product. Keep this short; the purpose is to connect the service to the desk, not to explain payment infrastructure. | “The important point is not the payment technology. It is that useful information becomes a real product with real revenue.” | **Useful information → Revenue** |
-| **3:05–3:35** | Open `/desk`. Show the treasury summary and latest proposal. Let the viewer read the proposed action before moving on. | “Now we move to the desk. The desk sees an opportunity for its funds. ChronicleAI can recommend a move, but the AI cannot move money by itself.” | **ACT**<br>A proposal for the treasury desk |
-| **3:35–3:55** | Move to the safety status, health checks, pause state, and approval result. Highlight the final decision rather than every metric. | “Before anything happens, ChronicleAI checks its safety limits. It considers the desk’s health, size limits, and whether the system is allowed to act. If the checks do not pass, the desk holds.” | **AI proposes**<br>**Safety rules decide** |
-| **3:55–4:15** | Open `/activity` and focus on the relevant KeeperHub run. Show the execution status, KeeperHub run ID, route, and transaction link. | “When the move is approved, KeeperHub handles the real transaction. It is the execution layer that turns the approved decision into an onchain action.” | **KeeperHub executed**<br>Real workflow<br>Real transaction |
-| **4:15–4:40** | Follow the transaction link to the block explorer. Keep the confirmed status, chain, timestamp, and transaction hash on screen. | “ChronicleAI records the result in its activity trail, then links to the confirmed transaction. This is not a simulation or a prediction. It is the public record of what happened.” | **PROVE**<br>Confirmed onchain transaction<br>Publicly verifiable |
-| **4:40–4:50** | Closing title card. Use the second and final slide. | “Information creates revenue. Revenue enables controlled action. Every action leaves public proof.” | **Real transaction → Public proof** |
+## Demo route (click path)
 
-## Surface order
+Record this exact path. Do not improvise mid-take.
 
-Record the browser flow in this order:
+```
+1. /                          Hero — “Watch. Earn. Act.”
+2. /alerts                    Public intelligence + causal chain
+3. /alerts/:id                One Alert with signal / policy / action links
+4. /desk                      Policy gate, HF, kill switch, capital
+5. /desk/tickets/:ticketId    Execution audit (preflight → submit → outcome)
+6. sepolia.etherscan.io/tx/…  Independent verification
+7. /activity?filter=desk      Full audit trail + routing labels
+8. (optional 8s) /watch       Premium monitoring product beat
+```
 
-1. [`/watch`](https://chronicle-ai-web.vercel.app/watch)
-2. Active Watch campaign detail or final report
-3. Telegram DM
-4. [`/premium`](https://chronicle-ai-web.vercel.app/premium) or the paid Watch receipt
-5. [`/desk`](https://chronicle-ai-web.vercel.app/desk)
-6. [`/activity`](https://chronicle-ai-web.vercel.app/activity)
-7. Confirmed block explorer transaction
+**Do not open:** Affiliates, FAQ walls, code editors, raw JSON, or more than one ticket.
 
-Use one story and one transaction. Do not jump between unrelated alerts, campaigns, or transactions.
+**Tabs to pre-open before recording (left → right):**
 
-## Recording direction
+1. `https://chronicle-ai-web.vercel.app/`
+2. `https://chronicle-ai-web.vercel.app/alerts`
+3. One strong alert detail (see prep below)
+4. `https://chronicle-ai-web.vercel.app/desk`
+5. One filled ticket with execution audit
+6. Etherscan hero tx
+7. `https://chronicle-ai-web.vercel.app/activity?filter=desk`
+8. (optional) `https://chronicle-ai-web.vercel.app/watch`
 
-- Keep the browser at a readable zoom and hide unrelated tabs, bookmarks, wallet secrets, and notifications.
-- Use captions matching the narration. The key message should remain understandable with audio muted.
-- Hold on the Telegram message, KeeperHub execution, and confirmed transaction for at least three seconds each.
-- Use simple cuts between surfaces. Avoid showing code, architecture diagrams, or payment protocol details in the main video.
-- Keep the cursor visible when it points to a campaign, receipt, execution status, or transaction link.
-- Do not call a desk condition a “market alert” unless the screen is actually showing an external market observation. Say “something important happened” or “the desk found an opportunity.”
-- Do not say that a specific customer payment funded the displayed transaction unless the product records that exact causal relationship.
-- Keep “ERC-20,” “event classification,” “ingestion pipeline,” “MCP,” “x402,” “MPP,” “APY differential,” and “preflight” out of the narration. They may remain visible as small UI labels.
+---
 
-## Final review checklist
+## Pre-recording checklist (~15 minutes)
 
-Before submitting, confirm that the video answers these questions without requiring technical knowledge:
+Do this **before** the camera rolls. A cold live demo is how good projects lose.
 
-- What does ChronicleAI watch?
-- Why would someone pay for it?
-- What does the desk do with the revenue?
-- What stops the AI from moving money freely?
-- Did KeeperHub execute a real transaction?
-- Where can the viewer verify the result?
+1. **Hard refresh every tab** so live data is warm.
+2. **Pick one Alert** that shows a causal chain (signal status + policy or action link). Prefer a desk-trigger or market alert that clearly connects to a desk decision.
+3. **Pick one filled ticket** on `/desk/tickets/:id` with:
+   - strategy label (e.g. oracle arb / yield rotation)
+   - **Execution audit timeline** visible (preflight → submit → outcome)
+   - tx hash + **Private route** badge when it is a desk trade
+4. **Confirm hero tx** opens on Etherscan and shows Success.
+5. **Confirm Activity desk filter** shows KeeperHub run IDs / routing labels.
+6. **Kill switch must be clear** and desk not paused (unless you intentionally demo a hold — not recommended for the main take).
+7. **Silence notifications.** 1080p, 60fps if possible. Dark theme is the product default — stick to it.
+8. **Mic test:** speak the one-sentence pitch once. If you stumble, rewrite nothing — just re-record that line.
 
-The final frame should leave the viewer with one sentence:
+### If live data is thin (backup plan)
 
-> ChronicleAI turns useful onchain information into revenue, controlled action, and public proof.
+Use the README deep-proof set. Still show the product UI first, then land on a known-good ticket + Etherscan:
+
+| Story beat | Backup tx |
+| --- | --- |
+| Desk private-route fill | `0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6` |
+| Yield rotation | `0xa6ccb2467f04e4159a0219fba7a3de307a2e196487cc6242d80493b851279d2a` |
+| Registry publish (public / sponsorship path) | `0x4acf30c4948dd0ddcde8c1377af22fc1c6acd01662b7470a785ae293bcc62f6a` |
+| MCP → REST recovery (reliability story) | `0xdeaf6568beed23962733d93e5575d2d8b182ee2d5f691609bb137a5f36166956` |
+
+---
+
+## Timed script
+
+Speak at a calm desk-reporter pace. **Do not rush the middle.** The middle is the win.
+
+### Beat 0 — Cold open (0:00 – 0:20)
+
+**On screen:** Home `/`
+
+**Say:**
+
+> Most agent demos stop at reasoning. The hard part is the last mile — turning a decision into a real onchain transaction that actually lands.
+>
+> ChronicleAI is an AI research desk that watches markets, earns from intelligence, and only then acts through KeeperHub — with public proof.
+
+**Do:** Hold hero for ~3s. Cursor idle. Let “Watch. Earn. Act.” and the live dashboard read.
+
+**Cut rule:** If the hero feels empty, still move on at 0:20. Do not scroll the marketing page.
+
+---
+
+### Beat 1 — Watch: intelligence is public (0:20 – 0:55)
+
+**On screen:** `/alerts` → click your pre-chosen alert → `/alerts/:id`
+
+**Say:**
+
+> First, it watches. ChronicleAI turns important onchain activity into plain-language Alerts — wallet moves, protocol events, desk conditions — with sources and publication proofs.
+>
+> This is not a private bot log. The market view is public. That is the product surface readers actually open.
+
+**Do:**
+
+1. Land on Alerts list (2s).
+2. Click one strong alert.
+3. Scroll just enough to show: title, summary, source/proof, and **causal chain** chips if present (signal / policy / action).
+
+**What judges should notice:** Alert is real, sourced, and already linked to the desk path.
+
+---
+
+### Beat 2 — Earn: revenue funds the desk (0:55 – 1:20)
+
+**On screen:** Stay on alert detail OR briefly flash `/subscription` or Premium teaser on the same page if visible — **max 15–20 seconds total**. Prefer narrating from the alert page rather than a full subscribe flow.
+
+**Say:**
+
+> Deeper analysis is productized. Humans unlock it with Chronicle Pass at four ninety-nine a month. Machine clients can pay per item over x402 or MPP.
+>
+> That revenue is what funds a real treasury desk — so the agent is not pretending every observation is a trade.
+
+**Do:** Do **not** complete a live wallet payment in the main take. It burns time and fails often on camera. Name the rails; show the business model in one breath.
+
+**Optional 5-second visual:** if a premium teaser or Pass CTA is already on screen, hover it. Otherwise skip.
+
+---
+
+### Beat 3 — Act: policy before execution (1:20 – 2:05)
+
+**On screen:** `/desk`
+
+**Say:**
+
+> When capital might move, the LLM only proposes. Hard policy decides.
+>
+> Health factor floors, position caps, minimum AUM, pause state, kill switch — pure deterministic gates. The model cannot self-approve a trade.
+
+**Do:**
+
+1. Show Live / pause / kill-switch badges.
+2. Point cursor at health factor + policy numbers for ~3s.
+3. Briefly show capital / equity if visible.
+4. Open intents or the pre-chosen ticket link from desk UI.
+
+**What judges should notice:** Safety is visible product UI, not a README claim.
+
+---
+
+### Beat 4 — The last mile: KeeperHub execution (2:05 – 3:25)  ★ core
+
+**On screen:** `/desk/tickets/:ticketId` → expand execution audit → open tx
+
+**Say:**
+
+> Here is the last mile.
+>
+> This ticket is one full path: Signal → decision → policy → KeeperHub workflow.
+>
+> Before broadcast, ChronicleAI dry-runs the material legs — including multi-step paths like approve then swap. If preflight fails, we record it. We do not invent a fill.
+>
+> Desk strategies submit on KeeperHub’s private route. Registry writes use the public path with sponsorship preferred. We label routes honestly from what actually returned — not marketing words.
+>
+> KeeperHub executes the workflow. ChronicleAI shows the run, gas narrative, and the transaction hash.
+
+**Do (slow, deliberate):**
+
+1. Show ticket headline + strategy + outcome badge (filled).
+2. Scroll to **Execution audit timeline**.
+3. Hover/expand stages in order: **preflight → submit → outcome**.
+4. Call out: KeeperHub run ID, **Private route** badge, gas if present.
+5. Click the tx hash → Etherscan success page.
+6. Hold Etherscan for **full 4–5 seconds**. Zoom if needed so the hash is readable.
+
+**This beat is ~80 seconds on purpose.** Judges are trained to distrust demos that skip the receipt.
+
+---
+
+### Beat 5 — Prove: activity trail (3:25 – 4:00)
+
+**On screen:** `/activity?filter=desk`
+
+**Say:**
+
+> Everything is inspectable. Activity correlates policy, KeeperHub logs, routing, and final receipts in one trail.
+>
+> If MCP transport drops, we fall back to KeeperHub’s REST workflow API, log the failure, and still land the write — same idempotency, no silent duplicates.
+>
+> Agents can think. KeeperHub lets them act. ChronicleAI makes the whole loop public.
+
+**Do:**
+
+1. Filter = Desk.
+2. Scroll one or two desk execution rows with run IDs / routing badges.
+3. Do not open five panels.
+
+---
+
+### Beat 6 — Optional product flash + close (4:00 – 4:30)
+
+**On screen:** `/watch` for ~8s **or** skip straight to close if time is tight.
+
+**If showing Watch, say:**
+
+> Watch is a separate paid product — monitor any wallet or contract, get Telegram DMs on matching events, and publish an onchain report when the campaign ends.
+
+**Always close on Etherscan or Activity with the hero tx visible. Say:**
+
+> One requirement for this hackathon: execute onchain through KeeperHub. Here is ours — live, audited, and independently verifiable.
+>
+> ChronicleAI: watch, earn, act, prove.
+
+**Hold final frame 3–5 seconds. Stop talking.**
+
+---
+
+## Spoken word budget (approx.)
+
+| Beat | Time | Words (target) |
+| --- | --- | --- |
+| Cold open | 0:20 | ~45 |
+| Watch | 0:35 | ~55 |
+| Earn | 0:25 | ~40 |
+| Policy | 0:45 | ~55 |
+| Execution ★ | 1:20 | ~110 |
+| Prove | 0:35 | ~55 |
+| Close | 0:30 | ~35 |
+| **Total** | **~4:30** | **~395** |
+
+If you go long, cut Earn first, then Watch optional flash. **Never cut Beat 4.**
+
+---
+
+## B-roll / cutaways (optional, only if editing)
+
+Use only if you are editing a second pass. Live continuous take is fine.
+
+| Cutaway | When | Purpose |
+| --- | --- | --- |
+| Etherscan success | After ticket outcome | Independent verification |
+| Routing badge close-up | During Beat 4 | Private vs public honesty |
+| MCP→REST log (README case study) | Beat 5 if time | Reliability story |
+| Registry contract page | Final 2s | Anchored publication surface |
+
+---
+
+## What NOT to say
+
+- “MEV-proof” / “never fails” / “fully autonomous money printer”
+- “We simulate” without naming **KeeperHub preflight / dry-run**
+- “Sponsored gas” on a private-route desk trade (they are mutually exclusive)
+- Long framework laundry lists (LangChain is fine **once**, not a tour)
+- “Imagine if…” — show the receipt instead
+
+---
+
+## Submission package (align video with DoraHacks fields)
+
+When you upload the BUIDL:
+
+| Field | Value |
+| --- | --- |
+| Source | `https://github.com/zaikaman/ChronicleAI` |
+| Demo video | This script, ≤ 5 min |
+| Tx proof | `https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6` |
+| Live desk | `https://chronicle-ai-web.vercel.app/desk` |
+| Live activity | `https://chronicle-ai-web.vercel.app/activity` |
+| Live alerts | `https://chronicle-ai-web.vercel.app/alerts` |
+| Registry | `0xD8Deb4475a7E23E194Bc93f8739858Fb20744111` (Sepolia) |
+
+**Video description (paste under the upload):**
+
+```text
+ChronicleAI — Watch. Earn. Act. Prove.
+
+AI research desk that monitors onchain activity, sells Chronicle Pass ($4.99/mo),
+routes revenue through hard policy into a treasury desk, and executes via KeeperHub
+with public audit trail.
+
+Hero tx (KeeperHub private route, desk oracle arb):
+https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6
+
+Live: https://chronicle-ai-web.vercel.app
+Code: https://github.com/zaikaman/ChronicleAI
+```
+
+---
+
+## Recording day run-of-show
+
+1. Run the pre-recording checklist (15 min).
+2. Do **one full silent click-through** of the demo route (2 min).
+3. Record **Take 1** continuous (no edits required).
+4. If Take 1 is ≥ 5:00 or flubs Beat 4, record **Take 2** only.
+5. Prefer the take where Etherscan is readable and you sound calm — not the take with more features.
+
+**Time to record after prep:** ~10 minutes for two takes.
+
+---
+
+## Judge-facing “why this wins” (do not read on camera)
+
+Keep this in your head, not in the voiceover:
+
+1. **Execution-weighted hackathon** → hero is a real KeeperHub-filled desk trade, not a chat transcript.
+2. **Last-mile thesis** → policy + preflight + private route + audit = you understood failure modes.
+3. **Real business loop** → Watch / Pass / Desk is more useful than “agent that swaps once.”
+4. **Honest routing** → private desk vs sponsored registry shows integration maturity.
+5. **Inspectable UI** → judges can re-walk Alerts → Desk → Ticket → Activity after the video.
+
+---
+
+## Quick cue card (print or second monitor)
+
+```
+0:00  /            Last mile. Watch. Earn. Act. Prove.
+0:20  /alerts      Public intelligence + causal chain
+0:55  (narrate)    Pass $4.99 · x402/MPP machines · funds desk
+1:20  /desk        LLM proposes · policy decides
+2:05  /ticket      Preflight → KeeperHub → private route → tx
+3:10  Etherscan    Hold success 5 seconds
+3:25  /activity    Audit trail · MCP fallback · prove
+4:00  close        “Here is our KeeperHub execution.” STOP
+```

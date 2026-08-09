@@ -261,15 +261,17 @@ export function useDeskCapitalMoves(
  * Tries signalHash match, then content-uri style source references.
  */
 export function useRelatedDeskTicket(options: {
+  ticketId?: string | null | undefined;
   sourceEventHash?: string | null | undefined;
   sourceReferences?: string[] | undefined;
 }): {
   ticket: DeskTicketNarrative | null;
   isLoading: boolean;
 } {
-  const { sourceEventHash, sourceReferences } = options;
+  const { ticketId, sourceEventHash, sourceReferences } = options;
 
   const fromRef = useMemo(() => {
+    if (ticketId) return ticketId;
     const refs = sourceReferences ?? [];
     return (
       refs
@@ -284,9 +286,9 @@ export function useRelatedDeskTicket(options: {
         })
         .find((id): id is string => Boolean(id)) ?? null
     );
-  }, [sourceReferences]);
+  }, [ticketId, sourceReferences]);
 
-  const enabled = Boolean(sourceEventHash || fromRef);
+  const enabled = Boolean(ticketId || sourceEventHash || fromRef);
 
   const query = useQuery({
     queryKey: queryKeys.desk.relatedTicket(sourceEventHash, fromRef),
