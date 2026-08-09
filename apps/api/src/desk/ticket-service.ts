@@ -55,6 +55,8 @@ export interface TicketService {
   findById(id: string): Promise<DeskTicketRow | null>;
   findByIntentId(intentId: string): Promise<DeskTicketRow | null>;
   findBySignalHash(signalHash: string): Promise<DeskTicketRow | null>;
+  findByKeeperHubRunId(keeperHubRunId: string): Promise<DeskTicketRow | null>;
+  findByTxHash(txHash: string): Promise<DeskTicketRow | null>;
   listRecent(limit?: number): Promise<DeskTicketRow[]>;
   listPage(params?: {
     page?: number;
@@ -329,6 +331,18 @@ export function createTicketService(deps: {
 
     async findBySignalHash(signalHash) {
       const result = await tickets.findBySignalHash(signalHash);
+      if (!result.ok) throw result.error;
+      return result.value;
+    },
+
+    async findByKeeperHubRunId(keeperHubRunId) {
+      const result = await tickets.findByKeeperHubRunId(keeperHubRunId);
+      if (!result.ok) throw result.error;
+      return result.value;
+    },
+
+    async findByTxHash(txHash) {
+      const result = await tickets.findByTxHash(txHash);
       if (!result.ok) throw result.error;
       return result.value;
     },

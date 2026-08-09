@@ -353,6 +353,8 @@ export interface DeskControlPlane {
   }): Promise<import("@chronicleai/db").PaginatedResult<DeskTicketRow>>;
   getTicket(id: string): Promise<DeskTicketRow | null>;
   findTicketBySignalHash(signalHash: string): Promise<DeskTicketRow | null>;
+  findTicketByKeeperHubRunId(keeperHubRunId: string): Promise<DeskTicketRow | null>;
+  findTicketByTxHash(txHash: string): Promise<DeskTicketRow | null>;
   findTicketByIntentId(intentId: string): Promise<DeskTicketRow | null>;
   listCapitalMoves(limit?: number): Promise<DeskCapitalMoveRow[]>;
   listCapitalMovesPage(params?: {
@@ -1491,6 +1493,14 @@ export function createDeskControlPlane(deps: DeskControlPlaneDeps): DeskControlP
 
     async findTicketBySignalHash(signalHash) {
       return deps.tickets.findBySignalHash(signalHash);
+    },
+
+    async findTicketByKeeperHubRunId(keeperHubRunId) {
+      return deps.tickets.findByKeeperHubRunId(keeperHubRunId);
+    },
+
+    async findTicketByTxHash(txHash) {
+      return deps.tickets.findByTxHash(txHash);
     },
 
     async findTicketByIntentId(intentId) {

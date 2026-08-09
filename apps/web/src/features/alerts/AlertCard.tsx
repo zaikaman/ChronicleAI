@@ -9,6 +9,7 @@ import {
 } from "../../components/data-primitives.tsx";
 import { PublicationProof } from "../../components/publication-proof.tsx";
 import { chainLabel, txExplorerUrl } from "../../lib/explorer.ts";
+import { useRelatedDeskTicket } from "../desk/use-desk.ts";
 import {
   alertActionStepLabel,
   alertHasSignalStep,
@@ -194,6 +195,16 @@ function CausalChain({
   );
   if (!hasCausalData) return null;
 
+  const relatedTicket = useRelatedDeskTicket({
+    ticketId: alert.ticketId,
+    keeperHubRunId: alert.keeperHubRunId ?? alert.actionKeeperHubRunId,
+    txHash: alert.actionTransactionHash ?? alert.transactionHash,
+    sourceEventHash: alert.sourceEventHash,
+    sourceReferences: alert.sourceReferences,
+  });
+  const ticketId = alert.ticketId ?? relatedTicket.ticket?.id;
+  const intentId = alert.intentId ?? relatedTicket.ticket?.intentId;
+
   const showSignal = alertHasSignalStep(alert);
   const proof = alert.causalChain?.proof;
   const proofHref = proof?.explorerUrl ?? alert.actionExplorerUrl ?? alert.explorerUrl;
@@ -208,10 +219,10 @@ function CausalChain({
         : null))
     : null;
   const actionHref = !isDeferred
-    ? alert.ticketId
-      ? `/desk/tickets/${encodeURIComponent(alert.ticketId)}`
-      : alert.intentId
-        ? `/activity?entityId=${encodeURIComponent(alert.intentId)}&entityType=desk_intent`
+    ? ticketId
+      ? `/desk/tickets/${encodeURIComponent(ticketId)}`
+      : intentId
+        ? `/activity?entityId=${encodeURIComponent(intentId)}&entityType=desk_intent`
         : actionTxHref
     : null;
 
@@ -231,23 +242,32 @@ function CausalChain({
             data-testid="alert-signal-status"
           />
         </div>
-        {alert.ticketId ? (
+        {ticketId ? (
           <Link
-            to={`/desk/tickets/${encodeURIComponent(alert.ticketId)}`}
+            to={`/desk/tickets/${encodeURIComponent(ticketId)}`}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-accent text-black hover:opacity-90 transition-all shadow-sm shrink-0"
             data-testid="alert-view-ticket-btn"
             onClick={(event) => event.stopPropagation()}
           >
             View Trade Ticket →
           </Link>
-        ) : alert.intentId ? (
+        ) : intentId ? (
           <Link
-            to={`/activity?entityId=${encodeURIComponent(alert.intentId)}&entityType=desk_intent`}
+            to={`/activity?entityId=${encodeURIComponent(intentId)}&entityType=desk_intent`}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-accent/20 text-accent border border-accent/40 hover:bg-accent/30 transition-all shrink-0"
             data-testid="alert-view-intent-btn"
             onClick={(event) => event.stopPropagation()}
           >
             View Trade Intent →
+          </Link>
+        ) : isDeskTriggerAlert(alert) ? (
+          <Link
+            to="/desk"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-accent/20 text-accent border border-accent/40 hover:bg-accent/30 transition-all shrink-0"
+            data-testid="alert-view-desk-btn"
+            onClick={(event) => event.stopPropagation()}
+          >
+            View Desk →
           </Link>
         ) : null}
       </div>

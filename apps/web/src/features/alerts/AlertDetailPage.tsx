@@ -14,6 +14,14 @@ export function AlertDetailPage(): ReactElement {
   const { state, refetch } = useAlert(alertId);
   const relatedTicket = useRelatedDeskTicket({
     ticketId: state.status === "success" ? state.data.ticketId : undefined,
+    keeperHubRunId:
+      state.status === "success"
+        ? (state.data.keeperHubRunId ?? state.data.actionKeeperHubRunId)
+        : undefined,
+    txHash:
+      state.status === "success"
+        ? (state.data.actionTransactionHash ?? state.data.transactionHash)
+        : undefined,
     sourceEventHash: state.status === "success" ? state.data.sourceEventHash : undefined,
     sourceReferences: state.status === "success" ? state.data.sourceReferences : undefined,
   });

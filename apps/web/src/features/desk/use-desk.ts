@@ -262,13 +262,15 @@ export function useDeskCapitalMoves(
  */
 export function useRelatedDeskTicket(options: {
   ticketId?: string | null | undefined;
+  keeperHubRunId?: string | null | undefined;
+  txHash?: string | null | undefined;
   sourceEventHash?: string | null | undefined;
   sourceReferences?: string[] | undefined;
 }): {
   ticket: DeskTicketNarrative | null;
   isLoading: boolean;
 } {
-  const { ticketId, sourceEventHash, sourceReferences } = options;
+  const { ticketId, keeperHubRunId, txHash, sourceEventHash, sourceReferences } = options;
 
   const fromRef = useMemo(() => {
     if (ticketId) return ticketId;
@@ -288,10 +290,13 @@ export function useRelatedDeskTicket(options: {
     );
   }, [ticketId, sourceReferences]);
 
-  const enabled = Boolean(ticketId || sourceEventHash || fromRef);
+  const enabled = Boolean(ticketId || keeperHubRunId || txHash || sourceEventHash || fromRef);
 
   const query = useQuery({
-    queryKey: queryKeys.desk.relatedTicket(sourceEventHash, fromRef),
+    queryKey: queryKeys.desk.relatedTicket(
+      sourceEventHash ?? null,
+      fromRef || keeperHubRunId || txHash || null,
+    ),
     enabled,
     queryFn: async ({ signal }) => {
       if (fromRef) {
@@ -303,16 +308,43 @@ export function useRelatedDeskTicket(options: {
           return body.ticket;
         } catch (err) {
           if (!isNotFoundError(err)) throw err;
-          // fall through to signalHash lookup
+        }
+      }
+
+      if (keeperHubRunId) {
+        try {
+          const body = await apiGetJson<{ tickets: DeskTicketNarrative[] }>("/desk/tickets", {
+            signal,
+            params: { keeperHubRunId },
+          });
+          if (body.tickets?.[0]) return body.tickets[0];
+        } catch {
+          // fall through
+        }
+      }
+
+      if (txHash) {
+        try {
+          const body = await apiGetJson<{ tickets: DeskTicketNarrative[] }>("/desk/tickets", {
+            signal,
+            params: { txHash },
+          });
+          if (body.tickets?.[0]) return body.tickets[0];
+        } catch {
+          // fall through
         }
       }
 
       if (sourceEventHash) {
-        const body = await apiGetJson<{ tickets: DeskTicketNarrative[] }>("/desk/tickets", {
-          signal,
-          params: { signalHash: sourceEventHash },
-        });
-        return body.tickets?.[0] ?? null;
+        try {
+          const body = await apiGetJson<{ tickets: DeskTicketNarrative[] }>("/desk/tickets", {
+            signal,
+            params: { signalHash: sourceEventHash },
+          });
+          return body.tickets?.[0] ?? null;
+        } catch {
+          return null;
+        }
       }
 
       return null;

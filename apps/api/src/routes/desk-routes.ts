@@ -180,13 +180,33 @@ export function createDeskRoutes(controlPlane: DeskControlPlane): RouterType {
   router.get("/desk/tickets", async (req, res, next) => {
     try {
       const signalHashRaw = req.query.signalHash;
+      const keeperHubRunIdRaw = req.query.keeperHubRunId;
+      const txHashRaw = req.query.txHash;
+
       const signalHash =
         typeof signalHashRaw === "string" && signalHashRaw.trim().length > 0
           ? signalHashRaw.trim()
           : undefined;
+      const keeperHubRunId =
+        typeof keeperHubRunIdRaw === "string" && keeperHubRunIdRaw.trim().length > 0
+          ? keeperHubRunIdRaw.trim()
+          : undefined;
+      const txHash =
+        typeof txHashRaw === "string" && txHashRaw.trim().length > 0
+          ? txHashRaw.trim()
+          : undefined;
 
-      if (signalHash) {
-        const ticket = await controlPlane.findTicketBySignalHash(signalHash);
+      if (signalHash || keeperHubRunId || txHash) {
+        let ticket = null;
+        if (keeperHubRunId) {
+          ticket = await controlPlane.findTicketByKeeperHubRunId(keeperHubRunId);
+        }
+        if (!ticket && txHash) {
+          ticket = await controlPlane.findTicketByTxHash(txHash);
+        }
+        if (!ticket && signalHash) {
+          ticket = await controlPlane.findTicketBySignalHash(signalHash);
+        }
         res.json({
           tickets: ticket ? [toPublicTicketNarrative(ticket)] : [],
           pagination: {

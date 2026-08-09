@@ -19,6 +19,8 @@ export interface DeskTicketRepository {
   findByTicketHash(ticketHash: string): Promise<Result<DeskTicketRow | null>>;
   /** Most recent ticket whose signal commitment hash matches. */
   findBySignalHash(signalHash: string): Promise<Result<DeskTicketRow | null>>;
+  findByKeeperHubRunId(keeperHubRunId: string): Promise<Result<DeskTicketRow | null>>;
+  findByTxHash(txHash: string): Promise<Result<DeskTicketRow | null>>;
   update(id: string, update: DeskTicketUpdate): Promise<Result<DeskTicketRow>>;
   listRecent(limitParam?: number): Promise<Result<DeskTicketRow[]>>;
   listPage(params?: PaginationParams): Promise<Result<PaginatedResult<DeskTicketRow>>>;
@@ -83,6 +85,28 @@ export function createDeskTicketRepository(
       const { data, error } = await table()
         .select("*")
         .eq("signal_hash", signalHash.toLowerCase())
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(maybeRow((data ?? []) as DeskTicketRow[]));
+    },
+
+    async findByKeeperHubRunId(keeperHubRunId) {
+      const { data, error } = await table()
+        .select("*")
+        .eq("keeper_hub_run_id", keeperHubRunId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(maybeRow((data ?? []) as DeskTicketRow[]));
+    },
+
+    async findByTxHash(txHash) {
+      const { data, error } = await table()
+        .select("*")
+        .eq("tx_hash", txHash)
         .order("created_at", { ascending: false })
         .limit(1);
 
