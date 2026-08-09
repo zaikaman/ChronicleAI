@@ -69,31 +69,38 @@ export function hasExplorerLink(log: unknown): boolean {
       ? (l.details as Record<string, unknown>)
       : {};
 
+  const getString = (val: unknown): string | null =>
+    typeof val === "string" && val.trim().length > 0 ? val.trim() : null;
+
   const txHash =
-    l.tx_hash ||
-    l.txHash ||
-    l.transaction_hash ||
-    l.transactionHash ||
-    details.txHash ||
-    details.transactionHash ||
-    details.registryTxHash ||
-    details.payoutTxHash ||
-    details.burnTxHash ||
-    details.mintTxHash ||
-    details.action_transaction_hash ||
+    getString(l.tx_hash) ||
+    getString(l.txHash) ||
+    getString(l.transaction_hash) ||
+    getString(l.transactionHash) ||
+    getString(details.txHash) ||
+    getString(details.transactionHash) ||
+    getString(details.registryTxHash) ||
+    getString(details.payoutTxHash) ||
+    getString(details.burnTxHash) ||
+    getString(details.mintTxHash) ||
+    getString(details.action_transaction_hash) ||
+    getString(details.actionTransactionHash) ||
     null;
 
-  const explorerUrl =
-    l.explorer_url ||
-    l.explorerUrl ||
-    details.explorer_url ||
-    details.explorerUrl ||
-    details.action_explorer_url ||
-    details.protectStatusUrl ||
-    l.protectStatusUrl ||
-    (txHash ? `https://sepolia.etherscan.io/tx/${txHash}` : null);
+  const validTxHash = txHash && /^0x[0-9a-fA-F]{10,}$/.test(txHash) ? txHash : null;
 
-  return Boolean(explorerUrl);
+  const explorerUrl =
+    getString(l.explorer_url) ||
+    getString(l.explorerUrl) ||
+    getString(details.explorer_url) ||
+    getString(details.explorerUrl) ||
+    getString(details.action_explorer_url) ||
+    getString(details.actionExplorerUrl) ||
+    getString(details.protectStatusUrl) ||
+    getString(l.protectStatusUrl) ||
+    (validTxHash ? `https://sepolia.etherscan.io/tx/${validTxHash}` : null);
+
+  return Boolean(explorerUrl && explorerUrl.startsWith("http"));
 }
 
 export function createExecutionLogRepository(supabase: SupabaseClient): ExecutionLogRepository {

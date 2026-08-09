@@ -227,6 +227,10 @@ export function createActivityRoutes(deps: ActivityRouteDeps): RouterType {
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+    res.setHeader("X-Total-Count", totalCount.toString());
+    res.setHeader("X-Total-Pages", totalPages.toString());
+    res.setHeader("X-Current-Page", currentPage.toString());
+    res.setHeader("Access-Control-Expose-Headers", "X-Total-Count, X-Total-Pages, X-Current-Page");
     res.send(out);
   };
 
