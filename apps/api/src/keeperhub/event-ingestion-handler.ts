@@ -418,6 +418,14 @@ export class EventIngestionHandler {
       };
     }
 
+    if (payload.eventType === "wallet_transfer") {
+      return {
+        accepted: true,
+        statusCode: 202,
+        message: "Wallet watch event stored (wallet watch alerts excluded from public Alerts feed)",
+      };
+    }
+
     // 6. Create the deterministic public Alert shell before any LLM call.
     // This makes the public observation and its causal evidence durable even
     // when enrichment, publication, or registry anchoring is unavailable.

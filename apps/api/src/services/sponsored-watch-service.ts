@@ -1266,6 +1266,25 @@ export function createSponsoredWatchService(params: {
       return true;
     }
 
+    if (kind === "wallet" || primary.event_type === "wallet_transfer") {
+      await execLogRepo.append({
+        action_type: "publish_alert",
+        entity_type: "sponsored_watch",
+        entity_id: watch.id,
+        status: "succeeded",
+        message: `Public wallet watch alert publication skipped (wallet watch alerts excluded from public Alerts feed; ${newEvents.length} new event(s))`,
+        details: {
+          visibility: "public",
+          deliveryMode: "wallet_watch_skipped",
+          matchedEventCount: newEvents.length,
+          sourceEventIds: newEvents.map((e) => e.id).slice(0, 20),
+        },
+        started_at: nowIso,
+        completed_at: nowIso,
+      });
+      return publicChatId ? publicDmDelivered : true;
+    }
+
     if (!alertRepo || !alertPublicationService) {
       // Soft fallback: community broadcast only when full pipeline is unavailable.
       if (notificationService) {
@@ -1273,7 +1292,7 @@ export function createSponsoredWatchService(params: {
           alertId: watch.id,
           title,
           summary,
-          eventType: kind === "wallet" ? "wallet_transfer" : "contract_event",
+          eventType: "contract_event",
           sourceChainLabel: "Ethereum Mainnet",
           sourceExplorerUrl: sourceExplorer,
           contentUri: frontendOrigin
