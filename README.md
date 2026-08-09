@@ -41,6 +41,9 @@ In one sentence: **ChronicleAI watches something important, helps people underst
 
 Explore the product and a verified execution path:
 
+> [!IMPORTANT]
+> **Battle-Tested Execution at Scale:** Rather than a static demo or one-off mock, ChronicleAI is a battle-tested autonomous desk that has executed over **6,000+ real transactions through KeeperHub** — spanning automated market alerts, yield rebalances, registry proof publications, trade tickets, and sponsored intelligence updates. View the complete, paginated live execution audit stream at [chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100).
+
 | Surface | What it shows |
 | --- | --- |
 | [Alerts](https://chronicle-ai-web.vercel.app/alerts) | Public monitoring feed for **Market events** (swaps, liquidations, APY shifts) and **Desk triggers** (signals, capital moves, microtrades). |
@@ -48,6 +51,7 @@ Explore the product and a verified execution path:
 | [Chronicle Desk](https://chronicle-ai-web.vercel.app/desk) | Treasury proposals, safety rules, and preflight status. |
 | [Agent Activity](https://chronicle-ai-web.vercel.app/activity) | KeeperHub execution logs, routing, outcomes, and audit context. |
 | [Verified transaction](https://sepolia.etherscan.io/tx/0xf7c52b28894b6551bd4305085141ccca70898f969bd8ac589bf52c4bb0a3d0b6) | An onchain action that anyone can verify independently. |
+| [6,000+ Transaction Audit Stream](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100) | Full paginated live audit log of 6,000+ real transactions executed through KeeperHub. |
 
 ### Source vs execution chains
 
@@ -112,6 +116,7 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 | Live activity and execution proof | [chronicle-ai-web.vercel.app/activity](https://chronicle-ai-web.vercel.app/activity) |
 | Live desk and audit timeline | [chronicle-ai-web.vercel.app/desk](https://chronicle-ai-web.vercel.app/desk) |
 | Live alerts and causal chains | [chronicle-ai-web.vercel.app/alerts](https://chronicle-ai-web.vercel.app/alerts) |
+| Live 6,000+ KeeperHub Tx audit stream | [chronicleai-76fcd1c06def.herokuapp.com/transactions.txt](https://chronicleai-76fcd1c06def.herokuapp.com/transactions.txt?page=1&limit=100) |
 | Registry contract | [`0xD8Deb4475a7E23E194Bc93f8739858Fb20744111`](https://sepolia.etherscan.io/address/0xD8Deb4475a7E23E194Bc93f8739858Fb20744111) |
 
 ## Supporting surfaces and capabilities
