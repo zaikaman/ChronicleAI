@@ -183,7 +183,6 @@ function applyAlertListFilters<T extends FilterableQuery>(
   filters?: PublicAlertListFilters,
 ): T {
   let q: FilterableQuery = query.neq("delivery_status", "queued");
-  q = q.neq("event_type", "wallet_transfer");
 
   if (filters?.feedScope === "all") {
     // Mainnet market Alerts + Sepolia Desk-trigger Alerts (server-side union).
