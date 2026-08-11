@@ -25,9 +25,12 @@ export function corsMiddleware(allowedOrigin: string) {
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature, X-ChronicleAI-Timestamp, X-ChronicleAI-Nonce, X-Premium-Access-Receipt, X-Payer-Reference",
+      "Content-Type, Authorization, X-Request-Id, X-ChronicleAI-Signature, X-ChronicleAI-Timestamp, X-ChronicleAI-Nonce, X-Premium-Access-Receipt, X-Payer-Reference, PAYMENT-SIGNATURE",
     );
-    res.setHeader("Access-Control-Expose-Headers", "X-Premium-Access-Receipt, X-Payer-Reference");
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "X-Premium-Access-Receipt, X-Payer-Reference, PAYMENT-REQUIRED, X-PAYMENT-REQUIREMENTS, WWW-AUTHENTICATE, PAYMENT-RECEIPT",
+    );
     res.setHeader("Access-Control-Max-Age", "86400");
     res.setHeader("Vary", "Origin");
 

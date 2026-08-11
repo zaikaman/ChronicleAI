@@ -205,5 +205,11 @@ describe("CORS and rate-limit middleware", () => {
     expect(response.statusCode).toBe(204);
     expect(response.ended).toBe(true);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+    expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
+      "PAYMENT-SIGNATURE",
+    );
+    expect(response.headers.get("Access-Control-Expose-Headers")).toContain(
+      "PAYMENT-REQUIRED",
+    );
   });
 });
