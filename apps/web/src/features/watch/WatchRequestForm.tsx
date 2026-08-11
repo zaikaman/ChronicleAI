@@ -1,12 +1,13 @@
 // Watch request form — calls the canonical KeeperHub Marketplace listing.
 
+import { loadClientEnv } from "@chronicleai/config/client";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { loadClientEnv } from "@chronicleai/config/client";
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { Surface } from "../../components/page-chrome.tsx";
 import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
 import { isEvmAddress, useWallet } from "../wallet";
+import { AgentPaymentInstructions } from "./AgentPaymentInstructions.tsx";
 
 type TargetKind = "contract" | "wallet";
 type Visibility = "public" | "private";
@@ -414,6 +415,7 @@ export function WatchRequestForm({
         <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
           KeeperHub Marketplace handles payment on Base Mainnet. ChronicleAI creates the registry receipt on Ethereum Sepolia, monitors Ethereum Mainnet, sends Telegram alerts, and publishes the final report asynchronously.
         </p>
+        <AgentPaymentInstructions />
         <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-frame px-3 py-1 text-xs font-medium text-muted-foreground">
           <span aria-hidden="true">◉</span> KeeperHub Marketplace · Base Mainnet USDC · Sepolia registry proof
         </p>

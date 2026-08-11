@@ -12,9 +12,10 @@ const FORWARDED_HEADERS = [
 /**
  * Browser-safe gateway for the public Watch listing.
  *
- * The KeeperHub organization key remains server-side. The browser only sees
- * the 402 challenge and sends back a standard PAYMENT-SIGNATURE header after
- * signing it with the connected wallet.
+ * The KeeperHub organization key remains server-side for the browser x402
+ * path. Agent callers may instead send an MPP `Authorization: Payment ...`
+ * credential; that credential must pass through unchanged so KeeperHub can
+ * verify it and return its Payment-Receipt.
  */
 export function createKeeperhubMarketplaceProxyRoutes(env: ServerEnv): RouterType {
   const router: RouterType = Router();
@@ -33,20 +34,24 @@ export function createKeeperhubMarketplaceProxyRoutes(env: ServerEnv): RouterTyp
       }
 
       const headers: Record<string, string> = {
+        // KeeperHub's marketplace call route is anonymous apart from payment.
+        // Keep the server key for browser/x402 calls, but never overwrite an
+        // MPP credential supplied by an agent.
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       };
       const paymentSignature = req.header("PAYMENT-SIGNATURE");
       if (paymentSignature) headers["PAYMENT-SIGNATURE"] = paymentSignature;
+      const paymentAuthorization = req.header("Authorization");
+      if (paymentAuthorization?.startsWith("Payment ")) {
+        headers.Authorization = paymentAuthorization;
+      }
 
-      const upstream = await fetch(
-        `${baseUrl}/api/mcp/workflows/${MARKETPLACE_SLUG}/call`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify(req.body),
-        },
-      );
+      const upstream = await fetch(`${baseUrl}/api/mcp/workflows/${MARKETPLACE_SLUG}/call`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(req.body),
+      });
 
       for (const header of FORWARDED_HEADERS) {
         const value = upstream.headers.get(header);

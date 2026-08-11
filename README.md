@@ -5,7 +5,7 @@
 > ChronicleAI is an AI research desk that monitors important onchain activity, sells a **Chronicle Pass** subscription for deeper intelligence, uses that predictable revenue for carefully controlled treasury actions, and publishes public proof of what happened.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
-[![Tests](https://img.shields.io/badge/Tests-1252%20passing-brightgreen?style=for-the-badge)](README.md#verification)
+[![Tests](https://img.shields.io/badge/Tests-1254%20passing-brightgreen?style=for-the-badge)](README.md#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
@@ -88,7 +88,7 @@ ChronicleAI watches onchain activity across two complementary layers:
 The canonical paid Watch path is a listed KeeperHub workflow, not a second monitoring implementation. KeeperHub handles the marketplace payment and workflow invocation; ChronicleAI keeps ownership of Telegram binding, campaign creation, event monitoring, alert delivery, and report publication.
 
 - **Listing:** `chronicleai-paid-onchain-watch-v2`, priced at **0.05 USDC per call**.
-- **Payment rail:** KeeperHub Marketplace settles browser payments with **x402 on Base Mainnet** and can expose the same paid workflow to agent callers through its x402/MPP marketplace rail.
+- **Payment rail:** Watch supports **x402 on Base Mainnet** for browser payments and **MPP** for agent payments through the same KeeperHub Marketplace workflow. The browser flow signs `PAYMENT-SIGNATURE`; an MPP-capable agent answers the `Authorization: Payment ...` challenge and retries the call with its payment credential.
 - **Workflow input:** only `targetContract`, `targetKind`, `focusKey`, `durationHours`, `visibility`, and `telegramBindingCode` are required. The `telegramBindingCode` field name is retained for listing compatibility, but its value is the reusable `ctai_...` token. `requestId`, `startsAt`, `endsAt`, and `watchSpecHash` are not marketplace inputs; ChronicleAI derives any required provenance and campaign-window data internally.
 - **Telegram binding:** open [`@chronicleai_bot`](https://t.me/chronicleai_bot), send `/start`, and paste the persistent `ctai_...` token. The token is reusable until `/disconnect`; the Watch UI remembers it and links the connected wallet with one personal-signature step.
 - **Free-tier bridge:** the workflow uses KeeperHub's Telegram action to send a `CHRONICLE_INGEST v1` envelope to ChronicleAI. It does not require a paid KeeperHub HTTP node.
@@ -411,7 +411,7 @@ The local services run at:
 
 ## Verification
 
-The project reports **1,252 passing and 42 skipped tests** across 147 test files, plus 34 KeeperHub workflow definitions.
+The project reports **1,254 passing and 42 skipped tests** across 148 test files, plus 34 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check
