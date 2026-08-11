@@ -26,7 +26,7 @@ describe("telegram-watch-ingest-service", () => {
       bindingRepo: bindingRepo as never,
       watchRepo: watchRepo as never,
       watchService: watchService as never,
-      marketplaceSlug: "chronicle-paid-onchain-watch-v2",
+      marketplaceSlug: "chronicleai-paid-onchain-watch-v2",
       minDurationHours: 1,
       maxDurationHours: 2160,
     });
@@ -34,7 +34,7 @@ describe("telegram-watch-ingest-service", () => {
     const before = Math.floor(Date.now() / 1000);
     const result = await handler(
       {
-        marketplaceSlug: "chronicle-paid-onchain-watch-v2",
+        marketplaceSlug: "chronicleai-paid-onchain-watch-v2",
         targetContract: "0x1234567890abcdef1234567890abcdef12345678",
         targetKind: "contract",
         focusKey: "transfers",
