@@ -411,7 +411,7 @@ The local services run at:
 
 ## Verification
 
-The project reports **1,255 passing and 42 skipped tests** across 148 test files, plus 34 KeeperHub workflow definitions.
+The project reports **1,238 passing tests across 139 test files**, plus 34 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check
@@ -423,6 +423,10 @@ The smoke test live-verifies KeeperHub health, Sepolia private-routing capabilit
 ```bash
 pnpm --filter @chronicleai/api exec tsx scripts/keeperhub-stack-smoke.ts
 ```
+
+## CI/CD
+
+Pull requests and pushes to `main` run type-checking, tests, and the production build in GitHub Actions. Heroku and Vercel continue to deploy through their existing provider integrations. See [`docs/ci-cd.md`](docs/ci-cd.md) for the workflow boundaries.
 
 ## License and acknowledgments
 

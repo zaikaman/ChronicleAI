@@ -309,7 +309,7 @@ Local endpoints:
 
 ## Verification
 
-1,255 passing and 42 skipped tests across 148 test files, plus 34 KeeperHub workflow definitions.
+1,238 passing tests across 139 test files, plus 34 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check

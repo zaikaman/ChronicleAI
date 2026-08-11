@@ -16,6 +16,7 @@
     "check": "biome check .",
     "fix": "biome check --write .",
     "test": "vitest run",
+    "verify:ci": "pnpm type-check && pnpm test && pnpm build",
     "test:watch": "vitest",
     "db:migrate": "supabase db push",
     "db:types": "supabase gen types typescript --project-id luhrtrmizufucvrxnzbs > packages/db/src/database.types.ts"
