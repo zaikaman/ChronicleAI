@@ -60,6 +60,11 @@ interface PaymentAccept {
 
 interface PaymentRequired {
   x402Version: number;
+  resource: {
+    url: string;
+    description: string;
+    mimeType: string;
+  };
   accepts: PaymentAccept[];
 }
 
@@ -149,8 +154,8 @@ async function signMarketplacePayment(
 
   return encodePaymentSignature({
     x402Version: paymentRequired.x402Version,
-    scheme: accepted.scheme,
-    network: accepted.network,
+    resource: paymentRequired.resource,
+    accepted,
     payload: {
       signature,
       authorization: {
