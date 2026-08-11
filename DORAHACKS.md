@@ -5,7 +5,7 @@
 > ChronicleAI is an AI research desk that monitors important onchain activity, sells a **Chronicle Pass** subscription for deeper intelligence, uses that predictable revenue for carefully controlled treasury actions, and publishes public proof of what happened.
 
 [![KeeperHub](https://img.shields.io/badge/KeeperHub-execution%20%26%20reliability-blueviolet?style=for-the-badge)](https://keeperhub.com)
-[![Tests](https://img.shields.io/badge/Tests-1255%20passing-brightgreen?style=for-the-badge)](https://github.com/zaikaman/ChronicleAI#verification)
+[![Tests](https://img.shields.io/badge/Tests-1238%20passing-brightgreen?style=for-the-badge)](https://github.com/zaikaman/ChronicleAI#verification)
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 

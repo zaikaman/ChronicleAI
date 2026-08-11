@@ -9,7 +9,7 @@
 [![LangChainJS](https://img.shields.io/badge/LangChainJS-agent%20framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)](https://js.langchain.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge)](https://www.typescriptlang.org/)
 
-![youtube](https://youtu.be/E8M1e9Rmzes)
+[![Watch the ChronicleAI demo on YouTube](https://img.youtube.com/vi/E8M1e9Rmzes/maxresdefault.jpg)](https://www.youtube.com/watch?v=E8M1e9Rmzes)
 
 ## How ChronicleAI works
 
