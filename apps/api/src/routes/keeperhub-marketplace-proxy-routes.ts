@@ -1,7 +1,7 @@
 import type { ServerEnv } from "@chronicleai/config";
 import { Router, type Router as RouterType } from "express";
 
-const MARKETPLACE_SLUG = "chronicle-paid-onchain-watch";
+const MARKETPLACE_SLUG = "chronicle-paid-onchain-watch-v2";
 const FORWARDED_HEADERS = [
   "payment-required",
   "x-payment-requirements",

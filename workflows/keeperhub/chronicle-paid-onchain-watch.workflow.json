@@ -4,7 +4,7 @@
   "workflow": {
     "name": "ChronicleAI Paid Onchain Watch",
     "description": "Free-tier Marketplace workflow: send the Watch request through ChronicleAI's Telegram bridge. ChronicleAI derives the campaign window and spec hash, executes the existing createSponsoredWatch workflow on Ethereum Sepolia, and monitors the campaign asynchronously. Payment is handled by KeeperHub Marketplace on Base Mainnet.",
-    "marketplaceSlug": "chronicle-paid-onchain-watch",
+    "marketplaceSlug": "chronicle-paid-onchain-watch-v2",
     "marketplaceDescription": "Start a paid ChronicleAI Watch campaign. Before calling, open @chronicleai_bot, send /start, and paste the one-time binding code returned by the bot. The code expires after 30 minutes and is required for Telegram alerts. KeeperHub handles payment on Base Mainnet; ChronicleAI creates the Watch audit record on Ethereum Sepolia and monitors it asynchronously. The workflow accepts only the six Watch request fields; request id, timestamps, and spec hash are generated internally.",
     "inputSchema": {
       "type": "object",
@@ -47,7 +47,7 @@
         "config": {
           "actionType": "telegram/send-message",
           "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
-          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"watch_request\",\"payload\":{\"marketplaceSlug\":\"chronicle-paid-onchain-watch\",\"targetContract\":\"{{@trigger-manual:Marketplace Request.targetContract}}\",\"targetKind\":\"{{@trigger-manual:Marketplace Request.targetKind}}\",\"focusKey\":\"{{@trigger-manual:Marketplace Request.focusKey}}\",\"durationHours\":{{@trigger-manual:Marketplace Request.durationHours}},\"visibility\":\"{{@trigger-manual:Marketplace Request.visibility}}\",\"telegramBindingCode\":\"{{@trigger-manual:Marketplace Request.telegramBindingCode}}\"}}",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"watch_request\",\"payload\":{\"marketplaceSlug\":\"chronicle-paid-onchain-watch-v2\",\"targetContract\":\"{{@trigger-manual:Marketplace Request.targetContract}}\",\"targetKind\":\"{{@trigger-manual:Marketplace Request.targetKind}}\",\"focusKey\":\"{{@trigger-manual:Marketplace Request.focusKey}}\",\"durationHours\":{{@trigger-manual:Marketplace Request.durationHours}},\"visibility\":\"{{@trigger-manual:Marketplace Request.visibility}}\",\"telegramBindingCode\":\"{{@trigger-manual:Marketplace Request.telegramBindingCode}}\"}}",
           "parseMode": "none"
         }
       }

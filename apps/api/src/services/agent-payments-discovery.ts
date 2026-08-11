@@ -144,9 +144,9 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
       note: "Watch checkout is canonical through KeeperHub Marketplace; the ChronicleAI page is a browser gateway that forwards the KeeperHub x402 challenge without exposing the organization API key. Legacy premium item checkout remains available for compatibility.",
     },
     keeperhubMarketplaceWatch: {
-      slug: "chronicle-paid-onchain-watch",
-      callUrl: "https://app.keeperhub.com/api/mcp/workflows/chronicle-paid-onchain-watch/call",
-      mcpUrl: "https://app.keeperhub.com/mcp/w/chronicle-paid-onchain-watch",
+      slug: "chronicle-paid-onchain-watch-v2",
+      callUrl: "https://app.keeperhub.com/api/mcp/workflows/chronicle-paid-onchain-watch-v2/call",
+      mcpUrl: "https://app.keeperhub.com/mcp/w/chronicle-paid-onchain-watch-v2",
       paymentNetwork: "Base Mainnet",
       registryNetwork: "Ethereum Sepolia",
       telegramInstruction:

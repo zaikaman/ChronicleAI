@@ -130,7 +130,7 @@ describe("telegram-ingest-service", () => {
 
   it("dispatches watch_request with the Telegram transport chat id", async () => {
     const watchMsg = formatChronicleIngestMessage("watch_request", {
-      marketplaceSlug: "chronicle-paid-onchain-watch",
+      marketplaceSlug: "chronicle-paid-onchain-watch-v2",
       requestId: "watch-request-1",
     });
     const result = await processTelegramIngestUpdate(
@@ -163,7 +163,7 @@ describe("telegram-ingest-service", () => {
     if (!result.handled) return;
     expect(result.kind).toBe("watch_request");
     expect(result.body["message"]).toBe(
-      "chronicle-paid-onchain-watch via -100123",
+      "chronicle-paid-onchain-watch-v2 via -100123",
     );
   });
 

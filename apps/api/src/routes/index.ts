@@ -1235,7 +1235,7 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
         bindingRepo: deps.telegramBindingRepo,
         watchRepo: deps.watchRepo,
         watchService,
-        marketplaceSlug: "chronicle-paid-onchain-watch",
+        marketplaceSlug: "chronicle-paid-onchain-watch-v2",
         minDurationHours: env.sponsoredWatchMinDurationHours,
         maxDurationHours: env.sponsoredWatchMaxDurationDays * 24,
       }),
@@ -1322,7 +1322,7 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
     marketplaceBridgeRouter.use(
       createKeeperhubSponsoredWatchRoutes(watchService, {
         bindingRepo: deps.telegramBindingRepo,
-        marketplaceSlug: "chronicle-paid-onchain-watch",
+        marketplaceSlug: "chronicle-paid-onchain-watch-v2",
         defaultDurationDays: env.sponsoredWatchDefaultDurationDays,
         minDurationHours: env.sponsoredWatchMinDurationHours,
         maxDurationHours: env.sponsoredWatchMaxDurationDays * 24,
