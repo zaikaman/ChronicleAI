@@ -128,6 +128,12 @@ function formatTargetKind(targetKind?: "wallet" | "contract"): string {
   return targetKind === "wallet" ? "Wallet activity" : "Contract activity";
 }
 
+export function fallbackCampaignOutcome(status: string, hasCompletedAuditTrail: boolean): string {
+  const normalizedStatus = status.trim().toLowerCase();
+  const isCompleted = normalizedStatus === "completed" || hasCompletedAuditTrail;
+  return isCompleted ? "Monitoring campaign completed." : "Monitoring campaign in progress.";
+}
+
 function splitReportBlocks(analysis?: string): Array<{ heading?: string; body: string }> {
   return (analysis ?? "")
     .split(/\n\s*\n/)
@@ -299,7 +305,7 @@ export function SponsoredWatchDetailPage(): ReactElement {
   const reportNeedsContext = isRepetitiveHighlightSet(watch.reportHighlights);
   const displaySummary = reportNeedsContext
     ? `The campaign recorded ${formatCount(watch.monitoredEventCount ?? 0)} matching event records across ${formatCount(sourceEventCount)} committed source records. The stored narrative contains abbreviated transaction references but does not include decoded asset, amount, or direction metadata.`
-    : watch.reportSummary;
+    : (watch.reportSummary ?? fallbackCampaignOutcome(watch.status, dualTrailComplete));
   const displayHighlights = reportNeedsContext
     ? [
         `Coverage: ${formatCount(watch.monitoredEventCount ?? 0)} matching event records were retained for this campaign.`,
@@ -347,7 +353,7 @@ export function SponsoredWatchDetailPage(): ReactElement {
                 className="mt-2 break-words text-xl font-semibold tracking-tight text-foreground sm:text-2xl"
                 style={{ overflowWrap: "anywhere" }}
               >
-                {displaySummary ?? "Monitoring campaign completed."}
+                {displaySummary}
               </h2>
             </div>
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
