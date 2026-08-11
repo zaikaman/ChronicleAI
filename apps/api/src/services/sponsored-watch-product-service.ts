@@ -9,7 +9,7 @@ import type {
   PremiumIntelligenceRepository,
   TelegramBindingRepository,
 } from "@chronicleai/db";
-import { normalizePayerReference } from "@chronicleai/db";
+import { isPersistentBindingToken, normalizePayerReference } from "@chronicleai/db";
 import { getAddress, isAddress } from "viem";
 import type { PaymentRoute } from "@chronicleai/schemas";
 import type { PaymentChallengeService } from "./payment-challenge-service.ts";
@@ -389,7 +389,7 @@ export function createSponsoredWatchProductService(deps: {
         if (!bindingResult.value.chat_id?.trim()) {
           throw new Error("Telegram binding is missing a chat id — send /start to the bot again");
         }
-        telegramBindingCode = rawCode.toUpperCase();
+        telegramBindingCode = isPersistentBindingToken(rawCode) ? rawCode : rawCode.toUpperCase();
       } else if (request.telegramBindingCode?.trim()) {
         // Optional public-mode bind: still fold the code into the committed spec
         // so settle can attach chat_id for dual delivery when provided.
@@ -398,7 +398,10 @@ export function createSponsoredWatchProductService(deps: {
             request.telegramBindingCode.trim(),
           );
           if (bindingResult.ok && bindingResult.value) {
-            telegramBindingCode = request.telegramBindingCode.trim().toUpperCase();
+            const rawBindingCode = request.telegramBindingCode.trim();
+            telegramBindingCode = isPersistentBindingToken(rawBindingCode)
+              ? rawBindingCode
+              : rawBindingCode.toUpperCase();
           }
         }
       }

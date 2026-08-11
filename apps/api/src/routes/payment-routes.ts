@@ -12,6 +12,7 @@ import type {
   SponsoredWatchRepository,
   TelegramBindingRepository,
 } from "@chronicleai/db";
+import { isPersistentBindingToken } from "@chronicleai/db";
 import type { ExecutionLogInsert } from "@chronicleai/db";
 import type { PaymentRoute } from "@chronicleai/schemas";
 import { Router, type Router as RouterType, type Response } from "express";
@@ -575,7 +576,7 @@ export function createPaymentRoutes(params: {
                 return;
               }
               telegramChatId = binding.chat_id;
-              if (!binding.used_at) {
+              if (!binding.used_at && !isPersistentBindingToken(bindingCode)) {
                 const marked = await params.telegramBindingRepo.markUsed(binding.id, {
                   walletAddress: result.verification.payerReference ?? null,
                 });

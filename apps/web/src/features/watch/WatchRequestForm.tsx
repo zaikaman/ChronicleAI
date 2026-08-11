@@ -48,6 +48,13 @@ const DURATION_PRESETS = [
   { label: "30 days", durationHours: 720 },
 ] as const;
 
+const TELEGRAM_BINDING_STORAGE_KEY = "chronicleai.watch.telegram-binding.v1";
+
+type StoredTelegramBinding = {
+  token: string;
+  walletAddress: string | null;
+};
+
 interface PaymentAccept {
   scheme: string;
   network: string;
@@ -97,6 +104,20 @@ function decodePaymentRequired(response: Response): PaymentRequired {
 
 function encodePaymentSignature(value: unknown): string {
   return btoa(JSON.stringify(value));
+}
+
+function buildTelegramWalletLinkMessage(
+  walletAddress: string,
+  issuedAt: string,
+  token: string,
+): string {
+  return [
+    "ChronicleAI Telegram Watch Link",
+    `Wallet: ${walletAddress.trim().toLowerCase()}`,
+    `Issued-At: ${issuedAt}`,
+    `Binding-Token: ${token.trim()}`,
+    "Purpose: Link this wallet to my ChronicleAI Telegram Watch alerts",
+  ].join("\n");
 }
 
 async function signMarketplacePayment(
@@ -189,6 +210,7 @@ export function WatchRequestForm({
   const [focusKey, setFocusKey] = useState<WatchFocusKey>("none");
   const [visibility, setVisibility] = useState<Visibility>("public");
   const [telegramBindingCode, setTelegramBindingCode] = useState("");
+  const [telegramWalletAddress, setTelegramWalletAddress] = useState<string | null>(null);
   const [durationHours, setDurationHours] = useState(1);
   const [step, setStep] = useState<FormStep>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +231,34 @@ export function WatchRequestForm({
   const focusOptions = targetKind === "wallet" ? WALLET_FOCUS_OPTIONS : CONTRACT_FOCUS_OPTIONS;
   const currentFocus = focusOptions.find((option) => option.key === focusKey) ?? focusOptions[0]!;
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(TELEGRAM_BINDING_STORAGE_KEY);
+      if (!raw) return;
+      const stored = JSON.parse(raw) as Partial<StoredTelegramBinding>;
+      if (typeof stored.token === "string" && stored.token.trim()) {
+        setTelegramBindingCode(stored.token.trim());
+        setTelegramWalletAddress(
+          typeof stored.walletAddress === "string" ? stored.walletAddress : null,
+        );
+      }
+    } catch {
+      // A blocked or malformed browser storage entry should not block Watch.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!telegramBindingCode.trim()) return;
+    try {
+      window.localStorage.setItem(
+        TELEGRAM_BINDING_STORAGE_KEY,
+        JSON.stringify({ token: telegramBindingCode.trim(), walletAddress: telegramWalletAddress }),
+      );
+    } catch {
+      // The token remains usable in this tab even when persistent storage is blocked.
+    }
+  }, [telegramBindingCode, telegramWalletAddress]);
+
   useEffect(() => () => controllerRef.current?.abort(), []);
 
   const callMarketplace = useCallback(async (input: Record<string, unknown>, paymentSignature?: string) => {
@@ -228,6 +278,57 @@ export function WatchRequestForm({
     if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : `Marketplace call failed (${response.status})`);
     return { result: body };
   }, []);
+
+  const ensureTelegramWalletLink = useCallback(async (token: string, walletAddress: string) => {
+    if (telegramWalletAddress?.toLowerCase() === walletAddress.toLowerCase()) return;
+
+    const issuedAt = new Date().toISOString();
+    const signature = await wallet.signMessage(
+      buildTelegramWalletLinkMessage(walletAddress, issuedAt, token),
+    );
+    const response = await fetchWithTimeout(`${API_BASE}/telegram/binding/link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, walletAddress, issuedAt, signature }),
+      signal: controllerRef.current?.signal,
+    });
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error(
+        typeof body.error === "string" ? body.error : `Telegram wallet link failed (${response.status})`,
+      );
+    }
+    setTelegramWalletAddress(walletAddress);
+  }, [telegramWalletAddress, wallet.signMessage]);
+
+  const disconnectTelegram = useCallback(async () => {
+    const token = telegramBindingCode.trim();
+    try {
+      if (token) {
+        const response = await fetchWithTimeout(`${API_BASE}/telegram/binding/revoke`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+          throw new Error(
+            typeof body.error === "string" ? body.error : `Telegram disconnect failed (${response.status})`,
+          );
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not disconnect Telegram");
+      return;
+    }
+    setTelegramBindingCode("");
+    setTelegramWalletAddress(null);
+    try {
+      window.localStorage.removeItem(TELEGRAM_BINDING_STORAGE_KEY);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+  }, [telegramBindingCode]);
 
   const handlePrepare = useCallback(async () => {
     setError(null);
@@ -263,6 +364,8 @@ export function WatchRequestForm({
     controllerRef.current?.abort();
     controllerRef.current = new AbortController();
     try {
+      const walletAddress = wallet.isConnected && wallet.address ? wallet.address : await wallet.connect();
+      await ensureTelegramWalletLink(telegramBindingCode.trim(), walletAddress);
       const response = await callMarketplace(input);
       if (!response.challenge) {
         const watch = (response.result?.watch ?? response.result) as SettledWatch;
@@ -282,7 +385,7 @@ export function WatchRequestForm({
     } finally {
       inFlightRef.current = false;
     }
-  }, [callMarketplace, durationHours, focusKey, onSettled, targetContract, targetKind, telegramBindingCode, visibility]);
+  }, [callMarketplace, durationHours, ensureTelegramWalletLink, focusKey, onSettled, targetContract, targetKind, telegramBindingCode, visibility, wallet]);
 
   const handlePay = useCallback(async () => {
     if (!prepared) return;
@@ -350,15 +453,23 @@ export function WatchRequestForm({
 
         <div className="flex flex-col gap-3 sm:col-span-2 rounded-xl border border-border bg-frame/50 p-4" data-testid="watch-telegram-panel">
           <div>
-            <p className="text-xs font-medium text-foreground m-0 mb-1">Telegram binding required</p>
-            <p className="text-xs text-muted-foreground m-0 leading-relaxed">Before calling, open <strong>@{telegramBotUsername}</strong>, send <code>/start</code>, and paste the one-time binding code returned by the bot. The code expires after 30 minutes and is required for Telegram alerts.</p>
+            <p className="text-xs font-medium text-foreground m-0 mb-1">Telegram connection</p>
+            <p className="text-xs text-muted-foreground m-0 leading-relaxed">Open <strong>@{telegramBotUsername}</strong> and send <code>/start</code> once. Paste the persistent token here; ChronicleAI will remember this Telegram chat and the wallet you use for Watch payments until you disconnect it.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <a href={telegramDeepLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors" data-testid="watch-telegram-open">Open @{telegramBotUsername}</a>
+            {telegramBindingCode.trim() ? (
+              <button type="button" onClick={() => void disconnectTelegram()} className="inline-flex items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors" data-testid="watch-telegram-disconnect">Disconnect</button>
+            ) : null}
           </div>
+          {telegramBindingCode.trim() && telegramWalletAddress ? (
+            <p className="m-0 rounded-lg border border-[color:var(--success)]/30 bg-[color:var(--success)]/10 px-3 py-2 text-xs text-foreground" role="status" data-testid="watch-telegram-connected">
+              Connected · Telegram alerts and wallet <span className="font-mono">{telegramWalletAddress.slice(0, 6)}…{telegramWalletAddress.slice(-4)}</span> are remembered.
+            </p>
+          ) : null}
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">One-time binding code <span className="text-[var(--accent-error)]">*</span></span>
-            <input type="text" value={telegramBindingCode} onChange={(event) => setTelegramBindingCode(event.target.value.toUpperCase())} placeholder="ABCD12" className="rounded-xl border border-border bg-background px-3 py-2.5 font-mono text-sm tracking-wider text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] uppercase" data-testid="watch-telegram-code-input" autoComplete="off" spellCheck={false} />
+            <span className="text-xs font-medium text-muted-foreground">Persistent Telegram token <span className="text-[var(--accent-error)]">*</span></span>
+            <input type="password" value={telegramBindingCode} onChange={(event) => { setTelegramBindingCode(event.target.value.trim()); setTelegramWalletAddress(null); }} placeholder="ctai_…" className="rounded-xl border border-border bg-background px-3 py-2.5 font-mono text-sm tracking-wider text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]" data-testid="watch-telegram-code-input" autoComplete="off" spellCheck={false} />
           </label>
         </div>
 

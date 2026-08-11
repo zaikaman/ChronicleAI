@@ -1,8 +1,13 @@
-// Telegram Watch binding: /start issues a one-time code; CHRONICLE_BIND links it.
+// Telegram Watch binding: /start issues a durable token; CHRONICLE_BIND keeps
+// the legacy one-time linking path compatible.
 // Reuses the existing ingest/send bot — no new @BotFather bot.
 
-import type { TelegramBindingRepository } from "@chronicleai/db";
-import { generateBindingCode } from "@chronicleai/db";
+import {
+  generateBindingCode,
+  generatePersistentBindingToken,
+  hashPersistentBindingToken,
+  type TelegramBindingRepository,
+} from "@chronicleai/db";
 import {
   extractChronicleBindCode,
   isTelegramStartCommand,
@@ -18,10 +23,10 @@ export function createTelegramBindingHandler(deps: {
   bindingRepo: TelegramBindingRepository;
   /** Reply via Bot API (ingest or send bot token). */
   reply: TelegramReplyFn;
-  /** Binding TTL in minutes (default 30). */
+  /** Retained for compatibility with older callers; durable tokens do not expire. */
   ttlMinutes?: number;
 }): TelegramBindingHandler {
-  const ttlMs = Math.max(5, deps.ttlMinutes ?? 30) * 60_000;
+  const persistentExpiry = "9999-12-31T23:59:59.999Z";
 
   return {
     async handleDirectMessage({ chatId, text, username }) {
@@ -53,17 +58,30 @@ export function createTelegramBindingHandler(deps: {
       // ignored so stray chatter does not spam codes. Telegram only allows
       // DMs after the user messages the bot first.
       if (!isTelegramStartCommand(text)) {
+        if (/^\/(?:disconnect|revoke)(?:@\w+)?$/i.test(text.trim())) {
+          const revoked = await deps.bindingRepo.revokePersistentByChatId(chatId);
+          const replyText = revoked.ok
+            ? "ChronicleAI Telegram is disconnected. Send /start to connect again."
+            : "Could not disconnect Telegram right now. Please try again.";
+          await deps.reply({ chatId, text: replyText });
+          return { replyText, linked: false };
+        }
         return null;
       }
 
-      const code = generateBindingCode(6);
-      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+      // Rotate the durable credential when the user explicitly starts again.
+      // This makes recovery from a cleared browser or suspected token leak safe.
+      await deps.bindingRepo.revokePersistentByChatId(chatId);
+      const token = generatePersistentBindingToken();
       const created = await deps.bindingRepo.create({
-        code,
+        // Keep the legacy NOT NULL code column populated for old schemas and
+        // admin tooling. Authentication uses token_hash for durable tokens.
+        code: generateBindingCode(6),
+        token_hash: hashPersistentBindingToken(token),
         chat_id: chatId,
         username: username ?? null,
         source: "watch",
-        expires_at: expiresAt,
+        expires_at: persistentExpiry,
       });
       if (!created.ok) {
         const replyText =
@@ -72,9 +90,9 @@ export function createTelegramBindingHandler(deps: {
         return { replyText };
       }
 
-      const replyText = `Your ChronicleAI binding code is \`${code}\`. Paste it in the Watch form.`;
+      const replyText = `Telegram connected. Your persistent Watch token is \`${token}\`. Paste it in the Watch form once; keep it private. Send /disconnect to revoke it.`;
       await deps.reply({ chatId, text: replyText });
-      return { replyText, code };
+      return { replyText, code: token };
     },
   };
 }

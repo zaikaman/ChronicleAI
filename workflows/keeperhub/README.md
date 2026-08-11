@@ -207,9 +207,9 @@ Before publishing, configure these values in the private workflow copy:
   `KEEPERHUB_MARKETPLACE_BRIDGE_SECRET` value.
 
 The Marketplace listing copy and input description must include this exact
-Telegram onboarding instruction: **Before calling, open `@chronicleai_bot`,
-send `/start`, and paste the one-time binding code returned by the bot. The
-code expires after 30 minutes and is required for Telegram alerts.**
+Telegram onboarding instruction: **The first time, open `@chronicleai_bot`,
+send `/start`, and paste the persistent Watch token returned by the bot.
+Reuse it for future campaigns; send `/disconnect` to revoke it.**
 
 The workflow performs `HTTP Request (prepare) → createSponsoredWatch on
 Ethereum Sepolia → HTTP Request (register)`. ChronicleAI then owns the

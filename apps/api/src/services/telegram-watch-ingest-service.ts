@@ -9,6 +9,7 @@ import type {
   SponsoredWatchRepository,
   TelegramBindingRepository,
 } from "@chronicleai/db";
+import { isPersistentBindingToken } from "@chronicleai/db";
 import { createHash } from "node:crypto";
 import { getAddress, isAddress } from "viem";
 import type { SponsoredWatchService } from "./sponsored-watch-service.ts";
@@ -141,7 +142,7 @@ export function createTelegramWatchRequestHandler(
             : null;
       if (!visibility) throw new Error("visibility must be public or private");
 
-      const telegramBindingCode = requiredString(payload, "telegramBindingCode", 16).toUpperCase();
+      const telegramBindingCode = requiredString(payload, "telegramBindingCode", 256);
       const requestId = deriveMarketplaceRequestId({
         marketplaceSlug,
         transportChatId,
@@ -206,11 +207,13 @@ export function createTelegramWatchRequestHandler(
         marketplaceRequestId: requestId,
       });
 
-      const marked = await params.bindingRepo.markUsed(bindingResult.value.id);
-      if (!marked.ok && !bindingResult.value.used_at) {
-        throw new Error(
-          `Watch registered but Telegram binding could not be consumed: ${marked.error.message}`,
-        );
+      if (!isPersistentBindingToken(telegramBindingCode)) {
+        const marked = await params.bindingRepo.markUsed(bindingResult.value.id);
+        if (!marked.ok && !bindingResult.value.used_at) {
+          throw new Error(
+            `Watch registered but Telegram binding could not be consumed: ${marked.error.message}`,
+          );
+        }
       }
 
       return {

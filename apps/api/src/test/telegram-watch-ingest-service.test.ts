@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { getAddress } from "viem";
+import { generatePersistentBindingToken } from "@chronicleai/db";
 import { deriveWatchSpecHash } from "../services/watch-spec-hash.ts";
 import { createTelegramWatchRequestHandler } from "../services/telegram-watch-ingest-service.ts";
 
@@ -75,5 +76,47 @@ describe("telegram-watch-ingest-service", () => {
     expect(call.telegramChatId).toBe("777");
     expect(call.marketplaceRequestId).toMatch(/^tg-[a-f0-9]{64}$/);
     expect(bindingRepo.markUsed).toHaveBeenCalledWith("binding-1");
+  });
+
+  it("does not consume a persistent Telegram token after a Watch is accepted", async () => {
+    const token = generatePersistentBindingToken();
+    const bindingRepo = {
+      findValidByCode: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { id: "binding-2", chat_id: "777", token_hash: "hash", used_at: null },
+      }),
+      markUsed: vi.fn(),
+    };
+    const watchRepo = {
+      findByMarketplaceRequestId: vi.fn().mockResolvedValue({ ok: true, value: null }),
+    };
+    const watchService = {
+      createSponsoredWatch: vi.fn().mockResolvedValue({ id: "watch-2", on_chain_watch_id: 13, create_tx_hash: null }),
+    };
+    const handler = createTelegramWatchRequestHandler({
+      bindingRepo: bindingRepo as never,
+      watchRepo: watchRepo as never,
+      watchService: watchService as never,
+      marketplaceSlug: "chronicleai-paid-onchain-watch-v2",
+      minDurationHours: 1,
+      maxDurationHours: 2160,
+    });
+
+    const result = await handler(
+      {
+        marketplaceSlug: "chronicleai-paid-onchain-watch-v2",
+        targetContract: "0x1234567890abcdef1234567890abcdef12345678",
+        targetKind: "contract",
+        focusKey: "none",
+        durationHours: 1,
+        visibility: "private",
+        telegramBindingCode: token,
+      },
+      "-1004373075093",
+      45,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(bindingRepo.markUsed).not.toHaveBeenCalled();
   });
 });

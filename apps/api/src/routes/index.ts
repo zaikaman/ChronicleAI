@@ -128,6 +128,7 @@ import { createDeskRoutes } from "./desk-routes.ts";
 import { createKeeperhubBlockRoutes } from "./keeperhub-block-routes.ts";
 import { createKeeperhubDeskRoutes } from "./keeperhub-desk-routes.ts";
 import { createKeeperhubEventRoutes } from "./keeperhub-event-routes.ts";
+import { createTelegramBindingRoutes } from "./telegram-binding-routes.ts";
 import { createTelegramWebhookRoutes } from "./telegram-webhook-routes.ts";
 import { createTreasuryCctpRoutes } from "./treasury-cctp-routes.ts";
 
@@ -780,6 +781,10 @@ export function setupUS1Routes(_app: Express, env: ServerEnv, deps: US1Dependenc
     console.warn(
       "TELEGRAM_WEBHOOK_SECRET not set — Telegram KeeperHub bridge disabled (POST /telegram/webhook)",
     );
+  }
+
+  if (deps.telegramBindingRepo) {
+    apiRouter.use(createTelegramBindingRoutes({ bindingRepo: deps.telegramBindingRepo }));
   }
 
   // Public alerts (no auth required)

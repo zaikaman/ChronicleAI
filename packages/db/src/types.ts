@@ -332,6 +332,7 @@ export type SponsoredWatchUpdate = Partial<SponsoredWatchInsert>;
 export interface TelegramBindingRow {
   id: string;
   code: string;
+  token_hash: string | null;
   chat_id: string;
   username: string | null;
   wallet_address: string | null;
@@ -339,20 +340,23 @@ export interface TelegramBindingRow {
   created_at: string;
   expires_at: string;
   used_at: string | null;
+  revoked_at: string | null;
 }
 
 export interface TelegramBindingInsert {
   code: string;
+  token_hash?: string | null;
   chat_id: string;
   username?: string | null;
   wallet_address?: string | null;
   source?: string;
   expires_at?: string;
   used_at?: string | null;
+  revoked_at?: string | null;
 }
 
 export type TelegramBindingUpdate = Partial<
-  Pick<TelegramBindingInsert, "wallet_address" | "used_at" | "username">
+  Pick<TelegramBindingInsert, "wallet_address" | "used_at" | "username" | "revoked_at">
 >;
 
 // ── RevenuePayout ────────────────────────────────────────

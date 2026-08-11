@@ -5,6 +5,7 @@
 // and complete ended campaigns with report generation + publishSponsoredReport.
 
 import { Router, type Router as RouterType } from "express";
+import { isPersistentBindingToken } from "@chronicleai/db";
 import { getAddress, isAddress } from "viem";
 import type { SponsoredWatchService } from "../services/sponsored-watch-service.ts";
 import {
@@ -74,7 +75,7 @@ function resolvePrepareInput(body: Record<string, unknown>, deps: KeeperhubMarke
   }
   const visibility = body.visibility === "private" ? "private" : body.visibility === "public" ? "public" : null;
   if (!visibility) throw new Error("visibility must be public or private");
-  const telegramBindingCode = requiredString(body, "telegramBindingCode", 16).toUpperCase();
+  const telegramBindingCode = requiredString(body, "telegramBindingCode", 256);
   const requestId = requiredString(body, "requestId", 128);
   if (!MARKETPLACE_REQUEST_ID_RE.test(requestId)) {
     throw new Error("requestId must contain 8-128 URL-safe characters");
@@ -226,7 +227,7 @@ export function createKeeperhubSponsoredWatchRoutes(
         const createKeeperHubRunId = body.createKeeperHubRunId == null ? null : requiredString(body, "createKeeperHubRunId", 256);
         const createExplorerUrl = resolveExplorerUrl(body.createExplorerUrl);
 
-        const bindingCode = requiredString(body, "telegramBindingCode", 16).toUpperCase();
+        const bindingCode = requiredString(body, "telegramBindingCode", 256);
         const bindingResult = await marketplace.bindingRepo.findValidByCode(bindingCode);
         if (!bindingResult.ok) throw new Error(bindingResult.error.message);
         if (!bindingResult.value || bindingResult.value.chat_id !== telegramChatId) {
@@ -249,9 +250,11 @@ export function createKeeperhubSponsoredWatchRoutes(
           createExplorerUrl,
         });
 
-        const marked = await marketplace.bindingRepo.markUsed(bindingResult.value.id);
-        if (!marked.ok && !bindingResult.value.used_at) {
-          throw new Error(`Watch registered but Telegram binding could not be consumed: ${marked.error.message}`);
+        if (!isPersistentBindingToken(bindingCode)) {
+          const marked = await marketplace.bindingRepo.markUsed(bindingResult.value.id);
+          if (!marked.ok && !bindingResult.value.used_at) {
+            throw new Error(`Watch registered but Telegram binding could not be consumed: ${marked.error.message}`);
+          }
         }
 
         res.status(200).json({

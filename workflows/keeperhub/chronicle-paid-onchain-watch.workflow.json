@@ -5,7 +5,7 @@
     "name": "ChronicleAI Paid Onchain Watch",
     "description": "Free-tier Marketplace workflow: send the Watch request through ChronicleAI's Telegram bridge. ChronicleAI derives the campaign window and spec hash, executes the existing createSponsoredWatch workflow on Ethereum Sepolia, and monitors the campaign asynchronously. Payment is handled by KeeperHub Marketplace on Base Mainnet.",
     "marketplaceSlug": "chronicleai-paid-onchain-watch-v2",
-    "marketplaceDescription": "Start a paid ChronicleAI Watch campaign. Before calling, open @chronicleai_bot, send /start, and paste the one-time binding code returned by the bot. The code expires after 30 minutes and is required for Telegram alerts. KeeperHub handles payment on Base Mainnet; ChronicleAI creates the Watch audit record on Ethereum Sepolia and monitors it asynchronously. The workflow accepts only the six Watch request fields; request id, timestamps, and spec hash are generated internally.",
+    "marketplaceDescription": "Start a paid ChronicleAI Watch campaign. The first time, open @chronicleai_bot, send /start, and paste the persistent Watch token returned by the bot. ChronicleAI remembers the Telegram chat until you send /disconnect. KeeperHub handles payment on Base Mainnet; ChronicleAI creates the Watch audit record on Ethereum Sepolia and monitors it asynchronously. The workflow accepts only the six Watch request fields; request id, timestamps, and spec hash are generated internally.",
     "inputSchema": {
       "type": "object",
       "required": [
@@ -22,7 +22,7 @@
         "focusKey": { "type": "string", "enum": ["none", "transfers", "swaps", "liquidations", "deposits", "stablecoin", "cex"], "description": "Use none, transfers, swaps, liquidations, deposits, stablecoin, or cex." },
         "durationHours": { "type": "integer", "minimum": 1, "maximum": 2160, "description": "Campaign duration in hours, from 1 to 2160." },
         "visibility": { "type": "string", "enum": ["public", "private"], "description": "Use public or private." },
-        "telegramBindingCode": { "type": "string", "description": "One-time code from @chronicleai_bot after /start." }
+        "telegramBindingCode": { "type": "string", "description": "Persistent Watch token from @chronicleai_bot after the first /start; reuse it for future campaigns until /disconnect." }
       }
     }
   },

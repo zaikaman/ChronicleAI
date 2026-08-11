@@ -1483,9 +1483,14 @@ export type Database = {
           create_tx_hash: string | null
           created_at: string
           ends_at: string
+          execution_source: string
           id: string
           last_alert_sent_at: string | null
           last_monitored_at: string | null
+          marketplace_request_id: string | null
+          marketplace_slug: string | null
+          monitor_workflow_disabled_at: string | null
+          monitor_workflow_id: string | null
           monitored_event_count: number
           on_chain_watch_id: number | null
           report_analysis: string | null
@@ -1506,9 +1511,6 @@ export type Database = {
           updated_at: string
           visibility: string
           watch_spec_hash: string
-          execution_source: string
-          marketplace_slug: string | null
-          marketplace_request_id: string | null
         }
         Insert: {
           content_uri?: string | null
@@ -1517,9 +1519,14 @@ export type Database = {
           create_tx_hash?: string | null
           created_at?: string
           ends_at: string
+          execution_source?: string
           id?: string
           last_alert_sent_at?: string | null
           last_monitored_at?: string | null
+          marketplace_request_id?: string | null
+          marketplace_slug?: string | null
+          monitor_workflow_disabled_at?: string | null
+          monitor_workflow_id?: string | null
           monitored_event_count?: number
           on_chain_watch_id?: number | null
           report_analysis?: string | null
@@ -1540,9 +1547,6 @@ export type Database = {
           updated_at?: string
           visibility?: string
           watch_spec_hash: string
-          execution_source?: string
-          marketplace_slug?: string | null
-          marketplace_request_id?: string | null
         }
         Update: {
           content_uri?: string | null
@@ -1551,9 +1555,14 @@ export type Database = {
           create_tx_hash?: string | null
           created_at?: string
           ends_at?: string
+          execution_source?: string
           id?: string
           last_alert_sent_at?: string | null
           last_monitored_at?: string | null
+          marketplace_request_id?: string | null
+          marketplace_slug?: string | null
+          monitor_workflow_disabled_at?: string | null
+          monitor_workflow_id?: string | null
           monitored_event_count?: number
           on_chain_watch_id?: number | null
           report_analysis?: string | null
@@ -1574,9 +1583,6 @@ export type Database = {
           updated_at?: string
           visibility?: string
           watch_spec_hash?: string
-          execution_source?: string
-          marketplace_slug?: string | null
-          marketplace_request_id?: string | null
         }
         Relationships: []
       }
@@ -1605,7 +1611,9 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
+          revoked_at: string | null
           source: string
+          token_hash: string | null
           used_at: string | null
           username: string | null
           wallet_address: string | null
@@ -1616,7 +1624,9 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
+          revoked_at?: string | null
           source?: string
+          token_hash?: string | null
           used_at?: string | null
           username?: string | null
           wallet_address?: string | null
@@ -1627,7 +1637,9 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
+          revoked_at?: string | null
           source?: string
+          token_hash?: string | null
           used_at?: string | null
           username?: string | null
           wallet_address?: string | null

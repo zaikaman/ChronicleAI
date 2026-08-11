@@ -2,6 +2,7 @@
 // to a Watch form so the send bot may DM that user for private alerts.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash, randomBytes } from "node:crypto";
 import { type Result, ValidationError, failure, success } from "./errors.ts";
 import { mapPostgrestError, maybeRow } from "./repository-utils.ts";
 import type {
@@ -11,6 +12,19 @@ import type {
 } from "./types.ts";
 
 const CODE_PATTERN = /^[A-Z0-9]{4,16}$/i;
+const PERSISTENT_TOKEN_PATTERN = /^ctai_[A-Za-z0-9_-]{32,}$/;
+
+export function generatePersistentBindingToken(): string {
+  return `ctai_${randomBytes(32).toString("base64url")}`;
+}
+
+export function hashPersistentBindingToken(token: string): string {
+  return createHash("sha256").update(token.trim()).digest("hex");
+}
+
+export function isPersistentBindingToken(token: string): boolean {
+  return PERSISTENT_TOKEN_PATTERN.test(token.trim());
+}
 
 export function normalizeBindingCode(code: string): string {
   return code.trim().toUpperCase();
@@ -37,6 +51,9 @@ export interface TelegramBindingRepository {
   findByCode(code: string, nowIso?: string): Promise<Result<TelegramBindingRow | null>>;
   /** Any not-expired binding by code (for prepare validation). */
   findValidByCode(code: string, nowIso?: string): Promise<Result<TelegramBindingRow | null>>;
+  findPersistentByToken(token: string): Promise<Result<TelegramBindingRow | null>>;
+  findActivePersistentByChatId(chatId: string): Promise<Result<TelegramBindingRow | null>>;
+  revokePersistentByChatId(chatId: string): Promise<Result<number>>;
   findByChatId(chatId: string): Promise<Result<TelegramBindingRow[]>>;
   markUsed(
     id: string,
@@ -75,7 +92,11 @@ export function createTelegramBindingRepository(
     },
 
     async findByCode(code, nowIso) {
-      const normalized = normalizeBindingCode(code);
+      const raw = code.trim();
+      if (isPersistentBindingToken(raw)) {
+        return this.findPersistentByToken(raw);
+      }
+      const normalized = normalizeBindingCode(raw);
       if (!isValidBindingCode(normalized)) {
         return success(null);
       }
@@ -84,6 +105,7 @@ export function createTelegramBindingRepository(
         .select("*")
         .eq("code", normalized)
         .is("used_at", null)
+        .is("revoked_at", null)
         .gt("expires_at", now)
         .limit(1);
 
@@ -92,7 +114,11 @@ export function createTelegramBindingRepository(
     },
 
     async findValidByCode(code, nowIso) {
-      const normalized = normalizeBindingCode(code);
+      const raw = code.trim();
+      if (isPersistentBindingToken(raw)) {
+        return this.findPersistentByToken(raw);
+      }
+      const normalized = normalizeBindingCode(raw);
       if (!isValidBindingCode(normalized)) {
         return success(null);
       }
@@ -100,11 +126,54 @@ export function createTelegramBindingRepository(
       const { data, error } = await table()
         .select("*")
         .eq("code", normalized)
+        .is("revoked_at", null)
         .gt("expires_at", now)
         .limit(1);
 
       if (error) return failure(mapPostgrestError(error));
       return success(maybeRow(data ?? []) as TelegramBindingRow | null);
+    },
+
+    async findPersistentByToken(token) {
+      const normalized = token.trim();
+      if (!isPersistentBindingToken(normalized)) return success(null);
+      const { data, error } = await table()
+        .select("*")
+        .eq("token_hash", hashPersistentBindingToken(normalized))
+        .is("revoked_at", null)
+        .limit(1);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(maybeRow(data ?? []) as TelegramBindingRow | null);
+    },
+
+    async findActivePersistentByChatId(chatId) {
+      const id = String(chatId).trim();
+      if (!id) return success(null);
+      const { data, error } = await table()
+        .select("*")
+        .eq("chat_id", id)
+        .not("token_hash", "is", null)
+        .is("revoked_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(maybeRow(data ?? []) as TelegramBindingRow | null);
+    },
+
+    async revokePersistentByChatId(chatId) {
+      const id = String(chatId).trim();
+      if (!id) return success(0);
+      const { data, error } = await table()
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("chat_id", id)
+        .not("token_hash", "is", null)
+        .is("revoked_at", null)
+        .select("id");
+
+      if (error) return failure(mapPostgrestError(error));
+      return success((data ?? []).length);
     },
 
     async findByChatId(chatId) {

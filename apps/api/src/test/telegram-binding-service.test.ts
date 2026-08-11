@@ -69,6 +69,9 @@ describe("createTelegramBindingHandler", () => {
         create,
         findByCode: vi.fn(),
         findValidByCode: vi.fn(),
+        findPersistentByToken: vi.fn(),
+        findActivePersistentByChatId: vi.fn(),
+        revokePersistentByChatId: vi.fn().mockResolvedValue({ ok: true as const, value: 0 }),
         findByChatId: vi.fn(),
         markUsed: vi.fn(),
         update: vi.fn(),
@@ -83,8 +86,10 @@ describe("createTelegramBindingHandler", () => {
     });
 
     expect(result?.code).toBeTruthy();
-    expect(result?.replyText).toMatch(/binding code/i);
+    expect(result?.replyText).toMatch(/persistent Watch token/i);
     expect(create).toHaveBeenCalled();
+    expect(create.mock.calls[0]![0].token_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(create.mock.calls[0]![0].expires_at).toBe("9999-12-31T23:59:59.999Z");
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({ chatId: "99" }),
     );
@@ -109,6 +114,9 @@ describe("createTelegramBindingHandler", () => {
             used_at: null,
           },
         }),
+        findPersistentByToken: vi.fn(),
+        findActivePersistentByChatId: vi.fn(),
+        revokePersistentByChatId: vi.fn(),
         findByChatId: vi.fn(),
         markUsed,
         update: vi.fn(),
@@ -124,6 +132,33 @@ describe("createTelegramBindingHandler", () => {
     expect(result?.linked).toBe(true);
     expect(result?.replyText).toMatch(/Linked/);
     expect(markUsed).toHaveBeenCalledWith("b1");
+  });
+
+  it("revokes durable Telegram bindings on /disconnect", async () => {
+    const revokePersistentByChatId = vi.fn().mockResolvedValue({ ok: true as const, value: 1 });
+    const reply = vi.fn().mockResolvedValue({ ok: true as const });
+    const handler = createTelegramBindingHandler({
+      bindingRepo: {
+        create: vi.fn(),
+        findByCode: vi.fn(),
+        findValidByCode: vi.fn(),
+        findPersistentByToken: vi.fn(),
+        findActivePersistentByChatId: vi.fn(),
+        revokePersistentByChatId,
+        findByChatId: vi.fn(),
+        markUsed: vi.fn(),
+        update: vi.fn(),
+      } as never,
+      reply,
+    });
+
+    const result = await handler.handleDirectMessage({ chatId: "99", text: "/disconnect" });
+
+    expect(result?.linked).toBe(false);
+    expect(revokePersistentByChatId).toHaveBeenCalledWith("99");
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: "99", text: expect.stringMatching(/disconnected/i) }),
+    );
   });
 });
 
