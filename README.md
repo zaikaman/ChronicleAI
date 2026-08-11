@@ -157,7 +157,7 @@ The same intelligence can be read, paid for, acted on, and independently verifie
 
 ## Deep proof set
 
-The core demo uses one Alert→Signal→Action path. The repository includes 33 KeeperHub workflow definitions (28 core workflows and 5 optional mainnet monitoring workflows); the following proof set is available for deeper inspection:
+The core demo uses one Alert→Signal→Action path. The repository includes 34 KeeperHub workflow definitions (29 core workflows and 5 optional mainnet monitoring workflows); the following proof set is available for deeper inspection:
 
 | Surface / workflow | Action | Transaction |
 | --- | --- | --- |
@@ -411,7 +411,7 @@ The local services run at:
 
 ## Verification
 
-The project reports **1,252 passing and 42 skipped tests** across 147 test files, plus 33 KeeperHub workflow definitions.
+The project reports **1,252 passing and 42 skipped tests** across 147 test files, plus 34 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check

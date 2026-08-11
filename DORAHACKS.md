@@ -167,7 +167,7 @@ KeeperHub owns execution; ChronicleAI owns intelligence, Alert→Signal projecti
 
 ## Deep proof set
 
-ChronicleAI includes 33 KeeperHub workflow definitions (28 core, 5 optional mainnet monitoring). Verified onchain proofs:
+ChronicleAI includes 34 KeeperHub workflow definitions (29 core, 5 optional mainnet monitoring). Verified onchain proofs:
 
 | Surface / workflow | Action | Transaction |
 | --- | --- | --- |
@@ -309,7 +309,7 @@ Local endpoints:
 
 ## Verification
 
-1,252 passing and 42 skipped tests across 147 test files, plus 33 KeeperHub workflow definitions.
+1,252 passing and 42 skipped tests across 147 test files, plus 34 KeeperHub workflow definitions.
 
 ```bash
 pnpm type-check
