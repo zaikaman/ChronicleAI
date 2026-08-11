@@ -1,4 +1,3 @@
-- For docs related to keeperhub, just look at the keeperhub folder, but it's read-only, don't edit anything in it.
 - All code written must be real and production ready, no mock, fake or hardcode.
 - Whenever you're done, make sure to use powershell to play a sound to signal completion.
 - The current database schema types are defined at [database.types.ts](file:///d:/KeeperHubHackathon/packages/db/src/database.types.ts). Use this file for database schema context.
