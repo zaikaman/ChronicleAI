@@ -3,7 +3,7 @@
 //
 // Envelope (message text, plain parse mode):
 //   CHRONICLE_INGEST v1
-//   {"kind":"event"|"block"|"digest_run"|"desk_read","payload":{...}}
+//   {"kind":"event"|"block"|"digest_run"|"desk_read"|"watch_request","payload":{...}}
 //
 // desk_read → desk signal ingest (Phase 9 monitoring polls / quality bar).
 //
@@ -17,7 +17,12 @@
 
 export const CHRONICLE_INGEST_MARKER = "CHRONICLE_INGEST v1";
 
-export type TelegramIngestKind = "event" | "block" | "digest_run" | "desk_read";
+export type TelegramIngestKind =
+  | "event"
+  | "block"
+  | "digest_run"
+  | "desk_read"
+  | "watch_request";
 
 export type TelegramIngestEnvelope = {
   kind: TelegramIngestKind;
@@ -100,13 +105,14 @@ export function parseChronicleIngestText(raw: string): ParseIngestResult {
     kind !== "event" &&
     kind !== "block" &&
     kind !== "digest_run" &&
-    kind !== "desk_read"
+    kind !== "desk_read" &&
+    kind !== "watch_request"
   ) {
     return {
       ok: false,
       reason: "invalid",
       detail:
-        'envelope.kind must be "event", "block", "digest_run", or "desk_read"',
+        'envelope.kind must be "event", "block", "digest_run", "desk_read", or "watch_request"',
     };
   }
 
@@ -245,6 +251,18 @@ export type TelegramIngestHandlers = {
         signalType?: string | undefined;
         policyVerdict?: string | undefined;
         deduped?: boolean | undefined;
+      }>)
+    | undefined;
+  /** Marketplace Watch registration delivered through the free Telegram bridge. */
+  onWatchRequest?:
+    | ((payload: Record<string, unknown>, transportChatId: string) => Promise<{
+        statusCode: number;
+        accepted: boolean;
+        message: string;
+        watchId?: string | undefined;
+        onChainWatchId?: number | undefined;
+        createTxHash?: string | undefined;
+        duplicate?: boolean | undefined;
       }>)
     | undefined;
 };
@@ -440,6 +458,36 @@ export async function processTelegramIngestUpdate(
         ...(result.signalType ? { signalType: result.signalType } : {}),
         ...(result.policyVerdict ? { policyVerdict: result.policyVerdict } : {}),
         ...(result.deduped !== undefined ? { deduped: result.deduped } : {}),
+      },
+    };
+  }
+
+  if (parsed.envelope.kind === "watch_request") {
+    if (!handlers.onWatchRequest) {
+      return {
+        handled: false,
+        reason: "invalid",
+        detail: "watch_request handler not registered",
+      };
+    }
+    const result = await handlers.onWatchRequest(parsed.envelope.payload, parsed.chatId);
+    return {
+      handled: true,
+      kind: "watch_request",
+      statusCode: result.statusCode,
+      body: {
+        bridge: "telegram",
+        kind: "watch_request",
+        accepted: result.accepted,
+        message: result.message,
+        chatId: parsed.chatId,
+        messageId: parsed.messageId,
+        ...(result.watchId ? { watchId: result.watchId } : {}),
+        ...(result.onChainWatchId !== undefined
+          ? { onChainWatchId: result.onChainWatchId }
+          : {}),
+        ...(result.createTxHash ? { createTxHash: result.createTxHash } : {}),
+        ...(result.duplicate !== undefined ? { duplicate: result.duplicate } : {}),
       },
     };
   }

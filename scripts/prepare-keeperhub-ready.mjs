@@ -26,11 +26,15 @@ for (const line of envContent.split(/\r?\n/)) {
 const telegramChatId = env.TELEGRAM_INGEST_CHAT_ID || env.TELEGRAM_CHAT_ID || '';
 const deskWalletAddress = env.DESK_WALLET_ADDRESS || '';
 const chronicleRegistryAddress = env.CHRONICLE_REGISTRY_ADDRESS || '';
+const chronicleApiOrigin = env.CHRONICLE_API_ORIGIN || '';
+const marketplaceBridgeSecret = env.KEEPERHUB_MARKETPLACE_BRIDGE_SECRET || '';
 
 console.log('Values from apps/api/.env:');
 console.log(`- TELEGRAM_INGEST_CHAT_ID: ${telegramChatId}`);
 console.log(`- DESK_WALLET_ADDRESS: ${deskWalletAddress}`);
 console.log(`- CHRONICLE_REGISTRY_ADDRESS: ${chronicleRegistryAddress}`);
+console.log(`- CHRONICLE_API_ORIGIN: ${chronicleApiOrigin}`);
+console.log(`- KEEPERHUB_MARKETPLACE_BRIDGE_SECRET: ${marketplaceBridgeSecret ? '[configured]' : '[missing]'}`);
 
 if (!fs.existsSync(dstDir)) {
   fs.mkdirSync(dstDir, { recursive: true });
@@ -56,6 +60,12 @@ for (const file of files) {
     }
     if (chronicleRegistryAddress) {
       content = content.replaceAll('YOUR_CHRONICLE_REGISTRY_ADDRESS', chronicleRegistryAddress);
+    }
+    if (chronicleApiOrigin) {
+      content = content.replaceAll('YOUR_CHRONICLE_API_ORIGIN', chronicleApiOrigin.replace(/\/$/, ''));
+    }
+    if (marketplaceBridgeSecret) {
+      content = content.replaceAll('YOUR_KEEPERHUB_MARKETPLACE_BRIDGE_SECRET', marketplaceBridgeSecret);
     }
   }
   

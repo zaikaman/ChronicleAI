@@ -8,6 +8,7 @@ const productionEnv = {
   nodeEnv: "production",
   keeperhubApiKey: "kh_live_test",
   keeperhubApiBaseUrl: "https://app.keeperhub.com",
+  keeperhubMarketplaceBridgeSecret: "keeperhub-marketplace-test-secret",
   chronicleRegistryAddress: address,
   creatorRecoveryWallet: address,
   mppSecret: "mpp_test_secret",

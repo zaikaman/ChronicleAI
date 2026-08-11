@@ -191,6 +191,32 @@ Same pattern for `web3/approve-token`, `web3/write-contract`, `uniswap/swap-exac
 
 ## Loop 4 — Sponsored watch campaign cycle
 
+### Paid Watch Marketplace listing
+
+Import `chronicle-paid-onchain-watch.workflow.json` as the public Marketplace
+workflow with slug `chronicle-paid-onchain-watch`. The listing must keep its
+workflow graph private and configure the Marketplace price in KeeperHub. The
+Marketplace payment rail is KeeperHub-native x402/MPP on Base Mainnet; the
+registry write remains Ethereum Sepolia (`11155111`).
+
+Before publishing, configure these values in the private workflow copy:
+
+- `YOUR_CHRONICLE_API_ORIGIN` → the public HTTPS ChronicleAI API origin.
+- `YOUR_CHRONICLE_REGISTRY_ADDRESS` → the deployed Ethereum Sepolia registry.
+- `YOUR_KEEPERHUB_MARKETPLACE_BRIDGE_SECRET` → the dedicated
+  `KEEPERHUB_MARKETPLACE_BRIDGE_SECRET` value.
+
+The Marketplace listing copy and input description must include this exact
+Telegram onboarding instruction: **Before calling, open `@chronicleai_bot`,
+send `/start`, and paste the one-time binding code returned by the bot. The
+code expires after 30 minutes and is required for Telegram alerts.**
+
+The workflow performs `HTTP Request (prepare) → createSponsoredWatch on
+Ethereum Sepolia → HTTP Request (register)`. ChronicleAI then owns the
+monitoring loop and asynchronously publishes the report with the existing
+`chronicle-publish-sponsored-report` workflow. Do not move monitoring logic
+into this paid workflow.
+
 After payment settlement creates a watch (`createSponsoredWatch`), ChronicleAI runs the campaign loop automatically every 60s and via KeeperHub:
 
 ```bash

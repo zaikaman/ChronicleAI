@@ -128,6 +128,45 @@ describe("telegram-ingest-service", () => {
     expect(result.body["policyVerdict"]).toBe("ignore");
   });
 
+  it("dispatches watch_request with the Telegram transport chat id", async () => {
+    const watchMsg = formatChronicleIngestMessage("watch_request", {
+      marketplaceSlug: "chronicle-paid-onchain-watch",
+      requestId: "watch-request-1",
+    });
+    const result = await processTelegramIngestUpdate(
+      {
+        message: {
+          message_id: 10,
+          text: watchMsg,
+          chat: { id: "-100123" },
+        },
+      },
+      {
+        onEvent: async () => ({
+          statusCode: 500,
+          accepted: false,
+          message: "should not run",
+        }),
+        onBlock: async () => ({
+          statusCode: 500,
+          accepted: false,
+          message: "should not run",
+        }),
+        onWatchRequest: async (payload, transportChatId) => ({
+          statusCode: 202,
+          accepted: true,
+          message: `${String(payload.marketplaceSlug)} via ${transportChatId}`,
+        }),
+      },
+    );
+    expect(result.handled).toBe(true);
+    if (!result.handled) return;
+    expect(result.kind).toBe("watch_request");
+    expect(result.body["message"]).toBe(
+      "chronicle-paid-onchain-watch via -100123",
+    );
+  });
+
   it("dispatches event and block handlers", async () => {
     const eventMsg = formatChronicleIngestMessage("event", {
       eventName: "Swap",

@@ -14,6 +14,7 @@ import type { EventIngestionHandler } from "../keeperhub/event-ingestion-handler
 import type { EventNormalizer } from "../monitoring/event-normalizer.ts";
 import { getDigestRunHandler } from "../services/digest-run-bridge.ts";
 import { resolveDigestRunWindow } from "../services/digest-schedule-service.ts";
+import { getTelegramWatchRequestHandler } from "../services/telegram-watch-ingest-bridge.ts";
 import {
   processTelegramIngestUpdate,
   type TelegramBindingHandler,
@@ -180,6 +181,17 @@ export function createTelegramWebhookRoutes(deps: TelegramWebhookRouteDeps): Rou
                 accepted: e.result.accepted,
               })),
             };
+          },
+          onWatchRequest: async (body, transportChatId) => {
+            const watchHandler = getTelegramWatchRequestHandler();
+            if (!watchHandler) {
+              return {
+                statusCode: 503,
+                accepted: false,
+                message: "Watch registration handler not ready",
+              };
+            }
+            return watchHandler(body, transportChatId);
           },
           onDigestRun: async (body) => {
             const digestHandler = getDigestRunHandler();

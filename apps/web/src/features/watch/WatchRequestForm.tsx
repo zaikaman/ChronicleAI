@@ -1,59 +1,16 @@
-// Watch request form — buyer submits a target address + campaign window,
-// pays via x402, and gets a dual on-chain audit trail.
+// Watch request form — calls the canonical KeeperHub Marketplace listing.
 
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { loadClientEnv } from "@chronicleai/config/client";
 import { StatusBadge } from "../../components/data-primitives.tsx";
 import { Surface } from "../../components/page-chrome.tsx";
-import { isEvmAddress, useWallet } from "../wallet";
-import { settlePayment } from "../premium/use-premium.ts";
-
 import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
-const WEB_PAYMENT_ROUTE = "x402" as const;
-
-type FormStep =
-  | "idle"
-  | "preparing"
-  | "challenge_ready"
-  | "settling"
-  | "settled"
-  | "error";
+import { isEvmAddress, useWallet } from "../wallet";
+import { getAddress, keccak256, stringToBytes } from "viem";
 
 type TargetKind = "contract" | "wallet";
 type Visibility = "public" | "private";
-
-interface PreparedChallenge {
-  premiumItemId: string;
-  paymentRecordId: string;
-  challengeReference: string;
-  amountRequested: number;
-  currency: string;
-  expiresAt: string;
-  challengeData: Record<string, unknown>;
-  campaign: {
-    targetContract: string;
-    watchSpecHash: string;
-    startsAt: string;
-    endsAt: string;
-    durationDays: number;
-    durationHours?: number;
-    targetKind?: TargetKind;
-    visibility?: Visibility;
-  };
-  /** True when an already-open challenge was reused (no new charge minted). */
-  reused?: boolean;
-  /** True when the reused challenge was already paid recently. */
-  alreadySettled?: boolean;
-}
-
-/** Preset campaign lengths — includes 1h short demo for dual-tx proof. */
-const DURATION_PRESETS: Array<{ label: string; durationHours: number }> = [
-  { label: "1 hour (demo)", durationHours: 1 },
-  { label: "1 day", durationHours: 24 },
-  { label: "7 days", durationHours: 168 },
-  { label: "30 days", durationHours: 720 },
-];
 
 type WatchFocusKey =
   | "none"
@@ -67,154 +24,159 @@ type WatchFocusKey =
 interface WatchFocusOption {
   key: WatchFocusKey;
   label: string;
-  /** Preset instruction written into the watch spec + final report narrative. */
   description: string;
 }
 
-/** Watch focus presets for wallet targets (ERC-20 transfer matching). */
 const WALLET_FOCUS_OPTIONS: WatchFocusOption[] = [
   { key: "none", label: "Everything (no specific focus)", description: "" },
-  {
-    key: "transfers",
-    label: "Large transfers & whale moves",
-    description: "Watch for large transfers and whale-scale token moves involving this wallet.",
-  },
-  {
-    key: "cex",
-    label: "Exchange inflows / outflows",
-    description: "Watch for token movements between this wallet and centralized exchanges.",
-  },
+  { key: "transfers", label: "Large transfers & whale moves", description: "Watch for large transfers and whale-scale token moves involving this wallet." },
+  { key: "cex", label: "Exchange inflows / outflows", description: "Watch for token movements between this wallet and centralized exchanges." },
 ];
 
-/** Watch focus presets for contract / protocol targets. */
 const CONTRACT_FOCUS_OPTIONS: WatchFocusOption[] = [
   { key: "none", label: "Everything (no specific focus)", description: "" },
-  {
-    key: "swaps",
-    label: "Swaps & trades",
-    description: "Watch for token swaps and trades on this contract.",
-  },
-  {
-    key: "liquidations",
-    label: "Liquidations",
-    description: "Watch for liquidation events on this contract.",
-  },
-  {
-    key: "deposits",
-    label: "Deposits & withdrawals",
-    description: "Watch for deposits into and withdrawals from this protocol.",
-  },
-  {
-    key: "stablecoin",
-    label: "Stablecoin mints & burns",
-    description: "Watch for stablecoin mint and burn events on this contract.",
-  },
-  {
-    key: "cex",
-    label: "Exchange inflows / outflows",
-    description: "Watch for token movements between this contract and centralized exchanges.",
-  },
+  { key: "swaps", label: "Swaps & trades", description: "Watch for token swaps and trades on this contract." },
+  { key: "liquidations", label: "Liquidations", description: "Watch for liquidation events on this contract." },
+  { key: "deposits", label: "Deposits & withdrawals", description: "Watch for deposits into and withdrawals from this protocol." },
+  { key: "stablecoin", label: "Stablecoin mints & burns", description: "Watch for stablecoin mint and burn events on this contract." },
+  { key: "cex", label: "Exchange inflows / outflows", description: "Watch for token movements between this contract and centralized exchanges." },
 ];
 
-interface SettledWatch {
-  id: string;
-  targetContract: string;
-  status: string;
-  createTxHash?: string | null;
-  createExplorerUrl?: string | null;
-  startsAt?: string;
-  endsAt?: string;
-  targetKind?: TargetKind;
-  visibility?: Visibility;
+const DURATION_PRESETS = [
+  { label: "1 hour (demo)", durationHours: 1 },
+  { label: "1 day", durationHours: 24 },
+  { label: "7 days", durationHours: 168 },
+  { label: "30 days", durationHours: 720 },
+] as const;
+
+interface PaymentAccept {
+  scheme: string;
+  network: string;
+  asset: string;
+  amount: string;
+  payTo: string;
+  maxTimeoutSeconds?: number;
+  extra?: { name?: string; version?: string };
 }
 
-async function signX402Settlement(
-  challengeData: Record<string, unknown>,
+interface PaymentRequired {
+  x402Version: number;
+  accepts: PaymentAccept[];
+}
+
+interface PreparedMarketplaceCall {
+  input: Record<string, unknown>;
+  paymentRequired: PaymentRequired;
+  amountUsdc: number;
+}
+
+interface SettledWatch {
+  id?: string;
+  status?: string;
+  createTxHash?: string | null;
+  createExplorerUrl?: string | null;
+}
+
+type FormStep = "idle" | "preparing" | "challenge_ready" | "settling" | "settled" | "error";
+
+function decodePaymentRequired(response: Response): PaymentRequired {
+  const encoded = response.headers.get("PAYMENT-REQUIRED") ?? response.headers.get("X-PAYMENT-REQUIREMENTS");
+  if (!encoded) throw new Error("KeeperHub did not return a payment challenge.");
+  try {
+    const decoded = JSON.parse(atob(encoded)) as PaymentRequired;
+    if (!Array.isArray(decoded.accepts) || decoded.accepts.length === 0) throw new Error("empty accepts");
+    return decoded;
+  } catch {
+    throw new Error("KeeperHub returned an invalid payment challenge.");
+  }
+}
+
+function encodePaymentSignature(value: unknown): string {
+  return btoa(JSON.stringify(value));
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value !== null && typeof value === "object") {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+function deriveWatchSpecHash(watchSpec: Record<string, unknown>): string {
+  return keccak256(stringToBytes(JSON.stringify(sortKeysDeep(watchSpec))));
+}
+
+async function signMarketplacePayment(
+  paymentRequired: PaymentRequired,
   wallet: ReturnType<typeof useWallet>,
 ): Promise<string> {
+  const accepted = paymentRequired.accepts.find((item) => item.scheme === "exact");
+  if (!accepted || accepted.network !== "eip155:8453") {
+    throw new Error("This Watch listing currently accepts x402 USDC on Base Mainnet only.");
+  }
   let from = wallet.address;
-  if (!wallet.isConnected || !from) {
-    from = await wallet.connect();
-  }
-  if (!from || !isEvmAddress(from)) {
-    throw new Error("Wallet did not return a valid account.");
-  }
+  if (!wallet.isConnected || !from) from = await wallet.connect();
+  if (!from || !isEvmAddress(from)) throw new Error("Wallet did not return a valid account.");
 
-  const domain = challengeData.domain as Record<string, unknown>;
-  const types = challengeData.types as {
-    TransferWithAuthorization: Array<{ name: string; type: string }>;
-  };
-
-  const domainChainId =
-    typeof domain.chainId === "number"
-      ? domain.chainId
-      : typeof domain.chainId === "string"
-        ? Number(domain.chainId)
-        : wallet.targetChain.chainId;
-
-  if (Number.isInteger(domainChainId) && domainChainId > 0) {
-    await wallet.ensureChain({
-      ...wallet.targetChain,
-      chainId: domainChainId,
-      chainIdHex: `0x${domainChainId.toString(16)}`,
-      name:
-        domainChainId === wallet.targetChain.chainId
-          ? wallet.targetChain.name
-          : `Chain ${domainChainId}`,
-    });
-  } else {
-    await wallet.ensureChain();
-  }
-
-  const rawMessage = challengeData.message as Record<string, unknown>;
-  const toRaw = rawMessage.to;
-  if (typeof toRaw !== "string" || !isEvmAddress(toRaw)) {
-    throw new Error("Challenge message is missing a valid treasury `to` address.");
-  }
-  if (typeof rawMessage.nonce !== "string" || !rawMessage.nonce.startsWith("0x")) {
-    throw new Error("Challenge message is missing a valid bytes32 nonce.");
-  }
-
-  const message = {
-    from,
-    to: toRaw,
-    value:
-      typeof rawMessage.value === "bigint"
-        ? rawMessage.value
-        : BigInt(String(rawMessage.value ?? "0")),
-    validAfter:
-      typeof rawMessage.validAfter === "bigint"
-        ? rawMessage.validAfter
-        : BigInt(String(rawMessage.validAfter ?? "0")),
-    validBefore:
-      typeof rawMessage.validBefore === "bigint"
-        ? rawMessage.validBefore
-        : BigInt(String(rawMessage.validBefore ?? "0")),
-    nonce: rawMessage.nonce as string,
-  };
-
-  const signature = await wallet.signTypedData({
-    domain: {
-      name: String(domain.name ?? ""),
-      version: String(domain.version ?? "2"),
-      chainId: domainChainId,
-      verifyingContract: domain.verifyingContract,
-    },
-    types: {
-      TransferWithAuthorization: types.TransferWithAuthorization,
-    },
-    primaryType: "TransferWithAuthorization",
-    message,
+  await wallet.ensureChain({
+    ...wallet.targetChain,
+    chainId: 8453,
+    chainIdHex: "0x2105",
+    name: "Base",
   });
 
-  return JSON.stringify({
-    signature,
+  const now = Math.floor(Date.now() / 1000);
+  const validBefore = now + (accepted.maxTimeoutSeconds ?? 300);
+  const nonceBytes = new Uint8Array(32);
+  crypto.getRandomValues(nonceBytes);
+  const nonce = `0x${Array.from(nonceBytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const authorization = {
     from,
-    to: message.to,
-    value: message.value.toString(10),
-    validAfter: message.validAfter.toString(10),
-    validBefore: message.validBefore.toString(10),
-    nonce: message.nonce,
+    to: accepted.payTo,
+    value: BigInt(accepted.amount),
+    validAfter: BigInt(now - 60),
+    validBefore: BigInt(validBefore),
+    nonce,
+  };
+  const signature = await wallet.signTypedData({
+    domain: {
+      name: accepted.extra?.name ?? "USD Coin",
+      version: accepted.extra?.version ?? "2",
+      chainId: 8453,
+      verifyingContract: accepted.asset,
+    },
+    types: {
+      TransferWithAuthorization: [
+        { name: "from", type: "address" },
+        { name: "to", type: "address" },
+        { name: "value", type: "uint256" },
+        { name: "validAfter", type: "uint256" },
+        { name: "validBefore", type: "uint256" },
+        { name: "nonce", type: "bytes32" },
+      ],
+    },
+    primaryType: "TransferWithAuthorization",
+    message: authorization,
+  });
+
+  return encodePaymentSignature({
+    x402Version: paymentRequired.x402Version,
+    scheme: accepted.scheme,
+    network: accepted.network,
+    payload: {
+      signature,
+      authorization: {
+        ...authorization,
+        value: authorization.value.toString(),
+        validAfter: authorization.validAfter.toString(),
+        validBefore: authorization.validBefore.toString(),
+      },
+    },
   });
 }
 
@@ -239,126 +201,116 @@ export function WatchRequestForm({
   const [focusKey, setFocusKey] = useState<WatchFocusKey>("none");
   const [visibility, setVisibility] = useState<Visibility>("public");
   const [telegramBindingCode, setTelegramBindingCode] = useState("");
-  /** Default 1 hour short demo so create + report dual txs can complete in one session. */
   const [durationHours, setDurationHours] = useState(1);
   const [step, setStep] = useState<FormStep>("idle");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [prepared, setPrepared] = useState<PreparedChallenge | null>(null);
+  const [prepared, setPrepared] = useState<PreparedMarketplaceCall | null>(null);
   const [settledWatch, setSettledWatch] = useState<SettledWatch | null>(null);
-  const prepareControllerRef = useRef<AbortController | null>(null);
-  /** Guard against concurrent prepare submissions (double-click / re-click). */
-  const prepareInFlightRef = useRef(false);
+  const controllerRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
 
   const telegramBotUsername = useMemo(() => {
     try {
-      return loadClientEnv().telegramBotUsername ?? "ChronicleAIBot";
+      return loadClientEnv().telegramBotUsername ?? "chronicleai_bot";
     } catch {
-      return "ChronicleAIBot";
+      return "chronicleai_bot";
     }
   }, []);
   const telegramDeepLink = `https://t.me/${telegramBotUsername}`;
-  const focusOptions =
-    targetKind === "wallet" ? WALLET_FOCUS_OPTIONS : CONTRACT_FOCUS_OPTIONS;
-  const currentFocus = focusOptions.find((opt) => opt.key === focusKey) ?? focusOptions[0]!;
+  const focusOptions = targetKind === "wallet" ? WALLET_FOCUS_OPTIONS : CONTRACT_FOCUS_OPTIONS;
+  const currentFocus = focusOptions.find((option) => option.key === focusKey) ?? focusOptions[0]!;
 
-  useEffect(() => {
-    return () => prepareControllerRef.current?.abort();
+  useEffect(() => () => controllerRef.current?.abort(), []);
+
+  const callMarketplace = useCallback(async (input: Record<string, unknown>, paymentSignature?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE}/keeperhub/marketplace/watch/call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(paymentSignature ? { "PAYMENT-SIGNATURE": paymentSignature } : {}),
+      },
+      signal: controllerRef.current?.signal,
+      body: JSON.stringify(input),
+    });
+    if (response.status === 402) {
+      return { challenge: decodePaymentRequired(response) };
+    }
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : `Marketplace call failed (${response.status})`);
+    return { result: body };
   }, []);
 
   const handlePrepare = useCallback(async () => {
     setError(null);
     setNotice(null);
     setSettledWatch(null);
-    if (prepareInFlightRef.current) return;
-
+    if (inFlightRef.current) return;
     if (!isEvmAddress(targetContract.trim())) {
-      setError(
-        targetKind === "wallet"
-          ? "Enter a valid EVM wallet address (0x…)."
-          : "Enter a valid EVM contract address (0x…).",
-      );
+      setError(targetKind === "wallet" ? "Enter a valid EVM wallet address (0x…)." : "Enter a valid EVM contract address (0x…).");
       setStep("error");
       return;
     }
-
-    if (!Number.isFinite(durationHours) || durationHours < 1 || durationHours > 90 * 24) {
+    if (!telegramBindingCode.trim()) {
+      setError("A Telegram binding code is required. Open the bot, send /start, and paste the returned code.");
+      setStep("error");
+      return;
+    }
+    if (!Number.isInteger(durationHours) || durationHours < 1 || durationHours > 90 * 24) {
       setError("Duration must be between 1 hour and 90 days.");
       setStep("error");
       return;
     }
 
-    if (visibility === "private" && !telegramBindingCode.trim()) {
-      setError("Private watches require a Telegram binding code. Send /start to the bot first.");
-      setStep("error");
-      return;
-    }
-
+    const startsAtUnix = Math.floor(Date.now() / 1000);
+    const endsAtUnix = startsAtUnix + durationHours * 60 * 60;
+    const canonicalTargetContract = getAddress(targetContract.trim());
+    const startsAt = new Date(startsAtUnix * 1000).toISOString();
+    const endsAt = new Date(endsAtUnix * 1000).toISOString();
+    const watchSpecHash = deriveWatchSpecHash({
+      targetContract: canonicalTargetContract,
+      targetKind,
+      focusKey,
+      startsAt,
+      endsAt,
+    });
+    const input = {
+      targetContract: canonicalTargetContract,
+      targetKind,
+      focusKey,
+      durationHours,
+      visibility,
+      telegramBindingCode: telegramBindingCode.trim(),
+      requestId: crypto.randomUUID(),
+      startsAtUnix,
+      endsAtUnix,
+      watchSpecHash,
+    };
     setStep("preparing");
-    prepareInFlightRef.current = true;
-    prepareControllerRef.current?.abort();
-    const controller = new AbortController();
-    prepareControllerRef.current = controller;
+    inFlightRef.current = true;
+    controllerRef.current?.abort();
+    controllerRef.current = new AbortController();
     try {
-      let payer = wallet.address;
-      if (!payer) {
-        payer = await wallet.connect();
-      }
-
-      const response = await fetchWithTimeout(
-        `${API_BASE}/payments/sponsored-watch/challenges`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            targetContract: targetContract.trim(),
-            description: currentFocus.description || undefined,
-            durationHours,
-            targetKind,
-            visibility,
-            telegramBindingCode: telegramBindingCode.trim() || undefined,
-            paymentRoute: WEB_PAYMENT_ROUTE,
-            payerReference: payer ?? undefined,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Failed to prepare campaign (${response.status})`);
-      }
-
-      const data = (await response.json()) as PreparedChallenge;
-      setPrepared(data);
-      if (data.alreadySettled) {
-        setNotice(
-          "This campaign was already paid for and created on-chain. No additional charge was made.",
-        );
+      const response = await callMarketplace(input);
+      if (!response.challenge) {
+        const watch = (response.result?.watch ?? response.result) as SettledWatch;
+        setSettledWatch(watch);
+        setNotice("KeeperHub accepted the paid workflow. ChronicleAI is registering the Sepolia receipt and will begin monitoring asynchronously.");
+        onSettled?.(watch.id ?? "");
         setStep("settled");
         return;
       }
+      const accepted = response.challenge.accepts[0]!;
+      setPrepared({ input, paymentRequired: response.challenge, amountUsdc: Number(accepted.amount) / 1_000_000 });
       setStep("challenge_ready");
     } catch (err) {
-      if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : "Failed to prepare sponsored watch");
+      if (controllerRef.current?.signal.aborted) return;
+      setError(err instanceof Error ? err.message : "Failed to prepare the Marketplace Watch");
       setStep("error");
     } finally {
-      prepareInFlightRef.current = false;
-      if (prepareControllerRef.current === controller) {
-        prepareControllerRef.current = null;
-      }
+      inFlightRef.current = false;
     }
-  }, [
-    targetContract,
-    targetKind,
-    focusKey,
-    currentFocus,
-    durationHours,
-    visibility,
-    telegramBindingCode,
-    wallet,
-  ]);
+  }, [callMarketplace, durationHours, focusKey, onSettled, targetContract, targetKind, telegramBindingCode, visibility]);
 
   const handlePay = useCallback(async () => {
     if (!prepared) return;
@@ -366,40 +318,29 @@ export function WatchRequestForm({
     setNotice(null);
     setStep("settling");
     try {
-      const settlementReference = await signX402Settlement(prepared.challengeData, wallet);
-      const settled = await settlePayment({
-        challengeReference: prepared.challengeReference,
-        settlementReference,
-        paymentRoute: WEB_PAYMENT_ROUTE,
-      });
-
-      const watch = settled?.sponsoredWatch as SettledWatch | undefined;
-      if (watch) {
-        setSettledWatch(watch);
-        onSettled?.(watch.id ?? "");
-      }
+      const paymentSignature = await signMarketplacePayment(prepared.paymentRequired, wallet);
+      const response = await callMarketplace(prepared.input, paymentSignature);
+      if (response.challenge) throw new Error("KeeperHub returned another payment challenge. Check the wallet network and retry.");
+      const watch = (response.result?.watch ?? response.result) as SettledWatch;
+      setSettledWatch(watch);
+      setNotice("Payment accepted on Base Mainnet. The Watch transaction and asynchronous monitoring are now handled by the Marketplace workflow.");
+      onSettled?.(watch.id ?? "");
       setStep("settled");
     } catch (err) {
-      // A failed settle may still have succeeded on-chain (ambiguous receipt).
-      // Stay on the SAME challenge so retrying Pay does not mint a new charge;
-      // re-preparing is only needed if the user edits their details.
-      setError(err instanceof Error ? err.message : "Settlement failed");
+      setError(err instanceof Error ? err.message : "Marketplace payment failed");
       setStep("challenge_ready");
     }
-  }, [prepared, wallet, onSettled]);
+  }, [callMarketplace, onSettled, prepared, wallet]);
 
   return (
     <Surface className="p-5 sm:p-6" data-testid={dataTestId}>
       <div className="mb-5">
-        <h3 className="text-base font-semibold text-foreground m-0">Request a watch</h3>
+        <h3 className="text-base font-semibold text-foreground m-0">Start a paid Watch</h3>
         <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-          Pay to open a monitoring campaign on any wallet, contract, or protocol. ChronicleAI
-          writes an on-chain acceptance receipt, monitors the window, alerts you on Telegram, then
-          publishes a final report with a second registry transaction.
+          KeeperHub Marketplace handles payment on Base Mainnet. ChronicleAI creates the registry receipt on Ethereum Sepolia, monitors Ethereum Mainnet, sends Telegram alerts, and publishes the final report asynchronously.
         </p>
         <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-frame px-3 py-1 text-xs font-medium text-muted-foreground">
-          <span aria-hidden="true">🌐</span> Monitors Ethereum Mainnet · paid in USDC
-          (x402)
+          <span aria-hidden="true">◉</span> KeeperHub Marketplace · Base Mainnet USDC · Sepolia registry proof
         </p>
       </div>
 
@@ -407,261 +348,75 @@ export function WatchRequestForm({
         <div className="flex flex-col gap-1.5 sm:col-span-2" data-testid="watch-target-kind">
           <span className="text-xs font-medium text-muted-foreground">Target type</span>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={toggleClass(targetKind === "wallet")}
-              onClick={() => setTargetKind("wallet")}
-              data-testid="watch-kind-wallet"
-            >
-              Wallet
-            </button>
-            <button
-              type="button"
-              className={toggleClass(targetKind === "contract")}
-              onClick={() => setTargetKind("contract")}
-              data-testid="watch-kind-contract"
-            >
-              Contract
-            </button>
+            <button type="button" className={toggleClass(targetKind === "wallet")} onClick={() => setTargetKind("wallet")} data-testid="watch-kind-wallet">Wallet</button>
+            <button type="button" className={toggleClass(targetKind === "contract")} onClick={() => setTargetKind("contract")} data-testid="watch-kind-contract">Contract</button>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {targetKind === "wallet"
-              ? "Matches ERC-20 Transfer events on Ethereum Mainnet where this wallet is from or to."
-              : "Protocol = contract address + optional focus preset. Monitored on Ethereum Mainnet."}
-          </span>
+          <span className="text-xs text-muted-foreground">{targetKind === "wallet" ? "Matches ERC-20 Transfer events involving this wallet." : "Monitors events associated with this contract."}</span>
         </div>
 
         <label className="flex flex-col gap-1.5 sm:col-span-2">
-          <span className="text-xs font-medium text-muted-foreground">
-            {targetKind === "wallet" ? "Target wallet" : "Target contract"}
-          </span>
-          <input
-            type="text"
-            value={targetContract}
-            onChange={(e) => setTargetContract(e.target.value)}
-            placeholder="0x…"
-            className="rounded-xl border border-border bg-frame px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
-            data-testid="watch-target-input"
-            autoComplete="off"
-            spellCheck={false}
-          />
+          <span className="text-xs font-medium text-muted-foreground">{targetKind === "wallet" ? "Target wallet" : "Target contract"}</span>
+          <input type="text" value={targetContract} onChange={(event) => setTargetContract(event.target.value)} placeholder="0x…" className="rounded-xl border border-border bg-frame px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]" data-testid="watch-target-input" autoComplete="off" spellCheck={false} />
         </label>
 
         <label className="flex flex-col gap-1.5 sm:col-span-2">
-          <span className="text-xs font-medium text-muted-foreground">
-            Watch focus <span className="font-normal">(optional)</span>
-          </span>
-          <select
-            value={currentFocus.key}
-            onChange={(e) => setFocusKey(e.target.value as WatchFocusKey)}
-            className="rounded-xl border border-border bg-frame px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
-            data-testid="watch-focus-input"
-          >
-            {focusOptions.map((opt) => (
-              <option key={opt.key} value={opt.key}>
-                {opt.label}
-              </option>
-            ))}
+          <span className="text-xs font-medium text-muted-foreground">Watch focus <span className="font-normal">(included in the paid workflow input)</span></span>
+          <select value={currentFocus.key} onChange={(event) => setFocusKey(event.target.value as WatchFocusKey)} className="rounded-xl border border-border bg-frame px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]" data-testid="watch-focus-input">
+            {focusOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
-          <span className="text-xs text-muted-foreground">
-            {currentFocus.description
-              ? currentFocus.description
-              : "Alerts describe each matched event; the final report summarizes the window."}
-          </span>
+          <span className="text-xs text-muted-foreground">{currentFocus.description || "Alerts describe each matched event; the final report summarizes the window."}</span>
         </label>
 
         <div className="flex flex-col gap-1.5 sm:col-span-2" data-testid="watch-visibility">
           <span className="text-xs font-medium text-muted-foreground">Alert visibility</span>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={toggleClass(visibility === "public")}
-              onClick={() => setVisibility("public")}
-              data-testid="watch-visibility-public"
-            >
-              Public
-            </button>
-            <button
-              type="button"
-              className={toggleClass(visibility === "private")}
-              onClick={() => setVisibility("private")}
-              data-testid="watch-visibility-private"
-            >
-              Private
-            </button>
+            <button type="button" className={toggleClass(visibility === "public")} onClick={() => setVisibility("public")} data-testid="watch-visibility-public">Public</button>
+            <button type="button" className={toggleClass(visibility === "private")} onClick={() => setVisibility("private")} data-testid="watch-visibility-private">Private</button>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {visibility === "public"
-              ? "Alerts publish to the registry (provably real) and the community Telegram channel. Add a binding code to also get them DM'd to you."
-              : "Alerts go to your Telegram only. Create + report txs still stay onchain."}
-          </span>
+          <span className="text-xs text-muted-foreground">{visibility === "public" ? "Registry and community alerts, plus an optional Telegram DM." : "Telegram DM alerts only; the create and report receipts remain onchain."}</span>
         </div>
 
-        <div
-          className="flex flex-col gap-3 sm:col-span-2 rounded-xl border border-border bg-frame/50 p-4"
-          data-testid="watch-telegram-panel"
-        >
+        <div className="flex flex-col gap-3 sm:col-span-2 rounded-xl border border-border bg-frame/50 p-4" data-testid="watch-telegram-panel">
           <div>
-            <p className="text-xs font-medium text-foreground m-0 mb-1">Connect Telegram</p>
-            <p className="text-xs text-muted-foreground m-0 leading-relaxed">
-              Send /start to the bot, then paste the code it replies with.
-              {visibility === "private"
-                ? " Required for private watches."
-                : " Optional for public — enter it to also receive alerts by DM."}
-            </p>
+            <p className="text-xs font-medium text-foreground m-0 mb-1">Telegram binding required</p>
+            <p className="text-xs text-muted-foreground m-0 leading-relaxed">Before calling, open <strong>@{telegramBotUsername}</strong>, send <code>/start</code>, and paste the one-time binding code returned by the bot. The code expires after 30 minutes and is required for Telegram alerts.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={telegramDeepLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
-              data-testid="watch-telegram-open"
-            >
-              Open @{telegramBotUsername}
-            </a>
+            <a href={telegramDeepLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors" data-testid="watch-telegram-open">Open @{telegramBotUsername}</a>
           </div>
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              Binding code
-              {visibility === "private" ? (
-                <span className="text-[var(--accent-error)]"> *</span>
-              ) : (
-                <span className="font-normal"> (optional)</span>
-              )}
-            </span>
-            <input
-              type="text"
-              value={telegramBindingCode}
-              onChange={(e) => setTelegramBindingCode(e.target.value.toUpperCase())}
-              placeholder="ABCD12"
-              className="rounded-xl border border-border bg-background px-3 py-2.5 font-mono text-sm tracking-wider text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] uppercase"
-              data-testid="watch-telegram-code-input"
-              autoComplete="off"
-              spellCheck={false}
-            />
+            <span className="text-xs font-medium text-muted-foreground">One-time binding code <span className="text-[var(--accent-error)]">*</span></span>
+            <input type="text" value={telegramBindingCode} onChange={(event) => setTelegramBindingCode(event.target.value.toUpperCase())} placeholder="ABCD12" className="rounded-xl border border-border bg-background px-3 py-2.5 font-mono text-sm tracking-wider text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] uppercase" data-testid="watch-telegram-code-input" autoComplete="off" spellCheck={false} />
           </label>
         </div>
 
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="text-xs font-medium text-muted-foreground">Campaign duration</span>
-          <select
-            value={durationHours}
-            onChange={(e) => setDurationHours(Number(e.target.value))}
-            className="rounded-xl border border-border bg-frame px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
-            data-testid="watch-duration-input"
-          >
-            {DURATION_PRESETS.map((preset) => (
-              <option key={preset.durationHours} value={preset.durationHours}>
-                {preset.label}
-              </option>
-            ))}
+          <select value={durationHours} onChange={(event) => setDurationHours(Number(event.target.value))} className="rounded-xl border border-border bg-frame px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]" data-testid="watch-duration-input">
+            {DURATION_PRESETS.map((preset) => <option key={preset.durationHours} value={preset.durationHours}>{preset.label}</option>)}
           </select>
-          <span className="text-xs text-muted-foreground">
-            Use 1 hour for a short demo with create + report registry txs in one session.
-          </span>
+          <span className="text-xs text-muted-foreground">Use 1 hour for the hackathon smoke test; monitoring and final report continue asynchronously.</span>
         </label>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
         {step === "challenge_ready" && prepared ? (
-          <button
-            type="button"
-            onClick={() => void handlePay()}
-            className="inline-flex items-center justify-center rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
-            data-testid="watch-pay-button"
-          >
-            Pay {prepared.amountRequested} {prepared.currency}
-          </button>
+          <button type="button" onClick={() => void handlePay()} className="inline-flex items-center justify-center rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity" data-testid="watch-pay-button">Pay {prepared.amountUsdc.toFixed(2)} USDC on Base</button>
         ) : (
-          <button
-            type="button"
-            onClick={() => void handlePrepare()}
-            disabled={step === "preparing" || step === "settling"}
-            className="inline-flex items-center justify-center rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-            data-testid="watch-prepare-button"
-          >
-            {step === "preparing"
-              ? "Preparing…"
-              : step === "settling"
-                ? "Settling…"
-                : "Continue to payment"}
-          </button>
+          <button type="button" onClick={() => void handlePrepare()} disabled={step === "preparing" || step === "settling"} className="inline-flex items-center justify-center rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50" data-testid="watch-prepare-button">{step === "preparing" ? "Checking Marketplace…" : step === "settling" ? "Submitting payment…" : "Continue to KeeperHub payment"}</button>
         )}
-
-        {step === "challenge_ready" && prepared ? (
-          <button
-            type="button"
-            onClick={() => {
-              setPrepared(null);
-              setSettledWatch(null);
-              setError(null);
-              setNotice(null);
-              setStep("idle");
-            }}
-            className="inline-flex items-center justify-center rounded-full border border-border bg-background px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="watch-edit-details-button"
-          >
-            Edit details
-          </button>
-        ) : null}
-
-        {step === "challenge_ready" && prepared ? (
-          <StatusBadge
-            label={
-              prepared.reused
-                ? "Challenge reused · nothing new billed"
-                : `${
-                    prepared.campaign.durationHours != null &&
-                    prepared.campaign.durationHours < 24
-                      ? `${prepared.campaign.durationHours}h`
-                      : `${prepared.campaign.durationDays}d`
-                  } · ${prepared.amountRequested} ${prepared.currency}`
-            }
-            variant="info"
-          />
-        ) : null}
-        {step === "settled" ? (
-          <StatusBadge
-            label={notice ? "Campaign already created" : "Campaign accepted"}
-            variant="success"
-          />
-        ) : null}
+        {step === "challenge_ready" && prepared ? <button type="button" onClick={() => { setPrepared(null); setError(null); setStep("idle"); }} className="inline-flex items-center justify-center rounded-full border border-border bg-background px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors" data-testid="watch-edit-details-button">Edit details</button> : null}
+        {step === "challenge_ready" && prepared ? <StatusBadge label={`${prepared.amountUsdc.toFixed(2)} USDC · Base Mainnet`} variant="info" /> : null}
+        {step === "settled" ? <StatusBadge label="Marketplace payment accepted" variant="success" /> : null}
       </div>
 
-      {error ? (
-        <p className="mt-3 text-sm text-[var(--accent-error)]" data-testid="watch-form-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      {notice ? (
-        <p className="mt-3 text-sm text-muted-foreground" data-testid="watch-form-notice" role="status">
-          {notice}
-        </p>
-      ) : null}
-
+      {error ? <p className="mt-3 text-sm text-[var(--accent-error)]" data-testid="watch-form-error" role="alert">{error}</p> : null}
+      {notice ? <p className="mt-3 text-sm text-muted-foreground" data-testid="watch-form-notice" role="status">{notice}</p> : null}
       {settledWatch ? (
-        <div
-          className="mt-4 rounded-xl border border-border bg-frame/60 p-4 text-sm"
-          data-testid="watch-form-success"
-        >
-          <p className="font-medium text-foreground m-0 mb-1">Watch created</p>
-          <p className="text-muted-foreground m-0 mb-2">
-            Status <StatusBadge label={settledWatch.status} variant="info" />
-          </p>
-          {settledWatch.id ? (
-            <Link
-              to={`/watch/${settledWatch.id}`}
-              className="text-sm font-semibold text-foreground hover:text-muted-foreground transition-colors"
-            >
-              Open campaign audit trail →
-            </Link>
-          ) : (
-            <p className="text-xs text-muted-foreground m-0">
-              Initializing campaign on-chain. It will appear in the campaigns list below shortly.
-            </p>
-          )}
+        <div className="mt-4 rounded-xl border border-border bg-frame/60 p-4 text-sm" data-testid="watch-form-success">
+          <p className="font-medium text-foreground m-0 mb-1">Watch workflow accepted</p>
+          <p className="text-muted-foreground m-0 mb-2">ChronicleAI is registering the Sepolia create receipt now.</p>
+          {settledWatch.id ? <Link to={`/watch/${settledWatch.id}`} className="text-sm font-semibold text-foreground hover:text-muted-foreground transition-colors">Open campaign audit trail →</Link> : <p className="text-xs text-muted-foreground m-0">The campaign will appear in the list after the Marketplace workflow finishes registration.</p>}
         </div>
       ) : null}
     </Surface>

@@ -27,7 +27,7 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
         audience: "human",
         verificationType: "eip712_transfer_with_authorization",
         currency: "USDC",
-        network: "Ethereum Sepolia (configurable via server env)",
+        network: "Base Sepolia (legacy ChronicleAI payment route)",
         description:
           "Browser wallet path. Client creates a challenge with paymentRoute=x402, signs EIP-712 TransferWithAuthorization, then settles. Default rail on the /premium web UI.",
       },
@@ -40,6 +40,16 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
         network: "Tempo (machine-to-machine micro-billing)",
         description:
           "Agent path. Client creates a challenge with paymentRoute=mpp, computes HMAC-SHA256 over challengeData.hmacPayloadTemplate with the shared MPP secret, then settles with expiresAt:hmac as settlementReference.",
+      },
+      {
+        id: "keeperhub-marketplace-watch",
+        label: "KeeperHub Marketplace Watch",
+        audience: "dual",
+        verificationType: "keeperhub_x402_or_mpp",
+        currency: "USDC",
+        network: "Base Mainnet (KeeperHub Marketplace)",
+        description:
+          "Canonical Watch purchase. Call the listed workflow by slug; KeeperHub handles x402/MPP payment, the workflow writes the createSponsoredWatch receipt on Ethereum Sepolia, and ChronicleAI monitors and publishes the report asynchronously.",
       },
       {
         id: "auto",
@@ -60,6 +70,7 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
       createChallenge: "POST /payments/challenges",
       settlePayment: "POST /payments/settlements",
       createSponsoredWatchChallenge: "POST /payments/sponsored-watch/challenges",
+      keeperhubMarketplaceWatch: "POST /keeperhub/marketplace/watch/call",
       listSponsoredWatches: "GET /premium/watches",
       deskIntents: "GET /premium/desk/intents",
       deskTicket: "GET /premium/desk/tickets/:id",
@@ -130,7 +141,25 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
     humanUi: {
       path: "/premium",
       paymentRoute: "x402",
-      note: "The web UI only completes wallet checkout via x402. MPP is intentionally API-native; this discovery document is the agent entry point.",
+      note: "Watch checkout is canonical through KeeperHub Marketplace; the ChronicleAI page is a browser gateway that forwards the KeeperHub x402 challenge without exposing the organization API key. Legacy premium item checkout remains available for compatibility.",
+    },
+    keeperhubMarketplaceWatch: {
+      slug: "chronicle-paid-onchain-watch",
+      callUrl: "https://app.keeperhub.com/api/mcp/workflows/chronicle-paid-onchain-watch/call",
+      mcpUrl: "https://app.keeperhub.com/mcp/w/chronicle-paid-onchain-watch",
+      paymentNetwork: "Base Mainnet",
+      registryNetwork: "Ethereum Sepolia",
+      telegramInstruction:
+        "Before calling, open @chronicleai_bot, send /start, and paste the one-time binding code returned by the bot. The code expires after 30 minutes and is required for Telegram alerts.",
+      inputs: [
+        "targetContract",
+        "targetKind",
+        "focusKey",
+        "durationHours",
+        "visibility",
+        "telegramBindingCode",
+        "requestId",
+      ],
     },
   };
 }

@@ -187,6 +187,23 @@ export interface SponsoredWatchService {
     telegramChatId?: string | null;
   }): Promise<SponsoredWatchRow>;
 
+  /** Persist a successful Marketplace workflow write without submitting a second chain transaction. */
+  registerMarketplaceWatch(params: {
+    requestId: string;
+    marketplaceSlug: string;
+    targetContract: string;
+    watchSpecHash: string;
+    startsAt: string;
+    endsAt: string;
+    targetKind?: SponsoredWatchTargetKind;
+    visibility?: SponsoredWatchVisibility;
+    telegramChatId?: string | null;
+    onChainWatchId: number;
+    createTxHash: string;
+    createKeeperHubRunId?: string | null;
+    createExplorerUrl?: string | null;
+  }): Promise<SponsoredWatchRow>;
+
   completeWatch(watchId: string, params: CompleteWatchParams): Promise<SponsoredWatchRow>;
 
   failWatch(watchId: string, reason: string): Promise<SponsoredWatchRow>;
@@ -1799,6 +1816,106 @@ export function createSponsoredWatchService(params: {
     return result.value;
   }
 
+  async function persistCreatedWatch(params: {
+    targetContract: string;
+    watchSpecHash: string;
+    startsAt: string;
+    endsAt: string;
+    targetKind: SponsoredWatchTargetKind;
+    visibility: SponsoredWatchVisibility;
+    telegramChatId: string | null;
+    onChainWatchId: number;
+    createTxHash: string;
+    createKeeperHubRunId?: string | null;
+    createExplorerUrl?: string | null;
+    executionSource: "legacy_payment" | "keeperhub_marketplace";
+    marketplaceSlug?: string | null;
+    marketplaceRequestId?: string | null;
+    executedViaKeeperHub: boolean;
+  }): Promise<SponsoredWatchRow> {
+    if (params.visibility === "private" && !params.telegramChatId?.trim()) {
+      throw new Error("Private sponsored watches require a resolved telegram_chat_id");
+    }
+
+    const startsAtUnix = Math.floor(new Date(params.startsAt).getTime() / 1000);
+    const endsAtUnix = Math.floor(new Date(params.endsAt).getTime() / 1000);
+    if (!Number.isFinite(startsAtUnix) || !Number.isFinite(endsAtUnix) || startsAtUnix >= endsAtUnix) {
+      throw new Error("Sponsored watch requires startsAt < endsAt as valid ISO timestamps");
+    }
+    if (!Number.isSafeInteger(params.onChainWatchId) || params.onChainWatchId < 0) {
+      throw new Error("Sponsored watch requires a valid non-negative on-chain watch id");
+    }
+
+    const now = Date.now();
+    const startsMs = new Date(params.startsAt).getTime();
+    const endsMs = new Date(params.endsAt).getTime();
+    const initialStatus =
+      Number.isFinite(startsMs) && Number.isFinite(endsMs) && startsMs <= now && now < endsMs
+        ? "monitoring"
+        : "accepted";
+
+    const result = await watchRepo.create({
+      target_contract: params.targetContract,
+      watch_spec_hash: params.watchSpecHash,
+      starts_at: params.startsAt,
+      ends_at: params.endsAt,
+      create_tx_hash: params.createTxHash,
+      create_keeper_hub_run_id: params.createKeeperHubRunId ?? null,
+      create_explorer_url: params.createExplorerUrl ?? null,
+      on_chain_watch_id: params.onChainWatchId,
+      status: initialStatus,
+      source_event_ids: [],
+      monitored_event_count: 0,
+      last_monitored_at: null,
+      target_kind: params.targetKind,
+      visibility: params.visibility,
+      telegram_chat_id: params.telegramChatId?.trim() || null,
+      execution_source: params.executionSource,
+      marketplace_slug: params.marketplaceSlug ?? null,
+      marketplace_request_id: params.marketplaceRequestId ?? null,
+    });
+
+    if (!result.ok) {
+      throw new Error(`Failed to create sponsored watch: ${result.error.message}`);
+    }
+
+    await execLogRepo.append({
+      action_type: "sponsored_watch",
+      entity_type: "sponsored_watch",
+      entity_id: result.value.id,
+      status: "succeeded",
+      message: params.createKeeperHubRunId
+        ? `Executed via KeeperHub (run ${params.createKeeperHubRunId}): sponsored watch created for ${params.targetKind} ${params.targetContract}`
+        : `Sponsored watch created for ${params.targetKind} ${params.targetContract}`,
+      details: {
+        method: "createSponsoredWatch",
+        executionSource: params.executionSource,
+        marketplaceSlug: params.marketplaceSlug ?? null,
+        marketplaceRequestId: params.marketplaceRequestId ?? null,
+        targetContract: params.targetContract,
+        targetKind: params.targetKind,
+        visibility: params.visibility,
+        hasTelegramChatId: Boolean(params.telegramChatId?.trim()),
+        watchSpecHash: params.watchSpecHash,
+        startsAt: params.startsAt,
+        endsAt: params.endsAt,
+        createTxHash: params.createTxHash,
+        createKeeperHubRunId: params.createKeeperHubRunId ?? null,
+        createExplorerUrl: params.createExplorerUrl ?? null,
+        onChainWatchId: params.onChainWatchId,
+        status: initialStatus,
+        keeper_hub_run_id: params.createKeeperHubRunId ?? null,
+        tx_hash: params.createTxHash,
+        explorer_url: params.createExplorerUrl ?? null,
+        executedViaKeeperHub: params.executedViaKeeperHub,
+      },
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    });
+
+    return result.value;
+  }
+
   return {
     async createSponsoredWatch({
       targetContract,
@@ -1864,70 +1981,70 @@ export function createSponsoredWatchService(params: {
         throw new Error(`On-chain createSponsoredWatch failed: ${message}`);
       }
 
-      const now = Date.now();
-      const startsMs = new Date(startsAt).getTime();
-      const endsMs = new Date(endsAt).getTime();
-      // Enter monitoring immediately when the campaign window already covers now.
-      const initialStatus =
-        Number.isFinite(startsMs) && Number.isFinite(endsMs) && startsMs <= now && now < endsMs
-          ? "monitoring"
-          : "accepted";
-
-      const result = await watchRepo.create({
-        target_contract: targetContract,
-        watch_spec_hash: watchSpecHash,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        create_tx_hash: createTxHash,
-        create_keeper_hub_run_id: createKeeperHubRunId ?? null,
-        create_explorer_url: createExplorerUrl ?? null,
-        on_chain_watch_id: onChainWatchId,
-        status: initialStatus,
-        source_event_ids: [],
-        monitored_event_count: 0,
-        // Creation/activation is not a scan; the first cycle owns the initial lookup.
-        last_monitored_at: null,
-        target_kind: resolvedKind,
+      return persistCreatedWatch({
+        targetContract,
+        watchSpecHash,
+        startsAt,
+        endsAt,
+        targetKind: resolvedKind,
         visibility: resolvedVisibility,
-        telegram_chat_id: telegramChatId?.trim() || null,
+        telegramChatId: telegramChatId?.trim() || null,
+        onChainWatchId,
+        createTxHash,
+        createKeeperHubRunId,
+        createExplorerUrl,
+        executionSource: "legacy_payment",
+        executedViaKeeperHub: Boolean(createKeeperHubRunId || client.isKeeperHubBacked()),
       });
+    },
 
-      if (!result.ok) {
-        throw new Error(`Failed to create sponsored watch: ${result.error.message}`);
+    async registerMarketplaceWatch({
+      requestId,
+      marketplaceSlug,
+      targetContract,
+      watchSpecHash,
+      startsAt,
+      endsAt,
+      targetKind = "contract",
+      visibility = "public",
+      telegramChatId = null,
+      onChainWatchId,
+      createTxHash,
+      createKeeperHubRunId = null,
+      createExplorerUrl = null,
+    }) {
+      const existing = await watchRepo.findByMarketplaceRequestId(requestId);
+      if (!existing.ok) {
+        throw new Error(`Failed to check Marketplace Watch idempotency: ${existing.error.message}`);
       }
+      if (existing.value) return existing.value;
 
-      await execLogRepo.append({
-        action_type: "sponsored_watch",
-        entity_type: "sponsored_watch",
-        entity_id: result.value.id,
-        status: "succeeded",
-        message: createKeeperHubRunId
-          ? `Executed via KeeperHub (run ${createKeeperHubRunId}): sponsored watch created for ${resolvedKind} ${targetContract}`
-          : `Sponsored watch created for ${resolvedKind} ${targetContract}`,
-        details: {
-          method: "createSponsoredWatch",
+      try {
+        return await persistCreatedWatch({
           targetContract,
-          targetKind: resolvedKind,
-          visibility: resolvedVisibility,
-          hasTelegramChatId: Boolean(telegramChatId?.trim()),
           watchSpecHash,
           startsAt,
           endsAt,
+          targetKind: targetKind === "wallet" ? "wallet" : "contract",
+          visibility: visibility === "private" ? "private" : "public",
+          telegramChatId: telegramChatId?.trim() || null,
+          onChainWatchId,
           createTxHash,
           createKeeperHubRunId,
           createExplorerUrl,
-          onChainWatchId,
-          status: initialStatus,
-          keeper_hub_run_id: createKeeperHubRunId ?? null,
-          tx_hash: createTxHash,
-          explorer_url: createExplorerUrl ?? null,
-          executedViaKeeperHub: Boolean(createKeeperHubRunId || client.isKeeperHubBacked()),
-        },
-        started_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-      });
-
-      return result.value;
+          executionSource: "keeperhub_marketplace",
+          marketplaceSlug,
+          marketplaceRequestId: requestId,
+          executedViaKeeperHub: true,
+        });
+      } catch (error) {
+        // The partial unique index is the final arbiter when two retries race.
+        // Re-read after an insert conflict so both callers receive the one
+        // locally registered watch instead of surfacing a duplicate error.
+        const raced = await watchRepo.findByMarketplaceRequestId(requestId);
+        if (raced.ok && raced.value) return raced.value;
+        throw error;
+      }
     },
 
     async completeWatch(watchId, completeParams) {

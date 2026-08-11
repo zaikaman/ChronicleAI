@@ -78,6 +78,8 @@ export interface ServerEnv {
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
   keeperhubWebhookSecret: string;
+  /** Dedicated HMAC secret for the paid Watch Marketplace HTTP bridge. */
+  keeperhubMarketplaceBridgeSecret: string | undefined;
   geminiApiKey: string;
   geminiModel: string;
   geminiBaseUrl: string | undefined;
@@ -871,6 +873,9 @@ export function assertProductionReadiness(env: ServerEnv): void {
   if (!keeperHubApiKey || !keeperHubApiKey.startsWith("kh_")) {
     keeperHubCoreErrors.push("KEEPERHUB_API_KEY (kh_ organization key)");
   }
+  if (!env.keeperhubMarketplaceBridgeSecret?.trim() || env.keeperhubMarketplaceBridgeSecret.length < 16) {
+    errors.push("KEEPERHUB_MARKETPLACE_BRIDGE_SECRET (at least 16 characters)");
+  }
   if (!keeperHubApiBaseUrl) {
     keeperHubCoreErrors.push("KEEPERHUB_API_BASE_URL");
   } else {
@@ -1174,6 +1179,7 @@ export function loadServerEnv(): ServerEnv {
     supabaseUrl: requireEnv("SUPABASE_URL"),
     supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
     keeperhubWebhookSecret: requireEnv("KEEPERHUB_WEBHOOK_SECRET"),
+    keeperhubMarketplaceBridgeSecret: optionalEnv("KEEPERHUB_MARKETPLACE_BRIDGE_SECRET"),
     geminiApiKey: optionalEnv("GEMINI_API_KEY", "") as string,
     geminiModel: optionalEnv("GEMINI_MODEL", "gemini-2.0-flash") as string,
     geminiBaseUrl: optionalEnv("GEMINI_BASE_URL"),

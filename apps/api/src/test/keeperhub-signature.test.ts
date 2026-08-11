@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { errorHandler } from "../middleware/core.ts";
 import {
   computeKeeperhubSignature,
+  keeperhubMarketplaceAuthMiddleware,
   keeperhubSignatureMiddleware,
 } from "../middleware/keeperhub-signature.ts";
 
@@ -132,5 +133,71 @@ describe("KeeperHub signature middleware", () => {
 
       expect(response.status).toBe(401);
     });
+  });
+
+  it("accepts the dedicated bearer secret for Marketplace HTTP actions", async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(keeperhubMarketplaceAuthMiddleware(SECRET));
+    app.use((_req, res) => res.status(204).end());
+
+    const server = await new Promise<import("node:http").Server>((resolve) => {
+      const nextServer = app.listen(0, "127.0.0.1", () => resolve(nextServer));
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}/keeperhub/marketplace/watch/prepare`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ targetContract: "0x0000000000000000000000000000000000000001" }),
+      });
+
+      expect(response.status).toBe(204);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
+  it("keeps HMAC fallback enabled for direct Marketplace bridge callers", async () => {
+    const app = express();
+    app.use(
+      express.json({
+        verify: (req, _res, body) => {
+          (req as Request).rawBody = Buffer.from(body);
+        },
+      }),
+    );
+    app.use(keeperhubMarketplaceAuthMiddleware(SECRET));
+    app.use((_req, res) => res.status(204).end());
+
+    const server = await new Promise<import("node:http").Server>((resolve) => {
+      const nextServer = app.listen(0, "127.0.0.1", () => resolve(nextServer));
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const path = "/keeperhub/marketplace/watch/register";
+      const body = JSON.stringify({ requestId: "test-request" });
+      const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
+        method: "POST",
+        headers: {
+          ...signedHeaders(path, "POST", body),
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+
+      expect(response.status).toBe(204);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 });

@@ -8,7 +8,12 @@ describe("buildAgentPaymentsDiscovery", () => {
     const doc = buildAgentPaymentsDiscovery();
 
     expect(doc.version).toBe("1");
-    expect(doc.routes.map((r) => r.id)).toEqual(["x402", "mpp", "auto"]);
+    expect(doc.routes.map((r) => r.id)).toEqual([
+      "x402",
+      "mpp",
+      "keeperhub-marketplace-watch",
+      "auto",
+    ]);
     expect(doc.endpoints.createChallenge).toBe("POST /payments/challenges");
     expect(doc.endpoints.settlePayment).toBe("POST /payments/settlements");
     expect(doc.endpoints.wellKnown).toBe("GET /.well-known/agent-payments");

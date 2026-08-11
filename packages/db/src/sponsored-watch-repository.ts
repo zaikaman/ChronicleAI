@@ -4,12 +4,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Result, ValidationError, failure, success } from "./errors.ts";
 import {
+  type PaginatedResult,
+  type PaginationParams,
   buildPaginatedResult,
   mapPostgrestError,
   maybeRow,
   normalizePagination,
-  type PaginatedResult,
-  type PaginationParams,
 } from "./repository-utils.ts";
 import type { SponsoredWatchInsert, SponsoredWatchRow, SponsoredWatchUpdate } from "./types.ts";
 
@@ -26,6 +26,7 @@ function normalizeWatchBatchLimit(limit: number): number {
 export interface SponsoredWatchRepository {
   create(watch: SponsoredWatchInsert): Promise<Result<SponsoredWatchRow>>;
   findById(id: string): Promise<Result<SponsoredWatchRow | null>>;
+  findByMarketplaceRequestId(requestId: string): Promise<Result<SponsoredWatchRow | null>>;
   list(): Promise<Result<SponsoredWatchRow[]>>;
   /**
    * Page-based campaign list (newest first).
@@ -71,6 +72,18 @@ export function createSponsoredWatchRepository(supabase: SupabaseClient): Sponso
         return success(null);
       }
       const { data, error } = await table().select("*").eq("id", id).limit(1);
+
+      if (error) return failure(mapPostgrestError(error));
+      return success(maybeRow(data ?? []));
+    },
+
+    async findByMarketplaceRequestId(requestId) {
+      const normalized = requestId.trim();
+      if (!normalized) return success(null);
+      const { data, error } = await table()
+        .select("*")
+        .eq("marketplace_request_id", normalized)
+        .limit(1);
 
       if (error) return failure(mapPostgrestError(error));
       return success(maybeRow(data ?? []));

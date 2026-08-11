@@ -131,6 +131,32 @@ export function keeperhubSignatureMiddleware(secret: string) {
   };
 }
 
+/**
+ * Authenticator for the Marketplace HTTP action.
+ *
+ * Direct bridge callers should use the replay-resistant HMAC headers above.
+ * KeeperHub's HTTP Request node can store a secret header but cannot access
+ * Node's HMAC primitives, so Marketplace copies use a dedicated bearer token
+ * stored in the private workflow configuration. The token is never accepted
+ * by the internal scheduled-webhook routes.
+ */
+export function keeperhubMarketplaceAuthMiddleware(secret: string) {
+  const hmacMiddleware = keeperhubSignatureMiddleware(secret);
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const authorization = getSingleHeader(req.headers.authorization);
+    if (secret && authorization === `Bearer ${secret}`) {
+      req.webhookAuth = {
+        signature: "marketplace-bearer",
+        verified: true,
+        timestamp: new Date().toISOString(),
+      };
+      next();
+      return;
+    }
+    hmacMiddleware(req, res, next);
+  };
+}
+
 export interface KeeperhubSignatureInput {
   secret: string;
   method: string;

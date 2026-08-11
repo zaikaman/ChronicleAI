@@ -1506,6 +1506,9 @@ export type Database = {
           updated_at: string
           visibility: string
           watch_spec_hash: string
+          execution_source: string
+          marketplace_slug: string | null
+          marketplace_request_id: string | null
         }
         Insert: {
           content_uri?: string | null
@@ -1537,6 +1540,9 @@ export type Database = {
           updated_at?: string
           visibility?: string
           watch_spec_hash: string
+          execution_source?: string
+          marketplace_slug?: string | null
+          marketplace_request_id?: string | null
         }
         Update: {
           content_uri?: string | null
@@ -1568,6 +1574,9 @@ export type Database = {
           updated_at?: string
           visibility?: string
           watch_spec_hash?: string
+          execution_source?: string
+          marketplace_slug?: string | null
+          marketplace_request_id?: string | null
         }
         Relationships: []
       }

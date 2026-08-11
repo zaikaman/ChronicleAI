@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "exportedAt": "2026-08-11T00:00:00.000Z",
+  "workflow": {
+    "name": "ChronicleAI Paid Onchain Watch",
+    "description": "Free-tier Marketplace workflow: create the Watch audit record on Ethereum Sepolia, then send the successful transaction through ChronicleAI's Telegram ingest bridge for asynchronous registration and monitoring. Payment is handled by KeeperHub Marketplace on Base Mainnet.",
+    "marketplaceSlug": "chronicle-paid-onchain-watch",
+    "marketplaceDescription": "Start a paid ChronicleAI Watch campaign. Before calling, open @chronicleai_bot, send /start, and paste the one-time binding code returned by the bot. The code expires after 30 minutes and is required for Telegram alerts. KeeperHub handles payment on Base Mainnet; ChronicleAI creates the Watch audit record on Ethereum Sepolia and monitors it asynchronously. This workflow uses the free-tier Telegram bridge instead of HTTP Request actions.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "targetContract",
+        "targetKind",
+        "focusKey",
+        "durationHours",
+        "visibility",
+        "telegramBindingCode",
+        "requestId",
+        "startsAtUnix",
+        "endsAtUnix",
+        "watchSpecHash"
+      ],
+      "properties": {
+        "targetContract": { "type": "string", "description": "Ethereum address to watch." },
+        "targetKind": { "type": "string", "enum": ["contract", "wallet"] },
+        "focusKey": { "type": "string", "enum": ["none", "transfers", "swaps", "liquidations", "deposits", "stablecoin", "cex"] },
+        "durationHours": { "type": "integer", "minimum": 1, "maximum": 2160 },
+        "visibility": { "type": "string", "enum": ["public", "private"] },
+        "telegramBindingCode": { "type": "string", "description": "One-time code returned by @chronicleai_bot after /start; expires after 30 minutes." },
+        "requestId": { "type": "string", "description": "Client-generated URL-safe idempotency key." },
+        "startsAtUnix": { "type": "integer", "description": "Campaign start timestamp in Unix seconds." },
+        "endsAtUnix": { "type": "integer", "description": "Campaign end timestamp in Unix seconds." },
+        "watchSpecHash": { "type": "string", "description": "Keccak-256 hash of the canonical Watch specification." }
+      }
+    }
+  },
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "type": "trigger",
+      "position": { "x": 80, "y": 220 },
+      "data": {
+        "type": "trigger",
+        "label": "Marketplace Request",
+        "config": { "triggerType": "Manual" }
+      }
+    },
+    {
+      "id": "write-create-watch",
+      "type": "action",
+      "position": { "x": 380, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Create Watch on Ethereum Sepolia",
+        "config": {
+          "actionType": "web3/write-contract",
+          "network": "11155111",
+          "contractAddress": "YOUR_CHRONICLE_REGISTRY_ADDRESS",
+          "abiFunction": "createSponsoredWatch",
+          "functionArgs": "[\"{{@trigger-manual:Marketplace Request.targetContract}}\",\"{{@trigger-manual:Marketplace Request.watchSpecHash}}\",\"{{@trigger-manual:Marketplace Request.startsAtUnix}}\",\"{{@trigger-manual:Marketplace Request.endsAtUnix}}\"]",
+          "abi": "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"targetContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"watchSpecHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"startsAt\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"endsAt\",\"type\":\"uint64\"}],\"name\":\"createSponsoredWatch\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"watchId\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+        }
+      }
+    },
+    {
+      "id": "post-chronicle-telegram",
+      "type": "action",
+      "position": { "x": 760, "y": 220 },
+      "data": {
+        "type": "action",
+        "label": "Register Watch through Telegram ingest",
+        "config": {
+          "actionType": "telegram/send-message",
+          "chatId": "YOUR_TELEGRAM_INGEST_CHAT_ID",
+          "message": "CHRONICLE_INGEST v1\n{\"kind\":\"watch_request\",\"payload\":{\"marketplaceSlug\":\"chronicle-paid-onchain-watch\",\"requestId\":\"{{@trigger-manual:Marketplace Request.requestId}}\",\"targetContract\":\"{{@trigger-manual:Marketplace Request.targetContract}}\",\"targetKind\":\"{{@trigger-manual:Marketplace Request.targetKind}}\",\"focusKey\":\"{{@trigger-manual:Marketplace Request.focusKey}}\",\"durationHours\":{{@trigger-manual:Marketplace Request.durationHours}},\"visibility\":\"{{@trigger-manual:Marketplace Request.visibility}}\",\"telegramBindingCode\":\"{{@trigger-manual:Marketplace Request.telegramBindingCode}}\",\"startsAtUnix\":{{@trigger-manual:Marketplace Request.startsAtUnix}},\"endsAtUnix\":{{@trigger-manual:Marketplace Request.endsAtUnix}},\"watchSpecHash\":\"{{@trigger-manual:Marketplace Request.watchSpecHash}}\",\"createTxHash\":\"{{@write-create-watch:Create Watch on Ethereum Sepolia.transactionHash}}\",\"createExplorerUrl\":\"{{@write-create-watch:Create Watch on Ethereum Sepolia.transactionLink}}\"}}",
+          "parseMode": "none"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-manual", "target": "write-create-watch" },
+    { "id": "e2", "source": "write-create-watch", "target": "post-chronicle-telegram" }
+  ],
+  "integrationBindings": []
+}

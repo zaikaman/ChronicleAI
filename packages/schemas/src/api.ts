@@ -241,6 +241,8 @@ export interface AgentPaymentEndpoints {
   deskIntents?: string;
   deskTicket?: string;
   deskStream?: string;
+  /** Canonical paid Watch listing on KeeperHub Marketplace. */
+  keeperhubMarketplaceWatch?: string;
 }
 
 /**
@@ -298,6 +300,16 @@ export interface AgentPaymentsDiscovery {
   };
   /** Premium desk feed catalog + private-routing product note (Phase 4). */
   deskFeed?: AgentDeskFeedDiscovery;
+  /** KeeperHub Marketplace Watch listing and typed agent call surfaces. */
+  keeperhubMarketplaceWatch?: {
+    slug: string;
+    callUrl: string;
+    mcpUrl: string;
+    paymentNetwork: "Base Mainnet";
+    registryNetwork: "Ethereum Sepolia";
+    telegramInstruction: string;
+    inputs: string[];
+  };
 }
 
 // ── Payment Record ──────────────────────────────────────

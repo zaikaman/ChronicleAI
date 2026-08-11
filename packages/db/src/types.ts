@@ -280,9 +280,15 @@ export interface SponsoredWatchRow {
   target_kind: SponsoredWatchTargetKind;
   /** Owner Telegram chat id for private alert delivery. */
   telegram_chat_id: string | null;
-  /** public = registry alert + community Telegram; private = owner Telegram only. */
-  visibility: SponsoredWatchVisibility;
-  last_alert_sent_at: string | null;
+    /** public = registry alert + community Telegram; private = owner Telegram only. */
+    visibility: SponsoredWatchVisibility;
+    /** Canonical execution path for audit/UI provenance. */
+    execution_source: "legacy_payment" | "keeperhub_marketplace";
+    /** KeeperHub marketplace listing slug when created through Marketplace. */
+    marketplace_slug: string | null;
+    /** Caller/workflow idempotency key; unique when present. */
+    marketplace_request_id: string | null;
+    last_alert_sent_at: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -311,9 +317,12 @@ export interface SponsoredWatchInsert {
   last_monitored_at?: string | null;
   monitored_event_count?: number;
   target_kind?: SponsoredWatchTargetKind;
-  telegram_chat_id?: string | null;
-  visibility?: SponsoredWatchVisibility;
-  last_alert_sent_at?: string | null;
+    telegram_chat_id?: string | null;
+    visibility?: SponsoredWatchVisibility;
+    execution_source?: "legacy_payment" | "keeperhub_marketplace";
+    marketplace_slug?: string | null;
+    marketplace_request_id?: string | null;
+    last_alert_sent_at?: string | null;
   status?: string;
 }
 

@@ -1,7 +1,7 @@
 // Watch page — demo front door: request a watch, get Telegram alerts with proof, report onchain.
 
-import { type ReactElement } from "react";
 import { Bell, Eye, FileCheck } from "lucide-react";
+import type { ReactElement } from "react";
 import { Page, PageHeader, PageSection, Surface } from "../../components/page-chrome.tsx";
 import { PaginationControls } from "../../components/pagination-controls.tsx";
 import { useSponsoredWatches } from "../premium/use-premium.ts";
@@ -42,12 +42,12 @@ export function WatchPage(): ReactElement {
     <Page data-testid="watch-page">
       <PageHeader
         title="Watch any wallet, contract, or protocol. Get alerts on Telegram — provably real, onchain."
-        description="Tell ChronicleAI what to monitor. It watches the window, alerts you with proof, and publishes the final report onchain. Monitoring runs on Ethereum Mainnet, paid in USDC."
+        description="Tell ChronicleAI what to monitor. KeeperHub Marketplace handles the paid workflow, while ChronicleAI watches the window, alerts you with proof, and publishes the final report onchain."
         meta={
           !isLoading ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-frame px-2.5 py-1 text-xs font-medium text-muted-foreground">
               <span aria-hidden="true">🌐</span>
-              Ethereum Mainnet
+              Ethereum Mainnet monitoring
               <span aria-hidden="true">·</span>
               {watches.length} campaign{watches.length !== 1 ? "s" : ""}
             </span>
@@ -90,7 +90,7 @@ export function WatchPage(): ReactElement {
 
       <PageSection
         title="Open a watch"
-        description="Pay to monitor a target during a campaign window. Creation and final report each leave an onchain receipt."
+        description="Start the canonical KeeperHub Marketplace Watch workflow. Payment settles on Base Mainnet; creation and final report leave Ethereum Sepolia receipts."
       >
         <WatchRequestForm
           onSettled={() => {

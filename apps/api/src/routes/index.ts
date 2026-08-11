@@ -83,7 +83,10 @@ import {
 } from "../desk/index.ts";
 import { BlockIngestionHandler } from "../keeperhub/block-ingestion-handler.ts";
 import { EventIngestionHandler } from "../keeperhub/event-ingestion-handler.ts";
-import { keeperhubSignatureMiddleware } from "../middleware/keeperhub-signature.ts";
+import {
+  keeperhubMarketplaceAuthMiddleware,
+  keeperhubSignatureMiddleware,
+} from "../middleware/keeperhub-signature.ts";
 import { createEventNormalizer } from "../monitoring/event-normalizer.ts";
 import {
   blockRpcUrlsFromEnv,
@@ -1075,7 +1078,11 @@ import {
 } from "../services/premium-access-receipt-service.ts";
 import { createSponsoredWatchReportService } from "../services/sponsored-watch-report-service.ts";
 import { createSponsoredWatchService } from "../services/sponsored-watch-service.ts";
+import { fetchAndDecodeWatchIdFromTxHash } from "../services/sponsored-watch-id.ts";
+import { registerTelegramWatchRequestHandler } from "../services/telegram-watch-ingest-bridge.ts";
+import { createTelegramWatchRequestHandler } from "../services/telegram-watch-ingest-service.ts";
 import { createKeeperhubSponsoredWatchRoutes } from "./keeperhub-sponsored-watch-routes.ts";
+import { createKeeperhubMarketplaceProxyRoutes } from "./keeperhub-marketplace-proxy-routes.ts";
 import { createPaymentRoutes } from "./payment-routes.ts";
 import { createPremiumDeskRoutes } from "./premium-desk-routes.ts";
 import { createPremiumRoutes } from "./premium-routes.ts";
@@ -1109,6 +1116,8 @@ const SPONSORED_WATCH_CYCLE_MS = 60_000;
 export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependencies): void {
   const web3Client = createWeb3Client(env, { execLogRepo: deps.execLogRepo });
   const treasury = resolveTreasuryWallet(env);
+
+  apiRouter.use(createKeeperhubMarketplaceProxyRoutes(env));
 
   // Production: resolve Para MPC treasury address (async warm-up; x402 uses sync fallback then refresh)
   const treasuryAddressHolder = { address: treasury.address };
@@ -1217,6 +1226,24 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
     alertPublicationService: watchAlertPublication,
   });
 
+  // Free-tier Marketplace workflow path: the Web3 write is followed by a
+  // Telegram ingest envelope instead of Pro-gated HTTP Request actions.
+  if (deps.telegramBindingRepo) {
+    registerTelegramWatchRequestHandler(
+      createTelegramWatchRequestHandler({
+        bindingRepo: deps.telegramBindingRepo,
+        watchRepo: deps.watchRepo,
+        watchService,
+        marketplaceSlug: "chronicle-paid-onchain-watch",
+        minDurationHours: env.sponsoredWatchMinDurationHours,
+        maxDurationHours: env.sponsoredWatchMaxDurationDays * 24,
+        resolveWatchIdFromTransaction: (txHash) =>
+          fetchAndDecodeWatchIdFromTxHash(txHash, env.keeperhubNetwork, env.rpcUrl),
+      }),
+    );
+    console.info("KeeperHub Watch Telegram registration bridge enabled");
+  }
+
   // Premium routes
   apiRouter.use(
     createPremiumRoutes({
@@ -1284,6 +1311,30 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
       telegramBindingRepo: deps.telegramBindingRepo ?? null,
     }),
   );
+
+  // Marketplace HTTP bridge uses a separate secret so a public paid listing
+  // cannot call internal scheduled-webhook endpoints with the same credential.
+  if (deps.telegramBindingRepo) {
+    const marketplaceBridgeRouter = Router();
+    marketplaceBridgeRouter.use(
+      "/keeperhub",
+      keeperhubMarketplaceAuthMiddleware(env.keeperhubMarketplaceBridgeSecret ?? ""),
+    );
+    marketplaceBridgeRouter.use(
+      createKeeperhubSponsoredWatchRoutes(watchService, {
+        bindingRepo: deps.telegramBindingRepo,
+        marketplaceSlug: "chronicle-paid-onchain-watch",
+        defaultDurationDays: env.sponsoredWatchDefaultDurationDays,
+        minDurationHours: env.sponsoredWatchMinDurationHours,
+        maxDurationHours: env.sponsoredWatchMaxDurationDays * 24,
+        resolveWatchIdFromTransaction: (txHash) =>
+          fetchAndDecodeWatchIdFromTxHash(txHash, env.keeperhubNetwork, env.rpcUrl),
+      }),
+    );
+    apiRouter.use(marketplaceBridgeRouter);
+  } else {
+    console.warn("KeeperHub Watch Marketplace bridge disabled: Telegram binding repository is unavailable");
+  }
 
   // KeeperHub-triggered campaign cycle (scheduled workflow) + signed webhook
   const keeperhubRouter = Router();
