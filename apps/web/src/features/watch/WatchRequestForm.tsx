@@ -7,7 +7,6 @@ import { StatusBadge } from "../../components/data-primitives.tsx";
 import { Surface } from "../../components/page-chrome.tsx";
 import { API_BASE, fetchWithTimeout } from "../../lib/api.ts";
 import { isEvmAddress, useWallet } from "../wallet";
-import { getAddress, keccak256, stringToBytes } from "viem";
 
 type TargetKind = "contract" | "wallet";
 type Visibility = "public" | "private";
@@ -93,22 +92,6 @@ function decodePaymentRequired(response: Response): PaymentRequired {
 
 function encodePaymentSignature(value: unknown): string {
   return btoa(JSON.stringify(value));
-}
-
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeysDeep);
-  if (value !== null && typeof value === "object") {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      sorted[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
-    }
-    return sorted;
-  }
-  return value;
-}
-
-function deriveWatchSpecHash(watchSpec: Record<string, unknown>): string {
-  return keccak256(stringToBytes(JSON.stringify(sortKeysDeep(watchSpec))));
 }
 
 async function signMarketplacePayment(
@@ -262,29 +245,13 @@ export function WatchRequestForm({
       return;
     }
 
-    const startsAtUnix = Math.floor(Date.now() / 1000);
-    const endsAtUnix = startsAtUnix + durationHours * 60 * 60;
-    const canonicalTargetContract = getAddress(targetContract.trim());
-    const startsAt = new Date(startsAtUnix * 1000).toISOString();
-    const endsAt = new Date(endsAtUnix * 1000).toISOString();
-    const watchSpecHash = deriveWatchSpecHash({
-      targetContract: canonicalTargetContract,
-      targetKind,
-      focusKey,
-      startsAt,
-      endsAt,
-    });
     const input = {
-      targetContract: canonicalTargetContract,
+      targetContract: targetContract.trim(),
       targetKind,
       focusKey,
       durationHours,
       visibility,
       telegramBindingCode: telegramBindingCode.trim(),
-      requestId: crypto.randomUUID(),
-      startsAtUnix,
-      endsAtUnix,
-      watchSpecHash,
     };
     setStep("preparing");
     inFlightRef.current = true;

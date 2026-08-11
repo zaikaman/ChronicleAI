@@ -255,7 +255,7 @@ export type TelegramIngestHandlers = {
     | undefined;
   /** Marketplace Watch registration delivered through the free Telegram bridge. */
   onWatchRequest?:
-    | ((payload: Record<string, unknown>, transportChatId: string) => Promise<{
+    | ((payload: Record<string, unknown>, transportChatId: string, messageId?: number) => Promise<{
         statusCode: number;
         accepted: boolean;
         message: string;
@@ -470,7 +470,11 @@ export async function processTelegramIngestUpdate(
         detail: "watch_request handler not registered",
       };
     }
-    const result = await handlers.onWatchRequest(parsed.envelope.payload, parsed.chatId);
+    const result = await handlers.onWatchRequest(
+      parsed.envelope.payload,
+      parsed.chatId,
+      parsed.messageId,
+    );
     return {
       handled: true,
       kind: "watch_request",

@@ -1226,8 +1226,9 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
     alertPublicationService: watchAlertPublication,
   });
 
-  // Free-tier Marketplace workflow path: the Web3 write is followed by a
-  // Telegram ingest envelope instead of Pro-gated HTTP Request actions.
+  // Free-tier Marketplace workflow path: the paid workflow sends the six
+  // caller-facing fields through Telegram. ChronicleAI derives the internal
+  // campaign fields and executes the existing createSponsoredWatch workflow.
   if (deps.telegramBindingRepo) {
     registerTelegramWatchRequestHandler(
       createTelegramWatchRequestHandler({
@@ -1237,8 +1238,6 @@ export function setupUS3Routes(_app: Express, env: ServerEnv, deps: US3Dependenc
         marketplaceSlug: "chronicle-paid-onchain-watch",
         minDurationHours: env.sponsoredWatchMinDurationHours,
         maxDurationHours: env.sponsoredWatchMaxDurationDays * 24,
-        resolveWatchIdFromTransaction: (txHash) =>
-          fetchAndDecodeWatchIdFromTxHash(txHash, env.keeperhubNetwork, env.rpcUrl),
       }),
     );
     console.info("KeeperHub Watch Telegram registration bridge enabled");

@@ -182,7 +182,7 @@ export function createTelegramWebhookRoutes(deps: TelegramWebhookRouteDeps): Rou
               })),
             };
           },
-          onWatchRequest: async (body, transportChatId) => {
+          onWatchRequest: async (body, transportChatId, messageId) => {
             const watchHandler = getTelegramWatchRequestHandler();
             if (!watchHandler) {
               return {
@@ -191,7 +191,7 @@ export function createTelegramWebhookRoutes(deps: TelegramWebhookRouteDeps): Rou
                 message: "Watch registration handler not ready",
               };
             }
-            return watchHandler(body, transportChatId);
+            return watchHandler(body, transportChatId, messageId);
           },
           onDigestRun: async (body) => {
             const digestHandler = getDigestRunHandler();

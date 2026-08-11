@@ -185,6 +185,9 @@ export interface SponsoredWatchService {
     targetKind?: SponsoredWatchTargetKind;
     visibility?: SponsoredWatchVisibility;
     telegramChatId?: string | null;
+    executionSource?: "legacy_payment" | "keeperhub_marketplace";
+    marketplaceSlug?: string | null;
+    marketplaceRequestId?: string | null;
   }): Promise<SponsoredWatchRow>;
 
   /** Persist a successful Marketplace workflow write without submitting a second chain transaction. */
@@ -1925,6 +1928,9 @@ export function createSponsoredWatchService(params: {
       targetKind = "contract",
       visibility = "public",
       telegramChatId = null,
+      executionSource = "legacy_payment",
+      marketplaceSlug = null,
+      marketplaceRequestId = null,
     }) {
       const client = requireWeb3();
       const resolvedKind: SponsoredWatchTargetKind =
@@ -1993,7 +1999,9 @@ export function createSponsoredWatchService(params: {
         createTxHash,
         createKeeperHubRunId,
         createExplorerUrl,
-        executionSource: "legacy_payment",
+        executionSource,
+        marketplaceSlug,
+        marketplaceRequestId,
         executedViaKeeperHub: Boolean(createKeeperHubRunId || client.isKeeperHubBacked()),
       });
     },
