@@ -8,12 +8,16 @@ const clientFetch = globalThis.fetch;
 const env = {
   keeperhubApiBaseUrl: "https://keeperhub.example",
   keeperhubApiKey: "server-api-key",
+  keeperhubWatchApiKey: "watch-api-key",
 } as ServerEnv;
 
-async function withProxyServer(fn: (baseUrl: string) => Promise<void>): Promise<void> {
+async function withProxyServer(
+  fn: (baseUrl: string) => Promise<void>,
+  routeEnv: ServerEnv = env,
+): Promise<void> {
   const app = express();
   app.use(express.json());
-  app.use(createKeeperhubMarketplaceProxyRoutes(env));
+  app.use(createKeeperhubMarketplaceProxyRoutes(routeEnv));
 
   const server = await new Promise<import("node:http").Server>((resolve) => {
     const nextServer = app.listen(0, "127.0.0.1", () => resolve(nextServer));
@@ -71,7 +75,7 @@ describe("KeeperHub Marketplace Watch proxy", () => {
     });
   });
 
-  it("keeps the server API key for browser calls without an MPP credential", async () => {
+  it("uses the Watch API key for browser calls without an MPP credential", async () => {
     const upstreamFetch = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(
@@ -89,9 +93,36 @@ describe("KeeperHub Marketplace Watch proxy", () => {
       expect(upstreamFetch).toHaveBeenCalledWith(
         "https://keeperhub.example/api/mcp/workflows/chronicleai-paid-onchain-watch-v2/call",
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: "Bearer server-api-key" }),
+          headers: expect.objectContaining({ Authorization: "Bearer watch-api-key" }),
         }),
       );
     });
+  });
+
+  it("falls back to the generic API key for legacy deployments", async () => {
+    const upstreamFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ executionId: "exec-legacy" }), { status: 200 }),
+      );
+
+    await withProxyServer(
+      async (baseUrl) => {
+        const response = await clientFetch(`${baseUrl}/keeperhub/marketplace/watch/call`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetContract: "0x0000000000000000000000000000000000000001" }),
+        });
+
+        expect(response.status).toBe(200);
+        expect(upstreamFetch).toHaveBeenCalledWith(
+          "https://keeperhub.example/api/mcp/workflows/chronicleai-paid-onchain-watch-v2/call",
+          expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: "Bearer server-api-key" }),
+          }),
+        );
+      },
+      { ...env, keeperhubWatchApiKey: undefined },
+    );
   });
 });

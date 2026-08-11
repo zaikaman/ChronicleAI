@@ -23,7 +23,7 @@ export function createKeeperhubMarketplaceProxyRoutes(env: ServerEnv): RouterTyp
   router.post("/keeperhub/marketplace/watch/call", async (req, res, next) => {
     try {
       const baseUrl = env.keeperhubApiBaseUrl?.replace(/\/$/, "");
-      const apiKey = env.keeperhubApiKey?.trim();
+      const apiKey = env.keeperhubWatchApiKey?.trim() || env.keeperhubApiKey?.trim();
       if (!baseUrl || !apiKey) {
         res.status(503).json({ error: "KeeperHub Marketplace proxy is not configured" });
         return;
@@ -35,8 +35,9 @@ export function createKeeperhubMarketplaceProxyRoutes(env: ServerEnv): RouterTyp
 
       const headers: Record<string, string> = {
         // KeeperHub's marketplace call route is anonymous apart from payment.
-        // Keep the server key for browser/x402 calls, but never overwrite an
-        // MPP credential supplied by an agent.
+        // Prefer the Watch-scoped key for browser/x402 calls, but never
+        // overwrite an MPP credential supplied by an agent. Keep the generic
+        // fallback for legacy deployments without the new env var.
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       };

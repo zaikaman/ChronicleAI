@@ -298,6 +298,8 @@ export interface ServerEnv {
   keeperhubApiBaseUrl: string | undefined;
   /** Organization API key (kh_…). Required for material production writes. */
   keeperhubApiKey: string | undefined;
+  /** Watch Marketplace API key; falls back to keeperhubApiKey for legacy deployments. */
+  keeperhubWatchApiKey: string | undefined;
   /** KeeperHub network slug / chain id for writes (default sepolia). */
   keeperhubNetwork: string;
   /**
@@ -873,7 +875,10 @@ export function assertProductionReadiness(env: ServerEnv): void {
   if (!keeperHubApiKey || !keeperHubApiKey.startsWith("kh_")) {
     keeperHubCoreErrors.push("KEEPERHUB_API_KEY (kh_ organization key)");
   }
-  if (!env.keeperhubMarketplaceBridgeSecret?.trim() || env.keeperhubMarketplaceBridgeSecret.length < 16) {
+  if (
+    !env.keeperhubMarketplaceBridgeSecret?.trim() ||
+    env.keeperhubMarketplaceBridgeSecret.length < 16
+  ) {
     errors.push("KEEPERHUB_MARKETPLACE_BRIDGE_SECRET (at least 16 characters)");
   }
   if (!keeperHubApiBaseUrl) {
@@ -1285,6 +1290,7 @@ export function loadServerEnv(): ServerEnv {
       optionalEnv("ALLOW_DIRECT_ETHERS_WRITES", "false")?.toLowerCase() === "true",
     keeperhubApiBaseUrl: optionalEnv("KEEPERHUB_API_BASE_URL"),
     keeperhubApiKey: optionalEnv("KEEPERHUB_API_KEY"),
+    keeperhubWatchApiKey: optionalEnv("KEEPERHUB_API_KEY_WATCH"),
     keeperhubNetwork: optionalEnv("KEEPERHUB_NETWORK", "sepolia") as string,
     // Default ON: all material writes prefer KeeperHub MCP when KH is configured.
     // Opt out with KEEPERHUB_MCP_ENABLED=false for REST-only workflow execute.
