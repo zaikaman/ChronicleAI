@@ -164,6 +164,35 @@ describe("KeeperHub signature middleware", () => {
     }
   });
 
+  it("lets the browser-facing Marketplace proxy path fall through without webhook headers", async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(keeperhubSignatureMiddleware(SECRET));
+    app.use((_req, res) => res.status(204).end());
+
+    const server = await new Promise<import("node:http").Server>((resolve) => {
+      const nextServer = app.listen(0, "127.0.0.1", () => resolve(nextServer));
+    });
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/keeperhub/marketplace/watch/call`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetKind: "contract" }),
+        },
+      );
+
+      expect(response.status).toBe(204);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
   it("keeps HMAC fallback enabled for direct Marketplace bridge callers", async () => {
     const app = express();
     app.use(

@@ -48,6 +48,23 @@ export function keeperhubSignatureMiddleware(secret: string) {
   }
 
   return (req: Request, _res: Response, next: NextFunction): void => {
+    // The browser-facing Marketplace proxy is intentionally public at the
+    // ChronicleAI edge: it forwards the user's payment challenge/signature to
+    // KeeperHub using the server-side organization API key. It is mounted
+    // after some older /keeperhub routers, so let that specific route fall
+    // through instead of demanding internal webhook HMAC headers first.
+    const requestPath = req.path.replace(/\/+$/, "") || "/";
+    const originalPath = req.originalUrl.split("?", 1)[0]?.replace(/\/+$/, "") || "/";
+    if (
+      req.method === "POST" &&
+      (requestPath === "/marketplace/watch/call" ||
+        requestPath === "/keeperhub/marketplace/watch/call" ||
+        originalPath.endsWith("/keeperhub/marketplace/watch/call"))
+    ) {
+      next();
+      return;
+    }
+
     if (!secret || secret.length < 16) {
       next(unauthorized("KeeperHub signature authentication is not configured"));
       return;
