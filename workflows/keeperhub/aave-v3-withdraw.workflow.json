@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-28T00:00:00.000Z",
   "workflow": {
     "name": "ChronicleAI Aave V3 Withdraw Monitor — Ethereum Mainnet (Telegram bridge)",
-    "description": "Mainnet protocol-context source: Event Tracker on Ethereum Mainnet Aave V3 Pool Withdraw → Telegram → Chronicle. Classified as protocol_withdraw (threshold ≥ $100M); no direct execution in v1. FREE TIER. Sparse Event trigger (not hot-path)."
+    "description": "Mainnet protocol-context source: Event Tracker on Ethereum Mainnet Aave V3 Pool Withdraw → Telegram → Chronicle. Classified as protocol_withdraw (threshold ≥ $1B); no direct execution in v1. FREE TIER. Sparse Event trigger (not hot-path)."
   },
   "nodes": [
     {

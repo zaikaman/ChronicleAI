@@ -321,7 +321,7 @@ Wire **Account 1** workflow IDs into Chronicle env. Accounts 2–4 only need the
 - One **vanity account** for mainnet newspaper (swaps + CEX + mints) if free tier is tight
 - Liq + protocol supply/withdraw + desk polls stay on **Sepolia** monitor account
 - Start CEX monitor **USDC-only**; add WETH in a later phase
-- Align size filters with `EVENT_THRESHOLDS` in `@chronicleai/config` ($500k CEX, $100M protocol deposit/withdraw, $1M mint/burn, $500k swaps)
+- Align size filters with `EVENT_THRESHOLDS` in `@chronicleai/config` ($500k CEX, $1B protocol deposit/withdraw, $1M mint/burn, $500k swaps)
 
 ### Two-bot setup (required)
 
