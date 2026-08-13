@@ -19,8 +19,8 @@ export function formatPaymentRoute(route: PaymentRouteId): PaymentRouteDisplay {
     return {
       id: "x402",
       badge: "x402",
-      label: "x402 (wallet)",
-      audience: "Humans — USDC via browser wallet",
+      label: "x402 (agent or wallet)",
+      audience: "Agents or humans — EIP-712 USDC authorization",
       badgeVariant: "info",
     };
   }

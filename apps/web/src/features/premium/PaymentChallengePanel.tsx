@@ -1,5 +1,5 @@
-// Payment challenge panel — human wallet path via x402 only.
-// Machine-to-machine MPP remains available on the API; surface a link to the agent guide.
+// Payment challenge panel — human wallet checkout via x402.
+// Agents can use either x402 or MPP through the API guide.
 
 import { type ReactElement, useState } from "react";
 import { StatusBadge } from "../../components/data-primitives.tsx";
@@ -15,7 +15,7 @@ interface PaymentChallengePanelProps {
   priceCurrency: string;
   onSettled: (paymentRecordId: string, accessReceipt?: string) => void;
   onClose: () => void;
-  /** Opens the page-level agent / MPP discovery panel (no fake MPP checkout). */
+  /** Opens the page-level agent / x402 + MPP discovery panel. */
   onShowAgentGuide?: () => void;
   "data-testid"?: string;
 }
@@ -267,7 +267,7 @@ export function PaymentChallengePanel({
             className="mt-2 text-xs font-medium text-foreground underline underline-offset-2 hover:text-accent transition-colors cursor-pointer bg-transparent border-none p-0"
             data-testid="payment-panel-agent-guide-link"
           >
-            Agent / MPP purchase guide
+            Agent payment guide (x402 or MPP)
           </button>
         ) : null}
       </div>

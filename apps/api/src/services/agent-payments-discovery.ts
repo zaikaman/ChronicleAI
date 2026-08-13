@@ -16,20 +16,17 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
   return {
     version: "1",
     name: "ChronicleAI Premium Payments",
-    description:
-      "Dual-rail micropayments for premium intelligence, sponsored contract watches, and the desk feed. " +
-      "Humans pay with x402 (wallet USDC authorization). Machines pay with MPP (HMAC micro-billing on Tempo). " +
-      PRIVATE_ROUTING_PRODUCT_DESCRIPTION,
+    description: `Dual-rail micropayments for premium intelligence, sponsored contract watches, and the desk feed. Humans and agents can pay with x402 (EIP-712 USDC authorization). Agents can also use MPP (HMAC micro-billing on Tempo). ${PRIVATE_ROUTING_PRODUCT_DESCRIPTION}`,
     routes: [
       {
         id: "x402",
-        label: "x402 (wallet)",
-        audience: "human",
+        label: "x402 (agent or wallet)",
+        audience: "dual",
         verificationType: "eip712_transfer_with_authorization",
         currency: "USDC",
         network: "Base Sepolia (legacy ChronicleAI payment route)",
         description:
-          "Browser wallet path. Client creates a challenge with paymentRoute=x402, signs EIP-712 TransferWithAuthorization, then settles. Default rail on the /premium web UI.",
+          "EIP-712 USDC authorization path. Clients create a challenge with paymentRoute=x402, sign TransferWithAuthorization, then settle. Available to browser wallets and agents.",
       },
       {
         id: "mpp",
@@ -92,10 +89,10 @@ export function buildAgentPaymentsDiscovery(): AgentPaymentsDiscovery {
         "List teasers → POST challenge with paymentRoute=mpp → HMAC settle → access with receipt.",
       steps: [
         "GET /premium/items — each teaser includes paymentRoutes (expect x402 and mpp).",
-        "POST /payments/challenges with { premiumItemId, paymentRoute: \"mpp\", payerReference?: \"0x…\" }.",
+        'POST /payments/challenges with { premiumItemId, paymentRoute: "mpp", payerReference?: "0x…" }.',
         "Read challengeData.hmacPayloadTemplate and challengeData.expiresAt from the 201 response.",
         "Compute settlementReference = `${expiresAt}:${hmac_sha256_hex(secret, hmacPayloadTemplate)}`.",
-        "POST /payments/settlements with challengeReference, settlementReference, paymentRoute: \"mpp\", amountSettled, currency.",
+        'POST /payments/settlements with challengeReference, settlementReference, paymentRoute: "mpp", amountSettled, currency.',
         "Store accessReceipt from the settle response; GET /premium/items/:id with Authorization: Bearer <accessReceipt>.",
       ],
       challengeRequest: {

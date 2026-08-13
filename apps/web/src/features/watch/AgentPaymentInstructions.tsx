@@ -24,7 +24,7 @@ export function AgentPaymentInstructions(): ReactElement {
       >
         <span className="inline-flex min-w-0 items-center gap-2">
           <Bot className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span>Agent access · MPP</span>
+          <span>Agent access · x402 or MPP</span>
         </span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -39,9 +39,8 @@ export function AgentPaymentInstructions(): ReactElement {
           data-testid="watch-agent-instructions-panel"
         >
           <p className="m-0 max-w-3xl">
-            MPP is the machine payment route for the KeeperHub Marketplace workflow. Humans still
-            use the wallet checkout above; agents call the same Watch workflow with a Tempo MPP
-            credential.
+            Agents can pay for the KeeperHub Marketplace Watch with either x402 on Base Mainnet or
+            MPP on Tempo. Humans still use the wallet checkout above.
           </p>
 
           <ol className="mt-3 grid gap-3 pl-4 marker:font-semibold marker:text-foreground">
@@ -63,15 +62,19 @@ export function AgentPaymentInstructions(): ReactElement {
               <span className="font-semibold text-foreground">Start the workflow:</span>{" "}
               <code className="break-all text-foreground">POST {KEEPERHUB_WATCH_PATH}</code> with
               the Watch fields below and the human-provided <code>telegramBindingCode</code>. The
-              first request has no payment header; KeeperHub returns a 402 with a{" "}
-              <code>WWW-Authenticate: Payment ...</code> MPP challenge.
+              first request has no payment header; KeeperHub returns a 402 with the available
+              payment challenges.
             </li>
             <li>
-              <span className="font-semibold text-foreground">Pay and retry:</span> use an
-              MPP-compatible agent client to answer that Tempo charge challenge, then retry the same
-              request with <code>Authorization: Payment &lt;credential&gt;</code>. KeeperHub
-              verifies the credential and returns a <code>Payment-Receipt</code>; keep the MPP
-              client secret or account configuration in the agent runtime, never in this browser UI.
+              <span className="font-semibold text-foreground">Choose a rail, then retry:</span> for
+              x402, sign the Base USDC authorization from the <code>PAYMENT-REQUIRED</code>{" "}
+              challenge and retry with <code>PAYMENT-SIGNATURE</code>; for MPP, answer the Tempo
+              charge challenge and retry with <code>Authorization: Payment &lt;credential&gt;</code>
+              . KeeperHub verifies the selected credential and returns a{" "}
+              <code>Payment-Receipt</code>
+              {"; "}
+              keep wallet keys, MPP secrets, and account configuration in the agent runtime, never
+              in this browser UI.
             </li>
           </ol>
 

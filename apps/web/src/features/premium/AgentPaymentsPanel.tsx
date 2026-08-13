@@ -1,5 +1,5 @@
-// Agent-facing dual-rail discovery — MPP is API-native; this panel makes it findable.
-// Humans still checkout via x402 in PaymentChallengePanel.
+// Agent-facing dual-rail discovery — both x402 and MPP are API-native payment rails.
+// Humans can also use the x402 wallet checkout in PaymentChallengePanel.
 
 import type { AgentPaymentsDiscovery } from "@chronicleai/schemas";
 import {
@@ -27,12 +27,12 @@ const FALLBACK_DISCOVERY: AgentPaymentsDiscovery = {
   routes: [
     {
       id: "x402",
-      label: "x402 (wallet)",
-      audience: "human",
+      label: "x402 (agent or wallet)",
+      audience: "dual",
       verificationType: "eip712_transfer_with_authorization",
       currency: "USDC",
       network: "Ethereum Sepolia (configurable)",
-      description: "Browser wallet path on the /premium UI.",
+      description: "EIP-712 USDC authorization path for browser wallets and agents.",
     },
     {
       id: "mpp",
@@ -235,8 +235,9 @@ export function AgentPaymentsPanel({
             <p className="mt-1 text-sm text-muted-foreground leading-relaxed max-w-3xl">
               People can buy a single report with a wallet or cover everything with Chronicle Pass.
               Automated agents buy machine feeds and reports per item through the API using{" "}
-              <span className="font-semibold text-foreground">MPP</span>. The guide below shows the
-              exact machine-to-machine flow.
+              <span className="font-semibold text-foreground">x402 or MPP</span>. Choose x402 for
+              EIP-712 USDC authorization or MPP for Tempo HMAC micro-billing; the guide below
+              explains the available flows.
             </p>
           </div>
         </div>
@@ -366,8 +367,15 @@ export function AgentPaymentsPanel({
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-primary" />
-              MPP Execution Protocol
+              Dual-rail execution
             </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Premium items support both payment rails. Use{" "}
+              <code className="text-foreground">paymentRoute: &quot;x402&quot;</code> and submit the
+              signed EIP-3009 authorization JSON when settling with x402. Use{" "}
+              <code className="text-foreground">paymentRoute: &quot;mpp&quot;</code> and the HMAC
+              settlement reference for MPP. Both rails return the same access receipt.
+            </p>
             <div className="grid grid-cols-1 gap-2">
               {discovery.mpp.steps.map((step, idx) => (
                 <div
@@ -388,7 +396,7 @@ export function AgentPaymentsPanel({
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Code2 className="w-4 h-4 text-primary" />
-              Example Requests (cURL)
+              MPP example requests (cURL)
             </h3>
             <div className="grid grid-cols-1 gap-4">
               {(
